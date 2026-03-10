@@ -1040,6 +1040,11 @@ button {
   gap: 12px;
 }
 
+.background-upload-card__field > span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .background-upload-card__actions {
   display: flex;
   align-items: center;

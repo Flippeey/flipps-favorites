@@ -54,6 +54,7 @@ export function renderDrawerSection(section: SettingsSectionId, settings: AppSet
 
   const accentColor = normalizeHexColor(settings.accentColor, defaultAccentColor);
   const customAccentActive = !accentPresets.some(preset => preset.value === accentColor);
+  const hasCustomBackground = Boolean(settings.customBackgroundImage);
   return `
     <div class="drawer-panel">
       <div class="visual-section">
@@ -95,15 +96,16 @@ export function renderDrawerSection(section: SettingsSectionId, settings: AppSet
         <div class="field field--card background-upload-card">
           <div class="background-upload-card__actions">
             <button class="save-button button-with-icon background-upload-button" type="button">${renderUiIcon('upload')}<span>Upload image</span></button>
-            <div class="background-upload-card__preview" data-has-image="${String(Boolean(settings.customBackgroundImage))}">
-              ${settings.customBackgroundImage
-      ? `<img class="background-upload-card__preview-image" src="${escapeAttribute(settings.customBackgroundImage)}" alt="" />`
-      : '<span class="background-upload-card__preview-placeholder">Default</span>'}
-              <button class="icon-button background-remove-button" type="button" aria-label="Remove custom background" title="Remove custom background" ${settings.customBackgroundImage ? '' : 'disabled'}>${renderUiIcon('trash')}</button>
-            </div>
+            ${hasCustomBackground
+      ? `<div class="background-upload-card__preview" data-has-image="true">
+              <img class="background-upload-card__preview-image" src="${escapeAttribute(settings.customBackgroundImage)}" alt="" />
+              <button class="icon-button background-remove-button" type="button" aria-label="Remove custom background" title="Remove custom background">${renderUiIcon('trash')}</button>
+            </div>`
+      : ''}
           </div>
-          ${renderSettingsSlider('backgroundOpacity', 'Background opacity', settings.backgroundOpacity, 0, 100, '%')}
-          <label class="field">
+          ${hasCustomBackground
+      ? `${renderSettingsSlider('backgroundOpacity', 'Background opacity', settings.backgroundOpacity, 0, 100, '%')}
+          <label class="field background-upload-card__field">
             <span>Fit</span>
             <select name="backgroundFitMode">
               <option value="cover" ${settings.backgroundFitMode === 'cover' ? 'selected' : ''}>Cover (crop to fill)</option>
@@ -111,14 +113,15 @@ export function renderDrawerSection(section: SettingsSectionId, settings: AppSet
               <option value="fill" ${settings.backgroundFitMode === 'fill' ? 'selected' : ''}>Fill (stretch)</option>
             </select>
           </label>
-          <label class="field">
+          <label class="field background-upload-card__field">
             <span>Position</span>
             <select name="backgroundPositionMode">
               <option value="center" ${settings.backgroundPositionMode === 'center' ? 'selected' : ''}>Center</option>
               <option value="top" ${settings.backgroundPositionMode === 'top' ? 'selected' : ''}>Top</option>
               <option value="bottom" ${settings.backgroundPositionMode === 'bottom' ? 'selected' : ''}>Bottom</option>
             </select>
-          </label>
+          </label>`
+      : ''}
           <input class="icon-file-input" name="customBackgroundImageFile" type="file" accept="image/*" />
         </div>
       </div>
