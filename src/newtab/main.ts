@@ -79,6 +79,16 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
   await preloadVisibleIcons(state);
   renderApp(rootElement, state);
 
+  window.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) {
+      return;
+    }
+
+    if (dismissTransientUi(rootElement, state)) {
+      event.preventDefault();
+    }
+  });
+
   rootElement.addEventListener('click', event => {
     const target = event.target as HTMLElement | null;
     if (!target) {
@@ -236,11 +246,6 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const folderButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-folder-id]');
   const linkButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-link-url]');
 
-  const setDrawerOpen = (isOpen: boolean) => {
-    state.drawerOpen = isOpen;
-    drawer?.setAttribute('data-open', String(isOpen));
-  };
-
   const applySettingsPatch = async (patch: Partial<AppSettings>) => {
     const response = await sendRuntimeMessage<{ type: typeof messageTypes.patchSettings; patch: Partial<AppSettings> }, PatchSettingsResponse>({
       type: messageTypes.patchSettings,
@@ -285,10 +290,10 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     await switchSettingsSection(rootElement, state, 'general');
   });
 
-  toggleButton?.addEventListener('click', () => setDrawerOpen(true));
-  closeButton?.addEventListener('click', () => setDrawerOpen(false));
+  toggleButton?.addEventListener('click', () => openDrawer(rootElement, state));
+  closeButton?.addEventListener('click', () => closeDrawer(rootElement, state));
 
-  drawerScrim?.addEventListener('click', () => setDrawerOpen(false));
+  drawerScrim?.addEventListener('click', () => closeDrawer(rootElement, state));
 
   themeModeButtons.forEach(button => {
     button.addEventListener('click', async () => {
@@ -772,6 +777,65 @@ async function switchSettingsSection(rootElement: HTMLDivElement, state: AppStat
   state.settings = response.settings;
   state.drawerOpen = true;
   renderApp(rootElement, state);
+}
+
+function dismissTransientUi(rootElement: HTMLDivElement, state: AppState): boolean {
+  if (state.iconDialog.open) {
+    state.iconDialog = createClosedIconDialogState();
+    renderApp(rootElement, state);
+    return true;
+  }
+
+  if (state.contextMenu) {
+    state.contextMenu = null;
+    renderApp(rootElement, state);
+    return true;
+  }
+
+  if (state.accentPicker.open) {
+    state.accentPicker = {
+      ...createAccentPickerState(state.settings.accentColor),
+      open: false,
+    };
+    renderApp(rootElement, state);
+    return true;
+  }
+
+  if (state.drawerOpen) {
+    closeDrawer(rootElement, state);
+    return true;
+  }
+
+  return false;
+}
+
+function openDrawer(rootElement: HTMLDivElement, state: AppState): void {
+  state.drawerOpen = true;
+  renderApp(rootElement, state);
+  queueDrawerFocus(rootElement, true);
+}
+
+function closeDrawer(rootElement: HTMLDivElement, state: AppState): void {
+  const nextAccentPicker = state.accentPicker.open
+    ? {
+        ...createAccentPickerState(state.settings.accentColor),
+        open: false,
+      }
+    : state.accentPicker;
+
+  state.drawerOpen = false;
+  state.accentPicker = nextAccentPicker;
+  renderApp(rootElement, state);
+  queueDrawerFocus(rootElement, false);
+}
+
+function queueDrawerFocus(rootElement: HTMLDivElement, isOpen: boolean): void {
+  window.requestAnimationFrame(() => {
+    const nextTarget = isOpen
+      ? rootElement.querySelector<HTMLButtonElement>('.drawer-close')
+      : rootElement.querySelector<HTMLButtonElement>('.drawer-toggle');
+    nextTarget?.focus();
+  });
 }
 
 async function preloadVisibleIcons(state: AppState): Promise<void> {
