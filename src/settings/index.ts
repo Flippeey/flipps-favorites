@@ -1,5 +1,5 @@
 import type { AppSettings, SettingsSectionId, ThemeMode } from '../shared/messages';
-import { escapeHtml } from '../newtab/html';
+import { escapeAttribute, escapeHtml } from '../newtab/html';
 import { renderUiIcon, type UiIconName } from '../newtab/ui-icons';
 
 export const defaultAccentColor = '#3F72DC';
@@ -10,7 +10,7 @@ export const accentPresets = [
   { id: 'green', label: 'Green', value: '#2F8F4E' },
   { id: 'lime', label: 'Lime', value: '#7BAE2C' },
   { id: 'yellow', label: 'Yellow', value: '#C9A227' },
-  { id: 'orange', label: 'Orange', value: '#D8783F' },
+  { id: 'orange', label: 'Orange', value: '#F57C00' },
   { id: 'red', label: 'Red', value: '#C75252' },
   { id: 'rose', label: 'Rose', value: '#C96A7D' },
   { id: 'pink', label: 'Pink', value: '#C85FA4' },
@@ -87,6 +87,41 @@ export function renderDrawerSection(section: SettingsSectionId, settings: AppSet
         <input name="accentColor" type="hidden" value="${accentColor}" />
         ${renderAccentPickerPopover(accentPicker)}
       </div>
+      <div class="visual-section">
+        <div class="visual-section__header">
+          <h3>Background</h3>
+          <p class="field-hint">You can use your own background image if you want.</p>
+        </div>
+        <div class="field field--card background-upload-card">
+          <div class="background-upload-card__actions">
+            <button class="save-button button-with-icon background-upload-button" type="button">${renderUiIcon('upload')}<span>Upload image</span></button>
+            <div class="background-upload-card__preview" data-has-image="${String(Boolean(settings.customBackgroundImage))}">
+              ${settings.customBackgroundImage
+      ? `<img class="background-upload-card__preview-image" src="${escapeAttribute(settings.customBackgroundImage)}" alt="" />`
+      : '<span class="background-upload-card__preview-placeholder">Default</span>'}
+              <button class="icon-button background-remove-button" type="button" aria-label="Remove custom background" title="Remove custom background" ${settings.customBackgroundImage ? '' : 'disabled'}>${renderUiIcon('trash')}</button>
+            </div>
+          </div>
+          ${renderSettingsSlider('backgroundOpacity', 'Background opacity', settings.backgroundOpacity, 0, 100, '%')}
+          <label class="field">
+            <span>Fit</span>
+            <select name="backgroundFitMode">
+              <option value="cover" ${settings.backgroundFitMode === 'cover' ? 'selected' : ''}>Cover (crop to fill)</option>
+              <option value="contain" ${settings.backgroundFitMode === 'contain' ? 'selected' : ''}>Contain (fit inside)</option>
+              <option value="fill" ${settings.backgroundFitMode === 'fill' ? 'selected' : ''}>Fill (stretch)</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Position</span>
+            <select name="backgroundPositionMode">
+              <option value="center" ${settings.backgroundPositionMode === 'center' ? 'selected' : ''}>Center</option>
+              <option value="top" ${settings.backgroundPositionMode === 'top' ? 'selected' : ''}>Top</option>
+              <option value="bottom" ${settings.backgroundPositionMode === 'bottom' ? 'selected' : ''}>Bottom</option>
+            </select>
+          </label>
+          <input class="icon-file-input" name="customBackgroundImageFile" type="file" accept="image/*" />
+        </div>
+      </div>
     </div>
   `;
 }
@@ -97,8 +132,8 @@ export function buildShellStyle(settings: AppSettings): string {
   const rows = clamp(settings.favoritesRows, 0, 8);
   const columnGap = clamp(settings.favoritesColumnGap, 0, 48);
   const rowGap = clamp(settings.favoritesRowGap, 0, 48);
-  const tileWidth = clamp(settings.bookmarkTileWidth, 88, 180);
-  const iconSize = clamp(settings.bookmarkIconSize, 40, 112);
+  const tileWidth = clamp(settings.bookmarkTileWidth, 80, 160);
+  const iconSize = clamp(settings.bookmarkIconSize, 40, 120);
   const dockIconSize = Math.round(clamp(iconSize * 0.5, 28, 40));
   return [
     `--accent-color: ${accent}`,
@@ -114,7 +149,12 @@ export function buildShellStyle(settings: AppSettings): string {
     `--bookmark-icon-size: ${String(iconSize)}px`,
     `--dock-icon-size: ${String(dockIconSize)}px`,
     `--bookmark-row-height: ${String(iconSize + 54)}px`,
+    `--custom-background-image: ${settings.customBackgroundImage ? `url("${escapeCssUrl(settings.customBackgroundImage)}")` : 'none'}`,
   ].join('; ');
+}
+
+function escapeCssUrl(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 export function normalizeThemeMode(value: string | undefined): ThemeMode {
@@ -168,14 +208,14 @@ function renderAccentPickerPopover(picker: AccentPickerState): string {
         <button class="accent-picker-popover__close icon-button" type="button" aria-label="Close custom accent picker">${renderUiIcon('close')}</button>
       </div>
       <div class="accent-picker-popover__body">
-        <div class="accent-picker-popover__wheel" style="--accent-preview:${picker.draftColor}; --accent-hue:${String(Math.round(picker.hue))}deg; --accent-saturation:${String(Math.round(picker.saturation))}%; --accent-lightness:${String(Math.round(picker.lightness))}%">
-          <span class="accent-picker-popover__wheel-center" style="background:${picker.draftColor}"></span>
-        </div>
-        <div class="accent-picker-popover__controls">
+        <div class="accent-picker-popover__preview-column">
+          <div class="accent-picker-popover__preview" style="background: ${picker.draftColor}"></div>
           <label class="accent-hex-field accent-hex-field--popover">
             <span>Hex</span>
             <input name="accentHex" type="text" value="${picker.draftColor}" spellcheck="false" />
           </label>
+        </div>
+        <div class="accent-picker-popover__sliders">
           ${renderAccentControlSlider('accentPickerHue', 'Hue', Math.round(picker.hue), 0, 360, 'deg')}
           ${renderAccentControlSlider('accentPickerSaturation', 'Saturation', Math.round(picker.saturation), 0, 100, '%')}
           ${renderAccentControlSlider('accentPickerLightness', 'Lightness', Math.round(picker.lightness), 0, 100, '%')}

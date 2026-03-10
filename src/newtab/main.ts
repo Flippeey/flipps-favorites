@@ -198,6 +198,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   `;
 
   const drawer = rootElement.querySelector<HTMLElement>('.settings-drawer');
+  const bookmarkCanvas = rootElement.querySelector<HTMLElement>('.bookmark-canvas');
   const homeButton = rootElement.querySelector<HTMLButtonElement>('.library-home');
   const dockSettingsButton = rootElement.querySelector<HTMLButtonElement>('.dock-settings-link');
   const drawerScrim = rootElement.querySelector<HTMLButtonElement>('.drawer-scrim');
@@ -207,6 +208,12 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const useSystemThemeInput = rootElement.querySelector<HTMLInputElement>('input[name="useSystemTheme"]');
   const accentColorInput = rootElement.querySelector<HTMLInputElement>('input[name="accentColor"]');
   const accentHexInput = rootElement.querySelector<HTMLInputElement>('input[name="accentHex"]');
+  const customBackgroundImageFileInput = rootElement.querySelector<HTMLInputElement>('input[name="customBackgroundImageFile"]');
+  const backgroundOpacityInput = rootElement.querySelector<HTMLInputElement>('input[name="backgroundOpacity"]');
+  const backgroundFitModeInput = rootElement.querySelector<HTMLSelectElement>('select[name="backgroundFitMode"]');
+  const backgroundPositionModeInput = rootElement.querySelector<HTMLSelectElement>('select[name="backgroundPositionMode"]');
+  const backgroundUploadButton = rootElement.querySelector<HTMLButtonElement>('.background-upload-button');
+  const backgroundRemoveButton = rootElement.querySelector<HTMLButtonElement>('.background-remove-button');
   const accentPickerClose = rootElement.querySelector<HTMLButtonElement>('.accent-picker-popover__close');
   const accentPickerHueInput = rootElement.querySelector<HTMLInputElement>('input[name="accentPickerHue"]');
   const accentPickerSaturationInput = rootElement.querySelector<HTMLInputElement>('input[name="accentPickerSaturation"]');
@@ -246,6 +253,28 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const accentButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-accent-option]');
   const folderButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-folder-id]');
   const linkButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-link-url]');
+
+  const applyBookmarkCanvasBackgroundStyle = () => {
+    if (!bookmarkCanvas) {
+      return;
+    }
+
+    const hasCustomBackground = Boolean(state.settings.customBackgroundImage);
+    bookmarkCanvas.dataset.hasCustomBackground = String(hasCustomBackground);
+    if (hasCustomBackground) {
+      bookmarkCanvas.style.setProperty('--bookmark-canvas-bg-image', `url("${escapeCssUrl(state.settings.customBackgroundImage)}")`);
+      bookmarkCanvas.style.setProperty('--bookmark-canvas-bg-size', state.settings.backgroundFitMode === 'fill' ? '100% 100%' : state.settings.backgroundFitMode);
+      bookmarkCanvas.style.setProperty('--bookmark-canvas-bg-position', state.settings.backgroundPositionMode === 'center' ? 'center center' : `center ${state.settings.backgroundPositionMode}`);
+      bookmarkCanvas.style.setProperty('--bookmark-canvas-bg-opacity', String(state.settings.backgroundOpacity / 100));
+    } else {
+      bookmarkCanvas.style.removeProperty('--bookmark-canvas-bg-image');
+      bookmarkCanvas.style.removeProperty('--bookmark-canvas-bg-size');
+      bookmarkCanvas.style.removeProperty('--bookmark-canvas-bg-position');
+      bookmarkCanvas.style.removeProperty('--bookmark-canvas-bg-opacity');
+    }
+  };
+
+  applyBookmarkCanvasBackgroundStyle();
 
   const applySettingsPatch = async (patch: Partial<AppSettings>) => {
     const response = await sendRuntimeMessage<{ type: typeof messageTypes.patchSettings; patch: Partial<AppSettings> }, PatchSettingsResponse>({
@@ -356,7 +385,16 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   });
 
   accentPickerHueInput?.addEventListener('change', async () => {
-    await applySettingsPatch({ accentColor: state.accentPicker.draftColor });
+    const response = await sendRuntimeMessage<{ type: typeof messageTypes.patchSettings; patch: Partial<AppSettings> }, PatchSettingsResponse>({
+      type: messageTypes.patchSettings,
+      patch: { accentColor: state.accentPicker.draftColor },
+    });
+
+    state.settings = response.settings;
+    state.accentPicker = {
+      ...createAccentPickerState(response.settings.accentColor),
+      open: true,
+    };
   });
 
   accentPickerSaturationInput?.addEventListener('input', () => {
@@ -366,7 +404,16 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   });
 
   accentPickerSaturationInput?.addEventListener('change', async () => {
-    await applySettingsPatch({ accentColor: state.accentPicker.draftColor });
+    const response = await sendRuntimeMessage<{ type: typeof messageTypes.patchSettings; patch: Partial<AppSettings> }, PatchSettingsResponse>({
+      type: messageTypes.patchSettings,
+      patch: { accentColor: state.accentPicker.draftColor },
+    });
+
+    state.settings = response.settings;
+    state.accentPicker = {
+      ...createAccentPickerState(response.settings.accentColor),
+      open: true,
+    };
   });
 
   accentPickerLightnessInput?.addEventListener('input', () => {
@@ -376,7 +423,73 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   });
 
   accentPickerLightnessInput?.addEventListener('change', async () => {
-    await applySettingsPatch({ accentColor: state.accentPicker.draftColor });
+    const response = await sendRuntimeMessage<{ type: typeof messageTypes.patchSettings; patch: Partial<AppSettings> }, PatchSettingsResponse>({
+      type: messageTypes.patchSettings,
+      patch: { accentColor: state.accentPicker.draftColor },
+    });
+
+    state.settings = response.settings;
+    state.accentPicker = {
+      ...createAccentPickerState(response.settings.accentColor),
+      open: true,
+    };
+  });
+
+  backgroundUploadButton?.addEventListener('click', () => {
+    customBackgroundImageFileInput?.click();
+  });
+
+  customBackgroundImageFileInput?.addEventListener('change', async () => {
+    const file = customBackgroundImageFileInput.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const normalizedDataUrl = await normalizeBackgroundImage(file);
+    await applySettingsPatch({ customBackgroundImage: normalizedDataUrl });
+    customBackgroundImageFileInput.value = '';
+  });
+
+  backgroundRemoveButton?.addEventListener('click', async () => {
+    if (!state.settings.customBackgroundImage) {
+      return;
+    }
+    await applySettingsPatch({ customBackgroundImage: '' });
+  });
+
+  backgroundOpacityInput?.addEventListener('input', () => {
+    const nextOpacity = Math.max(0, Math.min(100, Number(backgroundOpacityInput.value)));
+    state.settings.backgroundOpacity = nextOpacity;
+    if (bookmarkCanvas) {
+      bookmarkCanvas.style.setProperty('--bookmark-canvas-bg-opacity', String(nextOpacity / 100));
+    }
+  });
+
+  backgroundOpacityInput?.addEventListener('change', async () => {
+    const nextOpacity = Math.max(0, Math.min(100, Number(backgroundOpacityInput.value)));
+    const response = await sendRuntimeMessage<{ type: typeof messageTypes.patchSettings; patch: Partial<AppSettings> }, PatchSettingsResponse>({
+      type: messageTypes.patchSettings,
+      patch: { backgroundOpacity: nextOpacity },
+    });
+
+    state.settings = response.settings;
+    applyBookmarkCanvasBackgroundStyle();
+  });
+
+  backgroundFitModeInput?.addEventListener('change', async () => {
+    const nextFitMode = backgroundFitModeInput.value;
+    if (nextFitMode !== 'cover' && nextFitMode !== 'contain' && nextFitMode !== 'fill') {
+      return;
+    }
+    await applySettingsPatch({ backgroundFitMode: nextFitMode });
+  });
+
+  backgroundPositionModeInput?.addEventListener('change', async () => {
+    const nextPositionMode = backgroundPositionModeInput.value;
+    if (nextPositionMode !== 'center' && nextPositionMode !== 'top' && nextPositionMode !== 'bottom') {
+      return;
+    }
+    await applySettingsPatch({ backgroundPositionMode: nextPositionMode });
   });
 
   rootFolderInput?.addEventListener('change', async () => {
@@ -441,6 +554,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     favoritesRowGapInput,
     bookmarkTileWidthInput,
     bookmarkIconSizeInput,
+    backgroundOpacityInput,
   ].forEach(input => {
     if (!input) {
       return;
@@ -1521,6 +1635,35 @@ async function normalizeUploadedImage(file: File): Promise<string> {
   return readFileAsDataUrl(blob);
 }
 
+async function normalizeBackgroundImage(file: File): Promise<string> {
+  const sourceDataUrl = await readFileAsDataUrl(file);
+  const image = await loadImageElement(sourceDataUrl);
+  const maxDimension = 2200;
+  const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Canvas is unavailable for background normalization.');
+  }
+
+  context.clearRect(0, 0, width, height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(image, 0, 0, width, height);
+
+  const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+  if (!blob) {
+    throw new Error('Failed to export the uploaded background image.');
+  }
+
+  return readFileAsDataUrl(blob);
+}
+
 function readFileAsDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1545,6 +1688,10 @@ function loadImageElement(src: string): Promise<HTMLImageElement> {
   });
 }
 
+function escapeCssUrl(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
 function updateAccentPickerDraft(rootElement: HTMLDivElement, state: AppState, patch: Partial<Pick<AccentPickerState, 'hue' | 'saturation' | 'lightness'>>): void {
   const nextState: AccentPickerState = {
     ...state.accentPicker,
@@ -1559,8 +1706,8 @@ function updateAccentPickerDraft(rootElement: HTMLDivElement, state: AppState, p
 
   const accentHexInput = rootElement.querySelector<HTMLInputElement>('input[name="accentHex"]');
   const accentColorInput = rootElement.querySelector<HTMLInputElement>('input[name="accentColor"]');
-  const wheel = rootElement.querySelector<HTMLElement>('.accent-picker-popover__wheel');
-  const wheelCenter = rootElement.querySelector<HTMLElement>('.accent-picker-popover__wheel-center');
+  const preview = rootElement.querySelector<HTMLElement>('.accent-picker-popover__preview');
+  const shell = rootElement.querySelector<HTMLElement>('.shell');
 
   if (accentHexInput) {
     accentHexInput.value = nextState.draftColor;
@@ -1570,15 +1717,15 @@ function updateAccentPickerDraft(rootElement: HTMLDivElement, state: AppState, p
     accentColorInput.value = nextState.draftColor;
   }
 
-  if (wheel) {
-    wheel.style.setProperty('--accent-preview', nextState.draftColor);
-    wheel.style.setProperty('--accent-hue', `${String(Math.round(nextState.hue))}deg`);
-    wheel.style.setProperty('--accent-saturation', `${String(Math.round(nextState.saturation))}%`);
-    wheel.style.setProperty('--accent-lightness', `${String(Math.round(nextState.lightness))}%`);
+  if (preview) {
+    preview.style.background = nextState.draftColor;
   }
 
-  if (wheelCenter) {
-    wheelCenter.setAttribute('style', `background:${nextState.draftColor}`);
+  if (shell) {
+    shell.setAttribute('style', buildShellStyle({
+      ...state.settings,
+      accentColor: nextState.draftColor,
+    }));
   }
 
   syncAccentSliderValue(rootElement, 'accentPickerHue', `${String(Math.round(nextState.hue))}deg`);
@@ -1601,6 +1748,8 @@ function syncSliderValueLabel(rootElement: HTMLDivElement, input: HTMLInputEleme
 
   const suffix = input.name === 'favoritesColumns' || input.name === 'favoritesRows'
     ? ''
+    : input.name === 'backgroundOpacity'
+      ? '%'
     : input.name === 'accentPickerHue'
       ? 'deg'
       : input.name.startsWith('accentPicker')

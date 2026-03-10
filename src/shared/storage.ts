@@ -8,6 +8,10 @@ const iconOverrideKey = 'icon-override-records';
 export const defaultSettings: AppSettings = {
   themeMode: 'system',
   accentColor: '#3f72dc',
+  customBackgroundImage: '',
+  backgroundOpacity: 70,
+  backgroundFitMode: 'cover',
+  backgroundPositionMode: 'center',
   settingsSection: 'general',
   rootFolderId: '',
   rememberLastFolder: true,
@@ -49,6 +53,16 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     accentColor: /^#[0-9a-fA-F]{6}$/.test(settings.accentColor ?? '')
       ? String(settings.accentColor).toUpperCase()
       : defaultSettings.accentColor.toUpperCase(),
+    customBackgroundImage: typeof settings.customBackgroundImage === 'string'
+      ? settings.customBackgroundImage
+      : defaultSettings.customBackgroundImage,
+    backgroundOpacity: normalizeNumber(settings.backgroundOpacity, defaultSettings.backgroundOpacity, 0, 100),
+    backgroundFitMode: settings.backgroundFitMode === 'cover' || settings.backgroundFitMode === 'contain' || settings.backgroundFitMode === 'fill'
+      ? settings.backgroundFitMode
+      : defaultSettings.backgroundFitMode,
+    backgroundPositionMode: settings.backgroundPositionMode === 'center' || settings.backgroundPositionMode === 'top' || settings.backgroundPositionMode === 'bottom'
+      ? settings.backgroundPositionMode
+      : defaultSettings.backgroundPositionMode,
     settingsSection: settings.settingsSection === 'general' || settings.settingsSection === 'appearance'
       ? settings.settingsSection
       : defaultSettings.settingsSection,
