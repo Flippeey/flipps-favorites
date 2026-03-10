@@ -15,7 +15,7 @@ export const messageTypes = {
 
 export type MessageType = (typeof messageTypes)[keyof typeof messageTypes];
 
-export type SettingsSectionId = 'general' | 'appearance' | 'advanced';
+export type SettingsSectionId = 'general' | 'appearance';
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 export interface AppSettings {
@@ -27,6 +27,13 @@ export interface AppSettings {
   openLinksInNewTab: boolean;
   showDock: boolean;
   dockFolderId: string;
+  favoritesColumns: number;
+  favoritesRows: number;
+  favoritesColumnGap: number;
+  favoritesRowGap: number;
+  bookmarkTileWidth: number;
+  bookmarkIconSize: number;
+  showBookmarkIconBackground: boolean;
 }
 
 export interface BookmarkNode {
