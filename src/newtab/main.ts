@@ -154,7 +154,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
           ${renderNavTrail(libraryFolders, breadcrumbs)}
         </div>
         <div class="nav-side nav-side--right">
-          <button class="drawer-toggle icon-button" type="button" aria-label="Open settings">${renderUiIcon('settings')}</button>
+          <button class="drawer-toggle nav-icon library-home button-with-icon" type="button" aria-label="Open settings">${renderUiIcon('settings')}<span>Settings</span></button>
         </div>
       </nav>
       <main class="workspace">

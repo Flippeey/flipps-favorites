@@ -64,8 +64,8 @@ button {
   --bookmark-icon-size: 64px;
   --dock-icon-size: 32px;
   --bookmark-row-height: 118px;
-  --page-bg: #eef1f5;
-  --page-bg-secondary: #e7ebf1;
+  --page-bg: #e7ebf1;
+  --page-bg-secondary: #eef1f5;
   --text-color: #2f3338;
   --muted-text: #6e7781;
   --nav-bg: rgba(255, 255, 255, 0.08);
@@ -89,8 +89,8 @@ button {
 }
 
 .shell[data-theme-mode="light"] {
-  --page-bg: #eef1f5;
-  --page-bg-secondary: #e7ebf1;
+  --page-bg: #e7ebf1;
+  --page-bg-secondary: #eef1f5;
   --text-color: #2f3338;
   --muted-text: #6e7781;
   --nav-bg: rgba(255, 255, 255, 0.08);
@@ -104,8 +104,8 @@ button {
 }
 
 .shell[data-theme-mode="dark"] {
-  --page-bg: #12161d;
-  --page-bg-secondary: #1a212b;
+  --page-bg: #1a212b;
+  --page-bg-secondary: #12161d;
   --text-color: #edf1f5;
   --muted-text: #adb7c3;
   --nav-bg: rgba(7, 11, 16, 0.18);
@@ -125,8 +125,8 @@ button {
 }
 
 .shell[data-theme-mode="system"] {
-  --page-bg: #eef1f5;
-  --page-bg-secondary: #e7ebf1;
+  --page-bg: #e7ebf1;
+  --page-bg-secondary: #eef1f5;
   --text-color: #2f3338;
   --muted-text: #6e7781;
   --nav-bg: rgba(255, 255, 255, 0.08);
@@ -141,8 +141,8 @@ button {
 
 @media (prefers-color-scheme: dark) {
   .shell[data-theme-mode="system"] {
-    --page-bg: #12161d;
-    --page-bg-secondary: #1a212b;
+    --page-bg: #1a212b;
+    --page-bg-secondary: #12161d;
     --text-color: #edf1f5;
     --muted-text: #adb7c3;
     --nav-bg: rgba(7, 11, 16, 0.18);
@@ -276,7 +276,7 @@ button {
   padding: 0 25px;
   overflow: hidden;
   white-space: nowrap;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-glass) 88%, transparent), color-mix(in srgb, var(--surface-glass) 68%, transparent));
+  background: var(--page-bg-secondary);
   border-bottom: 1px solid var(--border-subtle);
   backdrop-filter: blur(14px);
 }
@@ -398,7 +398,7 @@ button {
 
 .bookmark-tile:hover {
   transform: translateY(-2px);
-  background: var(--surface-layer-1);
+  background: var(--interactive-accent-soft);
   box-shadow: var(--elevation-low);
 }
 
@@ -492,15 +492,8 @@ button {
   display: flex;
   justify-content: center;
   padding: 24px 24px 18px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--interactive-accent) 26%, var(--panel-bg)) 0%,
-    color-mix(in srgb, var(--interactive-accent) 16%, var(--panel-bg)) 10%,
-    color-mix(in srgb, var(--interactive-accent) 7%, var(--panel-bg)) 22%,
-    var(--panel-bg) 42%,
-    var(--panel-bg) 100%
-  );
-  border-top: 1px solid color-mix(in srgb, var(--interactive-accent) 24%, var(--border-subtle));
+  background: var(--page-bg-secondary);
+  border-top: 1px solid var(--border-subtle);
   backdrop-filter: blur(12px);
   box-shadow: 0 -16px 32px rgba(5, 10, 18, 0.1);
 }
@@ -537,7 +530,7 @@ button {
 
 .dock-item:hover {
   transform: translateY(-2px);
-  background: var(--surface-layer-1);
+  background: var(--interactive-accent-soft);
   box-shadow: var(--elevation-low);
 }
 
