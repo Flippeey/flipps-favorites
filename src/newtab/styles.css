@@ -1251,7 +1251,7 @@ button {
   justify-content: space-between;
   gap: 16px;
   padding: 18px 24px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-color) 85%, #f2186b), color-mix(in srgb, var(--accent-color-strong) 82%, #ff3c84));
+  background: var(--accent-color-strong);
   color: white;
 }
 
@@ -1319,7 +1319,7 @@ button {
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: linear-gradient(180deg, var(--accent-color), var(--accent-color-strong));
+  background: transparent;
   box-shadow: 0 14px 32px var(--accent-shadow);
 }
 

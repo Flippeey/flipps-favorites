@@ -702,7 +702,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
       state.iconDialog.draftUrl = updatedTarget.url;
       state.iconDialog.status = `Saved bookmark ${updatedTarget.title || getHostname(updatedTarget.url)}.`;
       state.iconDialog.statusKind = 'success';
-      state.iconDialog.query = `${updatedTarget.title || getHostname(updatedTarget.url)} icon`;
+      state.iconDialog.query = `${updatedTarget.title || getSearchName(updatedTarget.url)} logo`;
       await loadIconDialogPreview(state, updatedTarget);
     }
 
@@ -1240,7 +1240,7 @@ async function openIconDialog(rootElement: HTMLDivElement, state: AppState, targ
     target,
     draftTitle: target.title || '',
     draftUrl: target.url,
-    query: `${target.title || getHostname(target.url)} icon`,
+    query: `${target.title || getSearchName(target.url)} logo`,
     status: '',
     statusKind: '',
     loading: true,
@@ -1429,6 +1429,17 @@ function isValidBookmarkUrl(value: string): boolean {
     return parsed.protocol === 'http:' || parsed.protocol === 'https:';
   } catch {
     return false;
+  }
+}
+
+// Extracts the most meaningful label from a URL for use as a search term.
+// e.g. https://www.twitch.tv → "twitch", https://apps.google.com → "google"
+function getSearchName(url: string): string {
+  try {
+    const parts = new URL(url).hostname.replace(/^www\./, '').split('.');
+    return parts.length >= 2 ? parts[parts.length - 2] : (parts[0] ?? '');
+  } catch {
+    return '';
   }
 }
 
