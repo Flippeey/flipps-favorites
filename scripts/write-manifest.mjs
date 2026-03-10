@@ -15,7 +15,7 @@ const baseManifest = {
   version: '0.1.0',
   description: 'A clean-room bookmark dashboard for new tabs.',
   permissions: ['bookmarks', 'storage'],
-  host_permissions: [],
+  host_permissions: ['https://*/*', 'http://*/*'],
   chrome_url_overrides: {
     newtab: 'newtab.html',
   },

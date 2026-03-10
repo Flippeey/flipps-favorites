@@ -3,6 +3,14 @@ export const messageTypes = {
   getSettings: 'settings/get',
   patchSettings: 'settings/patch',
   getBookmarkTree: 'bookmarks/get-tree',
+  updateBookmark: 'bookmarks/update',
+  removeBookmark: 'bookmarks/remove',
+  getIcon: 'icons/get',
+  searchIcons: 'icons/search',
+  setIconOverride: 'icons/set-override',
+  setIconOverrideFromUrl: 'icons/set-override-from-url',
+  removeIconOverride: 'icons/remove-override',
+  invalidateIcon: 'icons/invalidate',
 } as const;
 
 export type MessageType = (typeof messageTypes)[keyof typeof messageTypes];
@@ -27,6 +35,43 @@ export interface BookmarkNode {
   title: string;
   url?: string;
   children?: BookmarkNode[];
+}
+
+export type IconSourceKind = 'override' | 'favicon' | 'search' | 'generated';
+
+export interface ResolvedIcon {
+  cacheKey: string;
+  sourceKind: IconSourceKind;
+  dataUrl: string;
+  lastUpdated: number;
+  isFallback: boolean;
+}
+
+export interface IconCacheRecord {
+  cacheKey: string;
+  bookmarkUrl: string;
+  sourceKind: Exclude<IconSourceKind, 'override'>;
+  dataUrl: string;
+  mimeType: string;
+  updatedAt: number;
+  pipelineVersion: string;
+}
+
+export interface IconOverrideRecord {
+  overrideKey: string;
+  bookmarkUrl: string;
+  dataUrl: string;
+  fileName: string;
+  mimeType: string;
+  updatedAt: number;
+}
+
+export interface IconSearchCandidate {
+  imageUrl: string;
+  previewUrl: string;
+  label: string;
+  sourceKind: 'favicon' | 'search';
+  sourcePageUrl?: string;
 }
 
 export interface PingRequest {
@@ -63,14 +108,116 @@ export interface GetBookmarkTreeResponse {
   tree: BookmarkNode[];
 }
 
+export interface UpdateBookmarkRequest {
+  type: typeof messageTypes.updateBookmark;
+  bookmarkId: string;
+  changes: {
+    title?: string;
+    url?: string;
+  };
+}
+
+export interface UpdateBookmarkResponse {
+  bookmark: BookmarkNode;
+}
+
+export interface RemoveBookmarkRequest {
+  type: typeof messageTypes.removeBookmark;
+  bookmarkId: string;
+}
+
+export interface RemoveBookmarkResponse {
+  ok: true;
+}
+
+export interface GetIconRequest {
+  type: typeof messageTypes.getIcon;
+  bookmarkUrl: string;
+  bookmarkTitle?: string;
+}
+
+export interface GetIconResponse {
+  icon: ResolvedIcon;
+}
+
+export interface SearchIconsRequest {
+  type: typeof messageTypes.searchIcons;
+  query: string;
+  bookmarkUrl?: string;
+}
+
+export interface SearchIconsResponse {
+  candidates: IconSearchCandidate[];
+}
+
+export interface SetIconOverrideRequest {
+  type: typeof messageTypes.setIconOverride;
+  bookmarkUrl: string;
+  bookmarkTitle?: string;
+  dataUrl: string;
+  fileName: string;
+  mimeType: string;
+}
+
+export interface SetIconOverrideResponse {
+  icon: ResolvedIcon;
+}
+
+export interface SetIconOverrideFromUrlRequest {
+  type: typeof messageTypes.setIconOverrideFromUrl;
+  bookmarkUrl: string;
+  bookmarkTitle?: string;
+  imageUrl: string;
+  fileName?: string;
+}
+
+export interface SetIconOverrideFromUrlResponse {
+  icon: ResolvedIcon;
+}
+
+export interface RemoveIconOverrideRequest {
+  type: typeof messageTypes.removeIconOverride;
+  bookmarkUrl: string;
+  bookmarkTitle?: string;
+}
+
+export interface RemoveIconOverrideResponse {
+  icon: ResolvedIcon;
+}
+
+export interface InvalidateIconRequest {
+  type: typeof messageTypes.invalidateIcon;
+  bookmarkUrl?: string;
+}
+
+export interface InvalidateIconResponse {
+  ok: true;
+}
+
 export type AppRequest =
   | PingRequest
   | GetSettingsRequest
   | PatchSettingsRequest
-  | GetBookmarkTreeRequest;
+  | GetBookmarkTreeRequest
+  | UpdateBookmarkRequest
+  | RemoveBookmarkRequest
+  | GetIconRequest
+  | SearchIconsRequest
+  | SetIconOverrideRequest
+  | SetIconOverrideFromUrlRequest
+  | RemoveIconOverrideRequest
+  | InvalidateIconRequest;
 
 export type AppResponse =
   | PingResponse
   | GetSettingsResponse
   | PatchSettingsResponse
-  | GetBookmarkTreeResponse;
+  | GetBookmarkTreeResponse
+  | UpdateBookmarkResponse
+  | RemoveBookmarkResponse
+  | GetIconResponse
+  | SearchIconsResponse
+  | SetIconOverrideResponse
+  | SetIconOverrideFromUrlResponse
+  | RemoveIconOverrideResponse
+  | InvalidateIconResponse;
