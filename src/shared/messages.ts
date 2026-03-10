@@ -3,6 +3,8 @@ export const messageTypes = {
   getSettings: 'settings/get',
   patchSettings: 'settings/patch',
   getBookmarkTree: 'bookmarks/get-tree',
+  createBookmark: 'bookmarks/create',
+  moveBookmark: 'bookmarks/move',
   updateBookmark: 'bookmarks/update',
   removeBookmark: 'bookmarks/remove',
   getIcon: 'icons/get',
@@ -121,6 +123,29 @@ export interface GetBookmarkTreeResponse {
   tree: BookmarkNode[];
 }
 
+export interface CreateBookmarkRequest {
+  type: typeof messageTypes.createBookmark;
+  parentId: string;
+  title: string;
+  url?: string;
+  index?: number;
+}
+
+export interface CreateBookmarkResponse {
+  bookmark: BookmarkNode;
+}
+
+export interface MoveBookmarkRequest {
+  type: typeof messageTypes.moveBookmark;
+  bookmarkId: string;
+  parentId: string;
+  index?: number;
+}
+
+export interface MoveBookmarkResponse {
+  bookmark: BookmarkNode;
+}
+
 export interface UpdateBookmarkRequest {
   type: typeof messageTypes.updateBookmark;
   bookmarkId: string;
@@ -137,6 +162,7 @@ export interface UpdateBookmarkResponse {
 export interface RemoveBookmarkRequest {
   type: typeof messageTypes.removeBookmark;
   bookmarkId: string;
+  recursive?: boolean;
 }
 
 export interface RemoveBookmarkResponse {
@@ -212,6 +238,8 @@ export type AppRequest =
   | GetSettingsRequest
   | PatchSettingsRequest
   | GetBookmarkTreeRequest
+  | CreateBookmarkRequest
+  | MoveBookmarkRequest
   | UpdateBookmarkRequest
   | RemoveBookmarkRequest
   | GetIconRequest
@@ -226,6 +254,8 @@ export type AppResponse =
   | GetSettingsResponse
   | PatchSettingsResponse
   | GetBookmarkTreeResponse
+  | CreateBookmarkResponse
+  | MoveBookmarkResponse
   | UpdateBookmarkResponse
   | RemoveBookmarkResponse
   | GetIconResponse

@@ -1,4 +1,4 @@
-export type UiIconName = 'home' | 'settings' | 'close' | 'grid' | 'palette' | 'image' | 'external' | 'window' | 'edit' | 'trash' | 'sliders' | 'search' | 'upload' | 'refresh' | 'link';
+export type UiIconName = 'home' | 'settings' | 'close' | 'grid' | 'palette' | 'image' | 'external' | 'window' | 'edit' | 'trash' | 'sliders' | 'search' | 'upload' | 'refresh' | 'link' | 'save' | 'plus' | 'folderPlus' | 'copy' | 'scissors' | 'clipboard';
 
 export function renderUiIcon(name: UiIconName): string {
   const paths: Record<UiIconName, string> = {
@@ -17,6 +17,12 @@ export function renderUiIcon(name: UiIconName): string {
     upload: '<path d="M12 16V5"/><path d="m7.5 9.5 4.5-4.5 4.5 4.5"/><path d="M5 19h14"/>',
     refresh: '<path d="M20 11a8 8 0 1 0 1 4"/><path d="M20 4v7h-7"/>',
     link: '<path d="M10 14 8 16a3 3 0 1 1-4-4l2-2a3 3 0 0 1 4 0"/><path d="m14 10 2-2a3 3 0 1 1 4 4l-2 2a3 3 0 0 1-4 0"/><path d="M9 15 15 9"/>',
+    save: '<path d="M5 4h12l2 2v14H5Z"/><path d="M8 4v5h8V4"/><path d="M9 20v-6h6v6"/>',
+    plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+    folderPlus: '<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-9Z"/><path d="M15.5 13h5"/><path d="M18 10.5v5"/>',
+    copy: '<rect x="8" y="8" width="10" height="12" rx="2"/><path d="M6 16H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"/>',
+    scissors: '<circle cx="6.5" cy="17.5" r="2.5"/><circle cx="6.5" cy="6.5" r="2.5"/><path d="M20 4 8.5 15.5"/><path d="m13 13 7 7"/>',
+    clipboard: '<rect x="6" y="5" width="12" height="16" rx="2"/><path d="M9 5.5h6"/><path d="M9.5 3.5h5a1.5 1.5 0 0 1 1.5 1.5v1h-8v-1a1.5 1.5 0 0 1 1.5-1.5Z"/>',
   };
 
   return `<span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[name]}</svg></span>`;

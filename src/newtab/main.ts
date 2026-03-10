@@ -1,6 +1,6 @@
 import './styles.css';
-import { sendRuntimeMessage } from '../shared/browser';
-import { messageTypes, type AppSettings, type BookmarkNode, type GetBookmarkTreeResponse, type GetIconResponse, type GetSettingsResponse, type IconSearchCandidate, type InvalidateIconResponse, type PatchSettingsResponse, type PingResponse, type RemoveBookmarkResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SearchIconsResponse, type SettingsSectionId, type SetIconOverrideFromUrlResponse, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../shared/messages';
+import { extensionApi, sendRuntimeMessage } from '../shared/browser';
+import { messageTypes, type AppSettings, type BookmarkNode, type CreateBookmarkResponse, type GetBookmarkTreeResponse, type GetIconResponse, type GetSettingsResponse, type IconSearchCandidate, type InvalidateIconResponse, type MoveBookmarkResponse, type PatchSettingsResponse, type PingResponse, type RemoveBookmarkResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SearchIconsResponse, type SettingsSectionId, type SetIconOverrideFromUrlResponse, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../shared/messages';
 import { collectFolderOptions, collectLinkOptions, collectVisibleBookmarks as collectVisibleBookmarkTargets, findBookmarkActionTargetById, getBookmarkActionTarget, getBookmarkLabelForUrl, getBreadcrumbs, getDefaultFolder, getDockFolder, getFolderNode, getHostname, getLibraryFolders, isFolderDescendantOf, resolveInitialFolderId, resolveInitialIconToolTarget, resolveIconToolTarget, type BookmarkActionTarget } from './bookmark-navigation';
 import { escapeAttribute, escapeHtml } from './html';
 import { applyPendingIcon, applyResolvedIcon, getFaviconImageUrl, renderFaviconIconMarkup, renderIconPlaceholder, renderResolvedIconMarkup, renderBookmarkVisualIcon } from './icon-render';
@@ -19,15 +19,50 @@ interface AppState {
   accentPicker: AccentPickerState;
   iconToolTargetUrl: string;
   iconToolStatus: string;
-  contextMenu: BookmarkContextMenuState | null;
+  clipboard: FolderClipboardState | null;
+  contextMenu: ContextMenuState | null;
   iconDialog: IconDialogState;
   resolvedIcons: Record<string, ResolvedIcon>;
 }
 
+interface FolderActionTarget {
+  id: string;
+  title: string;
+  parentId: string;
+}
+
+interface SurfaceContextMenuTarget {
+  id: string;
+  title: string;
+  surface: 'grid' | 'dock';
+}
+
 interface BookmarkContextMenuState {
+  kind: 'bookmark';
   x: number;
   y: number;
   target: BookmarkActionTarget;
+}
+
+interface FolderContextMenuState {
+  kind: 'folder';
+  x: number;
+  y: number;
+  target: FolderActionTarget;
+}
+
+interface SurfaceContextMenuState {
+  kind: 'surface';
+  x: number;
+  y: number;
+  target: SurfaceContextMenuTarget;
+}
+
+type ContextMenuState = BookmarkContextMenuState | FolderContextMenuState | SurfaceContextMenuState;
+
+interface FolderClipboardState {
+  mode: 'copy' | 'cut';
+  item: BookmarkNode;
 }
 
 interface IconDialogState {
@@ -71,6 +106,7 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
     accentPicker: createAccentPickerState(settingsResponse.settings.accentColor),
     iconToolTargetUrl: resolveInitialIconToolTarget(bookmarkResponse.tree),
     iconToolStatus: '',
+    clipboard: null,
     contextMenu: null,
     iconDialog: createClosedIconDialogState(),
     resolvedIcons: {},
@@ -192,7 +228,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
           </section>
         </div>
       </aside>
-      ${state.contextMenu ? renderBookmarkContextMenu(state.contextMenu) : ''}
+      ${state.contextMenu ? renderContextMenu(state, state.contextMenu) : ''}
       ${state.iconDialog.open ? renderIconDialog(state.iconDialog) : ''}
     </div>
   `;
@@ -251,7 +287,10 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const iconDialogResultButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-icon-candidate-url]');
   const themeModeButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-theme-mode-option]');
   const accentButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-accent-option]');
+  const bookmarkGrid = rootElement.querySelector<HTMLElement>('.bookmark-grid');
+  const bookmarkDock = rootElement.querySelector<HTMLElement>('.bookmark-dock');
   const folderButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-folder-id]');
+  const folderCardButtons = rootElement.querySelectorAll<HTMLButtonElement>('.folder-card[data-folder-id]');
   const linkButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-link-url]');
 
   const applyBookmarkCanvasBackgroundStyle = () => {
@@ -578,6 +617,24 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     });
   });
 
+  folderCardButtons.forEach(button => {
+    button.addEventListener('contextmenu', event => {
+      const target = getFolderActionTarget(button);
+      if (!target) {
+        return;
+      }
+
+      event.preventDefault();
+      state.contextMenu = {
+        kind: 'folder',
+        x: event.clientX,
+        y: event.clientY,
+        target,
+      };
+      renderApp(rootElement, state);
+    });
+  });
+
   linkButtons.forEach(button => {
     button.addEventListener('click', () => {
       const url = button.dataset.linkUrl;
@@ -594,6 +651,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
       }
       event.preventDefault();
       state.contextMenu = {
+        kind: 'bookmark',
         x: event.clientX,
         y: event.clientY,
         target,
@@ -602,31 +660,66 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     });
   });
 
+  bookmarkCanvas?.addEventListener('contextmenu', event => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('[data-link-url], .folder-card[data-folder-id]')) {
+      return;
+    }
+
+    event.preventDefault();
+    state.contextMenu = {
+      kind: 'surface',
+      x: event.clientX,
+      y: event.clientY,
+      target: {
+        id: currentFolder.id,
+        title: currentFolder.title || 'Untitled',
+        surface: 'grid',
+      },
+    };
+    renderApp(rootElement, state);
+  });
+
+  bookmarkDock?.addEventListener('contextmenu', event => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('[data-link-url], .folder-card[data-folder-id]') || !dockFolder) {
+      return;
+    }
+
+    event.preventDefault();
+    state.contextMenu = {
+      kind: 'surface',
+      x: event.clientX,
+      y: event.clientY,
+      target: {
+        id: dockFolder.id,
+        title: dockFolder.title || 'Untitled',
+        surface: 'dock',
+      },
+    };
+    renderApp(rootElement, state);
+  });
+
   contextMenuItems.forEach(button => {
     button.addEventListener('click', async () => {
       const action = button.dataset.contextAction;
-      const target = state.contextMenu?.target;
-      if (!action || !target) {
+      const menuState = state.contextMenu;
+      if (!action || !menuState || button.disabled) {
         return;
       }
 
       state.contextMenu = null;
 
-      switch (action) {
-        case 'open-tab':
-          openBookmark(target.url, true);
+      switch (menuState.kind) {
+        case 'bookmark':
+          await handleBookmarkContextAction(rootElement, state, action, menuState.target);
           return;
-        case 'open-window':
-          window.open(target.url, '_blank', 'noopener,noreferrer,width=1280,height=900');
+        case 'folder':
+          await handleFolderContextAction(rootElement, state, action, menuState.target);
           return;
-        case 'edit':
-          await openIconDialog(rootElement, state, target);
+        case 'surface':
+          await handleSurfaceContextAction(rootElement, state, action, menuState.target);
           return;
-        case 'delete':
-          await deleteBookmarkFromContext(rootElement, state, target);
-          return;
-        default:
-          renderApp(rootElement, state);
       }
     });
   });
@@ -1197,7 +1290,7 @@ function renderFolderCard(node: BookmarkNode, resolvedIcons: Record<string, Reso
     : '';
 
   return `
-    <button class="${classes}" data-folder-id="${node.id}" type="button">
+    <button class="${classes}" data-folder-id="${node.id}" data-folder-title="${escapeAttribute(node.title || 'Untitled')}" data-parent-id="${escapeAttribute(node.parentId ?? '')}" type="button">
       <span class="folder-card__preview">
         <span class="folder-card__grid" data-folder-preview-variant="${variant}">
           ${previewItems.map(child => renderFolderPreviewCell(child, resolvedIcons)).join('') || `<span class="folder-card__cell folder-card__cell--empty">${escapeHtml(getInitial(node.title || 'Folder'))}</span>`}
@@ -1225,17 +1318,55 @@ function renderFolderPreviewCell(node: BookmarkNode, resolvedIcons: Record<strin
   return `<span class="folder-card__cell folder-card__cell--folder" title="${escapeAttribute(node.title || 'Folder')}">${itemCount > 0 ? String(itemCount) : escapeHtml(getInitial(node.title || 'Folder'))}</span>`;
 }
 
-function renderBookmarkContextMenu(contextMenu: BookmarkContextMenuState): string {
+function renderContextMenu(state: AppState, contextMenu: ContextMenuState): string {
   const x = clamp(contextMenu.x, 12, Math.max(12, window.innerWidth - 236));
-  const y = clamp(contextMenu.y, 12, Math.max(12, window.innerHeight - 252));
+  const maxHeight = contextMenu.kind === 'surface' ? 348 : 316;
+  const y = clamp(contextMenu.y, 12, Math.max(12, window.innerHeight - maxHeight));
+
+  if (contextMenu.kind === 'bookmark') {
+    return `
+      <div class="context-menu-layer">
+        <div class="bookmark-context-menu" style="left:${x}px; top:${y}px" role="menu" aria-label="Bookmark actions">
+          <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-tab" type="button" role="menuitem">${renderUiIcon('external')}<span>Open in new tab</span></button>
+          <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-window" type="button" role="menuitem">${renderUiIcon('window')}<span>Open in new window</span></button>
+          <div class="bookmark-context-menu__divider"></div>
+          <button class="bookmark-context-menu__item button-with-icon" data-context-action="edit" type="button" role="menuitem">${renderUiIcon('edit')}<span>Edit...</span></button>
+          <button class="bookmark-context-menu__item button-with-icon" data-context-action="delete" type="button" role="menuitem">${renderUiIcon('trash')}<span>Delete...</span></button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (contextMenu.kind === 'folder') {
+    const canPaste = canPasteClipboardIntoFolder(state, contextMenu.target.id);
+    return `
+      <div class="context-menu-layer">
+        <div class="bookmark-context-menu" style="left:${x}px; top:${y}px" role="menu" aria-label="Folder actions">
+          <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-tab" type="button" role="menuitem">${renderUiIcon('external')}<span>Open in new tab</span></button>
+          <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-window" type="button" role="menuitem">${renderUiIcon('window')}<span>Open in new window</span></button>
+          <div class="bookmark-context-menu__divider"></div>
+          <button class="bookmark-context-menu__item button-with-icon" data-context-action="cut" type="button" role="menuitem">${renderUiIcon('scissors')}<span>Cut</span></button>
+          <button class="bookmark-context-menu__item button-with-icon" data-context-action="copy" type="button" role="menuitem">${renderUiIcon('copy')}<span>Copy</span></button>
+          <button class="bookmark-context-menu__item button-with-icon" data-context-action="paste" type="button" role="menuitem" ${canPaste ? '' : 'disabled'}>${renderUiIcon('clipboard')}<span>Paste</span></button>
+          <div class="bookmark-context-menu__divider"></div>
+          <button class="bookmark-context-menu__item button-with-icon" data-context-action="edit-folder" type="button" role="menuitem">${renderUiIcon('edit')}<span>Edit</span></button>
+          <button class="bookmark-context-menu__item button-with-icon" data-context-action="delete-folder" type="button" role="menuitem">${renderUiIcon('trash')}<span>Delete</span></button>
+        </div>
+      </div>
+    `;
+  }
+
+  const canPaste = canPasteClipboardIntoFolder(state, contextMenu.target.id);
   return `
     <div class="context-menu-layer">
-      <div class="bookmark-context-menu" style="left:${x}px; top:${y}px" role="menu" aria-label="Bookmark actions">
-        <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-tab" type="button" role="menuitem">${renderUiIcon('external')}<span>Open in new tab</span></button>
-        <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-window" type="button" role="menuitem">${renderUiIcon('window')}<span>Open in new window</span></button>
+      <div class="bookmark-context-menu" style="left:${x}px; top:${y}px" role="menu" aria-label="${contextMenu.target.surface === 'dock' ? 'Dock actions' : 'Grid actions'}">
+        <button class="bookmark-context-menu__item button-with-icon" data-context-action="add-bookmark" type="button" role="menuitem">${renderUiIcon('plus')}<span>Add Bookmark</span></button>
+        <button class="bookmark-context-menu__item button-with-icon" data-context-action="add-folder" type="button" role="menuitem">${renderUiIcon('folderPlus')}<span>Add Folder</span></button>
+        <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-manager" type="button" role="menuitem">${renderUiIcon('grid')}<span>Open Bookmark Manager</span></button>
         <div class="bookmark-context-menu__divider"></div>
-        <button class="bookmark-context-menu__item button-with-icon" data-context-action="edit" type="button" role="menuitem">${renderUiIcon('edit')}<span>Edit...</span></button>
-        <button class="bookmark-context-menu__item button-with-icon" data-context-action="delete" type="button" role="menuitem">${renderUiIcon('trash')}<span>Delete...</span></button>
+        <button class="bookmark-context-menu__item button-with-icon" data-context-action="paste" type="button" role="menuitem" ${canPaste ? '' : 'disabled'}>${renderUiIcon('clipboard')}<span>Paste</span></button>
+        <div class="bookmark-context-menu__divider"></div>
+        <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-settings" type="button" role="menuitem">${renderUiIcon('settings')}<span>Open Settings</span></button>
       </div>
     </div>
   `;
@@ -1447,6 +1578,7 @@ async function deleteBookmarkFromContext(rootElement: HTMLDivElement, state: App
   await sendRuntimeMessage<{
     type: typeof messageTypes.removeBookmark;
     bookmarkId: string;
+    recursive?: boolean;
   }, RemoveBookmarkResponse>({
     type: messageTypes.removeBookmark,
     bookmarkId: target.id,
@@ -1478,6 +1610,337 @@ async function refreshBookmarkTree(state: AppState): Promise<void> {
       state.iconDialog = createClosedIconDialogState();
     }
   }
+
+  state.clipboard = refreshFolderClipboard(state.tree, state.clipboard);
+}
+
+async function handleBookmarkContextAction(rootElement: HTMLDivElement, state: AppState, action: string, target: BookmarkActionTarget): Promise<void> {
+  switch (action) {
+    case 'open-tab':
+      openBookmark(target.url, true);
+      return;
+    case 'open-window':
+      window.open(target.url, '_blank', 'noopener,noreferrer,width=1280,height=900');
+      return;
+    case 'edit':
+      await openIconDialog(rootElement, state, target);
+      return;
+    case 'delete':
+      await deleteBookmarkFromContext(rootElement, state, target);
+      return;
+    default:
+      renderApp(rootElement, state);
+  }
+}
+
+async function handleFolderContextAction(rootElement: HTMLDivElement, state: AppState, action: string, target: FolderActionTarget): Promise<void> {
+  switch (action) {
+    case 'open-tab':
+      openFolderView(target.id, true);
+      return;
+    case 'open-window':
+      openFolderView(target.id, false);
+      return;
+    case 'cut':
+      setFolderClipboard(state, 'cut', target.id);
+      renderApp(rootElement, state);
+      return;
+    case 'copy':
+      setFolderClipboard(state, 'copy', target.id);
+      renderApp(rootElement, state);
+      return;
+    case 'paste':
+      await pasteClipboardIntoFolder(rootElement, state, target.id);
+      return;
+    case 'edit-folder':
+      await renameFolder(rootElement, state, target);
+      return;
+    case 'delete-folder':
+      await deleteFolderFromContext(rootElement, state, target);
+      return;
+    default:
+      renderApp(rootElement, state);
+  }
+}
+
+async function handleSurfaceContextAction(rootElement: HTMLDivElement, state: AppState, action: string, target: SurfaceContextMenuTarget): Promise<void> {
+  switch (action) {
+    case 'add-bookmark':
+      await createBookmarkInFolder(rootElement, state, target.id);
+      return;
+    case 'add-folder':
+      await createFolderInFolder(rootElement, state, target.id);
+      return;
+    case 'open-manager':
+      openBookmarkManager();
+      return;
+    case 'paste':
+      await pasteClipboardIntoFolder(rootElement, state, target.id);
+      return;
+    case 'open-settings':
+      openDrawer(rootElement, state);
+      return;
+    default:
+      renderApp(rootElement, state);
+  }
+}
+
+function getFolderActionTarget(element: HTMLElement): FolderActionTarget | null {
+  const id = element.dataset.folderId;
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    title: element.dataset.folderTitle || 'Untitled',
+    parentId: element.dataset.parentId || '',
+  };
+}
+
+function setFolderClipboard(state: AppState, mode: FolderClipboardState['mode'], folderId: string): void {
+  const folder = getFolderNode(state.tree, folderId);
+  if (!folder) {
+    state.clipboard = null;
+    return;
+  }
+
+  state.clipboard = {
+    mode,
+    item: cloneBookmarkNode(folder),
+  };
+}
+
+function refreshFolderClipboard(tree: BookmarkNode[], clipboard: FolderClipboardState | null): FolderClipboardState | null {
+  if (!clipboard) {
+    return null;
+  }
+
+  if (clipboard.mode === 'copy') {
+    return clipboard;
+  }
+
+  const nextFolder = getFolderNode(tree, clipboard.item.id);
+  if (!nextFolder) {
+    return null;
+  }
+
+  return {
+    mode: clipboard.mode,
+    item: cloneBookmarkNode(nextFolder),
+  };
+}
+
+function canPasteClipboardIntoFolder(state: AppState, targetFolderId: string): boolean {
+  const clipboard = state.clipboard;
+  if (!clipboard) {
+    return false;
+  }
+
+  if (clipboard.mode === 'cut') {
+    if (targetFolderId === clipboard.item.id) {
+      return false;
+    }
+
+    if (!getFolderNode(state.tree, clipboard.item.id)) {
+      return false;
+    }
+
+    if (isFolderDescendantOf(state.tree, targetFolderId, clipboard.item.id)) {
+      return false;
+    }
+  }
+
+  return Boolean(getFolderNode(state.tree, targetFolderId));
+}
+
+async function createBookmarkInFolder(rootElement: HTMLDivElement, state: AppState, parentId: string): Promise<void> {
+  const response = await sendRuntimeMessage<{
+    type: typeof messageTypes.createBookmark;
+    parentId: string;
+    title: string;
+    url?: string;
+    index?: number;
+  }, CreateBookmarkResponse>({
+    type: messageTypes.createBookmark,
+    parentId,
+    title: 'New Bookmark',
+    url: 'https://example.com',
+  });
+
+  await refreshBookmarkTree(state);
+  await preloadVisibleIcons(state);
+
+  const nextTarget = findBookmarkActionTargetById(state.tree, response.bookmark.id);
+  if (nextTarget) {
+    await openIconDialog(rootElement, state, nextTarget);
+    return;
+  }
+
+  renderApp(rootElement, state);
+}
+
+async function createFolderInFolder(rootElement: HTMLDivElement, state: AppState, parentId: string): Promise<void> {
+  const nextTitle = window.prompt('Folder name', 'New Folder')?.trim();
+  if (!nextTitle) {
+    renderApp(rootElement, state);
+    return;
+  }
+
+  await sendRuntimeMessage<{
+    type: typeof messageTypes.createBookmark;
+    parentId: string;
+    title: string;
+    url?: string;
+    index?: number;
+  }, CreateBookmarkResponse>({
+    type: messageTypes.createBookmark,
+    parentId,
+    title: nextTitle,
+  });
+
+  await refreshBookmarkTree(state);
+  await preloadVisibleIcons(state);
+  renderApp(rootElement, state);
+}
+
+async function renameFolder(rootElement: HTMLDivElement, state: AppState, target: FolderActionTarget): Promise<void> {
+  const nextTitle = window.prompt('Folder name', target.title)?.trim();
+  if (!nextTitle || nextTitle === target.title) {
+    renderApp(rootElement, state);
+    return;
+  }
+
+  await sendRuntimeMessage<{
+    type: typeof messageTypes.updateBookmark;
+    bookmarkId: string;
+    changes: { title?: string; url?: string };
+  }, UpdateBookmarkResponse>({
+    type: messageTypes.updateBookmark,
+    bookmarkId: target.id,
+    changes: { title: nextTitle },
+  });
+
+  await refreshBookmarkTree(state);
+  renderApp(rootElement, state);
+}
+
+async function deleteFolderFromContext(rootElement: HTMLDivElement, state: AppState, target: FolderActionTarget): Promise<void> {
+  const folder = getFolderNode(state.tree, target.id);
+  const itemCount = folder?.children?.length ?? 0;
+  const confirmed = window.confirm(`Delete folder ${target.title || 'Untitled'} and its ${String(itemCount)} item${itemCount === 1 ? '' : 's'}?`);
+  if (!confirmed) {
+    renderApp(rootElement, state);
+    return;
+  }
+
+  await sendRuntimeMessage<{
+    type: typeof messageTypes.removeBookmark;
+    bookmarkId: string;
+    recursive?: boolean;
+  }, RemoveBookmarkResponse>({
+    type: messageTypes.removeBookmark,
+    bookmarkId: target.id,
+    recursive: true,
+  });
+
+  if (state.currentFolderId === target.id) {
+    state.currentFolderId = target.parentId || resolveInitialFolderId(state.settings, state.tree, getLastFolder, getFolderIdFromHash);
+  }
+
+  await refreshBookmarkTree(state);
+  await preloadVisibleIcons(state);
+  renderApp(rootElement, state);
+}
+
+async function pasteClipboardIntoFolder(rootElement: HTMLDivElement, state: AppState, targetFolderId: string): Promise<void> {
+  if (!canPasteClipboardIntoFolder(state, targetFolderId) || !state.clipboard) {
+    renderApp(rootElement, state);
+    return;
+  }
+
+  if (state.clipboard.mode === 'cut') {
+    await sendRuntimeMessage<{
+      type: typeof messageTypes.moveBookmark;
+      bookmarkId: string;
+      parentId: string;
+      index?: number;
+    }, MoveBookmarkResponse>({
+      type: messageTypes.moveBookmark,
+      bookmarkId: state.clipboard.item.id,
+      parentId: targetFolderId,
+    });
+    state.clipboard = null;
+  } else {
+    await cloneFolderSubtree(targetFolderId, state.clipboard.item);
+  }
+
+  await refreshBookmarkTree(state);
+  await preloadVisibleIcons(state);
+  renderApp(rootElement, state);
+}
+
+async function cloneFolderSubtree(parentId: string, sourceFolder: BookmarkNode): Promise<void> {
+  const response = await sendRuntimeMessage<{
+    type: typeof messageTypes.createBookmark;
+    parentId: string;
+    title: string;
+    url?: string;
+    index?: number;
+  }, CreateBookmarkResponse>({
+    type: messageTypes.createBookmark,
+    parentId,
+    title: sourceFolder.title || 'Untitled',
+  });
+
+  for (const child of sourceFolder.children ?? []) {
+    if (child.url) {
+      await sendRuntimeMessage<{
+        type: typeof messageTypes.createBookmark;
+        parentId: string;
+        title: string;
+        url?: string;
+        index?: number;
+      }, CreateBookmarkResponse>({
+        type: messageTypes.createBookmark,
+        parentId: response.bookmark.id,
+        title: child.title || getHostname(child.url),
+        url: child.url,
+      });
+      continue;
+    }
+
+    await cloneFolderSubtree(response.bookmark.id, child);
+  }
+}
+
+function cloneBookmarkNode(node: BookmarkNode): BookmarkNode {
+  return {
+    id: node.id,
+    parentId: node.parentId,
+    title: node.title,
+    url: node.url,
+    children: node.children?.map(child => cloneBookmarkNode(child)),
+  };
+}
+
+function openBookmarkManager(): void {
+  const managerUrl = /firefox/i.test(navigator.userAgent) ? 'about:bookmarks' : 'chrome://bookmarks/';
+  if (extensionApi.tabs?.create) {
+    void extensionApi.tabs.create({ url: managerUrl });
+    return;
+  }
+  window.open(managerUrl, '_blank', 'noopener');
+}
+
+function openFolderView(folderId: string, openInNewTab: boolean): void {
+  const folderUrl = extensionApi.runtime.getURL(`newtab.html#folder=${encodeURIComponent(folderId)}`);
+  if (openInNewTab) {
+    window.open(folderUrl, '_blank', 'noopener');
+    return;
+  }
+
+  window.open(folderUrl, '_blank', 'noopener,noreferrer,width=1280,height=900');
 }
 
 function getFolderIdFromHash(): string | null {

@@ -21,10 +21,30 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
       return { settings: await writeSettings(message.patch) };
     case messageTypes.getBookmarkTree:
       return { tree: await getBookmarkTree() };
+    case messageTypes.createBookmark:
+      return {
+        bookmark: normalizeBookmarkNode(await extensionApi.bookmarks.create({
+          parentId: message.parentId,
+          title: message.title,
+          url: message.url,
+          index: message.index,
+        })),
+      };
+    case messageTypes.moveBookmark:
+      return {
+        bookmark: normalizeBookmarkNode(await extensionApi.bookmarks.move(message.bookmarkId, {
+          parentId: message.parentId,
+          index: message.index,
+        })),
+      };
     case messageTypes.updateBookmark:
       return { bookmark: normalizeBookmarkNode(await extensionApi.bookmarks.update(message.bookmarkId, message.changes)) };
     case messageTypes.removeBookmark:
-      await extensionApi.bookmarks.remove(message.bookmarkId);
+      if (message.recursive) {
+        await extensionApi.bookmarks.removeTree(message.bookmarkId);
+      } else {
+        await extensionApi.bookmarks.remove(message.bookmarkId);
+      }
       return { ok: true };
     case messageTypes.getIcon:
       return { icon: await getIcon(message) };
