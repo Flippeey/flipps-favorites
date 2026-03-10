@@ -5,14 +5,18 @@ import { renderUiIcon, type UiIconName } from '../newtab/ui-icons';
 export const defaultAccentColor = '#3F72DC';
 
 export const accentPresets = [
-  { id: 'orange', label: 'Orange', value: '#D8783F' },
-  { id: 'gold', label: 'Gold', value: '#C9A227' },
-  { id: 'red', label: 'Red', value: '#C75252' },
-  { id: 'teal', label: 'Teal', value: '#23867B' },
   { id: 'blue', label: 'Blue', value: '#3F72DC' },
-  { id: 'grey', label: 'Grey', value: '#778292' },
-  { id: 'anthracite', label: 'Anthracite', value: '#4B5360' },
+  { id: 'teal', label: 'Teal', value: '#23867B' },
+  { id: 'green', label: 'Green', value: '#2F8F4E' },
+  { id: 'lime', label: 'Lime', value: '#7BAE2C' },
+  { id: 'yellow', label: 'Yellow', value: '#C9A227' },
+  { id: 'orange', label: 'Orange', value: '#D8783F' },
+  { id: 'red', label: 'Red', value: '#C75252' },
+  { id: 'rose', label: 'Rose', value: '#C96A7D' },
+  { id: 'pink', label: 'Pink', value: '#C85FA4' },
   { id: 'purple', label: 'Purple', value: '#7D60D8' },
+  { id: 'slate', label: 'Slate', value: '#778292' },
+  { id: 'graphite', label: 'Graphite', value: '#4B5360' },
 ] as const;
 
 export const themeModeOptions: Array<{ id: Exclude<ThemeMode, 'system'>; label: string; description: string; preview: 'light' | 'dark' }> = [
@@ -63,7 +67,6 @@ export function renderDrawerSection(section: SettingsSectionId, settings: AppSet
             <strong>Use system preference</strong>
             <span>Default behavior. Light and dark cards below update to show which mode is currently active.</span>
           </span>
-          <span class="system-theme-card__status">${resolveAppliedThemeMode(settings.themeMode) === 'dark' ? 'Dark active' : 'Light active'}</span>
         </label>
         <div class="theme-mode-grid" role="group" aria-label="Theme mode">
           ${themeModeOptions.map(option => renderThemeModeCard(option, settings.themeMode)).join('')}
