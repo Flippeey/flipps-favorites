@@ -33,9 +33,11 @@ interface BookmarkContextMenuState {
 interface IconDialogState {
   open: boolean;
   target: BookmarkActionTarget | null;
+  draftTitle: string;
+  draftUrl: string;
   query: string;
-  remoteUrl: string;
   status: string;
+  statusKind: 'error' | 'success' | 'info' | '';
   loading: boolean;
   results: IconSearchCandidate[];
   previewIcon: ResolvedIcon | null;
@@ -232,10 +234,11 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const iconDialogClose = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-close');
   const iconDialogSearchInput = rootElement.querySelector<HTMLInputElement>('input[name="iconDialogSearchQuery"]');
   const iconDialogSearchButton = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-search-button');
+  const iconDialogTitleInput = rootElement.querySelector<HTMLInputElement>('input[name="iconDialogTitle"]');
+  const iconDialogUrlInput = rootElement.querySelector<HTMLInputElement>('input[name="iconDialogUrl"]');
+  const iconDialogSaveButton = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-save-button');
   const iconDialogUploadButton = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-upload-button');
   const iconDialogFileInput = rootElement.querySelector<HTMLInputElement>('input[name="iconDialogFile"]');
-  const iconDialogRemoteUrlInput = rootElement.querySelector<HTMLInputElement>('input[name="iconDialogRemoteUrl"]');
-  const iconDialogApplyUrlButton = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-apply-url-button');
   const iconDialogRefreshButton = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-refresh-button');
   const iconDialogRemoveButton = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-remove-button');
   const iconDialogResultButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-icon-candidate-url]');
@@ -503,13 +506,10 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
           window.open(target.url, '_blank', 'noopener,noreferrer,width=1280,height=900');
           return;
         case 'edit':
-          await editBookmarkFromContext(rootElement, state, target);
+          await openIconDialog(rootElement, state, target);
           return;
         case 'delete':
           await deleteBookmarkFromContext(rootElement, state, target);
-          return;
-        case 'icon':
-          await openIconDialog(rootElement, state, target);
           return;
         default:
           renderApp(rootElement, state);
@@ -610,8 +610,132 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     state.iconDialog.query = iconDialogSearchInput.value;
   });
 
-  iconDialogRemoteUrlInput?.addEventListener('input', () => {
-    state.iconDialog.remoteUrl = iconDialogRemoteUrlInput.value;
+  const updateSaveButtonState = () => {
+    const draftTitle = (iconDialogTitleInput?.value ?? state.iconDialog.draftTitle).trim();
+    const draftUrl = (iconDialogUrlInput?.value ?? state.iconDialog.draftUrl).trim();
+    const canSave = draftTitle.length > 0 && isValidBookmarkUrl(draftUrl);
+    if (iconDialogSaveButton) {
+      iconDialogSaveButton.disabled = !canSave;
+    }
+    // Only clear the error toast once all fields are valid again
+    if (state.iconDialog.statusKind === 'error' && canSave) {
+      state.iconDialog.status = '';
+      state.iconDialog.statusKind = '';
+      rootElement.querySelector('.icon-dialog-toast')?.remove();
+    }
+  };
+
+  iconDialogTitleInput?.addEventListener('input', () => {
+    state.iconDialog.draftTitle = iconDialogTitleInput.value;
+    updateSaveButtonState();
+  });
+
+  iconDialogTitleInput?.addEventListener('blur', () => {
+    if (!iconDialogTitleInput.value.trim()) {
+      state.iconDialog.status = 'Name is required.';
+      state.iconDialog.statusKind = 'error';
+      renderApp(rootElement, state);
+    }
+  });
+
+  iconDialogUrlInput?.addEventListener('input', () => {
+    state.iconDialog.draftUrl = iconDialogUrlInput.value;
+    updateSaveButtonState();
+  });
+
+  iconDialogUrlInput?.addEventListener('blur', () => {
+    const val = iconDialogUrlInput.value.trim();
+    if (val && !isValidBookmarkUrl(val)) {
+      state.iconDialog.status = 'Enter a valid URL (for example https://example.com).';
+      state.iconDialog.statusKind = 'error';
+      renderApp(rootElement, state);
+    }
+  });
+
+  const saveDialogBookmark = async () => {
+    const target = state.iconDialog.target;
+    if (!target) {
+      return;
+    }
+
+    const nextTitle = state.iconDialog.draftTitle.trim();
+    const nextUrl = state.iconDialog.draftUrl.trim();
+    if (!nextTitle) {
+      state.iconDialog.status = 'Name is required.';
+      state.iconDialog.statusKind = 'error';
+      renderApp(rootElement, state);
+      return;
+    }
+
+    if (!nextUrl) {
+      state.iconDialog.status = 'URL is required.';
+      state.iconDialog.statusKind = 'error';
+      renderApp(rootElement, state);
+      return;
+    }
+
+    if (!isValidBookmarkUrl(nextUrl)) {
+      state.iconDialog.status = 'Enter a valid URL (for example https://example.com).';
+      state.iconDialog.statusKind = 'error';
+      renderApp(rootElement, state);
+      return;
+    }
+
+    await sendRuntimeMessage<{
+      type: typeof messageTypes.updateBookmark;
+      bookmarkId: string;
+      changes: { title?: string; url?: string };
+    }, UpdateBookmarkResponse>({
+      type: messageTypes.updateBookmark,
+      bookmarkId: target.id,
+      changes: {
+        title: nextTitle,
+        url: nextUrl,
+      },
+    });
+
+    await refreshBookmarkTree(state);
+
+    const updatedTarget = state.iconDialog.target;
+    if (updatedTarget) {
+      state.iconDialog.draftTitle = updatedTarget.title || nextTitle;
+      state.iconDialog.draftUrl = updatedTarget.url;
+      state.iconDialog.status = `Saved bookmark ${updatedTarget.title || getHostname(updatedTarget.url)}.`;
+      state.iconDialog.statusKind = 'success';
+      state.iconDialog.query = `${updatedTarget.title || getHostname(updatedTarget.url)} icon`;
+      await loadIconDialogPreview(state, updatedTarget);
+    }
+
+    renderApp(rootElement, state);
+  };
+
+  iconDialogSaveButton?.addEventListener('click', async () => {
+    await saveDialogBookmark();
+  });
+
+  iconDialogTitleInput?.addEventListener('keydown', async event => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+    event.preventDefault();
+    await saveDialogBookmark();
+  });
+
+  iconDialogUrlInput?.addEventListener('keydown', async event => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+    event.preventDefault();
+    await saveDialogBookmark();
+  });
+
+  iconDialogSearchInput?.addEventListener('keydown', async event => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+
+    event.preventDefault();
+    await searchIconDialog(rootElement, state, state.iconDialog.query);
   });
 
   iconDialogSearchButton?.addEventListener('click', async () => {
@@ -647,6 +771,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     });
 
     state.iconDialog.status = `Custom icon saved for ${target.title || getHostname(target.url)}.`;
+    state.iconDialog.statusKind = 'success';
     state.iconDialog.previewIcon = {
       cacheKey: `override:${target.url}`,
       sourceKind: 'override',
@@ -656,32 +781,6 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     };
     state.resolvedIcons[target.url] = state.iconDialog.previewIcon;
     iconDialogFileInput.value = '';
-    renderApp(rootElement, state);
-  });
-
-  iconDialogApplyUrlButton?.addEventListener('click', async () => {
-    const target = state.iconDialog.target;
-    const imageUrl = state.iconDialog.remoteUrl.trim();
-    if (!target || !imageUrl) {
-      return;
-    }
-
-    const response = await sendRuntimeMessage<{
-      type: typeof messageTypes.setIconOverrideFromUrl;
-      bookmarkUrl: string;
-      bookmarkTitle?: string;
-      imageUrl: string;
-      fileName?: string;
-    }, SetIconOverrideFromUrlResponse>({
-      type: messageTypes.setIconOverrideFromUrl,
-      bookmarkUrl: target.url,
-      bookmarkTitle: target.title,
-      imageUrl,
-    });
-
-    state.iconDialog.status = `Applied remote icon for ${target.title || getHostname(target.url)}.`;
-    state.iconDialog.previewIcon = response.icon;
-    state.resolvedIcons[target.url] = response.icon;
     renderApp(rootElement, state);
   });
 
@@ -700,6 +799,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     });
 
     state.iconDialog.status = `Refreshed icon cache for ${target.title || getHostname(target.url)}.`;
+    state.iconDialog.statusKind = 'info';
     await loadIconDialogPreview(state, target, rootElement);
     renderApp(rootElement, state);
   });
@@ -721,6 +821,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     });
 
     state.iconDialog.status = `Removed custom icon for ${target.title || getHostname(target.url)}.`;
+    state.iconDialog.statusKind = 'info';
     await loadIconDialogPreview(state, target, rootElement);
     renderApp(rootElement, state);
   });
@@ -747,6 +848,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
       });
 
       state.iconDialog.status = `Applied searched icon for ${target.title || getHostname(target.url)}.`;
+      state.iconDialog.statusKind = 'success';
       state.iconDialog.previewIcon = response.icon;
       state.resolvedIcons[target.url] = response.icon;
       renderApp(rootElement, state);
@@ -1020,7 +1122,6 @@ function renderBookmarkContextMenu(contextMenu: BookmarkContextMenuState): strin
         <div class="bookmark-context-menu__divider"></div>
         <button class="bookmark-context-menu__item button-with-icon" data-context-action="edit" type="button" role="menuitem">${renderUiIcon('edit')}<span>Edit...</span></button>
         <button class="bookmark-context-menu__item button-with-icon" data-context-action="delete" type="button" role="menuitem">${renderUiIcon('trash')}<span>Delete...</span></button>
-        <button class="bookmark-context-menu__item button-with-icon" data-context-action="icon" type="button" role="menuitem">${renderUiIcon('image')}<span>Icon...</span></button>
       </div>
     </div>
   `;
@@ -1028,6 +1129,9 @@ function renderBookmarkContextMenu(contextMenu: BookmarkContextMenuState): strin
 
 function renderIconDialog(iconDialog: IconDialogState): string {
   const title = iconDialog.target?.title || 'Bookmark';
+  const draftTitle = iconDialog.draftTitle.trim();
+  const draftUrl = iconDialog.draftUrl.trim();
+  const canSaveBookmark = draftTitle.length > 0 && isValidBookmarkUrl(draftUrl);
   const previewMarkup = iconDialog.previewIcon && iconDialog.previewIcon.sourceKind !== 'generated'
     ? `<img class="icon-dialog__preview-image" src="${escapeAttribute(iconDialog.previewIcon.dataUrl)}" alt="" />`
     : (iconDialog.target
@@ -1037,38 +1141,46 @@ function renderIconDialog(iconDialog: IconDialogState): string {
   return `
     <div class="icon-dialog-layer">
       <button class="icon-dialog-scrim" type="button" aria-label="Close icon picker"></button>
-      <section class="icon-dialog" role="dialog" aria-modal="true" aria-label="Change bookmark icon">
+      <section class="icon-dialog" role="dialog" aria-modal="true" aria-label="Edit bookmark">
         <header class="icon-dialog__header">
           <div class="icon-dialog__header-copy">
-            <p class="eyebrow">Icon</p>
+            <p class="eyebrow">Edit bookmark</p>
             <h3>${escapeHtml(title)}</h3>
           </div>
           <button class="icon-dialog-close icon-button" type="button" aria-label="Close icon picker">${renderUiIcon('close')}</button>
         </header>
         <div class="icon-dialog__body">
           <aside class="icon-dialog__preview-panel">
-            <div class="icon-dialog__preview">${previewMarkup}</div>
-            <p class="field-hint">Upload a local image, paste a direct image URL, or choose one of the search results.</p>
-            <input class="icon-file-input" name="iconDialogFile" type="file" accept="image/*" />
-            <div class="icon-dialog__actions">
-              <button class="drawer-secondary-button button-with-icon icon-dialog-upload-button" type="button">${renderUiIcon('upload')}<span>Upload image</span></button>
-              <button class="drawer-secondary-button button-with-icon icon-dialog-remove-button" type="button">${renderUiIcon('trash')}<span>Remove custom icon</span></button>
-              <button class="drawer-secondary-button button-with-icon icon-dialog-refresh-button" type="button">${renderUiIcon('refresh')}<span>Refresh icon</span></button>
+            <div class="icon-dialog__edit-fields">
+              <label class="field icon-dialog__field">
+                <span>Name</span>
+                <input name="iconDialogTitle" type="text" value="${escapeAttribute(iconDialog.draftTitle)}" placeholder="Bookmark name" required />
+              </label>
+              <label class="field icon-dialog__field">
+                <span>URL</span>
+                <input name="iconDialogUrl" type="url" value="${escapeAttribute(iconDialog.draftUrl)}" placeholder="https://example.com" required />
+              </label>
+              <button class="save-button button-with-icon icon-dialog-save-button" type="button" ${canSaveBookmark ? '' : 'disabled'}>${renderUiIcon('save')}<span>Save bookmark</span></button>
             </div>
-            <label class="field">
-              <span>Image URL</span>
-              <input name="iconDialogRemoteUrl" type="url" value="${escapeAttribute(iconDialog.remoteUrl)}" placeholder="https://example.com/logo.png" />
-            </label>
-            <button class="save-button button-with-icon icon-dialog-apply-url-button" type="button">${renderUiIcon('link')}<span>Use image URL</span></button>
-            <p class="icon-tool-status" data-empty="${String(!iconDialog.status)}">${escapeHtml(iconDialog.status || 'No icon action taken yet.')}</p>
+            <div class="icon-dialog__preview">
+              ${previewMarkup}
+              <div class="icon-dialog__preview-actions">
+                <button class="icon-dialog__preview-action icon-dialog__preview-action--refresh icon-dialog-refresh-button" type="button" aria-label="Refresh icon" title="Refresh icon">${renderUiIcon('refresh')}</button>
+                <button class="icon-dialog__preview-action icon-dialog__preview-action--remove icon-dialog-remove-button" type="button" aria-label="Remove custom icon" title="Remove custom icon">${renderUiIcon('trash')}</button>
+                <button class="icon-dialog__preview-action icon-dialog__preview-action--upload icon-dialog-upload-button" type="button" aria-label="Upload icon" title="Upload icon">${renderUiIcon('upload')}<span>Upload image</span></button>
+              </div>
+            </div>
+            <p class="field-hint">Hover the preview for quick icon actions, or choose one of the search results.</p>
+            <input class="icon-file-input" name="iconDialogFile" type="file" accept="image/*" />
+            ${iconDialog.status ? `<div class="icon-dialog-toast" data-kind="${iconDialog.statusKind || 'info'}" role="status">${escapeHtml(iconDialog.status)}</div>` : ''}
           </aside>
           <div class="icon-dialog__search-panel">
             <div class="visual-section__header">
               <h3>Search</h3>
-              <p class="field-hint">Search for a logo or favicon and click a result to apply it immediately.</p>
+              <p class="field-hint">Search for an icon or favicon and click a result to apply it immediately.</p>
             </div>
             <div class="icon-dialog__search-row">
-              <input name="iconDialogSearchQuery" type="search" value="${escapeAttribute(iconDialog.query)}" placeholder="Search for a logo" />
+              <input name="iconDialogSearchQuery" type="search" value="${escapeAttribute(iconDialog.query)}" placeholder="Search for an icon" />
               <button class="save-button button-with-icon icon-dialog-search-button" type="button">${renderUiIcon('search')}<span>Search</span></button>
             </div>
             <div class="icon-dialog__results" data-loading="${String(iconDialog.loading)}">
@@ -1111,9 +1223,11 @@ function createClosedIconDialogState(): IconDialogState {
   return {
     open: false,
     target: null,
+    draftTitle: '',
+    draftUrl: '',
     query: '',
-    remoteUrl: '',
     status: '',
+    statusKind: '',
     loading: false,
     results: [],
     previewIcon: null,
@@ -1124,9 +1238,11 @@ async function openIconDialog(rootElement: HTMLDivElement, state: AppState, targ
   state.iconDialog = {
     open: true,
     target,
-    query: `${target.title || getHostname(target.url)} logo`,
-    remoteUrl: '',
+    draftTitle: target.title || '',
+    draftUrl: target.url,
+    query: `${target.title || getHostname(target.url)} icon`,
     status: '',
+    statusKind: '',
     loading: true,
     results: [],
     previewIcon: null,
@@ -1168,6 +1284,7 @@ async function searchIconDialog(rootElement: HTMLDivElement, state: AppState, qu
 
   state.iconDialog.loading = true;
   state.iconDialog.status = `Searching icons for ${target.title || getHostname(target.url)}...`;
+  state.iconDialog.statusKind = 'info';
   renderApp(rootElement, state);
 
   try {
@@ -1191,6 +1308,7 @@ async function searchIconDialog(rootElement: HTMLDivElement, state: AppState, qu
     state.iconDialog.status = response.candidates.length
       ? `Found ${String(response.candidates.length)} icon candidates.`
       : 'No icon candidates found for that search.';
+    state.iconDialog.statusKind = response.candidates.length ? 'info' : 'error';
     renderApp(rootElement, state);
   } catch {
     if (!state.iconDialog.open || state.iconDialog.target?.url !== target.url) {
@@ -1200,38 +1318,9 @@ async function searchIconDialog(rootElement: HTMLDivElement, state: AppState, qu
     state.iconDialog.loading = false;
     state.iconDialog.results = [];
     state.iconDialog.status = 'Icon search failed. Try a different search or use upload.';
+    state.iconDialog.statusKind = 'error';
     renderApp(rootElement, state);
   }
-}
-
-async function editBookmarkFromContext(rootElement: HTMLDivElement, state: AppState, target: BookmarkActionTarget): Promise<void> {
-  const nextTitle = window.prompt('Bookmark title', target.title);
-  if (nextTitle === null) {
-    renderApp(rootElement, state);
-    return;
-  }
-
-  const nextUrl = window.prompt('Bookmark URL', target.url);
-  if (nextUrl === null) {
-    renderApp(rootElement, state);
-    return;
-  }
-
-  await sendRuntimeMessage<{
-    type: typeof messageTypes.updateBookmark;
-    bookmarkId: string;
-    changes: { title?: string; url?: string };
-  }, UpdateBookmarkResponse>({
-    type: messageTypes.updateBookmark,
-    bookmarkId: target.id,
-    changes: {
-      title: nextTitle,
-      url: nextUrl,
-    },
-  });
-
-  await refreshBookmarkTree(state);
-  renderApp(rootElement, state);
 }
 
 async function deleteBookmarkFromContext(rootElement: HTMLDivElement, state: AppState, target: BookmarkActionTarget): Promise<void> {
@@ -1332,6 +1421,15 @@ function openBookmark(url: string, openInNewTab: boolean): void {
 
 function normalizeColor(value: string): string {
   return /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#f4f0e8';
+}
+
+function isValidBookmarkUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function getInitial(value: string): string {
