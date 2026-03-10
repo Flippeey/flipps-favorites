@@ -230,7 +230,7 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
       <div class="visual-section">
         <div class="visual-section__header">
           <h3>Dock</h3>
-          <p class="field-hint">Pin a folder to the bottom strip for persistent quick access.</p>
+          <p class="field-hint">Pin a folder to the bottom dock to keep visual previews of favorite folders and links centered on the page.</p>
         </div>
         <label class="toggle-field toggle-field--card">
           <input name="showDock" type="checkbox" ${settings.showDock ? 'checked' : ''} />

@@ -143,7 +143,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const themeMode = normalizeThemeMode(state.settings.themeMode);
 
   rootElement.innerHTML = `
-    <div class="shell" data-theme-mode="${themeMode}" data-bookmark-icon-surface="${String(state.settings.showBookmarkIconBackground)}" style="${buildShellStyle(state.settings)}">
+    <div class="shell" data-theme-mode="${themeMode}" data-bookmark-icon-surface="${String(state.settings.showBookmarkIconBackground)}" data-dock-visible="${String(state.settings.showDock)}" style="${buildShellStyle(state.settings)}">
       <nav class="bookmarks-navbar" aria-label="Folder path">
         <div class="nav-side nav-side--left">
           <button class="nav-icon library-home button-with-icon" type="button">${renderUiIcon('home')}<span>Home</span></button>
@@ -163,12 +163,10 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
         </section>
         ${state.settings.showDock ? `
           <aside class="bookmark-dock" aria-label="Dock">
-            <div class="dock-header">
-              <span>${escapeHtml(dockFolder?.title || 'Dock')}</span>
-              <button class="dock-settings-link icon-button" type="button" aria-label="Customize favorites">${renderUiIcon('sliders')}</button>
-            </div>
-            <div class="dock-strip">
-              ${dockItems.map(item => renderDockItem(item, state.resolvedIcons)).join('') || '<p class="dock-empty">Choose a dock folder in settings.</p>'}
+            <div class="dock-inner">
+              <div class="dock-strip">
+                ${dockItems.map(item => renderDockItem(item, state.resolvedIcons)).join('') || '<p class="dock-empty">Choose a dock folder in settings.</p>'}
+              </div>
             </div>
           </aside>
         ` : ''}
@@ -861,7 +859,56 @@ async function preloadVisibleIcons(state: AppState): Promise<void> {
 }
 
 function collectVisibleBookmarks(state: AppState): BookmarkActionTarget[] {
-  return collectVisibleBookmarkTargets(state.tree, state.currentFolderId, state.settings);
+  const directTargets = collectVisibleBookmarkTargets(state.tree, state.currentFolderId, state.settings);
+  const previewTargets = collectDockPreviewBookmarkTargets(state.tree, state.settings);
+  const uniqueTargets = new Map<string, BookmarkActionTarget>();
+
+  for (const target of [...directTargets, ...previewTargets]) {
+    if (!target.url || uniqueTargets.has(target.url)) {
+      continue;
+    }
+
+    uniqueTargets.set(target.url, target);
+  }
+
+  return Array.from(uniqueTargets.values());
+}
+
+function collectDockPreviewBookmarkTargets(tree: BookmarkNode[], settings: AppSettings): BookmarkActionTarget[] {
+  const dockFolder = getDockFolder(tree, settings);
+  if (!dockFolder) {
+    return [];
+  }
+
+  const targets: BookmarkActionTarget[] = [];
+  for (const item of dockFolder.children ?? []) {
+    if (item.url) {
+      continue;
+    }
+
+    for (const child of getDockPreviewItems(item)) {
+      if (!child.url) {
+        continue;
+      }
+
+      targets.push({
+        id: child.id,
+        url: child.url,
+        title: child.title || getHostname(child.url),
+      });
+    }
+  }
+
+  return targets;
+}
+
+function getDockPreviewItems(node: BookmarkNode): BookmarkNode[] {
+  return (node.children ?? []).slice(0, 6);
+}
+
+function getFolderPreviewItems(node: BookmarkNode, variant: 'tile' | 'dock'): BookmarkNode[] {
+  const limit = variant === 'tile' ? 4 : 6;
+  return (node.children ?? []).slice(0, limit);
 }
 
 function renderNavTrail(libraryFolders: BookmarkNode[], breadcrumbs: BookmarkNode[]): string {
@@ -897,16 +944,56 @@ function renderBookmarkTile(node: BookmarkNode, resolvedIcons: Record<string, Re
     `;
   }
 
+  return renderFolderCard(node, resolvedIcons, 'tile');
+}
+
+function renderDockItem(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>): string {
+  if (node.url) {
+    const label = node.title || getHostname(node.url);
+    const meta = getHostname(node.url);
+    const resolvedIcon = resolvedIcons[node.url];
+    const visualIconMarkup = renderBookmarkVisualIcon(node.url, label, resolvedIcon, 'dock');
+    const visualState = resolvedIcon && resolvedIcon.sourceKind !== 'generated'
+      ? (resolvedIcon.isFallback ? 'fallback' : 'resolved')
+      : 'favicon';
+    return `
+      <button class="dock-item dock-item--link-card" data-link-url="${escapeAttribute(node.url)}" data-bookmark-id="${node.id}" data-bookmark-title="${escapeAttribute(label)}" type="button">
+        <span class="dock-item__preview dock-item__preview--link">
+          <span class="dock-item__icon dock-item__icon--link" data-bookmark-icon data-icon-url="${escapeAttribute(node.url)}" data-icon-title="${escapeAttribute(label)}" data-icon-placeholder="${escapeAttribute(getInitial(label))}" data-icon-state="${visualState}">${visualIconMarkup}</span>
+        </span>
+        <span class="dock-item__label">${escapeHtml(label)}</span>
+        <span class="dock-item__meta">${escapeHtml(meta)}</span>
+      </button>
+    `;
+  }
+
+  return renderFolderCard(node, resolvedIcons, 'dock');
+}
+
+function renderFolderCard(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>, variant: 'tile' | 'dock'): string {
   const itemCount = node.children?.length ?? 0;
+  const previewItems = getFolderPreviewItems(node, variant);
+  const classes = variant === 'tile'
+    ? 'bookmark-tile folder-card folder-card--tile'
+    : 'dock-item folder-card folder-card--dock';
+  const metaMarkup = variant === 'dock'
+    ? `<span class="folder-card__meta">${itemCount === 1 ? '1 item' : `${String(itemCount)} items`}</span>`
+    : '';
+
   return `
-    <button class="bookmark-tile folder-tile" data-folder-id="${node.id}" type="button">
-      <div class="tile-icon tile-icon--folder">${itemCount}</div>
-      <span class="tile-label">${escapeHtml(node.title || 'Untitled')}</span>
+    <button class="${classes}" data-folder-id="${node.id}" type="button">
+      <span class="folder-card__preview">
+        <span class="folder-card__grid" data-folder-preview-variant="${variant}">
+          ${previewItems.map(child => renderFolderPreviewCell(child, resolvedIcons)).join('') || `<span class="folder-card__cell folder-card__cell--empty">${escapeHtml(getInitial(node.title || 'Folder'))}</span>`}
+        </span>
+      </span>
+      <span class="folder-card__label">${escapeHtml(node.title || 'Untitled')}</span>
+      ${metaMarkup}
     </button>
   `;
 }
 
-function renderDockItem(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>): string {
+function renderFolderPreviewCell(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>): string {
   if (node.url) {
     const label = node.title || getHostname(node.url);
     const resolvedIcon = resolvedIcons[node.url];
@@ -914,20 +1001,12 @@ function renderDockItem(node: BookmarkNode, resolvedIcons: Record<string, Resolv
     const visualState = resolvedIcon && resolvedIcon.sourceKind !== 'generated'
       ? (resolvedIcon.isFallback ? 'fallback' : 'resolved')
       : 'favicon';
-    return `
-      <button class="dock-item" data-link-url="${escapeAttribute(node.url)}" data-bookmark-id="${node.id}" data-bookmark-title="${escapeAttribute(label)}" type="button">
-        <span class="dock-item__icon dock-item__icon--link" data-bookmark-icon data-icon-url="${escapeAttribute(node.url)}" data-icon-title="${escapeAttribute(label)}" data-icon-placeholder="${escapeAttribute(getInitial(label))}" data-icon-state="${visualState}">${visualIconMarkup}</span>
-        <span class="dock-item__label">${escapeHtml(label)}</span>
-      </button>
-    `;
+
+    return `<span class="folder-card__cell folder-card__cell--link" data-bookmark-icon data-icon-url="${escapeAttribute(node.url)}" data-icon-title="${escapeAttribute(label)}" data-icon-placeholder="${escapeAttribute(getInitial(label))}" data-icon-state="${visualState}">${visualIconMarkup}</span>`;
   }
 
-  return `
-    <button class="dock-item" data-folder-id="${node.id}" type="button">
-      <span class="dock-item__icon dock-item__icon--folder">${escapeHtml(getInitial(node.title || 'Folder'))}</span>
-      <span class="dock-item__label">${escapeHtml(node.title || 'Untitled')}</span>
-    </button>
-  `;
+  const itemCount = node.children?.length ?? 0;
+  return `<span class="folder-card__cell folder-card__cell--folder" title="${escapeAttribute(node.title || 'Folder')}">${itemCount > 0 ? String(itemCount) : escapeHtml(getInitial(node.title || 'Folder'))}</span>`;
 }
 
 function renderBookmarkContextMenu(contextMenu: BookmarkContextMenuState): string {
