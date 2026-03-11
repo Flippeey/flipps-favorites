@@ -1,6 +1,6 @@
-import { sendRuntimeMessage } from '../shared/browser';
+﻿import { sendRuntimeMessage } from '../shared/browser';
 import { messageTypes, type BookmarkNode, type GetBookmarkTreeResponse } from '../shared/messages';
-import { createClosedIconDialogState, type AppState, type BookmarkClipboardState } from './app-state';
+import { createClosedBookmarkDialogState, type AppState, type BookmarkClipboardState } from './app-state';
 import { syncDerivedTree } from './derived-tree';
 import { findBookmarkActionTargetById, findNodeById, getFolderNode, resolveInitialFolderId } from './bookmark-navigation';
 import { queueVisibleIconPreload } from './icon-runtime';
@@ -74,12 +74,12 @@ export async function refreshBookmarkTree(state: AppState): Promise<void> {
 
     syncDerivedTree(state);
 
-    if (state.iconDialog.target) {
-      const nextTarget = findBookmarkActionTargetById(state.tree, state.iconDialog.target.id);
+    if (state.bookmarkDialog.target) {
+      const nextTarget = findBookmarkActionTargetById(state.tree, state.bookmarkDialog.target.id);
       if (nextTarget) {
-        state.iconDialog.target = nextTarget;
+        state.bookmarkDialog.target = nextTarget;
       } else {
-        state.iconDialog = createClosedIconDialogState();
+        state.bookmarkDialog = createClosedBookmarkDialogState();
       }
     }
 

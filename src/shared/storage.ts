@@ -1,16 +1,20 @@
 import { extensionApi } from './browser';
 import type { AppSettings, IconCacheRecord, IconOverrideRecord } from './messages';
+import { createCachedRecordStore, createCachedValueStore } from './storage-buckets';
 
 const storageKey = 'app-settings';
 const iconCacheKey = 'icon-cache-records';
 const iconOverrideKey = 'icon-override-records';
 
-let settingsCache: AppSettings | null = null;
-let settingsLoadPromise: Promise<AppSettings> | null = null;
-let iconCacheRecordsCache: Record<string, IconCacheRecord> | null = null;
-let iconCacheLoadPromise: Promise<Record<string, IconCacheRecord>> | null = null;
-let iconOverrideRecordsCache: Record<string, IconOverrideRecord> | null = null;
-let iconOverrideLoadPromise: Promise<Record<string, IconOverrideRecord>> | null = null;
+const settingsStore = createCachedValueStore<AppSettings>({
+  storageKey,
+  deserialize(storedValue) {
+    return normalizeSettings((storedValue as Partial<AppSettings> | undefined) ?? {});
+  },
+});
+
+const iconCacheStore = createCachedRecordStore<IconCacheRecord>(iconCacheKey);
+const iconOverrideStore = createCachedRecordStore<IconOverrideRecord>(iconOverrideKey);
 
 export const defaultSettings: AppSettings = {
   themeMode: 'system',
@@ -35,39 +39,16 @@ export const defaultSettings: AppSettings = {
 };
 
 export async function readSettings(): Promise<AppSettings> {
-  if (settingsCache) {
-    return settingsCache;
-  }
-
-  if (!settingsLoadPromise) {
-    settingsLoadPromise = (async () => {
-      const stored = await extensionApi.storage.local.get(storageKey) as Record<string, Partial<AppSettings> | undefined>;
-      const normalized = normalizeSettings(stored[storageKey] ?? {});
-      settingsCache = normalized;
-      settingsLoadPromise = null;
-      return normalized;
-    })().catch(error => {
-      settingsLoadPromise = null;
-      throw error;
-    });
-  }
-
-  return settingsLoadPromise;
+  return settingsStore.read();
 }
 
 export async function writeSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   const nextSettings = normalizeSettings({
-    ...(settingsCache ?? await readSettings()),
+    ...(await readSettings()),
     ...patch,
   });
 
-  await extensionApi.storage.local.set({
-    [storageKey]: nextSettings,
-  });
-
-  settingsCache = nextSettings;
-
-  return nextSettings;
+  return settingsStore.write(nextSettings);
 }
 
 function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
@@ -118,120 +99,37 @@ function normalizeNumber(value: unknown, fallback: number, min: number, max: num
 }
 
 export async function readIconCacheRecords(): Promise<Record<string, IconCacheRecord>> {
-  return { ...(await loadIconCacheRecords()) };
+  return iconCacheStore.readAll();
 }
 
 export async function readIconCacheRecord(cacheKey: string): Promise<IconCacheRecord | null> {
-  const records = await loadIconCacheRecords();
-  return records[cacheKey] ?? null;
+  return iconCacheStore.readOne(cacheKey);
 }
 
 export async function writeIconCacheRecord(record: IconCacheRecord): Promise<void> {
-  const records = await loadIconCacheRecords();
-  const nextRecords = {
-    ...records,
-    [record.cacheKey]: record,
-  };
-  await extensionApi.storage.local.set({
-    [iconCacheKey]: nextRecords,
-  });
-  iconCacheRecordsCache = nextRecords;
+  await iconCacheStore.writeOne(record.cacheKey, record);
 }
 
 export async function deleteIconCacheRecord(cacheKeyValue: string): Promise<void> {
-  const records = await loadIconCacheRecords();
-  if (!(cacheKeyValue in records)) {
-    return;
-  }
-
-  const nextRecords = { ...records };
-  delete nextRecords[cacheKeyValue];
-  await extensionApi.storage.local.set({
-    [iconCacheKey]: nextRecords,
-  });
-  iconCacheRecordsCache = nextRecords;
+  await iconCacheStore.deleteOne(cacheKeyValue);
 }
 
 export async function deleteAllIconCacheRecords(): Promise<void> {
-  await extensionApi.storage.local.set({
-    [iconCacheKey]: {},
-  });
-  iconCacheRecordsCache = {};
+  await iconCacheStore.clearAll();
 }
 
 export async function readIconOverrideRecords(): Promise<Record<string, IconOverrideRecord>> {
-  return { ...(await loadIconOverrideRecords()) };
+  return iconOverrideStore.readAll();
 }
 
 export async function readIconOverrideRecord(bookmarkUrl: string): Promise<IconOverrideRecord | null> {
-  const records = await loadIconOverrideRecords();
-  return records[bookmarkUrl] ?? null;
+  return iconOverrideStore.readOne(bookmarkUrl);
 }
 
 export async function writeIconOverrideRecord(record: IconOverrideRecord): Promise<void> {
-  const records = await loadIconOverrideRecords();
-  const nextRecords = {
-    ...records,
-    [record.bookmarkUrl]: record,
-  };
-  await extensionApi.storage.local.set({
-    [iconOverrideKey]: nextRecords,
-  });
-  iconOverrideRecordsCache = nextRecords;
+  await iconOverrideStore.writeOne(record.bookmarkUrl, record);
 }
 
 export async function deleteIconOverrideRecord(bookmarkUrl: string): Promise<void> {
-  const records = await loadIconOverrideRecords();
-  if (!(bookmarkUrl in records)) {
-    return;
-  }
-
-  const nextRecords = { ...records };
-  delete nextRecords[bookmarkUrl];
-  await extensionApi.storage.local.set({
-    [iconOverrideKey]: nextRecords,
-  });
-  iconOverrideRecordsCache = nextRecords;
-}
-
-async function loadIconCacheRecords(): Promise<Record<string, IconCacheRecord>> {
-  if (iconCacheRecordsCache) {
-    return iconCacheRecordsCache;
-  }
-
-  if (!iconCacheLoadPromise) {
-    iconCacheLoadPromise = (async () => {
-      const stored = await extensionApi.storage.local.get(iconCacheKey) as Record<string, Record<string, IconCacheRecord> | undefined>;
-      const records = stored[iconCacheKey] ?? {};
-      iconCacheRecordsCache = records;
-      iconCacheLoadPromise = null;
-      return records;
-    })().catch(error => {
-      iconCacheLoadPromise = null;
-      throw error;
-    });
-  }
-
-  return iconCacheLoadPromise;
-}
-
-async function loadIconOverrideRecords(): Promise<Record<string, IconOverrideRecord>> {
-  if (iconOverrideRecordsCache) {
-    return iconOverrideRecordsCache;
-  }
-
-  if (!iconOverrideLoadPromise) {
-    iconOverrideLoadPromise = (async () => {
-      const stored = await extensionApi.storage.local.get(iconOverrideKey) as Record<string, Record<string, IconOverrideRecord> | undefined>;
-      const records = stored[iconOverrideKey] ?? {};
-      iconOverrideRecordsCache = records;
-      iconOverrideLoadPromise = null;
-      return records;
-    })().catch(error => {
-      iconOverrideLoadPromise = null;
-      throw error;
-    });
-  }
-
-  return iconOverrideLoadPromise;
+  await iconOverrideStore.deleteOne(bookmarkUrl);
 }

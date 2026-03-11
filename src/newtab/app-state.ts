@@ -1,4 +1,4 @@
-import type { AppSettings, BookmarkNode, IconSearchCandidate, ResolvedIcon } from '../shared/messages';
+﻿import type { AppSettings, BookmarkNode, IconSearchCandidate, ResolvedIcon } from '../shared/messages';
 import { createAccentPickerState, type AccentPickerState, type GeneralSettingsSubpage } from '../settings';
 import { deriveTreeState, type DerivedTreeState } from './derived-tree';
 import { resolveInitialFolderId, resolveInitialIconToolTarget, type BookmarkActionTarget } from './bookmark-navigation';
@@ -15,7 +15,7 @@ export interface AppState {
   iconToolStatus: string;
   clipboard: BookmarkClipboardState | null;
   contextMenu: ContextMenuState | null;
-  iconDialog: IconDialogState;
+  bookmarkDialog: BookmarkDialogState;
   resolvedIcons: Record<string, ResolvedIcon>;
   selectedIds: string[];
   selectionAnchorId: string | null;
@@ -91,7 +91,7 @@ export interface AppStatus {
   kind: 'error' | 'success' | 'info';
 }
 
-export interface IconDialogState {
+export interface BookmarkDialogState {
   open: boolean;
   target: BookmarkActionTarget | null;
   draftTitle: string;
@@ -124,7 +124,7 @@ export function createInitialAppState(args: {
     iconToolStatus: '',
     clipboard: null,
     contextMenu: null,
-    iconDialog: createClosedIconDialogState(),
+    bookmarkDialog: createClosedBookmarkDialogState(),
     resolvedIcons: {},
     selectedIds: [],
     selectionAnchorId: null,
@@ -133,7 +133,7 @@ export function createInitialAppState(args: {
   };
 }
 
-export function createClosedIconDialogState(): IconDialogState {
+export function createClosedBookmarkDialogState(): BookmarkDialogState {
   return {
     open: false,
     target: null,

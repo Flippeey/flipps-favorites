@@ -1,12 +1,14 @@
-import './styles.css';
+﻿import './styles.css';
 import { sendRuntimeMessage } from '../shared/browser';
-import { messageTypes, type AppSettings, type BookmarkNode, type CreateBookmarkResponse, type GetBookmarkTreeResponse, type GetIconResponse, type GetSettingsResponse, type IconSearchCandidate, type InvalidateIconResponse, type MoveBookmarkResponse, type OpenBookmarkManagerResponse, type PatchSettingsResponse, type PingResponse, type RemoveBookmarkResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SearchIconsResponse, type SettingsSectionId, type SetIconOverrideFromUrlResponse, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../shared/messages';
-import { createClosedIconDialogState, createInitialAppState, type AppState, type AppStatus, type BookmarkClipboardState, type ContextMenuState, type FolderActionTarget, type IconDialogState, type SelectionContextMenuTarget, type SelectionScope, type SurfaceContextMenuTarget } from './app-state';
+import { messageTypes, type AppSettings, type BookmarkNode, type CreateBookmarkResponse, type GetBookmarkTreeResponse, type GetSettingsResponse, type InvalidateIconResponse, type MoveBookmarkResponse, type OpenBookmarkManagerResponse, type PatchSettingsResponse, type PingResponse, type RemoveBookmarkResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SettingsSectionId, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../shared/messages';
+import { createClosedBookmarkDialogState, createInitialAppState, type AppState, type BookmarkClipboardState, type FolderActionTarget, type SelectionContextMenuTarget, type SelectionScope, type SurfaceContextMenuTarget } from './app-state';
 import { syncDerivedTree } from './derived-tree';
 import { findBookmarkActionTargetById, findNodeById, getBookmarkActionTarget, getBookmarkLabelForUrl, getFolderNode, getHostname, isFolderDescendantOf, resolveInitialFolderId, type BookmarkActionTarget } from './bookmark-navigation';
 import { escapeAttribute, escapeHtml } from './html';
+import { applyBookmarkDialogCandidate, loadBookmarkDialogPreview, openBookmarkDialog, refreshBookmarkDialogIcon, removeBookmarkDialogOverride, renderBookmarkDialog, saveBookmarkDialogBookmark, searchBookmarkDialog, uploadBookmarkDialogImage } from './bookmark-dialog';
 import { hydrateBookmarkIcons, queueVisibleIconPreload } from './icon-runtime';
 import { applyPendingIcon, applyResolvedIcon, getFaviconImageUrl, renderFaviconIconMarkup, renderIconPlaceholder, renderResolvedIconMarkup, renderBookmarkVisualIcon } from './icon-render';
+import { renderContextMenu, renderStatusMessage } from './overlays';
 import { getFolderIdFromHash, getLastFolder, getSearchName, isValidBookmarkUrl, normalizeBackgroundImage, normalizeUploadedImage, openBookmark, openFolderView, persistLastFolder, removeLastFolder, syncFolderHash } from './runtime-helpers';
 import { clearSelection, createSelectionContextMenuState, getCurrentFolderChildren, getFolderChildren, getOrderedSelectedIds, getSelectedNodes, isClipboardCutItem, isItemSelected, isSameScope, normalizeSelection, openSelectionInNewTabs } from './selection-state';
 import { getFolderActionTarget, setupDockInteractions, setupGridInteractions } from './surface-interactions';
@@ -319,24 +321,24 @@ async function handleDelegatedClick(rootElement: HTMLDivElement, state: AppState
     return;
   }
 
-  if (target.closest('.icon-dialog-scrim, .icon-dialog-close')) {
-    state.iconDialog = createClosedIconDialogState();
+  if (target.closest('.bookmark-dialog-scrim, .bookmark-dialog-close')) {
+    state.bookmarkDialog = createClosedBookmarkDialogState();
     renderApp(rootElement, state);
     return;
   }
 
-  if (target.closest('.icon-dialog-search-button')) {
-    await searchIconDialog(rootElement, state, state.iconDialog.query);
+  if (target.closest('.bookmark-dialog-search-button')) {
+    await searchBookmarkDialog(rootElement, state, state.bookmarkDialog.query, renderApp);
     return;
   }
 
-  if (target.closest('.icon-dialog-upload-button')) {
-    rootElement.querySelector<HTMLInputElement>('input[name="iconDialogFile"]')?.click();
+  if (target.closest('.bookmark-dialog-upload-button')) {
+    rootElement.querySelector<HTMLInputElement>('input[name="bookmarkDialogFile"]')?.click();
     return;
   }
 
-  if (target.closest('.icon-dialog-refresh-button')) {
-    const dialogTarget = state.iconDialog.target;
+  if (target.closest('.bookmark-dialog-refresh-button')) {
+    const dialogTarget = state.bookmarkDialog.target;
     if (!dialogTarget) {
       return;
     }
@@ -349,15 +351,12 @@ async function handleDelegatedClick(rootElement: HTMLDivElement, state: AppState
       bookmarkUrl: dialogTarget.url,
     });
 
-    state.iconDialog.status = `Refreshed icon cache for ${dialogTarget.title || getHostname(dialogTarget.url)}.`;
-    state.iconDialog.statusKind = 'info';
-    await loadIconDialogPreview(state, dialogTarget, rootElement);
-    renderApp(rootElement, state);
+    await refreshBookmarkDialogIcon(rootElement, state, renderApp);
     return;
   }
 
-  if (target.closest('.icon-dialog-remove-button')) {
-    const dialogTarget = state.iconDialog.target;
+  if (target.closest('.bookmark-dialog-remove-button')) {
+    const dialogTarget = state.bookmarkDialog.target;
     if (!dialogTarget) {
       return;
     }
@@ -372,39 +371,19 @@ async function handleDelegatedClick(rootElement: HTMLDivElement, state: AppState
       bookmarkTitle: dialogTarget.title,
     });
 
-    state.iconDialog.status = `Removed custom icon for ${dialogTarget.title || getHostname(dialogTarget.url)}.`;
-    state.iconDialog.statusKind = 'info';
-    await loadIconDialogPreview(state, dialogTarget, rootElement);
-    renderApp(rootElement, state);
+    await removeBookmarkDialogOverride(rootElement, state, renderApp);
     return;
   }
 
   const iconCandidateButton = target.closest<HTMLButtonElement>('[data-icon-candidate-url]');
   if (iconCandidateButton) {
-    const dialogTarget = state.iconDialog.target;
+    const dialogTarget = state.bookmarkDialog.target;
     const imageUrl = iconCandidateButton.dataset.iconCandidateUrl;
     if (!dialogTarget || !imageUrl) {
       return;
     }
 
-    const response = await sendRuntimeMessage<{
-      type: typeof messageTypes.setIconOverrideFromUrl;
-      bookmarkUrl: string;
-      bookmarkTitle?: string;
-      imageUrl: string;
-      fileName?: string;
-    }, SetIconOverrideFromUrlResponse>({
-      type: messageTypes.setIconOverrideFromUrl,
-      bookmarkUrl: dialogTarget.url,
-      bookmarkTitle: dialogTarget.title,
-      imageUrl,
-    });
-
-    state.iconDialog.status = `Applied searched icon for ${dialogTarget.title || getHostname(dialogTarget.url)}.`;
-    state.iconDialog.statusKind = 'success';
-    state.iconDialog.previewIcon = response.icon;
-    state.resolvedIcons[dialogTarget.url] = response.icon;
-    renderApp(rootElement, state);
+    await applyBookmarkDialogCandidate(rootElement, state, imageUrl, renderApp);
     return;
   }
 
@@ -538,8 +517,8 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
         </div>
       </aside>
       ${state.statusMessage ? renderStatusMessage(state.statusMessage) : ''}
-      ${state.contextMenu ? renderContextMenu(state, state.contextMenu) : ''}
-      ${state.iconDialog.open ? renderIconDialog(state.iconDialog) : ''}
+      ${state.contextMenu ? renderContextMenu(state, state.contextMenu, targetFolderId => canPasteClipboardIntoFolder(state, targetFolderId)) : ''}
+      ${state.bookmarkDialog.open ? renderBookmarkDialog(state.bookmarkDialog) : ''}
     </div>
   `;
 
@@ -569,12 +548,12 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const showBookmarkIconBackgroundInput = rootElement.querySelector<HTMLInputElement>('input[name="showBookmarkIconBackground"]');
   const iconToolTargetInput = rootElement.querySelector<HTMLSelectElement>('select[name="iconToolTargetUrl"]');
   const iconFileInput = rootElement.querySelector<HTMLInputElement>('input[name="iconFile"]');
-  const iconDialogSearchInput = rootElement.querySelector<HTMLInputElement>('input[name="iconDialogSearchQuery"]');
-  const iconDialogSearchButton = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-search-button');
-  const iconDialogTitleInput = rootElement.querySelector<HTMLInputElement>('input[name="iconDialogTitle"]');
-  const iconDialogUrlInput = rootElement.querySelector<HTMLInputElement>('input[name="iconDialogUrl"]');
-  const iconDialogSaveButton = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-save-button');
-  const iconDialogFileInput = rootElement.querySelector<HTMLInputElement>('input[name="iconDialogFile"]');
+  const bookmarkDialogSearchInput = rootElement.querySelector<HTMLInputElement>('input[name="bookmarkDialogSearchQuery"]');
+  const bookmarkDialogSearchButton = rootElement.querySelector<HTMLButtonElement>('.bookmark-dialog-search-button');
+  const bookmarkDialogTitleInput = rootElement.querySelector<HTMLInputElement>('input[name="bookmarkDialogTitle"]');
+  const bookmarkDialogUrlInput = rootElement.querySelector<HTMLInputElement>('input[name="bookmarkDialogUrl"]');
+  const bookmarkDialogSaveButton = rootElement.querySelector<HTMLButtonElement>('.bookmark-dialog-save-button');
+  const bookmarkDialogFileInput = rootElement.querySelector<HTMLInputElement>('input[name="bookmarkDialogFile"]');
   const bookmarkGrid = rootElement.querySelector<HTMLElement>('.bookmark-grid');
   const bookmarkDock = rootElement.querySelector<HTMLElement>('.bookmark-dock');
   const dockStrip = rootElement.querySelector<HTMLElement>('.dock-strip');
@@ -879,174 +858,90 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   });
 
 
-  iconDialogSearchInput?.addEventListener('input', () => {
-    state.iconDialog.query = iconDialogSearchInput.value;
+  bookmarkDialogSearchInput?.addEventListener('input', () => {
+    state.bookmarkDialog.query = bookmarkDialogSearchInput.value;
   });
 
   const updateSaveButtonState = () => {
-    const draftTitle = (iconDialogTitleInput?.value ?? state.iconDialog.draftTitle).trim();
-    const draftUrl = (iconDialogUrlInput?.value ?? state.iconDialog.draftUrl).trim();
+    const draftTitle = (bookmarkDialogTitleInput?.value ?? state.bookmarkDialog.draftTitle).trim();
+    const draftUrl = (bookmarkDialogUrlInput?.value ?? state.bookmarkDialog.draftUrl).trim();
     const canSave = draftTitle.length > 0 && isValidBookmarkUrl(draftUrl);
-    if (iconDialogSaveButton) {
-      iconDialogSaveButton.disabled = !canSave;
+    if (bookmarkDialogSaveButton) {
+      bookmarkDialogSaveButton.disabled = !canSave;
     }
     // Only clear the error toast once all fields are valid again
-    if (state.iconDialog.statusKind === 'error' && canSave) {
-      state.iconDialog.status = '';
-      state.iconDialog.statusKind = '';
-      rootElement.querySelector('.icon-dialog-toast')?.remove();
+    if (state.bookmarkDialog.statusKind === 'error' && canSave) {
+      state.bookmarkDialog.status = '';
+      state.bookmarkDialog.statusKind = '';
+      rootElement.querySelector('.bookmark-dialog-toast')?.remove();
     }
   };
 
-  iconDialogTitleInput?.addEventListener('input', () => {
-    state.iconDialog.draftTitle = iconDialogTitleInput.value;
+  bookmarkDialogTitleInput?.addEventListener('input', () => {
+    state.bookmarkDialog.draftTitle = bookmarkDialogTitleInput.value;
     updateSaveButtonState();
   });
 
-  iconDialogTitleInput?.addEventListener('blur', () => {
-    if (!iconDialogTitleInput.value.trim()) {
-      state.iconDialog.status = 'Name is required.';
-      state.iconDialog.statusKind = 'error';
+  bookmarkDialogTitleInput?.addEventListener('blur', () => {
+    if (!bookmarkDialogTitleInput.value.trim()) {
+      state.bookmarkDialog.status = 'Name is required.';
+      state.bookmarkDialog.statusKind = 'error';
       renderApp(rootElement, state);
     }
   });
 
-  iconDialogUrlInput?.addEventListener('input', () => {
-    state.iconDialog.draftUrl = iconDialogUrlInput.value;
+  bookmarkDialogUrlInput?.addEventListener('input', () => {
+    state.bookmarkDialog.draftUrl = bookmarkDialogUrlInput.value;
     updateSaveButtonState();
   });
 
-  iconDialogUrlInput?.addEventListener('blur', () => {
-    const val = iconDialogUrlInput.value.trim();
+  bookmarkDialogUrlInput?.addEventListener('blur', () => {
+    const val = bookmarkDialogUrlInput.value.trim();
     if (val && !isValidBookmarkUrl(val)) {
-      state.iconDialog.status = 'Enter a valid URL (for example https://example.com).';
-      state.iconDialog.statusKind = 'error';
+      state.bookmarkDialog.status = 'Enter a valid URL (for example https://example.com).';
+      state.bookmarkDialog.statusKind = 'error';
       renderApp(rootElement, state);
     }
   });
 
-  const saveDialogBookmark = async () => {
-    const target = state.iconDialog.target;
-    if (!target) {
-      return;
-    }
-
-    const nextTitle = state.iconDialog.draftTitle.trim();
-    const nextUrl = state.iconDialog.draftUrl.trim();
-    if (!nextTitle) {
-      state.iconDialog.status = 'Name is required.';
-      state.iconDialog.statusKind = 'error';
-      renderApp(rootElement, state);
-      return;
-    }
-
-    if (!nextUrl) {
-      state.iconDialog.status = 'URL is required.';
-      state.iconDialog.statusKind = 'error';
-      renderApp(rootElement, state);
-      return;
-    }
-
-    if (!isValidBookmarkUrl(nextUrl)) {
-      state.iconDialog.status = 'Enter a valid URL (for example https://example.com).';
-      state.iconDialog.statusKind = 'error';
-      renderApp(rootElement, state);
-      return;
-    }
-
-    await sendRuntimeMessage<{
-      type: typeof messageTypes.updateBookmark;
-      bookmarkId: string;
-      changes: { title?: string; url?: string };
-    }, UpdateBookmarkResponse>({
-      type: messageTypes.updateBookmark,
-      bookmarkId: target.id,
-      changes: {
-        title: nextTitle,
-        url: nextUrl,
-      },
-    });
-
-    await refreshBookmarkTree(state);
-
-    const updatedTarget = state.iconDialog.target;
-    if (updatedTarget) {
-      state.iconDialog.draftTitle = updatedTarget.title || nextTitle;
-      state.iconDialog.draftUrl = updatedTarget.url;
-      state.iconDialog.status = `Saved bookmark ${updatedTarget.title || getHostname(updatedTarget.url)}.`;
-      state.iconDialog.statusKind = 'success';
-      state.iconDialog.query = `${updatedTarget.title || getSearchName(updatedTarget.url)} logo`;
-      await loadIconDialogPreview(state, updatedTarget);
-    }
-
-    renderApp(rootElement, state);
-  };
-
-  iconDialogSaveButton?.addEventListener('click', async () => {
-    await saveDialogBookmark();
+  bookmarkDialogSaveButton?.addEventListener('click', async () => {
+    await saveBookmarkDialogBookmark(rootElement, state, renderApp);
   });
 
-  iconDialogTitleInput?.addEventListener('keydown', async event => {
+  bookmarkDialogTitleInput?.addEventListener('keydown', async event => {
     if (event.key !== 'Enter') {
       return;
     }
     event.preventDefault();
-    await saveDialogBookmark();
+    await saveBookmarkDialogBookmark(rootElement, state, renderApp);
   });
 
-  iconDialogUrlInput?.addEventListener('keydown', async event => {
+  bookmarkDialogUrlInput?.addEventListener('keydown', async event => {
     if (event.key !== 'Enter') {
       return;
     }
     event.preventDefault();
-    await saveDialogBookmark();
+    await saveBookmarkDialogBookmark(rootElement, state, renderApp);
   });
 
-  iconDialogSearchInput?.addEventListener('keydown', async event => {
+  bookmarkDialogSearchInput?.addEventListener('keydown', async event => {
     if (event.key !== 'Enter') {
       return;
     }
 
     event.preventDefault();
-    await searchIconDialog(rootElement, state, state.iconDialog.query);
+    await searchBookmarkDialog(rootElement, state, state.bookmarkDialog.query, renderApp);
   });
 
-  iconDialogFileInput?.addEventListener('change', async () => {
-    const file = iconDialogFileInput.files?.[0];
-    const target = state.iconDialog.target;
+  bookmarkDialogFileInput?.addEventListener('change', async () => {
+    const file = bookmarkDialogFileInput.files?.[0];
+    const target = state.bookmarkDialog.target;
     if (!file || !target) {
       return;
     }
 
-    const normalizedDataUrl = await normalizeUploadedImage(file);
-    await sendRuntimeMessage<{
-      type: typeof messageTypes.setIconOverride;
-      bookmarkUrl: string;
-      bookmarkTitle?: string;
-      dataUrl: string;
-      fileName: string;
-      mimeType: string;
-    }, SetIconOverrideResponse>({
-      type: messageTypes.setIconOverride,
-      bookmarkUrl: target.url,
-      bookmarkTitle: target.title,
-      dataUrl: normalizedDataUrl,
-      fileName: file.name,
-      mimeType: 'image/png',
-    });
-
-    state.iconDialog.status = `Custom icon saved for ${target.title || getHostname(target.url)}.`;
-    state.iconDialog.statusKind = 'success';
-    state.iconDialog.previewIcon = {
-      cacheKey: `override:${target.url}`,
-      sourceKind: 'override',
-      dataUrl: normalizedDataUrl,
-      lastUpdated: Date.now(),
-      isFallback: false,
-    };
-    state.resolvedIcons[target.url] = state.iconDialog.previewIcon;
-    iconDialogFileInput.value = '';
-    renderApp(rootElement, state);
+    await uploadBookmarkDialogImage(rootElement, state, file, renderApp);
+    bookmarkDialogFileInput.value = '';
   });
 
   setupGridInteractions(rootElement, state, bookmarkCanvas, bookmarkGrid, resolvedCurrentFolder, renderApp);
@@ -1066,8 +961,8 @@ async function switchSettingsSection(rootElement: HTMLDivElement, state: AppStat
 }
 
 function dismissTransientUi(rootElement: HTMLDivElement, state: AppState): boolean {
-  if (state.iconDialog.open) {
-    state.iconDialog = createClosedIconDialogState();
+  if (state.bookmarkDialog.open) {
+    state.bookmarkDialog = createClosedBookmarkDialogState();
     renderApp(rootElement, state);
     return true;
   }
@@ -1141,7 +1036,7 @@ function handleGlobalKeydown(rootElement: HTMLDivElement, state: AppState, event
     return dismissTransientUi(rootElement, state);
   }
 
-  if (state.iconDialog.open || isEditableTarget(event.target)) {
+  if (state.bookmarkDialog.open || isEditableTarget(event.target)) {
     return false;
   }
 
@@ -1178,7 +1073,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
     return false;
   }
 
-  return Boolean(target.closest('input, textarea, select, [contenteditable="true"], .icon-dialog, .settings-drawer'));
+  return Boolean(target.closest('input, textarea, select, [contenteditable="true"], .bookmark-dialog, .settings-drawer'));
 }
 
 async function deleteSelectedItems(rootElement: HTMLDivElement, state: AppState, ids: string[], scope: SelectionScope | null = state.selectionScope): Promise<void> {
@@ -1327,275 +1222,6 @@ function renderFolderPreviewCell(node: BookmarkNode, resolvedIcons: Record<strin
   return `<span class="folder-card__cell folder-card__cell--folder" title="${escapeAttribute(node.title || 'Folder')}">${itemCount > 0 ? String(itemCount) : escapeHtml(getInitial(node.title || 'Folder'))}</span>`;
 }
 
-function renderStatusMessage(statusMessage: AppStatus): string {
-  return `
-    <div class="app-status" data-kind="${statusMessage.kind}" role="status" aria-live="polite">
-      <span>${escapeHtml(statusMessage.message)}</span>
-      <button class="app-status__dismiss icon-button" type="button" aria-label="Dismiss message">${renderUiIcon('close')}</button>
-    </div>
-  `;
-}
-
-function renderContextMenu(state: AppState, contextMenu: ContextMenuState): string {
-  const x = clamp(contextMenu.x, 12, Math.max(12, window.innerWidth - 287));
-  const estimatedHeight = contextMenu.kind === 'surface' ? 304 : contextMenu.kind === 'selection' ? 284 : 356;
-  const shouldOpenUpward = contextMenu.y + estimatedHeight > window.innerHeight - 12;
-  const anchoredY = shouldOpenUpward
-    ? clamp(contextMenu.y, estimatedHeight + 12, window.innerHeight - 12)
-    : clamp(contextMenu.y, 12, Math.max(12, window.innerHeight - estimatedHeight));
-  const menuStyle = shouldOpenUpward
-    ? `left:${x}px; top:${anchoredY}px; transform: translateY(calc(-100% + 8px));`
-    : `left:${x}px; top:${anchoredY}px;`;
-
-  if (contextMenu.kind === 'bookmark') {
-    const canPaste = Boolean(contextMenu.target.parentId) && canPasteClipboardIntoFolder(state, contextMenu.target.parentId);
-    return `
-      <div class="context-menu-layer">
-        <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="Bookmark actions">
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-tab" type="button" role="menuitem">${renderUiIcon('external')}<span>Open in new tab</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-window" type="button" role="menuitem">${renderUiIcon('window')}<span>Open in new window</span></button>
-          <div class="bookmark-context-menu__divider"></div>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="cut" type="button" role="menuitem">${renderUiIcon('scissors')}<span>Cut</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="copy" type="button" role="menuitem">${renderUiIcon('copy')}<span>Copy</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="paste" type="button" role="menuitem" ${canPaste ? '' : 'disabled'}>${renderUiIcon('clipboard')}<span>Paste</span></button>
-          <div class="bookmark-context-menu__divider"></div>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="edit" type="button" role="menuitem">${renderUiIcon('edit')}<span>Edit...</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="delete" type="button" role="menuitem">${renderUiIcon('trash')}<span>Delete...</span></button>
-        </div>
-      </div>
-    `;
-  }
-
-  if (contextMenu.kind === 'folder') {
-    const canPaste = canPasteClipboardIntoFolder(state, contextMenu.target.id);
-    return `
-      <div class="context-menu-layer">
-        <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="Folder actions">
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-tab" type="button" role="menuitem">${renderUiIcon('external')}<span>Open in new tab</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-window" type="button" role="menuitem">${renderUiIcon('window')}<span>Open in new window</span></button>
-          <div class="bookmark-context-menu__divider"></div>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="cut" type="button" role="menuitem">${renderUiIcon('scissors')}<span>Cut</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="copy" type="button" role="menuitem">${renderUiIcon('copy')}<span>Copy</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="paste" type="button" role="menuitem" ${canPaste ? '' : 'disabled'}>${renderUiIcon('clipboard')}<span>Paste</span></button>
-          <div class="bookmark-context-menu__divider"></div>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="edit-folder" type="button" role="menuitem">${renderUiIcon('edit')}<span>Edit</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="delete-folder" type="button" role="menuitem">${renderUiIcon('trash')}<span>Delete</span></button>
-        </div>
-      </div>
-    `;
-  }
-
-  if (contextMenu.kind === 'selection') {
-    const summary = [];
-    if (contextMenu.target.bookmarkCount) {
-      summary.push(`${String(contextMenu.target.bookmarkCount)} bookmark${contextMenu.target.bookmarkCount === 1 ? '' : 's'}`);
-    }
-    if (contextMenu.target.folderCount) {
-      summary.push(`${String(contextMenu.target.folderCount)} folder${contextMenu.target.folderCount === 1 ? '' : 's'}`);
-    }
-
-    return `
-      <div class="context-menu-layer">
-        <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="Selection actions">
-          <p class="bookmark-context-menu__label">${escapeHtml(summary.join(' · ') || 'Selection')}</p>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-tabs" type="button" role="menuitem">${renderUiIcon('external')}<span>Open all links in new tabs</span></button>
-          <div class="bookmark-context-menu__divider"></div>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="cut-selection" type="button" role="menuitem">${renderUiIcon('scissors')}<span>Cut</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="copy-selection" type="button" role="menuitem">${renderUiIcon('copy')}<span>Copy</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="delete-selection" type="button" role="menuitem">${renderUiIcon('trash')}<span>Delete</span></button>
-        </div>
-      </div>
-    `;
-  }
-
-  const canPaste = canPasteClipboardIntoFolder(state, contextMenu.target.id);
-  return `
-    <div class="context-menu-layer">
-      <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="${contextMenu.target.surface === 'dock' ? 'Dock actions' : 'Grid actions'}">
-        <button class="bookmark-context-menu__item button-with-icon" data-context-action="add-bookmark" type="button" role="menuitem">${renderUiIcon('plus')}<span>Add Bookmark</span></button>
-        <button class="bookmark-context-menu__item button-with-icon" data-context-action="add-folder" type="button" role="menuitem">${renderUiIcon('folderPlus')}<span>Add Folder</span></button>
-        <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-manager" type="button" role="menuitem">${renderUiIcon('grid')}<span>Open Bookmark Manager</span></button>
-        <div class="bookmark-context-menu__divider"></div>
-        <button class="bookmark-context-menu__item button-with-icon" data-context-action="paste" type="button" role="menuitem" ${canPaste ? '' : 'disabled'}>${renderUiIcon('clipboard')}<span>Paste</span></button>
-        <div class="bookmark-context-menu__divider"></div>
-        <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-settings" type="button" role="menuitem">${renderUiIcon('settings')}<span>Open Settings</span></button>
-      </div>
-    </div>
-  `;
-}
-
-function renderIconDialog(iconDialog: IconDialogState): string {
-  const title = iconDialog.target?.title || 'Bookmark';
-  const draftTitle = iconDialog.draftTitle.trim();
-  const draftUrl = iconDialog.draftUrl.trim();
-  const canSaveBookmark = draftTitle.length > 0 && isValidBookmarkUrl(draftUrl);
-  const previewMarkup = iconDialog.previewIcon && iconDialog.previewIcon.sourceKind !== 'generated'
-    ? `<img class="icon-dialog__preview-image" src="${escapeAttribute(iconDialog.previewIcon.dataUrl)}" alt="" />`
-    : (iconDialog.target
-      ? `<img class="icon-dialog__preview-image" src="${escapeAttribute(getFaviconImageUrl(iconDialog.target.url, 'dialog'))}" alt="" referrerpolicy="no-referrer" />`
-      : renderIconPlaceholder(title));
-
-  return `
-    <div class="icon-dialog-layer">
-      <button class="icon-dialog-scrim" type="button" aria-label="Close icon picker"></button>
-      <section class="icon-dialog" role="dialog" aria-modal="true" aria-label="Edit bookmark">
-        <header class="icon-dialog__header">
-          <div class="icon-dialog__header-copy">
-            <p class="eyebrow">Edit bookmark</p>
-            <h3>${escapeHtml(title)}</h3>
-          </div>
-          <button class="icon-dialog-close icon-button" type="button" aria-label="Close icon picker">${renderUiIcon('close')}</button>
-        </header>
-        <div class="icon-dialog__body">
-          <aside class="icon-dialog__preview-panel">
-            <div class="icon-dialog__edit-fields">
-              <label class="field icon-dialog__field">
-                <span>Name</span>
-                <input name="iconDialogTitle" type="text" value="${escapeAttribute(iconDialog.draftTitle)}" placeholder="Bookmark name" required />
-              </label>
-              <label class="field icon-dialog__field">
-                <span>URL</span>
-                <input name="iconDialogUrl" type="url" value="${escapeAttribute(iconDialog.draftUrl)}" placeholder="https://example.com" required />
-              </label>
-              <button class="save-button button-with-icon icon-dialog-save-button" type="button" ${canSaveBookmark ? '' : 'disabled'}>${renderUiIcon('save')}<span>Save bookmark</span></button>
-            </div>
-            <div class="icon-dialog__preview">
-              ${previewMarkup}
-              <div class="icon-dialog__preview-actions">
-                <button class="icon-dialog__preview-action icon-dialog__preview-action--refresh icon-dialog-refresh-button" type="button" aria-label="Refresh icon" title="Refresh icon">${renderUiIcon('refresh')}</button>
-                <button class="icon-dialog__preview-action icon-dialog__preview-action--remove icon-dialog-remove-button" type="button" aria-label="Remove custom icon" title="Remove custom icon">${renderUiIcon('trash')}</button>
-                <button class="icon-dialog__preview-action icon-dialog__preview-action--upload icon-dialog-upload-button" type="button" aria-label="Upload icon" title="Upload icon">${renderUiIcon('upload')}<span>Upload image</span></button>
-              </div>
-            </div>
-            <p class="field-hint">Hover the preview for quick icon actions, or choose one of the search results.</p>
-            <input class="icon-file-input" name="iconDialogFile" type="file" accept="image/*" />
-            ${iconDialog.status ? `<div class="icon-dialog-toast" data-kind="${iconDialog.statusKind || 'info'}" role="status">${escapeHtml(iconDialog.status)}</div>` : ''}
-          </aside>
-          <div class="icon-dialog__search-panel">
-            <div class="visual-section__header">
-              <h3>Search</h3>
-              <p class="field-hint">Search for an icon or favicon and click a result to apply it immediately.</p>
-            </div>
-            <div class="icon-dialog__search-row">
-              <input name="iconDialogSearchQuery" type="search" value="${escapeAttribute(iconDialog.query)}" placeholder="Search for an icon" />
-              <button class="save-button button-with-icon icon-dialog-search-button" type="button">${renderUiIcon('search')}<span>Search</span></button>
-            </div>
-            <div class="icon-dialog__results" data-loading="${String(iconDialog.loading)}">
-              ${renderIconDialogResults(iconDialog)}
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
-  `;
-}
-
-function renderIconDialogResults(iconDialog: IconDialogState): string {
-  if (iconDialog.loading) {
-    return '<p class="field-hint">Searching icons...</p>';
-  }
-
-  if (!iconDialog.results.length) {
-    return '<p class="field-hint">No icon candidates yet. Try a different search term.</p>';
-  }
-
-  return iconDialog.results.map(candidate => `
-    <button class="icon-result-card" data-icon-candidate-url="${escapeAttribute(candidate.imageUrl)}" type="button" title="${escapeAttribute(candidate.label)}">
-      <img class="icon-result-card__image" src="${escapeAttribute(candidate.previewUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" />
-      <span class="icon-result-card__label">${escapeHtml(candidate.label)}</span>
-    </button>
-  `).join('');
-}
-
-async function openIconDialog(rootElement: HTMLDivElement, state: AppState, target: BookmarkActionTarget): Promise<void> {
-  state.iconDialog = {
-    open: true,
-    target,
-    draftTitle: target.title || '',
-    draftUrl: target.url,
-    query: `${target.title || getSearchName(target.url)} logo`,
-    status: '',
-    statusKind: '',
-    loading: true,
-    results: [],
-    previewIcon: null,
-  };
-  renderApp(rootElement, state);
-  await Promise.allSettled([
-    loadIconDialogPreview(state, target, rootElement),
-    searchIconDialog(rootElement, state, state.iconDialog.query),
-  ]);
-}
-
-async function loadIconDialogPreview(state: AppState, target: BookmarkActionTarget, rootElement?: HTMLDivElement): Promise<void> {
-  const response = await sendRuntimeMessage<{
-    type: typeof messageTypes.getIcon;
-    bookmarkUrl: string;
-    bookmarkTitle?: string;
-  }, GetIconResponse>({
-    type: messageTypes.getIcon,
-    bookmarkUrl: target.url,
-    bookmarkTitle: target.title,
-  });
-
-  if (!state.iconDialog.open || state.iconDialog.target?.url !== target.url) {
-    return;
-  }
-
-  state.iconDialog.previewIcon = response.icon;
-  state.resolvedIcons[target.url] = response.icon;
-  if (rootElement) {
-    renderApp(rootElement, state);
-  }
-}
-
-async function searchIconDialog(rootElement: HTMLDivElement, state: AppState, query: string): Promise<void> {
-  const target = state.iconDialog.target;
-  if (!target) {
-    return;
-  }
-
-  state.iconDialog.loading = true;
-  state.iconDialog.status = `Searching icons for ${target.title || getHostname(target.url)}...`;
-  state.iconDialog.statusKind = 'info';
-  renderApp(rootElement, state);
-
-  try {
-    const response = await sendRuntimeMessage<{
-      type: typeof messageTypes.searchIcons;
-      query: string;
-      bookmarkUrl?: string;
-    }, SearchIconsResponse>({
-      type: messageTypes.searchIcons,
-      query,
-      bookmarkUrl: target.url,
-    });
-
-    if (!state.iconDialog.open || state.iconDialog.target?.url !== target.url) {
-      return;
-    }
-
-    state.iconDialog.query = query;
-    state.iconDialog.loading = false;
-    state.iconDialog.results = response.candidates;
-    state.iconDialog.status = response.candidates.length
-      ? `Found ${String(response.candidates.length)} icon candidates.`
-      : 'No icon candidates found for that search.';
-    state.iconDialog.statusKind = response.candidates.length ? 'info' : 'error';
-    renderApp(rootElement, state);
-  } catch {
-    if (!state.iconDialog.open || state.iconDialog.target?.url !== target.url) {
-      return;
-    }
-
-    state.iconDialog.loading = false;
-    state.iconDialog.results = [];
-    state.iconDialog.status = 'Icon search failed. Try a different search or use upload.';
-    state.iconDialog.statusKind = 'error';
-    renderApp(rootElement, state);
-  }
-}
-
 async function deleteBookmarkFromContext(rootElement: HTMLDivElement, state: AppState, target: BookmarkActionTarget): Promise<void> {
   const confirmed = window.confirm(`Delete ${target.title || getHostname(target.url)}?`);
   if (!confirmed) {
@@ -1612,8 +1238,8 @@ async function deleteBookmarkFromContext(rootElement: HTMLDivElement, state: App
     bookmarkId: target.id,
   });
 
-  if (state.iconDialog.target?.id === target.id) {
-    state.iconDialog = createClosedIconDialogState();
+  if (state.bookmarkDialog.target?.id === target.id) {
+    state.bookmarkDialog = createClosedBookmarkDialogState();
   }
 
   await refreshTreeAndRender(rootElement, state, renderApp);
@@ -1643,7 +1269,7 @@ async function handleBookmarkContextAction(rootElement: HTMLDivElement, state: A
       renderApp(rootElement, state);
       return;
     case 'edit':
-      await openIconDialog(rootElement, state, target);
+      await openBookmarkDialog(rootElement, state, target, renderApp);
       return;
     case 'delete':
       await deleteBookmarkFromContext(rootElement, state, target);
@@ -1792,7 +1418,7 @@ async function createBookmarkInFolder(rootElement: HTMLDivElement, state: AppSta
 
   const nextTarget = findBookmarkActionTargetById(state.tree, response.bookmark.id);
   if (nextTarget) {
-    await openIconDialog(rootElement, state, nextTarget);
+    await openBookmarkDialog(rootElement, state, nextTarget, renderApp);
     return;
   }
 
@@ -1977,7 +1603,7 @@ async function openBookmarkManager(rootElement: HTMLDivElement, state: AppState)
 
 function getInitial(value: string): string {
   const trimmed = value.trim();
-  return trimmed ? trimmed[0].toUpperCase() : '•';
+  return trimmed ? trimmed[0].toUpperCase() : 'â€¢';
 }
 
 function escapeCssUrl(value: string): string {
