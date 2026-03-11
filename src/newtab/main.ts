@@ -148,7 +148,7 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
     statusMessage: null,
   };
 
-  syncFolderHash(state.currentFolderId);
+  syncFolderHash(state.currentFolderId, 'replace');
   persistLastFolder(state.settings, state.currentFolderId);
   await preloadVisibleIcons(state);
   renderApp(rootElement, state);
@@ -204,7 +204,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
 
   if (currentFolder.id !== state.currentFolderId) {
     state.currentFolderId = currentFolder.id;
-    syncFolderHash(currentFolder.id);
+    syncFolderHash(currentFolder.id, 'replace');
     persistLastFolder(state.settings, currentFolder.id);
   }
 
@@ -379,7 +379,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     if (response.settings.rootFolderId && !isFolderDescendantOf(state.tree, state.currentFolderId, response.settings.rootFolderId)) {
       state.currentFolderId = response.settings.rootFolderId;
       clearSelection(state);
-      syncFolderHash(state.currentFolderId);
+      syncFolderHash(state.currentFolderId, 'replace');
       persistLastFolder(state.settings, state.currentFolderId);
     }
 
@@ -1757,6 +1757,12 @@ function setupSurfaceInteractions(
       return;
     }
 
+    if (state.contextMenu) {
+      state.contextMenu = null;
+      renderApp(rootElement, state);
+      return;
+    }
+
     const target = event.target as HTMLElement | null;
     const itemButton = target?.closest<HTMLButtonElement>(itemSelector);
     if (!itemButton) {
@@ -2427,7 +2433,7 @@ function navigateToFolder(state: AppState, folderId: string): void {
   state.currentFolderId = folderId;
   clearSelection(state);
   state.contextMenu = null;
-  syncFolderHash(folderId);
+  syncFolderHash(folderId, 'push');
   persistLastFolder(state.settings, folderId);
 }
 
@@ -3014,9 +3020,14 @@ function getFolderIdFromHash(): string | null {
   }
 }
 
-function syncFolderHash(folderId: string): void {
+function syncFolderHash(folderId: string, mode: 'replace' | 'push' = 'replace'): void {
   const nextHash = `#folder=${encodeURIComponent(folderId)}`;
   if (window.location.hash !== nextHash) {
+    if (mode === 'push') {
+      history.pushState(null, '', nextHash);
+      return;
+    }
+
     history.replaceState(null, '', nextHash);
   }
 }
