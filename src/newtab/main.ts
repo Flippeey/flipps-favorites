@@ -26,6 +26,9 @@ if (!root) {
 
 let settingsFeedbackTimer: number | null = null;
 let statusMessageTimer: number | null = null;
+let searchDebounceTimer: number | null = null;
+
+const SEARCH_DEBOUNCE_MS = 180;
 
 void bootstrap(root);
 
@@ -103,11 +106,19 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
   });
 }
 
-async function applySettingsPatch(rootElement: HTMLDivElement, state: AppState, patch: Partial<AppSettings>, options: { silent?: boolean } = {}): Promise<void> {
+async function applySettingsPatch(rootElement: HTMLDivElement, state: AppState, patch: Partial<AppSettings>, options: { silent?: boolean; optimistic?: boolean } = {}): Promise<void> {
+  const drawerUiState = captureDrawerUiState(rootElement);
+  const previousSettings = state.settings;
+
   try {
+    if (options.optimistic) {
+      applyLocalSettingsPatch(state, patch);
+    }
+
     if (!options.silent) {
       setSettingsFeedback(state, 'saving', 'Saving changes...');
       renderApp(rootElement, state);
+      restoreDrawerUiState(rootElement, drawerUiState);
     }
 
     const response = await sendRuntimeMessage<{ type: typeof messageTypes.patchSettings; patch: Partial<AppSettings> }, PatchSettingsResponse>({
@@ -117,15 +128,73 @@ async function applySettingsPatch(rootElement: HTMLDivElement, state: AppState, 
 
     applySettingsResponse(state, response.settings);
     if (!options.silent) {
-      setSettingsFeedback(state, 'saved', 'Saved');
+      setSettingsFeedback(state, 'saved', 'Your settings have been saved.');
     }
     renderStateAndWarmIcons(rootElement, state, renderApp);
+    restoreDrawerUiState(rootElement, drawerUiState);
   } catch (error) {
+    if (options.optimistic) {
+      applySettingsResponse(state, previousSettings);
+    }
+
     if (!options.silent) {
       setSettingsFeedback(state, 'error', error instanceof Error ? error.message : 'Failed to save settings.');
     }
     renderApp(rootElement, state);
+    restoreDrawerUiState(rootElement, drawerUiState);
   }
+}
+
+function applyLocalSettingsPatch(state: AppState, patch: Partial<AppSettings>): void {
+  applySettingsResponse(state, {
+    ...state.settings,
+    ...patch,
+  });
+}
+
+function captureDrawerUiState(rootElement: HTMLDivElement): {
+  scrollTop: number;
+  focusSelector: string | null;
+} | null {
+  const drawerBody = rootElement.querySelector<HTMLElement>('.drawer-body');
+  if (!drawerBody) {
+    return null;
+  }
+
+  const activeElement = document.activeElement;
+  let focusSelector: string | null = null;
+  if (activeElement instanceof HTMLElement && rootElement.contains(activeElement)) {
+    if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLSelectElement || activeElement instanceof HTMLTextAreaElement) {
+      if (activeElement.name) {
+        focusSelector = `[name="${activeElement.name}"]`;
+      }
+    }
+  }
+
+  return {
+    scrollTop: drawerBody.scrollTop,
+    focusSelector,
+  };
+}
+
+function restoreDrawerUiState(rootElement: HTMLDivElement, snapshot: { scrollTop: number; focusSelector: string | null } | null): void {
+  if (!snapshot) {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    const drawerBody = rootElement.querySelector<HTMLElement>('.drawer-body');
+    if (drawerBody) {
+      drawerBody.scrollTop = snapshot.scrollTop;
+    }
+
+    if (!snapshot.focusSelector) {
+      return;
+    }
+
+    const nextFocusedElement = rootElement.querySelector<HTMLElement>(snapshot.focusSelector);
+    nextFocusedElement?.focus();
+  });
 }
 
 function applySettingsResponse(state: AppState, settings: AppSettings): void {
@@ -596,9 +665,12 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
           ${renderNavTrail(libraryFolders, breadcrumbs)}
         </div>
         <div class="nav-side nav-side--right nav-side--controls">
-          <label class="surface-search surface-search--nav" aria-label="Search this folder">
+          <label class="surface-search surface-search--nav" aria-label="Search all bookmarks">
             <span class="surface-search__icon">${renderUiIcon('search')}</span>
-            <input name="currentFolderSearch" type="search" value="${escapeAttribute(state.searchQuery)}" placeholder="Search" aria-label="Search this folder" />
+            <input name="currentFolderSearch" type="search" value="${escapeAttribute(state.searchDraft)}" placeholder="Search all bookmarks" aria-label="Search all bookmarks" />
+            ${state.searchDraft
+      ? `<button class="surface-search__clear" type="button" aria-label="Clear search">${renderUiIcon('close')}</button>`
+      : ''}
           </label>
           <label class="sort-controls__field sort-controls__field--nav">
             <select name="bookmarkSortOption" aria-label="Sort bookmarks">
@@ -666,6 +738,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const accentHexInput = rootElement.querySelector<HTMLInputElement>('input[name="accentHex"]');
   const customBackgroundImageFileInput = rootElement.querySelector<HTMLInputElement>('input[name="customBackgroundImageFile"]');
   const currentFolderSearchInput = rootElement.querySelector<HTMLInputElement>('input[name="currentFolderSearch"]');
+  const currentFolderSearchClearButton = rootElement.querySelector<HTMLButtonElement>('.surface-search__clear');
   const bookmarkSortOptionInput = rootElement.querySelector<HTMLSelectElement>('select[name="bookmarkSortOption"]');
   const backgroundOpacityInput = rootElement.querySelector<HTMLInputElement>('input[name="backgroundOpacity"]');
   const backgroundFitModeInput = rootElement.querySelector<HTMLSelectElement>('select[name="backgroundFitMode"]');
@@ -734,16 +807,49 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   });
 
   currentFolderSearchInput?.addEventListener('input', () => {
-    const selectionStart = currentFolderSearchInput.selectionStart ?? currentFolderSearchInput.value.length;
-    const selectionEnd = currentFolderSearchInput.selectionEnd ?? currentFolderSearchInput.value.length;
-    state.searchQuery = currentFolderSearchInput.value;
+    state.searchDraft = currentFolderSearchInput.value;
+
+    if (searchDebounceTimer !== null) {
+      window.clearTimeout(searchDebounceTimer);
+    }
+
+    searchDebounceTimer = window.setTimeout(() => {
+      searchDebounceTimer = null;
+      const shouldRestoreFocus = document.activeElement === currentFolderSearchInput;
+      const selectionStart = currentFolderSearchInput.selectionStart ?? currentFolderSearchInput.value.length;
+      const selectionEnd = currentFolderSearchInput.selectionEnd ?? currentFolderSearchInput.value.length;
+      state.searchQuery = state.searchDraft;
+      syncDerivedTree(state);
+      normalizeSelection(state);
+      renderApp(rootElement, state);
+
+      if (!shouldRestoreFocus) {
+        return;
+      }
+
+      window.requestAnimationFrame(() => {
+        const nextSearchInput = rootElement.querySelector<HTMLInputElement>('input[name="currentFolderSearch"]');
+        nextSearchInput?.focus();
+        nextSearchInput?.setSelectionRange(selectionStart, selectionEnd);
+      });
+    }, SEARCH_DEBOUNCE_MS);
+  });
+
+  currentFolderSearchClearButton?.addEventListener('click', () => {
+    if (searchDebounceTimer !== null) {
+      window.clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = null;
+    }
+
+    state.searchDraft = '';
+    state.searchQuery = '';
     syncDerivedTree(state);
     normalizeSelection(state);
     renderApp(rootElement, state);
+
     window.requestAnimationFrame(() => {
       const nextSearchInput = rootElement.querySelector<HTMLInputElement>('input[name="currentFolderSearch"]');
       nextSearchInput?.focus();
-      nextSearchInput?.setSelectionRange(selectionStart, selectionEnd);
     });
   });
 
@@ -903,27 +1009,27 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   });
 
   favoritesColumnsInput?.addEventListener('change', async () => {
-    await applySettingsPatch(rootElement, state, { favoritesColumns: Number(favoritesColumnsInput.value), layoutPreset: 'custom' });
+    await applySettingsPatch(rootElement, state, { favoritesColumns: Number(favoritesColumnsInput.value), layoutPreset: 'custom' }, { optimistic: true });
   });
 
   favoritesRowsInput?.addEventListener('change', async () => {
-    await applySettingsPatch(rootElement, state, { favoritesRows: Number(favoritesRowsInput.value), layoutPreset: 'custom' });
+    await applySettingsPatch(rootElement, state, { favoritesRows: Number(favoritesRowsInput.value), layoutPreset: 'custom' }, { optimistic: true });
   });
 
   favoritesColumnGapInput?.addEventListener('change', async () => {
-    await applySettingsPatch(rootElement, state, { favoritesColumnGap: Number(favoritesColumnGapInput.value), layoutPreset: 'custom' });
+    await applySettingsPatch(rootElement, state, { favoritesColumnGap: Number(favoritesColumnGapInput.value), layoutPreset: 'custom' }, { optimistic: true });
   });
 
   favoritesRowGapInput?.addEventListener('change', async () => {
-    await applySettingsPatch(rootElement, state, { favoritesRowGap: Number(favoritesRowGapInput.value), layoutPreset: 'custom' });
+    await applySettingsPatch(rootElement, state, { favoritesRowGap: Number(favoritesRowGapInput.value), layoutPreset: 'custom' }, { optimistic: true });
   });
 
   bookmarkTileWidthInput?.addEventListener('change', async () => {
-    await applySettingsPatch(rootElement, state, { bookmarkTileWidth: Number(bookmarkTileWidthInput.value), layoutPreset: 'custom' });
+    await applySettingsPatch(rootElement, state, { bookmarkTileWidth: Number(bookmarkTileWidthInput.value), layoutPreset: 'custom' }, { optimistic: true });
   });
 
   bookmarkIconSizeInput?.addEventListener('change', async () => {
-    await applySettingsPatch(rootElement, state, { bookmarkIconSize: Number(bookmarkIconSizeInput.value), layoutPreset: 'custom' });
+    await applySettingsPatch(rootElement, state, { bookmarkIconSize: Number(bookmarkIconSizeInput.value), layoutPreset: 'custom' }, { optimistic: true });
   });
 
   showBookmarkIconBackgroundInput?.addEventListener('change', async () => {
@@ -1306,6 +1412,14 @@ async function applyHistorySnapshots(state: AppState, entry: Extract<UndoHistory
 }
 
 function handleGlobalKeydown(rootElement: HTMLDivElement, state: AppState, event: KeyboardEvent): boolean {
+  const shortcutKey = event.ctrlKey || event.metaKey;
+  const key = event.key.toLowerCase();
+
+  if (!event.altKey && shortcutKey && (key === 'k' || key === 's')) {
+    focusSearchInput(rootElement, state);
+    return true;
+  }
+
   if (event.key === 'Escape') {
     return dismissTransientUi(rootElement, state);
   }
@@ -1313,9 +1427,6 @@ function handleGlobalKeydown(rootElement: HTMLDivElement, state: AppState, event
   if (state.bookmarkDialog.open || isEditableTarget(event.target)) {
     return false;
   }
-
-  const shortcutKey = event.ctrlKey || event.metaKey;
-  const key = event.key.toLowerCase();
 
   if (shortcutKey && key === 'z' && !event.shiftKey) {
     void undoLastAction(rootElement, state);
@@ -1350,6 +1461,27 @@ function handleGlobalKeydown(rootElement: HTMLDivElement, state: AppState, event
   }
 
   return false;
+}
+
+function focusSearchInput(rootElement: HTMLDivElement, state: AppState): void {
+  const searchInput = rootElement.querySelector<HTMLInputElement>('input[name="currentFolderSearch"]');
+  if (!searchInput) {
+    return;
+  }
+
+  if (state.contextMenu) {
+    state.contextMenu = null;
+    renderApp(rootElement, state);
+    window.requestAnimationFrame(() => {
+      const nextSearchInput = rootElement.querySelector<HTMLInputElement>('input[name="currentFolderSearch"]');
+      nextSearchInput?.focus();
+      nextSearchInput?.select();
+    });
+    return;
+  }
+
+  searchInput.focus();
+  searchInput.select();
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -1448,7 +1580,7 @@ function renderSurfaceSummary(state: AppState, visibleCount: number, totalCount:
   }
 
   if (state.searchQuery.trim()) {
-    parts.push(`Filtered by "${escapeHtml(state.searchQuery.trim())}"`);
+    parts.push(`Search results for "${escapeHtml(state.searchQuery.trim())}"`);
   }
 
   return parts.map(part => `<span class="workspace-pill">${part}</span>`).join('');
@@ -1458,8 +1590,8 @@ function renderGridEmptyState(state: AppState): string {
   if (state.searchQuery.trim()) {
     return `
       <div class="empty-state empty-state--rich">
-        <strong>No matches in this folder</strong>
-        <p>Try a different search term or clear the current filter.</p>
+        <strong>No bookmarks matched your search</strong>
+        <p>Try a different term or clear the search to return to the current folder.</p>
       </div>
     `;
   }

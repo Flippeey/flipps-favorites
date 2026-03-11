@@ -116,6 +116,7 @@ const shortcutGroups = [
     items: [
       { keys: 'Delete / Backspace', description: 'Delete the current selection.' },
       { keys: 'Ctrl/Cmd+Click', description: 'Open a bookmark or folder in a new tab.' },
+      { keys: 'Ctrl/Cmd+K or Ctrl/Cmd+S', description: 'Focus and select the bookmark search field.' },
     ],
   },
 ] as const;
@@ -171,6 +172,7 @@ export function renderDrawerSection(section: SettingsSectionId, settings: AppSet
           ${themeModeOptions.map(option => renderThemeModeCard(option, settings.themeMode)).join('')}
         </div>
       </div>
+      <div class="settings-section-divider" aria-hidden="true"></div>
       <div class="visual-section">
         <div class="visual-section__header">
           <h3>Accent</h3>
@@ -186,6 +188,7 @@ export function renderDrawerSection(section: SettingsSectionId, settings: AppSet
         <input name="accentColor" type="hidden" value="${accentColor}" />
         ${renderAccentPickerPopover(accentPicker)}
       </div>
+      <div class="settings-section-divider" aria-hidden="true"></div>
       <div class="visual-section">
         <div class="visual-section__header">
           <h3>Background</h3>
@@ -453,21 +456,26 @@ function renderHelpSection(): string {
       <div class="visual-section">
         <div class="visual-section__header">
           <h3>About</h3>
-          <p class="field-hint">Flipp's Favorites keeps bookmark navigation, organization, and visual customization inside the new tab page.</p>
+          <p class="field-hint">A personal bookmark workspace shaped around everyday use, with enough flexibility for other people to make it their own.</p>
+        </div>
+        <div class="shortcut-card">
+          <p class="help-about-copy">Flipp's Favorites is a project by Flippeey, originally built to make personal bookmark navigation feel faster, calmer, and more visual than the default browser experience. Over time it grew into a polished new-tab workspace that is still driven by those personal needs, but is shared so other people can enjoy it too.</p>
+          <p class="help-about-copy">The extension was developed with partial AI assistance during implementation and iteration. That support helped speed up experimentation and reduce repetitive work, while the product direction, feature decisions, and overall UX were still shaped intentionally by hand.</p>
         </div>
         <div class="shortcut-card">
           <div class="shortcut-list">
             <div class="shortcut-row">
-              <span class="shortcut-keys">New tab</span>
-              <span class="shortcut-description">Browse folders, reorder items, edit bookmarks, and keep a dock of favorite folders visible at the bottom of the page.</span>
+              <span class="shortcut-keys">Workspace</span>
+              <span class="shortcut-description">Use the new tab page as a bookmark workspace: browse through folders, search across the full library, reorganize items, edit entries in place, and keep a dock of frequently used folders visible at the bottom.</span>
             </div>
             <div class="shortcut-row">
-              <span class="shortcut-keys">Theme</span>
-              <span class="shortcut-description">Light, dark, accent, background image, and layout presets are all available from the right-side drawer.</span>
+              <span class="shortcut-keys">Customization</span>
+              <span class="shortcut-description">Adjust the look and feel from the right-side drawer with theme modes, accent colors, background images, layout presets, custom spacing controls, and dock behavior settings.</span>
             </div>
           </div>
         </div>
       </div>
+      <div class="settings-section-divider" aria-hidden="true"></div>
       <div class="visual-section">
         <div class="visual-section__header">
           <h3>Shortcuts</h3>

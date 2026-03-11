@@ -13,6 +13,7 @@ export interface AppState {
   accentPicker: AccentPickerState;
   iconToolTargetUrl: string;
   iconToolStatus: string;
+  searchDraft: string;
   searchQuery: string;
   bookmarkUsage: Record<string, BookmarkUsageRecord>;
   clipboard: BookmarkClipboardState | null;
@@ -160,6 +161,7 @@ export function createInitialAppState(args: {
     accentPicker: createAccentPickerState(settings.accentColor),
     iconToolTargetUrl: resolveInitialIconToolTarget(tree),
     iconToolStatus: '',
+    searchDraft: '',
     searchQuery: '',
     bookmarkUsage,
     clipboard: null,

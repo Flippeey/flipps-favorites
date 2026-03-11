@@ -102,7 +102,7 @@ function setupSurfaceInteractions(
 
   const visibleItems = getVisibleChildren(state, scope);
   const buttonById = new Map(itemButtons.map(button => [button.dataset[idDatasetKey] || '', button]));
-  const dragDisabled = surface === 'grid' && folderId === state.currentFolderId && state.settings.bookmarkSortMode !== 'manual';
+  const dragDisabled = surface === 'grid' && folderId === state.currentFolderId && (state.settings.bookmarkSortMode !== 'manual' || Boolean(state.searchQuery.trim()));
 
   const setButtonSelectionState = (selectedIds: string[]) => {
     const selectedSet = new Set(selectedIds);

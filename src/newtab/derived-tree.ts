@@ -7,6 +7,7 @@ export interface DerivedTreeState {
   currentFolder: BookmarkNode | null;
   allCurrentFolderChildren: BookmarkNode[];
   currentFolderChildren: BookmarkNode[];
+  searchResults: BookmarkNode[];
   dockFolder: BookmarkNode | null;
   dockItems: BookmarkNode[];
   libraryFolders: BookmarkNode[];
@@ -32,11 +33,17 @@ export function deriveTreeState(
   const dockFolder = getDockFolder(tree, settings);
   const visibleIconTargets = collectUniqueVisibleIconTargets(tree, settings, currentFolder?.id ?? defaultFolder?.id ?? '');
   const allCurrentFolderChildren = currentFolder?.children ?? [];
+  const searchResults = searchQuery.trim()
+    ? applySearchView(tree, settings, searchQuery, bookmarkUsage)
+    : [];
   const derived: DerivedTreeState = {
     defaultFolder,
     currentFolder,
     allCurrentFolderChildren,
-    currentFolderChildren: applyCurrentFolderView(allCurrentFolderChildren, settings, searchQuery, bookmarkUsage),
+    currentFolderChildren: searchQuery.trim()
+      ? searchResults
+      : applyCurrentFolderView(allCurrentFolderChildren, settings, bookmarkUsage),
+    searchResults,
     dockFolder,
     dockItems: dockFolder?.children ?? [],
     libraryFolders: getLibraryFolders(tree),
@@ -51,19 +58,53 @@ export function deriveTreeState(
 function applyCurrentFolderView(
   children: BookmarkNode[],
   settings: AppSettings,
-  searchQuery: string,
   bookmarkUsage: Record<string, BookmarkUsageRecord>,
 ): BookmarkNode[] {
-  const query = searchQuery.trim().toLowerCase();
-  const filtered = query
-    ? children.filter(node => matchesSearchQuery(node, query))
-    : [...children];
-
+  const filtered = [...children];
   if (settings.bookmarkSortMode === 'manual') {
     return filtered;
   }
 
   return filtered.sort((left, right) => compareNodes(left, right, settings, bookmarkUsage));
+}
+
+function applySearchView(
+  tree: BookmarkNode[],
+  settings: AppSettings,
+  searchQuery: string,
+  bookmarkUsage: Record<string, BookmarkUsageRecord>,
+): BookmarkNode[] {
+  const query = searchQuery.trim().toLowerCase();
+  if (!query) {
+    return [];
+  }
+
+  const results = collectSearchMatches(tree, query);
+  if (settings.bookmarkSortMode === 'manual') {
+    return results;
+  }
+
+  return results.sort((left, right) => compareNodes(left, right, settings, bookmarkUsage));
+}
+
+function collectSearchMatches(tree: BookmarkNode[], query: string): BookmarkNode[] {
+  const queue = [...tree];
+  const results: BookmarkNode[] = [];
+
+  while (queue.length) {
+    const node = queue.shift();
+    if (!node) {
+      continue;
+    }
+
+    if (matchesSearchQuery(node, query)) {
+      results.push(node);
+    }
+
+    queue.push(...(node.children ?? []));
+  }
+
+  return results;
 }
 
 function matchesSearchQuery(node: BookmarkNode, query: string): boolean {
