@@ -1291,6 +1291,8 @@ button {
   position: absolute;
   pointer-events: auto;
   width: 275px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
   padding: 8px 0;
   border-radius: 14px;
   background: var(--surface-glass);

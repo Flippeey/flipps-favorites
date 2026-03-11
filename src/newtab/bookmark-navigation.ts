@@ -4,6 +4,7 @@ export interface BookmarkActionTarget {
   id: string;
   url: string;
   title: string;
+  parentId: string;
 }
 
 export function getHostname(url: string): string {
@@ -114,6 +115,7 @@ export function getBookmarkActionTarget(element: HTMLElement): BookmarkActionTar
     id,
     url,
     title: element.dataset.bookmarkTitle || getHostname(url),
+    parentId: element.dataset.parentId || '',
   };
 }
 
@@ -131,6 +133,7 @@ export function findBookmarkActionTargetById(tree: BookmarkNode[], bookmarkId: s
     id: node.id,
     url: node.url,
     title: node.title || getHostname(node.url),
+    parentId: node.parentId ?? '',
   };
 }
 
@@ -160,6 +163,7 @@ export function collectVisibleBookmarks(tree: BookmarkNode[], currentFolderId: s
       id: candidate.id,
       url: candidate.url,
       title: candidate.title || getHostname(candidate.url),
+      parentId: candidate.parentId ?? '',
     });
   }
 
