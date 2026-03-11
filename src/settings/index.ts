@@ -30,7 +30,7 @@ export const layoutPresetOptions: Array<{
   id: Exclude<LayoutPresetId, 'custom'>;
   label: string;
   description: string;
-  settings: Pick<AppSettings, 'favoritesColumns' | 'favoritesRows' | 'favoritesColumnGap' | 'favoritesRowGap' | 'bookmarkTileWidth' | 'bookmarkIconSize' | 'showBookmarkIconBackground'>;
+  settings: Pick<AppSettings, 'favoritesColumns' | 'favoritesRows' | 'favoritesColumnGap' | 'favoritesRowGap' | 'bookmarkTileWidth' | 'bookmarkIconSize'>;
 }> = [
   {
     id: 'balanced',
@@ -43,7 +43,6 @@ export const layoutPresetOptions: Array<{
       favoritesRowGap: 20,
       bookmarkTileWidth: 130,
       bookmarkIconSize: 75,
-      showBookmarkIconBackground: false,
     },
   },
   {
@@ -57,7 +56,6 @@ export const layoutPresetOptions: Array<{
       favoritesRowGap: 14,
       bookmarkTileWidth: 108,
       bookmarkIconSize: 60,
-      showBookmarkIconBackground: false,
     },
   },
   {
@@ -71,7 +69,6 @@ export const layoutPresetOptions: Array<{
       favoritesRowGap: 24,
       bookmarkTileWidth: 146,
       bookmarkIconSize: 82,
-      showBookmarkIconBackground: true,
     },
   },
   {
@@ -85,7 +82,6 @@ export const layoutPresetOptions: Array<{
       favoritesRowGap: 28,
       bookmarkTileWidth: 168,
       bookmarkIconSize: 96,
-      showBookmarkIconBackground: true,
     },
   },
 ];
@@ -390,12 +386,12 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
               ${renderSettingsSlider('favoritesRowGap', 'Row gap', settings.favoritesRowGap, 0, 48, 'px')}
               ${renderSettingsSlider('bookmarkTileWidth', 'Tile width', settings.bookmarkTileWidth, 88, 180, 'px')}
               ${renderSettingsSlider('bookmarkIconSize', 'Icon size', settings.bookmarkIconSize, 40, 112, 'px')}
-            </div>
-            <label class="toggle-field toggle-field--card">
-              <input name="showBookmarkIconBackground" type="checkbox" ${settings.showBookmarkIconBackground ? 'checked' : ''} />
-              <span>Show accent background behind bookmark icons</span>
-            </label>`
+            </div>`
           : `<p class="field-hint">Switch to Custom if you want to fine-tune spacing, row limits, and icon treatment.</p>`}
+        <label class="toggle-field toggle-field--card">
+          <input name="showBookmarkIconBackground" type="checkbox" ${settings.showBookmarkIconBackground ? 'checked' : ''} />
+          <span>Show accent background behind bookmark icons</span>
+        </label>
       </div>
     `;
   }
