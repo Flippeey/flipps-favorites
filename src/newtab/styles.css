@@ -373,7 +373,22 @@ button {
 .bookmark-canvas {
   position: relative;
   min-height: calc(100vh - 112px - var(--dock-height));
-  padding: 24px 36px 40px;
+  padding: 24px 56px 40px;
+}
+
+.selection-marquee {
+  position: absolute;
+  z-index: 2;
+  border: 1px solid color-mix(in srgb, var(--interactive-accent) 70%, white 12%);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--interactive-accent) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 16%, transparent);
+  pointer-events: none;
+}
+
+.selection-marquee--dock {
+  left: 0;
+  top: 0;
 }
 
 .bookmark-canvas::before {
@@ -416,6 +431,7 @@ button {
 }
 
 .bookmark-tile {
+  position: relative;
   width: var(--bookmark-tile-width);
   padding: 10px 8px 12px;
   border-radius: 18px;
@@ -424,10 +440,71 @@ button {
   transition: transform 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
 }
 
+.bookmark-tile[data-selected="true"],
+.dock-item[data-selected="true"],
+.folder-card[data-selected="true"] {
+  background: color-mix(in srgb, var(--interactive-accent-soft) 78%, var(--surface-layer-1));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 42%, var(--border-subtle)), var(--elevation-low);
+}
+
+.bookmark-tile[data-selected="true"] .tile-label,
+.dock-item[data-selected="true"] .dock-item__label,
+.dock-item[data-selected="true"] .dock-item__meta,
+.folder-card[data-selected="true"] .folder-card__label,
+.folder-card[data-selected="true"] .folder-card__meta {
+  color: var(--text-primary);
+}
+
+.bookmark-tile[data-drag-source="true"],
+.dock-item[data-drag-source="true"],
+.folder-card[data-drag-source="true"] {
+  opacity: 0.48;
+  transform: scale(0.98);
+}
+
+.bookmark-grid [data-drop-position]:not([data-drop-position="inside"])::after,
+.dock-strip [data-drop-position]:not([data-drop-position="inside"])::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  width: 4px;
+  border-radius: 999px;
+  background: var(--interactive-accent-gradient);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 18%, transparent), 0 10px 18px var(--accent-shadow);
+  pointer-events: none;
+}
+
+.bookmark-grid [data-drop-position="before"]::after,
+.dock-strip [data-drop-position="before"]::after {
+  left: -11px;
+}
+
+.bookmark-grid [data-drop-position="after"]::after,
+.dock-strip [data-drop-position="after"]::after {
+  right: -11px;
+}
+
+.bookmark-grid [data-drop-position="inside"],
+.dock-strip [data-drop-position="inside"] {
+  background: color-mix(in srgb, var(--interactive-accent-soft) 84%, var(--surface-layer-1));
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 52%, var(--border-subtle)), var(--elevation-low);
+}
+
 .bookmark-tile:hover {
   transform: translateY(-2px);
   background: var(--interactive-accent-soft);
   box-shadow: var(--elevation-low);
+}
+
+.bookmark-tile,
+.dock-item,
+.folder-card,
+.tile-icon,
+.dock-item__icon,
+.folder-card__preview {
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .bookmark-tile:focus-visible {
@@ -527,6 +604,7 @@ button {
 }
 
 .dock-inner {
+  position: relative;
   width: min(100%, 1240px);
 }
 
@@ -568,6 +646,7 @@ button {
 }
 
 .folder-card {
+  position: relative;
   color: var(--text-primary);
   transition: transform 160ms ease;
 }
@@ -1301,6 +1380,15 @@ button {
   backdrop-filter: blur(16px);
 }
 
+.bookmark-context-menu__label {
+  margin: 0;
+  padding: 2px 14px 10px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
 .bookmark-context-menu__item {
   display: flex;
   align-items: center;
@@ -1343,6 +1431,40 @@ button {
   height: 1px;
   margin: 6px 0;
   background: var(--panel-border);
+}
+
+.app-status {
+  position: fixed;
+  top: 72px;
+  right: 20px;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(420px, calc(100vw - 40px));
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface-layer-2);
+  box-shadow: var(--elevation-medium);
+}
+
+.app-status[data-kind="error"] {
+  border-color: color-mix(in srgb, #c84d4d 58%, var(--border-strong));
+  background: color-mix(in srgb, #c84d4d 12%, var(--surface-layer-2));
+}
+
+.app-status[data-kind="success"] {
+  border-color: color-mix(in srgb, #2b9860 54%, var(--border-strong));
+  background: color-mix(in srgb, #2b9860 12%, var(--surface-layer-2));
+}
+
+.app-status__dismiss {
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  padding: 0;
 }
 
 .icon-dialog-scrim {

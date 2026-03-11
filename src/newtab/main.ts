@@ -1,6 +1,6 @@
 import './styles.css';
 import { extensionApi, sendRuntimeMessage } from '../shared/browser';
-import { messageTypes, type AppSettings, type BookmarkNode, type CreateBookmarkResponse, type GetBookmarkTreeResponse, type GetIconResponse, type GetSettingsResponse, type IconSearchCandidate, type InvalidateIconResponse, type MoveBookmarkResponse, type PatchSettingsResponse, type PingResponse, type RemoveBookmarkResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SearchIconsResponse, type SettingsSectionId, type SetIconOverrideFromUrlResponse, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../shared/messages';
+import { messageTypes, type AppSettings, type BookmarkNode, type CreateBookmarkResponse, type GetBookmarkTreeResponse, type GetIconResponse, type GetSettingsResponse, type IconSearchCandidate, type InvalidateIconResponse, type MoveBookmarkResponse, type OpenBookmarkManagerResponse, type PatchSettingsResponse, type PingResponse, type RemoveBookmarkResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SearchIconsResponse, type SettingsSectionId, type SetIconOverrideFromUrlResponse, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../shared/messages';
 import { collectFolderOptions, collectLinkOptions, collectVisibleBookmarks as collectVisibleBookmarkTargets, findBookmarkActionTargetById, findNodeById, getBookmarkActionTarget, getBookmarkLabelForUrl, getBreadcrumbs, getDefaultFolder, getDockFolder, getFolderNode, getHostname, getLibraryFolders, isFolderDescendantOf, resolveInitialFolderId, resolveInitialIconToolTarget, resolveIconToolTarget, type BookmarkActionTarget } from './bookmark-navigation';
 import { escapeAttribute, escapeHtml } from './html';
 import { applyPendingIcon, applyResolvedIcon, getFaviconImageUrl, renderFaviconIconMarkup, renderIconPlaceholder, renderResolvedIconMarkup, renderBookmarkVisualIcon } from './icon-render';
@@ -23,6 +23,19 @@ interface AppState {
   contextMenu: ContextMenuState | null;
   iconDialog: IconDialogState;
   resolvedIcons: Record<string, ResolvedIcon>;
+  selectedIds: string[];
+  selectionAnchorId: string | null;
+  selectionScope: SelectionScope | null;
+  statusMessage: AppStatus | null;
+}
+
+type BookmarkItemKind = 'bookmark' | 'folder';
+
+type SelectionSurface = 'grid' | 'dock';
+
+interface SelectionScope {
+  surface: SelectionSurface;
+  folderId: string;
 }
 
 interface FolderActionTarget {
@@ -58,11 +71,30 @@ interface SurfaceContextMenuState {
   target: SurfaceContextMenuTarget;
 }
 
-type ContextMenuState = BookmarkContextMenuState | FolderContextMenuState | SurfaceContextMenuState;
+interface SelectionContextMenuState {
+  kind: 'selection';
+  x: number;
+  y: number;
+  target: SelectionContextMenuTarget;
+}
+
+type ContextMenuState = BookmarkContextMenuState | FolderContextMenuState | SurfaceContextMenuState | SelectionContextMenuState;
+
+interface SelectionContextMenuTarget {
+  ids: string[];
+  bookmarkCount: number;
+  folderCount: number;
+  scope: SelectionScope | null;
+}
 
 interface BookmarkClipboardState {
   mode: 'copy' | 'cut';
-  item: BookmarkNode;
+  items: BookmarkNode[];
+}
+
+interface AppStatus {
+  message: string;
+  kind: 'error' | 'success' | 'info';
 }
 
 interface IconDialogState {
@@ -110,6 +142,10 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
     contextMenu: null,
     iconDialog: createClosedIconDialogState(),
     resolvedIcons: {},
+    selectedIds: [],
+    selectionAnchorId: null,
+    selectionScope: null,
+    statusMessage: null,
   };
 
   syncFolderHash(state.currentFolderId);
@@ -118,11 +154,11 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
   renderApp(rootElement, state);
 
   window.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) {
+    if (event.defaultPrevented || event.isComposing) {
       return;
     }
 
-    if (dismissTransientUi(rootElement, state)) {
+    if (handleGlobalKeydown(rootElement, state, event)) {
       event.preventDefault();
     }
   });
@@ -196,15 +232,17 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
       <main class="workspace">
         <section class="bookmark-canvas" aria-label="Bookmarks grid">
           <div class="bookmark-grid" data-limit-rows="${String(state.settings.favoritesRows > 0)}">
-            ${canvasItems.map(item => renderBookmarkTile(item, state.resolvedIcons)).join('') || '<p class="empty-state">This folder is empty.</p>'}
+            ${canvasItems.map((item, index) => renderBookmarkTile(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'grid', currentFolder.id))).join('') || '<p class="empty-state">This folder is empty.</p>'}
           </div>
+          <div class="selection-marquee" hidden aria-hidden="true"></div>
         </section>
         ${state.settings.showDock ? `
           <aside class="bookmark-dock" aria-label="Dock">
             <div class="dock-inner">
               <div class="dock-strip">
-                ${dockItems.map(item => renderDockItem(item, state.resolvedIcons)).join('') || '<p class="dock-empty">Choose a dock folder in settings.</p>'}
+                ${dockItems.map((item, index) => renderDockItem(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'dock', dockFolder?.id ?? ''))).join('') || '<p class="dock-empty">Choose a dock folder in settings.</p>'}
               </div>
+              <div class="selection-marquee selection-marquee--dock" hidden aria-hidden="true"></div>
             </div>
           </aside>
         ` : ''}
@@ -228,6 +266,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
           </section>
         </div>
       </aside>
+      ${state.statusMessage ? renderStatusMessage(state.statusMessage) : ''}
       ${state.contextMenu ? renderContextMenu(state, state.contextMenu) : ''}
       ${state.iconDialog.open ? renderIconDialog(state.iconDialog) : ''}
     </div>
@@ -272,6 +311,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const iconUploadTrigger = rootElement.querySelector<HTMLButtonElement>('.icon-upload-trigger');
   const iconRemoveButton = rootElement.querySelector<HTMLButtonElement>('.icon-remove-button');
   const iconRefreshButton = rootElement.querySelector<HTMLButtonElement>('.icon-refresh-button');
+  const appStatusDismissButton = rootElement.querySelector<HTMLButtonElement>('.app-status__dismiss');
   const contextMenuItems = rootElement.querySelectorAll<HTMLButtonElement>('[data-context-action]');
   const iconDialogDismiss = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-scrim');
   const iconDialogClose = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-close');
@@ -289,6 +329,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const accentButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-accent-option]');
   const bookmarkGrid = rootElement.querySelector<HTMLElement>('.bookmark-grid');
   const bookmarkDock = rootElement.querySelector<HTMLElement>('.bookmark-dock');
+  const dockStrip = rootElement.querySelector<HTMLElement>('.dock-strip');
   const folderButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-folder-id]');
   const folderCardButtons = rootElement.querySelectorAll<HTMLButtonElement>('.folder-card[data-folder-id]');
   const linkButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-link-url]');
@@ -606,7 +647,14 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   });
 
   folderButtons.forEach(button => {
-    button.addEventListener('click', async () => {
+    button.addEventListener('click', async event => {
+      if (button.dataset.suppressClick === 'true') {
+        button.dataset.suppressClick = 'false';
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+
       const folderId = button.dataset.folderId;
       if (!folderId) {
         return;
@@ -619,6 +667,10 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
 
   folderCardButtons.forEach(button => {
     button.addEventListener('contextmenu', event => {
+      if (button.dataset.gridItemId || button.dataset.dockItemId) {
+        return;
+      }
+
       const target = getFolderActionTarget(button);
       if (!target) {
         return;
@@ -636,7 +688,18 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   });
 
   linkButtons.forEach(button => {
-    button.addEventListener('click', () => {
+    button.addEventListener('click', event => {
+      if (button.dataset.suppressClick === 'true') {
+        button.dataset.suppressClick = 'false';
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+
+      if (event.metaKey || event.ctrlKey) {
+        return;
+      }
+
       const url = button.dataset.linkUrl;
       if (!url) {
         return;
@@ -645,6 +708,10 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     });
 
     button.addEventListener('contextmenu', event => {
+      if (button.dataset.gridItemId || button.dataset.dockItemId) {
+        return;
+      }
+
       const target = getBookmarkActionTarget(button);
       if (!target) {
         return;
@@ -667,6 +734,13 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     }
 
     event.preventDefault();
+    const gridScope: SelectionScope = { surface: 'grid', folderId: currentFolder.id };
+    if (state.selectedIds.length > 1 && isSameScope(state.selectionScope, gridScope)) {
+      state.contextMenu = createSelectionContextMenuState(state, event.clientX, event.clientY, gridScope);
+      renderApp(rootElement, state);
+      return;
+    }
+
     state.contextMenu = {
       kind: 'surface',
       x: event.clientX,
@@ -687,6 +761,13 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     }
 
     event.preventDefault();
+    const dockScope: SelectionScope = { surface: 'dock', folderId: dockFolder.id };
+    if (state.selectedIds.length > 1 && isSameScope(state.selectionScope, dockScope)) {
+      state.contextMenu = createSelectionContextMenuState(state, event.clientX, event.clientY, dockScope);
+      renderApp(rootElement, state);
+      return;
+    }
+
     state.contextMenu = {
       kind: 'surface',
       x: event.clientX,
@@ -720,8 +801,16 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
         case 'surface':
           await handleSurfaceContextAction(rootElement, state, action, menuState.target);
           return;
+        case 'selection':
+          await handleSelectionContextAction(rootElement, state, action, menuState.target);
+          return;
       }
     });
+  });
+
+  appStatusDismissButton?.addEventListener('click', () => {
+    state.statusMessage = null;
+    renderApp(rootElement, state);
   });
 
   iconToolTargetInput?.addEventListener('change', () => {
@@ -1072,6 +1161,9 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     });
   });
 
+  setupGridInteractions(rootElement, state, bookmarkCanvas, bookmarkGrid, currentFolder);
+  setupDockInteractions(rootElement, state, bookmarkDock, dockStrip, dockFolder);
+
   const currentGeneration = ++iconRenderGeneration;
   void hydrateBookmarkIcons(rootElement, state, currentGeneration);
 }
@@ -1113,6 +1205,18 @@ function dismissTransientUi(rootElement: HTMLDivElement, state: AppState): boole
     return true;
   }
 
+  if (state.statusMessage) {
+    state.statusMessage = null;
+    renderApp(rootElement, state);
+    return true;
+  }
+
+  if (state.selectedIds.length) {
+    clearSelection(state);
+    renderApp(rootElement, state);
+    return true;
+  }
+
   return false;
 }
 
@@ -1143,6 +1247,653 @@ function queueDrawerFocus(rootElement: HTMLDivElement, isOpen: boolean): void {
       : rootElement.querySelector<HTMLButtonElement>('.drawer-toggle');
     nextTarget?.focus();
   });
+}
+
+function handleGlobalKeydown(rootElement: HTMLDivElement, state: AppState, event: KeyboardEvent): boolean {
+  if (event.key === 'Escape') {
+    return dismissTransientUi(rootElement, state);
+  }
+
+  if (state.iconDialog.open || isEditableTarget(event.target)) {
+    return false;
+  }
+
+  const shortcutKey = event.ctrlKey || event.metaKey;
+  const key = event.key.toLowerCase();
+
+  if (shortcutKey && key === 'c' && state.selectedIds.length) {
+    setClipboardFromItemIds(state, 'copy', getOrderedSelectedIds(state));
+    renderApp(rootElement, state);
+    return true;
+  }
+
+  if (shortcutKey && key === 'x' && state.selectedIds.length) {
+    setClipboardFromItemIds(state, 'cut', getOrderedSelectedIds(state));
+    renderApp(rootElement, state);
+    return true;
+  }
+
+  if (shortcutKey && key === 'v' && state.clipboard) {
+    void pasteClipboardIntoFolder(rootElement, state, state.selectionScope?.folderId ?? state.currentFolderId);
+    return true;
+  }
+
+  if ((event.key === 'Delete' || event.key === 'Backspace') && state.selectedIds.length) {
+    void deleteSelectedItems(rootElement, state, getOrderedSelectedIds(state), state.selectionScope);
+    return true;
+  }
+
+  return false;
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return Boolean(target.closest('input, textarea, select, [contenteditable="true"], .icon-dialog, .settings-drawer'));
+}
+
+function clearSelection(state: AppState): void {
+  state.selectedIds = [];
+  state.selectionAnchorId = null;
+  state.selectionScope = null;
+}
+
+function normalizeSelection(state: AppState): void {
+  if (!state.selectionScope) {
+    clearSelection(state);
+    return;
+  }
+
+  const visibleIds = new Set(getFolderChildren(state, state.selectionScope.folderId).map(node => node.id));
+  state.selectedIds = state.selectedIds.filter(id => visibleIds.has(id));
+  if (state.selectionAnchorId && !visibleIds.has(state.selectionAnchorId)) {
+    state.selectionAnchorId = state.selectedIds[0] ?? null;
+  }
+
+  if (!state.selectedIds.length) {
+    state.selectionScope = null;
+  }
+
+  if (state.contextMenu?.kind === 'selection' && state.selectedIds.length < 2) {
+    state.contextMenu = null;
+  }
+}
+
+function getFolderChildren(state: AppState, folderId: string): BookmarkNode[] {
+  return getFolderNode(state.tree, folderId)?.children ?? [];
+}
+
+function getCurrentFolderChildren(state: AppState): BookmarkNode[] {
+  return (getFolderNode(state.tree, state.currentFolderId) ?? getDefaultFolder(state.tree, state.settings.rootFolderId))?.children ?? [];
+}
+
+function isItemSelected(state: AppState, itemId: string, surface: SelectionSurface, folderId: string): boolean {
+  const selectionScope = state.selectionScope;
+  return selectionScope !== null
+    && selectionScope.surface === surface
+    && selectionScope.folderId === folderId
+    && state.selectedIds.includes(itemId);
+}
+
+function setSelection(state: AppState, ids: string[], scope: SelectionScope | null, anchorId: string | null = ids[0] ?? null): void {
+  state.selectedIds = ids;
+  state.selectionAnchorId = anchorId;
+  state.selectionScope = ids.length && scope ? scope : null;
+}
+
+function getOrderedSelectedIds(state: AppState, scope: SelectionScope | null = state.selectionScope): string[] {
+  if (!scope) {
+    return [];
+  }
+
+  const selectedSet = new Set(state.selectedIds);
+  return getFolderChildren(state, scope.folderId)
+    .filter(node => selectedSet.has(node.id))
+    .map(node => node.id);
+}
+
+function getSelectedNodes(state: AppState, ids: string[] = getOrderedSelectedIds(state), scope: SelectionScope | null = state.selectionScope): BookmarkNode[] {
+  if (!scope) {
+    return [];
+  }
+
+  const idSet = new Set(ids);
+  return getFolderChildren(state, scope.folderId).filter(node => idSet.has(node.id));
+}
+
+function createSelectionContextMenuState(state: AppState, x: number, y: number, scope: SelectionScope | null = state.selectionScope): SelectionContextMenuState {
+  const selectedNodes = getSelectedNodes(state, getOrderedSelectedIds(state, scope), scope);
+  return {
+    kind: 'selection',
+    x,
+    y,
+    target: {
+      ids: selectedNodes.map(node => node.id),
+      bookmarkCount: selectedNodes.filter(node => Boolean(node.url)).length,
+      folderCount: selectedNodes.filter(node => !node.url).length,
+      scope,
+    },
+  };
+}
+
+function openSelectionInNewTabs(state: AppState, ids: string[], scope: SelectionScope | null = state.selectionScope): void {
+  for (const node of getSelectedNodes(state, ids, scope)) {
+    if (node.url) {
+      window.open(node.url, '_blank', 'noopener');
+      continue;
+    }
+
+    openFolderView(node.id, true);
+  }
+}
+
+async function deleteSelectedItems(rootElement: HTMLDivElement, state: AppState, ids: string[], scope: SelectionScope | null = state.selectionScope): Promise<void> {
+  const selectedNodes = getSelectedNodes(state, ids, scope);
+  if (!selectedNodes.length) {
+    renderApp(rootElement, state);
+    return;
+  }
+
+  const bookmarkCount = selectedNodes.filter(node => Boolean(node.url)).length;
+  const folderCount = selectedNodes.length - bookmarkCount;
+  const labelParts = [];
+  if (bookmarkCount) {
+    labelParts.push(`${String(bookmarkCount)} bookmark${bookmarkCount === 1 ? '' : 's'}`);
+  }
+  if (folderCount) {
+    labelParts.push(`${String(folderCount)} folder${folderCount === 1 ? '' : 's'}`);
+  }
+
+  const confirmed = window.confirm(`Delete ${labelParts.join(' and ')}?`);
+  if (!confirmed) {
+    renderApp(rootElement, state);
+    return;
+  }
+
+  for (const node of selectedNodes) {
+    await sendRuntimeMessage<{
+      type: typeof messageTypes.removeBookmark;
+      bookmarkId: string;
+      recursive?: boolean;
+    }, RemoveBookmarkResponse>({
+      type: messageTypes.removeBookmark,
+      bookmarkId: node.id,
+      recursive: !node.url,
+    });
+  }
+
+  clearSelection(state);
+  await refreshBookmarkTree(state);
+  await preloadVisibleIcons(state);
+  renderApp(rootElement, state);
+}
+
+function setupGridInteractions(rootElement: HTMLDivElement, state: AppState, bookmarkCanvas: HTMLElement | null, bookmarkGrid: HTMLElement | null, currentFolder: BookmarkNode): void {
+  setupSurfaceInteractions(rootElement, state, {
+    surface: 'grid',
+    surfaceElement: bookmarkCanvas,
+    itemContainer: bookmarkGrid,
+    folderId: currentFolder.id,
+    itemSelector: '[data-grid-item-id]',
+    idDatasetKey: 'gridItemId',
+    kindDatasetKey: 'gridItemKind',
+    marqueeSelector: '.selection-marquee',
+  });
+}
+
+function setupDockInteractions(rootElement: HTMLDivElement, state: AppState, bookmarkDock: HTMLElement | null, dockStrip: HTMLElement | null, dockFolder: BookmarkNode | null): void {
+  if (!dockFolder) {
+    return;
+  }
+
+  setupSurfaceInteractions(rootElement, state, {
+    surface: 'dock',
+    surfaceElement: bookmarkDock,
+    itemContainer: dockStrip,
+    folderId: dockFolder.id,
+    itemSelector: '[data-dock-item-id]',
+    idDatasetKey: 'dockItemId',
+    kindDatasetKey: 'dockItemKind',
+    marqueeSelector: '.selection-marquee--dock',
+  });
+}
+
+function setupSurfaceInteractions(
+  rootElement: HTMLDivElement,
+  state: AppState,
+  config: {
+    surface: SelectionSurface;
+    surfaceElement: HTMLElement | null;
+    itemContainer: HTMLElement | null;
+    folderId: string;
+    itemSelector: string;
+    idDatasetKey: 'gridItemId' | 'dockItemId';
+    kindDatasetKey: 'gridItemKind' | 'dockItemKind';
+    marqueeSelector: string;
+  },
+): void {
+  const { surface, surfaceElement, itemContainer, folderId, itemSelector, idDatasetKey, kindDatasetKey, marqueeSelector } = config;
+  if (!surfaceElement || !itemContainer) {
+    return;
+  }
+
+  const scope: SelectionScope = { surface, folderId };
+  const marqueeElement = surfaceElement.querySelector<HTMLElement>(marqueeSelector);
+  const itemButtons = Array.from(itemContainer.querySelectorAll<HTMLButtonElement>(itemSelector));
+  const folderButtons = Array.from(itemContainer.querySelectorAll<HTMLButtonElement>(`.folder-card${itemSelector}`));
+  const linkButtons = Array.from(itemContainer.querySelectorAll<HTMLButtonElement>(`[data-link-url]${itemSelector}`));
+  const threshold = 6;
+
+  let interaction:
+    | {
+        kind: 'pending-marquee' | 'marquee';
+        pointerId: number;
+        startX: number;
+        startY: number;
+      }
+    | {
+        kind: 'pending-drag' | 'dragging';
+        pointerId: number;
+        startX: number;
+        startY: number;
+        sourceButton: HTMLButtonElement;
+        dragIds: string[];
+        dropTarget: { kind: 'reorder'; index: number } | { kind: 'folder'; folderId: string } | null;
+      }
+    | null = null;
+
+  const visibleItems = getFolderChildren(state, folderId);
+  const buttonById = new Map(itemButtons.map(button => [button.dataset[idDatasetKey] || '', button]));
+
+  const setButtonSelectionState = (selectedIds: string[]) => {
+    const selectedSet = new Set(selectedIds);
+    itemButtons.forEach(button => {
+      button.dataset.selected = String(selectedSet.has(button.dataset[idDatasetKey] || ''));
+    });
+  };
+
+  const clearDropIndicator = () => {
+    itemButtons.forEach(button => {
+      delete button.dataset.dropPosition;
+      delete button.dataset.dragSource;
+    });
+  };
+
+  const hideMarquee = () => {
+    if (marqueeElement) {
+      marqueeElement.hidden = true;
+      marqueeElement.removeAttribute('style');
+    }
+  };
+
+  const suppressNextClick = (button: HTMLButtonElement) => {
+    button.dataset.suppressClick = 'true';
+  };
+
+  const updateMarquee = (clientX: number, clientY: number) => {
+    if (!marqueeElement || !interaction || (interaction.kind !== 'pending-marquee' && interaction.kind !== 'marquee')) {
+      return;
+    }
+
+    const activeInteraction = interaction;
+
+    const surfaceRect = surfaceElement.getBoundingClientRect();
+    const left = Math.min(activeInteraction.startX, clientX) - surfaceRect.left;
+    const top = Math.min(activeInteraction.startY, clientY) - surfaceRect.top;
+    const width = Math.abs(clientX - activeInteraction.startX);
+    const height = Math.abs(clientY - activeInteraction.startY);
+
+    marqueeElement.hidden = false;
+    marqueeElement.style.left = `${left}px`;
+    marqueeElement.style.top = `${top}px`;
+    marqueeElement.style.width = `${width}px`;
+    marqueeElement.style.height = `${height}px`;
+
+    const selectedIds = itemButtons
+      .filter(button => rectsIntersect(button.getBoundingClientRect(), {
+        left: Math.min(activeInteraction.startX, clientX),
+        right: Math.max(activeInteraction.startX, clientX),
+        top: Math.min(activeInteraction.startY, clientY),
+        bottom: Math.max(activeInteraction.startY, clientY),
+      }))
+      .map(button => button.dataset[idDatasetKey] || '')
+      .filter(Boolean);
+
+    setSelection(state, selectedIds, scope);
+    setButtonSelectionState(selectedIds);
+  };
+
+  const updateDragState = (clientX: number, clientY: number) => {
+    if (!interaction || interaction.kind !== 'dragging') {
+      return;
+    }
+
+    const dragIdSet = new Set(interaction.dragIds);
+    clearDropIndicator();
+    interaction.dragIds.forEach(id => {
+      buttonById.get(id)?.setAttribute('data-drag-source', 'true');
+    });
+
+    const hoveredButton = (document.elementFromPoint(clientX, clientY) as HTMLElement | null)?.closest<HTMLButtonElement>(itemSelector);
+    if (!hoveredButton) {
+      interaction.dropTarget = { kind: 'reorder', index: visibleItems.filter(item => !dragIdSet.has(item.id)).length };
+      return;
+    }
+
+    const hoveredId = hoveredButton.dataset[idDatasetKey] || '';
+    const hoveredKind = hoveredButton.dataset[kindDatasetKey] as BookmarkItemKind | undefined;
+    if (!dragIdSet.has(hoveredId) && hoveredKind === 'folder' && canMoveItemsIntoFolder(state, interaction.dragIds, hoveredId, scope)) {
+      hoveredButton.dataset.dropPosition = 'inside';
+      interaction.dropTarget = { kind: 'folder', folderId: hoveredId };
+      return;
+    }
+
+    if (dragIdSet.has(hoveredId)) {
+      interaction.dropTarget = null;
+      return;
+    }
+
+    const rect = hoveredButton.getBoundingClientRect();
+    const placeAfter = surface === 'dock'
+      ? clientX > rect.left + rect.width / 2
+      : (clientY > rect.top + rect.height * 0.7 || (clientY >= rect.top + rect.height * 0.3 && clientX > rect.left + rect.width / 2));
+    hoveredButton.dataset.dropPosition = placeAfter ? 'after' : 'before';
+
+    const remainingItems = visibleItems.filter(item => !dragIdSet.has(item.id));
+    const remainingIndex = remainingItems.findIndex(item => item.id === hoveredId);
+    interaction.dropTarget = {
+      kind: 'reorder',
+      index: remainingIndex === -1 ? remainingItems.length : remainingIndex + (placeAfter ? 1 : 0),
+    };
+  };
+
+  const finishInteraction = async () => {
+    hideMarquee();
+    if (!interaction) {
+      return;
+    }
+
+    const completedInteraction = interaction;
+    interaction = null;
+
+    if (completedInteraction.kind === 'dragging') {
+      clearDropIndicator();
+      if (completedInteraction.dropTarget?.kind === 'folder') {
+        const moved = await moveSelectionIntoFolder(rootElement, state, completedInteraction.dragIds, completedInteraction.dropTarget.folderId, scope);
+        if (!moved) {
+          renderApp(rootElement, state);
+        }
+        return;
+      }
+
+      if (completedInteraction.dropTarget?.kind === 'reorder') {
+        const reordered = await reorderSelection(rootElement, state, completedInteraction.dragIds, completedInteraction.dropTarget.index, scope);
+        if (!reordered) {
+          renderApp(rootElement, state);
+        }
+        return;
+      }
+    }
+
+    if (completedInteraction.kind === 'marquee') {
+      renderApp(rootElement, state);
+      return;
+    }
+
+    clearDropIndicator();
+  };
+
+  itemButtons.forEach(button => {
+    button.addEventListener('dragstart', event => {
+      event.preventDefault();
+    });
+  });
+
+  surfaceElement.addEventListener('pointerdown', event => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    const itemButton = target?.closest<HTMLButtonElement>(itemSelector);
+    if (!itemButton) {
+      state.contextMenu = null;
+      clearSelection(state);
+      interaction = {
+        kind: 'pending-marquee',
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+      };
+      event.preventDefault();
+      surfaceElement.setPointerCapture(event.pointerId);
+      setButtonSelectionState([]);
+      return;
+    }
+
+    const itemId = itemButton.dataset[idDatasetKey];
+    if (!itemId) {
+      return;
+    }
+
+    if (event.metaKey || event.ctrlKey) {
+      const nextSelectedIds = new Set(isSameScope(state.selectionScope, scope) ? state.selectedIds : []);
+      if (nextSelectedIds.has(itemId)) {
+        nextSelectedIds.delete(itemId);
+      } else {
+        nextSelectedIds.add(itemId);
+      }
+
+      const orderedIds = visibleItems.filter(node => nextSelectedIds.has(node.id)).map(node => node.id);
+      setSelection(state, orderedIds, scope, itemId);
+      state.contextMenu = null;
+      suppressNextClick(itemButton);
+      renderApp(rootElement, state);
+      return;
+    }
+
+    interaction = {
+      kind: 'pending-drag',
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      sourceButton: itemButton,
+      dragIds: isSameScope(state.selectionScope, scope) && state.selectedIds.includes(itemId) && state.selectedIds.length
+        ? getOrderedSelectedIds(state, scope)
+        : [itemId],
+      dropTarget: null,
+    };
+    surfaceElement.setPointerCapture(event.pointerId);
+  });
+
+  surfaceElement.addEventListener('pointermove', event => {
+    if (!interaction || interaction.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const distance = Math.hypot(event.clientX - interaction.startX, event.clientY - interaction.startY);
+    if (interaction.kind === 'pending-marquee' && distance >= threshold) {
+      interaction.kind = 'marquee';
+    }
+
+    if (interaction.kind === 'marquee') {
+      updateMarquee(event.clientX, event.clientY);
+      return;
+    }
+
+    if (interaction.kind === 'pending-drag' && distance >= threshold) {
+      interaction.kind = 'dragging';
+      setSelection(state, interaction.dragIds, scope, interaction.dragIds[0] ?? null);
+      setButtonSelectionState(interaction.dragIds);
+      suppressNextClick(interaction.sourceButton);
+    }
+
+    if (interaction.kind === 'dragging') {
+      event.preventDefault();
+      updateDragState(event.clientX, event.clientY);
+    }
+  });
+
+  const endPointerInteraction = (event: PointerEvent) => {
+    if (!interaction || interaction.pointerId !== event.pointerId) {
+      return;
+    }
+
+    void finishInteraction();
+  };
+
+  surfaceElement.addEventListener('pointerup', endPointerInteraction);
+  surfaceElement.addEventListener('pointercancel', endPointerInteraction);
+
+  folderButtons.forEach(button => {
+    button.addEventListener('contextmenu', event => {
+      const target = getFolderActionTarget(button);
+      const itemId = button.dataset[idDatasetKey];
+      if (!target || !itemId) {
+        return;
+      }
+
+      event.preventDefault();
+      if (!isSameScope(state.selectionScope, scope) || !state.selectedIds.includes(itemId)) {
+        setSelection(state, [itemId], scope, itemId);
+      }
+
+      state.contextMenu = state.selectedIds.length > 1
+        ? createSelectionContextMenuState(state, event.clientX, event.clientY, scope)
+        : {
+            kind: 'folder',
+            x: event.clientX,
+            y: event.clientY,
+            target,
+          };
+      renderApp(rootElement, state);
+    });
+  });
+
+  linkButtons.forEach(button => {
+    button.addEventListener('contextmenu', event => {
+      const target = getBookmarkActionTarget(button);
+      const itemId = button.dataset[idDatasetKey];
+      if (!target || !itemId) {
+        return;
+      }
+
+      event.preventDefault();
+      if (!isSameScope(state.selectionScope, scope) || !state.selectedIds.includes(itemId)) {
+        setSelection(state, [itemId], scope, itemId);
+      }
+
+      state.contextMenu = state.selectedIds.length > 1
+        ? createSelectionContextMenuState(state, event.clientX, event.clientY, scope)
+        : {
+            kind: 'bookmark',
+            x: event.clientX,
+            y: event.clientY,
+            target,
+          };
+      renderApp(rootElement, state);
+    });
+  });
+}
+
+function isSameScope(left: SelectionScope | null, right: SelectionScope | null): boolean {
+  return Boolean(left && right && left.surface === right.surface && left.folderId === right.folderId);
+}
+
+function rectsIntersect(a: DOMRect, b: { left: number; right: number; top: number; bottom: number }): boolean {
+  return a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top;
+}
+
+function canMoveItemsIntoFolder(state: AppState, dragIds: string[], targetFolderId: string, scope: SelectionScope): boolean {
+  const dragNodes = getSelectedNodes(state, dragIds, scope);
+  if (!dragNodes.length || !getFolderNode(state.tree, targetFolderId)) {
+    return false;
+  }
+
+  for (const node of dragNodes) {
+    if (node.id === targetFolderId) {
+      return false;
+    }
+
+    if (!node.url && isFolderDescendantOf(state.tree, targetFolderId, node.id)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+async function reorderSelection(rootElement: HTMLDivElement, state: AppState, dragIds: string[], dropIndex: number, scope: SelectionScope): Promise<boolean> {
+  const currentChildren = getFolderChildren(state, scope.folderId);
+  const dragIdSet = new Set(dragIds);
+  const draggedItems = currentChildren.filter(node => dragIdSet.has(node.id));
+  if (!draggedItems.length) {
+    return false;
+  }
+
+  const remainingItems = currentChildren.filter(node => !dragIdSet.has(node.id));
+  const normalizedDropIndex = clamp(dropIndex, 0, remainingItems.length);
+  const nextOrder = [
+    ...remainingItems.slice(0, normalizedDropIndex),
+    ...draggedItems,
+    ...remainingItems.slice(normalizedDropIndex),
+  ];
+
+  if (nextOrder.every((item, index) => item.id === currentChildren[index]?.id)) {
+    return false;
+  }
+
+  for (const [index, item] of nextOrder.entries()) {
+    await sendRuntimeMessage<{
+      type: typeof messageTypes.moveBookmark;
+      bookmarkId: string;
+      parentId: string;
+      index?: number;
+    }, MoveBookmarkResponse>({
+      type: messageTypes.moveBookmark,
+      bookmarkId: item.id,
+      parentId: scope.folderId,
+      index,
+    });
+  }
+
+  setSelection(state, draggedItems.map(item => item.id), scope);
+  await refreshBookmarkTree(state);
+  await preloadVisibleIcons(state);
+  renderApp(rootElement, state);
+  return true;
+}
+
+async function moveSelectionIntoFolder(rootElement: HTMLDivElement, state: AppState, dragIds: string[], targetFolderId: string, scope: SelectionScope): Promise<boolean> {
+  if (!canMoveItemsIntoFolder(state, dragIds, targetFolderId, scope)) {
+    return false;
+  }
+
+  const dragNodes = getSelectedNodes(state, dragIds, scope);
+  const targetChildren = getFolderChildren(state, targetFolderId);
+  let nextIndex = targetChildren.length;
+  for (const node of dragNodes) {
+    await sendRuntimeMessage<{
+      type: typeof messageTypes.moveBookmark;
+      bookmarkId: string;
+      parentId: string;
+      index?: number;
+    }, MoveBookmarkResponse>({
+      type: messageTypes.moveBookmark,
+      bookmarkId: node.id,
+      parentId: targetFolderId,
+      index: nextIndex,
+    });
+    nextIndex += 1;
+  }
+
+  clearSelection(state);
+  await refreshBookmarkTree(state);
+  await preloadVisibleIcons(state);
+  renderApp(rootElement, state);
+  return true;
 }
 
 async function preloadVisibleIcons(state: AppState): Promise<void> {
@@ -1238,7 +1989,7 @@ function renderBreadcrumb(node: BookmarkNode, index: number, items: BookmarkNode
   return `<button class="breadcrumb" data-folder-id="${node.id}" data-last="${String(isLast)}" type="button">${escapeHtml(node.title || 'Untitled')}</button>`;
 }
 
-function renderBookmarkTile(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>): string {
+function renderBookmarkTile(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>, index: number, selected: boolean): string {
   if (node.url) {
     const label = node.title || getHostname(node.url);
     const resolvedIcon = resolvedIcons[node.url];
@@ -1247,17 +1998,17 @@ function renderBookmarkTile(node: BookmarkNode, resolvedIcons: Record<string, Re
       ? (resolvedIcon.isFallback ? 'fallback' : 'resolved')
       : 'favicon';
     return `
-      <button class="bookmark-tile link-tile" data-link-url="${escapeAttribute(node.url)}" data-bookmark-id="${node.id}" data-bookmark-title="${escapeAttribute(label)}" data-parent-id="${escapeAttribute(node.parentId ?? '')}" type="button">
+      <button class="bookmark-tile link-tile" data-link-url="${escapeAttribute(node.url)}" data-bookmark-id="${node.id}" data-bookmark-title="${escapeAttribute(label)}" data-parent-id="${escapeAttribute(node.parentId ?? '')}" data-grid-item-id="${node.id}" data-grid-item-index="${String(index)}" data-grid-item-kind="bookmark" data-selected="${String(selected)}" type="button">
         <div class="tile-icon tile-icon--link" data-bookmark-icon data-icon-url="${escapeAttribute(node.url)}" data-icon-title="${escapeAttribute(label)}" data-icon-placeholder="${escapeAttribute(getInitial(label))}" data-icon-state="${visualState}">${visualIconMarkup}</div>
         <span class="tile-label">${escapeHtml(label)}</span>
       </button>
     `;
   }
 
-  return renderFolderCard(node, resolvedIcons, 'tile');
+  return renderFolderCard(node, resolvedIcons, 'tile', index, selected);
 }
 
-function renderDockItem(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>): string {
+function renderDockItem(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>, index: number, selected: boolean): string {
   if (node.url) {
     const label = node.title || getHostname(node.url);
     const meta = getHostname(node.url);
@@ -1267,7 +2018,7 @@ function renderDockItem(node: BookmarkNode, resolvedIcons: Record<string, Resolv
       ? (resolvedIcon.isFallback ? 'fallback' : 'resolved')
       : 'favicon';
     return `
-      <button class="dock-item dock-item--link-card" data-link-url="${escapeAttribute(node.url)}" data-bookmark-id="${node.id}" data-bookmark-title="${escapeAttribute(label)}" data-parent-id="${escapeAttribute(node.parentId ?? '')}" type="button">
+      <button class="dock-item dock-item--link-card" data-link-url="${escapeAttribute(node.url)}" data-bookmark-id="${node.id}" data-bookmark-title="${escapeAttribute(label)}" data-parent-id="${escapeAttribute(node.parentId ?? '')}" data-dock-item-id="${node.id}" data-dock-item-index="${String(index)}" data-dock-item-kind="bookmark" data-selected="${String(selected)}" type="button">
         <span class="dock-item__preview dock-item__preview--link">
           <span class="dock-item__icon dock-item__icon--link" data-bookmark-icon data-icon-url="${escapeAttribute(node.url)}" data-icon-title="${escapeAttribute(label)}" data-icon-placeholder="${escapeAttribute(getInitial(label))}" data-icon-state="${visualState}">${visualIconMarkup}</span>
         </span>
@@ -1277,10 +2028,10 @@ function renderDockItem(node: BookmarkNode, resolvedIcons: Record<string, Resolv
     `;
   }
 
-  return renderFolderCard(node, resolvedIcons, 'dock');
+  return renderFolderCard(node, resolvedIcons, 'dock', index, selected);
 }
 
-function renderFolderCard(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>, variant: 'tile' | 'dock'): string {
+function renderFolderCard(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>, variant: 'tile' | 'dock', index?: number, selected = false): string {
   const itemCount = node.children?.length ?? 0;
   const previewItems = getFolderPreviewItems(node, variant);
   const classes = variant === 'tile'
@@ -1291,7 +2042,7 @@ function renderFolderCard(node: BookmarkNode, resolvedIcons: Record<string, Reso
     : '';
 
   return `
-    <button class="${classes}" data-folder-id="${node.id}" data-folder-title="${escapeAttribute(node.title || 'Untitled')}" data-parent-id="${escapeAttribute(node.parentId ?? '')}" type="button">
+    <button class="${classes}" data-folder-id="${node.id}" data-folder-title="${escapeAttribute(node.title || 'Untitled')}" data-parent-id="${escapeAttribute(node.parentId ?? '')}" ${variant === 'tile' ? `data-grid-item-id="${node.id}" data-grid-item-index="${String(index ?? 0)}" data-grid-item-kind="folder" data-selected="${String(selected)}"` : `data-dock-item-id="${node.id}" data-dock-item-index="${String(index ?? 0)}" data-dock-item-kind="folder" data-selected="${String(selected)}"`} type="button">
       <span class="folder-card__preview">
         <span class="folder-card__grid" data-folder-preview-variant="${variant}">
           ${previewItems.map(child => renderFolderPreviewCell(child, resolvedIcons)).join('') || `<span class="folder-card__cell folder-card__cell--empty">${escapeHtml(getInitial(node.title || 'Folder'))}</span>`}
@@ -1319,9 +2070,18 @@ function renderFolderPreviewCell(node: BookmarkNode, resolvedIcons: Record<strin
   return `<span class="folder-card__cell folder-card__cell--folder" title="${escapeAttribute(node.title || 'Folder')}">${itemCount > 0 ? String(itemCount) : escapeHtml(getInitial(node.title || 'Folder'))}</span>`;
 }
 
+function renderStatusMessage(statusMessage: AppStatus): string {
+  return `
+    <div class="app-status" data-kind="${statusMessage.kind}" role="status" aria-live="polite">
+      <span>${escapeHtml(statusMessage.message)}</span>
+      <button class="app-status__dismiss icon-button" type="button" aria-label="Dismiss message">${renderUiIcon('close')}</button>
+    </div>
+  `;
+}
+
 function renderContextMenu(state: AppState, contextMenu: ContextMenuState): string {
   const x = clamp(contextMenu.x, 12, Math.max(12, window.innerWidth - 287));
-  const estimatedHeight = contextMenu.kind === 'surface' ? 304 : 356;
+  const estimatedHeight = contextMenu.kind === 'surface' ? 304 : contextMenu.kind === 'selection' ? 284 : 356;
   const shouldOpenUpward = contextMenu.y + estimatedHeight > window.innerHeight - 12;
   const anchoredY = shouldOpenUpward
     ? clamp(contextMenu.y, estimatedHeight + 12, window.innerHeight - 12)
@@ -1363,6 +2123,29 @@ function renderContextMenu(state: AppState, contextMenu: ContextMenuState): stri
           <div class="bookmark-context-menu__divider"></div>
           <button class="bookmark-context-menu__item button-with-icon" data-context-action="edit-folder" type="button" role="menuitem">${renderUiIcon('edit')}<span>Edit</span></button>
           <button class="bookmark-context-menu__item button-with-icon" data-context-action="delete-folder" type="button" role="menuitem">${renderUiIcon('trash')}<span>Delete</span></button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (contextMenu.kind === 'selection') {
+    const summary = [];
+    if (contextMenu.target.bookmarkCount) {
+      summary.push(`${String(contextMenu.target.bookmarkCount)} bookmark${contextMenu.target.bookmarkCount === 1 ? '' : 's'}`);
+    }
+    if (contextMenu.target.folderCount) {
+      summary.push(`${String(contextMenu.target.folderCount)} folder${contextMenu.target.folderCount === 1 ? '' : 's'}`);
+    }
+
+    return `
+      <div class="context-menu-layer">
+        <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="Selection actions">
+          <p class="bookmark-context-menu__label">${escapeHtml(summary.join(' · ') || 'Selection')}</p>
+          <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-tabs" type="button" role="menuitem">${renderUiIcon('external')}<span>Open all links in new tabs</span></button>
+          <div class="bookmark-context-menu__divider"></div>
+          <button class="bookmark-context-menu__item button-with-icon" data-context-action="cut-selection" type="button" role="menuitem">${renderUiIcon('scissors')}<span>Cut</span></button>
+          <button class="bookmark-context-menu__item button-with-icon" data-context-action="copy-selection" type="button" role="menuitem">${renderUiIcon('copy')}<span>Copy</span></button>
+          <button class="bookmark-context-menu__item button-with-icon" data-context-action="delete-selection" type="button" role="menuitem">${renderUiIcon('trash')}<span>Delete</span></button>
         </div>
       </div>
     `;
@@ -1472,6 +2255,8 @@ function navigateToFolder(state: AppState, folderId: string): void {
     return;
   }
   state.currentFolderId = folderId;
+  clearSelection(state);
+  state.contextMenu = null;
   syncFolderHash(folderId);
   persistLastFolder(state.settings, folderId);
 }
@@ -1624,6 +2409,7 @@ async function refreshBookmarkTree(state: AppState): Promise<void> {
   }
 
   state.clipboard = refreshFolderClipboard(state.tree, state.clipboard);
+  normalizeSelection(state);
 }
 
 async function handleBookmarkContextAction(rootElement: HTMLDivElement, state: AppState, action: string, target: BookmarkActionTarget): Promise<void> {
@@ -1635,11 +2421,11 @@ async function handleBookmarkContextAction(rootElement: HTMLDivElement, state: A
       window.open(target.url, '_blank', 'noopener,noreferrer,width=1280,height=900');
       return;
     case 'cut':
-      setClipboardFromNode(state, 'cut', target.id);
+      setClipboardFromItemIds(state, 'cut', [target.id]);
       renderApp(rootElement, state);
       return;
     case 'copy':
-      setClipboardFromNode(state, 'copy', target.id);
+      setClipboardFromItemIds(state, 'copy', [target.id]);
       renderApp(rootElement, state);
       return;
     case 'paste':
@@ -1669,11 +2455,11 @@ async function handleFolderContextAction(rootElement: HTMLDivElement, state: App
       openFolderView(target.id, false);
       return;
     case 'cut':
-      setClipboardFromNode(state, 'cut', target.id);
+      setClipboardFromItemIds(state, 'cut', [target.id]);
       renderApp(rootElement, state);
       return;
     case 'copy':
-      setClipboardFromNode(state, 'copy', target.id);
+      setClipboardFromItemIds(state, 'copy', [target.id]);
       renderApp(rootElement, state);
       return;
     case 'paste':
@@ -1699,13 +2485,35 @@ async function handleSurfaceContextAction(rootElement: HTMLDivElement, state: Ap
       await createFolderInFolder(rootElement, state, target.id);
       return;
     case 'open-manager':
-      openBookmarkManager();
+      await openBookmarkManager(rootElement, state);
       return;
     case 'paste':
       await pasteClipboardIntoFolder(rootElement, state, target.id);
       return;
     case 'open-settings':
       openDrawer(rootElement, state);
+      return;
+    default:
+      renderApp(rootElement, state);
+  }
+}
+
+async function handleSelectionContextAction(rootElement: HTMLDivElement, state: AppState, action: string, target: SelectionContextMenuTarget): Promise<void> {
+  switch (action) {
+    case 'open-tabs':
+      openSelectionInNewTabs(state, target.ids, target.scope);
+      renderApp(rootElement, state);
+      return;
+    case 'cut-selection':
+      setClipboardFromItemIds(state, 'cut', target.ids);
+      renderApp(rootElement, state);
+      return;
+    case 'copy-selection':
+      setClipboardFromItemIds(state, 'copy', target.ids);
+      renderApp(rootElement, state);
+      return;
+    case 'delete-selection':
+      await deleteSelectedItems(rootElement, state, target.ids, target.scope);
       return;
     default:
       renderApp(rootElement, state);
@@ -1725,16 +2533,20 @@ function getFolderActionTarget(element: HTMLElement): FolderActionTarget | null 
   };
 }
 
-function setClipboardFromNode(state: AppState, mode: BookmarkClipboardState['mode'], bookmarkId: string): void {
-  const node = findNodeById(state.tree, bookmarkId);
-  if (!node) {
+function setClipboardFromItemIds(state: AppState, mode: BookmarkClipboardState['mode'], bookmarkIds: string[]): void {
+  const items = bookmarkIds
+    .map(bookmarkId => findNodeById(state.tree, bookmarkId))
+    .filter((node): node is BookmarkNode => Boolean(node))
+    .map(node => cloneBookmarkNode(node));
+
+  if (!items.length) {
     state.clipboard = null;
     return;
   }
 
   state.clipboard = {
     mode,
-    item: cloneBookmarkNode(node),
+    items,
   };
 }
 
@@ -1747,14 +2559,18 @@ function refreshFolderClipboard(tree: BookmarkNode[], clipboard: BookmarkClipboa
     return clipboard;
   }
 
-  const nextNode = findNodeById(tree, clipboard.item.id);
-  if (!nextNode) {
+  const nextItems = clipboard.items
+    .map(item => findNodeById(tree, item.id))
+    .filter((node): node is BookmarkNode => Boolean(node))
+    .map(node => cloneBookmarkNode(node));
+
+  if (!nextItems.length) {
     return null;
   }
 
   return {
     mode: clipboard.mode,
-    item: cloneBookmarkNode(nextNode),
+    items: nextItems,
   };
 }
 
@@ -1765,20 +2581,22 @@ function canPasteClipboardIntoFolder(state: AppState, targetFolderId: string): b
   }
 
   if (clipboard.mode === 'cut') {
-    if (clipboard.item.parentId === targetFolderId) {
+    if (clipboard.items.every(item => item.parentId === targetFolderId)) {
       return false;
     }
 
-    if (targetFolderId === clipboard.item.id) {
-      return false;
-    }
+    for (const item of clipboard.items) {
+      if (targetFolderId === item.id) {
+        return false;
+      }
 
-    if (!findNodeById(state.tree, clipboard.item.id)) {
-      return false;
-    }
+      if (!findNodeById(state.tree, item.id)) {
+        return false;
+      }
 
-    if (!clipboard.item.url && isFolderDescendantOf(state.tree, targetFolderId, clipboard.item.id)) {
-      return false;
+      if (!item.url && isFolderDescendantOf(state.tree, targetFolderId, item.id)) {
+        return false;
+      }
     }
   }
 
@@ -1891,19 +2709,33 @@ async function pasteClipboardIntoFolder(rootElement: HTMLDivElement, state: AppS
   }
 
   if (state.clipboard.mode === 'cut') {
-    await sendRuntimeMessage<{
-      type: typeof messageTypes.moveBookmark;
-      bookmarkId: string;
-      parentId: string;
-      index?: number;
-    }, MoveBookmarkResponse>({
-      type: messageTypes.moveBookmark,
-      bookmarkId: state.clipboard.item.id,
-      parentId: targetFolderId,
-    });
+    const targetFolder = getFolderNode(state.tree, targetFolderId);
+    let nextIndex = targetFolder?.children?.length ?? 0;
+
+    for (const item of state.clipboard.items) {
+      await sendRuntimeMessage<{
+        type: typeof messageTypes.moveBookmark;
+        bookmarkId: string;
+        parentId: string;
+        index?: number;
+      }, MoveBookmarkResponse>({
+        type: messageTypes.moveBookmark,
+        bookmarkId: item.id,
+        parentId: targetFolderId,
+        index: nextIndex,
+      });
+      nextIndex += 1;
+    }
+
     state.clipboard = null;
   } else {
-    await cloneBookmarkSubtree(targetFolderId, state.clipboard.item);
+    const targetFolder = getFolderNode(state.tree, targetFolderId);
+    let nextIndex = targetFolder?.children?.length ?? 0;
+
+    for (const item of state.clipboard.items) {
+      await cloneBookmarkSubtree(targetFolderId, item, nextIndex);
+      nextIndex += 1;
+    }
   }
 
   await refreshBookmarkTree(state);
@@ -1911,7 +2743,7 @@ async function pasteClipboardIntoFolder(rootElement: HTMLDivElement, state: AppS
   renderApp(rootElement, state);
 }
 
-async function cloneBookmarkSubtree(parentId: string, sourceNode: BookmarkNode): Promise<void> {
+async function cloneBookmarkSubtree(parentId: string, sourceNode: BookmarkNode, index?: number): Promise<void> {
   if (sourceNode.url) {
     await sendRuntimeMessage<{
       type: typeof messageTypes.createBookmark;
@@ -1924,6 +2756,7 @@ async function cloneBookmarkSubtree(parentId: string, sourceNode: BookmarkNode):
       parentId,
       title: sourceNode.title || getHostname(sourceNode.url),
       url: sourceNode.url,
+      index,
     });
     return;
   }
@@ -1938,6 +2771,7 @@ async function cloneBookmarkSubtree(parentId: string, sourceNode: BookmarkNode):
     type: messageTypes.createBookmark,
     parentId,
     title: sourceNode.title || 'Untitled',
+    index,
   });
 
   for (const child of sourceNode.children ?? []) {
@@ -1971,13 +2805,21 @@ function cloneBookmarkNode(node: BookmarkNode): BookmarkNode {
   };
 }
 
-function openBookmarkManager(): void {
-  const managerUrl = /firefox/i.test(navigator.userAgent) ? 'about:bookmarks' : 'chrome://bookmarks/';
-  if (extensionApi.tabs?.create) {
-    void extensionApi.tabs.create({ url: managerUrl });
+async function openBookmarkManager(rootElement: HTMLDivElement, state: AppState): Promise<void> {
+  const response = await sendRuntimeMessage<{ type: typeof messageTypes.openBookmarkManager }, OpenBookmarkManagerResponse>({
+    type: messageTypes.openBookmarkManager,
+  });
+
+  if (!response.opened) {
+    state.statusMessage = {
+      kind: 'error',
+      message: response.message || 'The browser blocked the native bookmark manager page.',
+    };
+    renderApp(rootElement, state);
     return;
   }
-  window.open(managerUrl, '_blank', 'noopener');
+
+  state.statusMessage = null;
 }
 
 function openFolderView(folderId: string, openInNewTab: boolean): void {

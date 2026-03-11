@@ -19,6 +19,8 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
       return { settings: await readSettings() };
     case messageTypes.patchSettings:
       return { settings: await writeSettings(message.patch) };
+    case messageTypes.openBookmarkManager:
+      return openBookmarkManager();
     case messageTypes.getBookmarkTree:
       return { tree: await getBookmarkTree() };
     case messageTypes.createBookmark:
@@ -81,4 +83,29 @@ function normalizeBookmarkNode(node: any): BookmarkNode {
 
 function normalizeBookmarkNodes(nodes: any[]): BookmarkNode[] {
   return nodes.map(normalizeBookmarkNode);
+}
+
+async function openBookmarkManager(): Promise<{ ok: boolean; opened: boolean; message?: string }> {
+  const managerUrl = /firefox/i.test(navigator.userAgent) ? 'about:bookmarks' : 'chrome://bookmarks/';
+
+  if (!extensionApi.tabs?.create) {
+    return {
+      ok: false,
+      opened: false,
+      message: 'This browser does not expose tab creation from the extension context.',
+    };
+  }
+
+  try {
+    await extensionApi.tabs.create({ url: managerUrl });
+    return { ok: true, opened: true };
+  } catch (error) {
+    return {
+      ok: false,
+      opened: false,
+      message: error instanceof Error
+        ? error.message
+        : 'The browser blocked the native bookmark manager page.',
+    };
+  }
 }

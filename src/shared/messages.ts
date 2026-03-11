@@ -2,6 +2,7 @@ export const messageTypes = {
   ping: 'app/ping',
   getSettings: 'settings/get',
   patchSettings: 'settings/patch',
+  openBookmarkManager: 'browser/open-bookmark-manager',
   getBookmarkTree: 'bookmarks/get-tree',
   createBookmark: 'bookmarks/create',
   moveBookmark: 'bookmarks/move',
@@ -113,6 +114,16 @@ export interface PatchSettingsRequest {
 
 export interface PatchSettingsResponse {
   settings: AppSettings;
+}
+
+export interface OpenBookmarkManagerRequest {
+  type: typeof messageTypes.openBookmarkManager;
+}
+
+export interface OpenBookmarkManagerResponse {
+  ok: boolean;
+  opened: boolean;
+  message?: string;
 }
 
 export interface GetBookmarkTreeRequest {
@@ -237,6 +248,7 @@ export type AppRequest =
   | PingRequest
   | GetSettingsRequest
   | PatchSettingsRequest
+  | OpenBookmarkManagerRequest
   | GetBookmarkTreeRequest
   | CreateBookmarkRequest
   | MoveBookmarkRequest
@@ -253,6 +265,7 @@ export type AppResponse =
   | PingResponse
   | GetSettingsResponse
   | PatchSettingsResponse
+  | OpenBookmarkManagerResponse
   | GetBookmarkTreeResponse
   | CreateBookmarkResponse
   | MoveBookmarkResponse
