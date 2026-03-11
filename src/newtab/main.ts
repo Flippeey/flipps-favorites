@@ -1,117 +1,18 @@
 import './styles.css';
-import { extensionApi, sendRuntimeMessage } from '../shared/browser';
+import { sendRuntimeMessage } from '../shared/browser';
 import { messageTypes, type AppSettings, type BookmarkNode, type CreateBookmarkResponse, type GetBookmarkTreeResponse, type GetIconResponse, type GetSettingsResponse, type IconSearchCandidate, type InvalidateIconResponse, type MoveBookmarkResponse, type OpenBookmarkManagerResponse, type PatchSettingsResponse, type PingResponse, type RemoveBookmarkResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SearchIconsResponse, type SettingsSectionId, type SetIconOverrideFromUrlResponse, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../shared/messages';
+import { createClosedIconDialogState, createInitialAppState, type AppState, type AppStatus, type BookmarkClipboardState, type BookmarkItemKind, type ContextMenuState, type FolderActionTarget, type IconDialogState, type SelectionContextMenuState, type SelectionContextMenuTarget, type SelectionScope, type SelectionSurface, type SurfaceContextMenuTarget } from './app-state';
 import { collectFolderOptions, collectLinkOptions, collectVisibleBookmarks as collectVisibleBookmarkTargets, findBookmarkActionTargetById, findNodeById, getBookmarkActionTarget, getBookmarkLabelForUrl, getBreadcrumbs, getDefaultFolder, getDockFolder, getFolderNode, getHostname, getLibraryFolders, isFolderDescendantOf, resolveInitialFolderId, resolveInitialIconToolTarget, resolveIconToolTarget, type BookmarkActionTarget } from './bookmark-navigation';
 import { escapeAttribute, escapeHtml } from './html';
+import { hydrateBookmarkIcons, queueVisibleIconPreload } from './icon-runtime';
 import { applyPendingIcon, applyResolvedIcon, getFaviconImageUrl, renderFaviconIconMarkup, renderIconPlaceholder, renderResolvedIconMarkup, renderBookmarkVisualIcon } from './icon-render';
+import { getFolderIdFromHash, getLastFolder, getSearchName, isValidBookmarkUrl, normalizeBackgroundImage, normalizeUploadedImage, openBookmark, openFolderView, persistLastFolder, removeLastFolder, syncFolderHash } from './runtime-helpers';
+import { clearSelection, createSelectionContextMenuState, getCurrentFolderChildren, getFolderChildren, getOrderedSelectedIds, getSelectedNodes, isClipboardCutItem, isItemSelected, isSameScope, normalizeSelection, openSelectionInNewTabs, setSelection } from './selection-state';
+import { cloneBookmarkNode, navigateToFolder, navigateToFolderAndRender, refreshBookmarkTree, refreshTreeAndRender, renderStateAndWarmIcons } from './state-transitions';
 import { renderUiIcon } from './ui-icons';
 import { buildShellStyle, createAccentPickerState, hslToHex, normalizeGeneralSubpage, normalizeHexColor, normalizeThemeMode, renderDrawerSection, renderSectionButton, resolveAppliedThemeMode, type AccentPickerState, type GeneralSettingsSubpage } from '../settings';
 
 const root = document.querySelector<HTMLDivElement>('#app');
-const lastFolderStorageKey = 'newtab/last-folder';
-
-interface AppState {
-  settings: AppSettings;
-  tree: BookmarkNode[];
-  currentFolderId: string;
-  drawerOpen: boolean;
-  generalSubpage: GeneralSettingsSubpage;
-  accentPicker: AccentPickerState;
-  iconToolTargetUrl: string;
-  iconToolStatus: string;
-  clipboard: BookmarkClipboardState | null;
-  contextMenu: ContextMenuState | null;
-  iconDialog: IconDialogState;
-  resolvedIcons: Record<string, ResolvedIcon>;
-  selectedIds: string[];
-  selectionAnchorId: string | null;
-  selectionScope: SelectionScope | null;
-  statusMessage: AppStatus | null;
-}
-
-type BookmarkItemKind = 'bookmark' | 'folder';
-
-type SelectionSurface = 'grid' | 'dock';
-
-interface SelectionScope {
-  surface: SelectionSurface;
-  folderId: string;
-}
-
-interface FolderActionTarget {
-  id: string;
-  title: string;
-  parentId: string;
-}
-
-interface SurfaceContextMenuTarget {
-  id: string;
-  title: string;
-  surface: 'grid' | 'dock';
-}
-
-interface BookmarkContextMenuState {
-  kind: 'bookmark';
-  x: number;
-  y: number;
-  target: BookmarkActionTarget;
-}
-
-interface FolderContextMenuState {
-  kind: 'folder';
-  x: number;
-  y: number;
-  target: FolderActionTarget;
-}
-
-interface SurfaceContextMenuState {
-  kind: 'surface';
-  x: number;
-  y: number;
-  target: SurfaceContextMenuTarget;
-}
-
-interface SelectionContextMenuState {
-  kind: 'selection';
-  x: number;
-  y: number;
-  target: SelectionContextMenuTarget;
-}
-
-type ContextMenuState = BookmarkContextMenuState | FolderContextMenuState | SurfaceContextMenuState | SelectionContextMenuState;
-
-interface SelectionContextMenuTarget {
-  ids: string[];
-  bookmarkCount: number;
-  folderCount: number;
-  scope: SelectionScope | null;
-}
-
-interface BookmarkClipboardState {
-  mode: 'copy' | 'cut';
-  items: BookmarkNode[];
-}
-
-interface AppStatus {
-  message: string;
-  kind: 'error' | 'success' | 'info';
-}
-
-interface IconDialogState {
-  open: boolean;
-  target: BookmarkActionTarget | null;
-  draftTitle: string;
-  draftUrl: string;
-  query: string;
-  status: string;
-  statusKind: 'error' | 'success' | 'info' | '';
-  loading: boolean;
-  results: IconSearchCandidate[];
-  previewIcon: ResolvedIcon | null;
-}
-
-let iconRenderGeneration = 0;
-
 if (!root) {
   throw new Error('App root not found.');
 }
@@ -129,24 +30,12 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
     throw new Error('Background service is unavailable.');
   }
 
-  const state: AppState = {
+  const state: AppState = createInitialAppState({
     settings: settingsResponse.settings,
     tree: bookmarkResponse.tree,
-    currentFolderId: resolveInitialFolderId(settingsResponse.settings, bookmarkResponse.tree, getLastFolder, getFolderIdFromHash),
-    drawerOpen: false,
-    generalSubpage: 'general',
-    accentPicker: createAccentPickerState(settingsResponse.settings.accentColor),
-    iconToolTargetUrl: resolveInitialIconToolTarget(bookmarkResponse.tree),
-    iconToolStatus: '',
-    clipboard: null,
-    contextMenu: null,
-    iconDialog: createClosedIconDialogState(),
-    resolvedIcons: {},
-    selectedIds: [],
-    selectionAnchorId: null,
-    selectionScope: null,
-    statusMessage: null,
-  };
+    getLastFolder,
+    getFolderIdFromHash,
+  });
 
   syncFolderHash(state.currentFolderId, 'replace');
   persistLastFolder(state.settings, state.currentFolderId);
@@ -185,11 +74,9 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
     if (!folderId || folderId === state.currentFolderId || !getFolderNode(state.tree, folderId)) {
       return;
     }
-    state.currentFolderId = folderId;
-    clearSelection(state);
-    persistLastFolder(state.settings, folderId);
-    renderApp(rootElement, state);
-    queueVisibleIconPreload(state);
+    if (navigateToFolder(state, folderId, 'none')) {
+      renderStateAndWarmIcons(rootElement, state, renderApp);
+    }
   });
 }
 
@@ -381,14 +268,10 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     }
 
     if (response.settings.rootFolderId && !isFolderDescendantOf(state.tree, state.currentFolderId, response.settings.rootFolderId)) {
-      state.currentFolderId = response.settings.rootFolderId;
-      clearSelection(state);
-      syncFolderHash(state.currentFolderId, 'replace');
-      persistLastFolder(state.settings, state.currentFolderId);
+      navigateToFolder(state, response.settings.rootFolderId, 'replace');
     }
 
-    renderApp(rootElement, state);
-    queueVisibleIconPreload(state);
+    renderStateAndWarmIcons(rootElement, state, renderApp);
   };
 
   homeButton?.addEventListener('click', () => {
@@ -396,9 +279,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     if (!targetId) {
       return;
     }
-    navigateToFolder(state, targetId);
-    renderApp(rootElement, state);
-    queueVisibleIconPreload(state);
+    navigateToFolderAndRender(rootElement, state, targetId, renderApp);
   });
 
   dockSettingsButton?.addEventListener('click', async () => {
@@ -669,9 +550,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
       if (!folderId) {
         return;
       }
-      navigateToFolder(state, folderId);
-      renderApp(rootElement, state);
-      queueVisibleIconPreload(state);
+      navigateToFolderAndRender(rootElement, state, folderId, renderApp);
     });
   });
 
@@ -1178,8 +1057,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   setupGridInteractions(rootElement, state, bookmarkCanvas, bookmarkGrid, currentFolder);
   setupDockInteractions(rootElement, state, bookmarkDock, dockStrip, dockFolder);
 
-  const currentGeneration = ++iconRenderGeneration;
-  void hydrateBookmarkIcons(rootElement, state, currentGeneration);
+  hydrateBookmarkIcons(rootElement, state);
 }
 
 async function switchSettingsSection(rootElement: HTMLDivElement, state: AppState, section: SettingsSectionId): Promise<void> {
@@ -1308,101 +1186,6 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return Boolean(target.closest('input, textarea, select, [contenteditable="true"], .icon-dialog, .settings-drawer'));
 }
 
-function clearSelection(state: AppState): void {
-  state.selectedIds = [];
-  state.selectionAnchorId = null;
-  state.selectionScope = null;
-}
-
-function normalizeSelection(state: AppState): void {
-  if (!state.selectionScope) {
-    clearSelection(state);
-    return;
-  }
-
-  const visibleIds = new Set(getFolderChildren(state, state.selectionScope.folderId).map(node => node.id));
-  state.selectedIds = state.selectedIds.filter(id => visibleIds.has(id));
-  if (state.selectionAnchorId && !visibleIds.has(state.selectionAnchorId)) {
-    state.selectionAnchorId = state.selectedIds[0] ?? null;
-  }
-
-  if (!state.selectedIds.length) {
-    state.selectionScope = null;
-  }
-
-  if (state.contextMenu?.kind === 'selection' && state.selectedIds.length < 2) {
-    state.contextMenu = null;
-  }
-}
-
-function getFolderChildren(state: AppState, folderId: string): BookmarkNode[] {
-  return getFolderNode(state.tree, folderId)?.children ?? [];
-}
-
-function getCurrentFolderChildren(state: AppState): BookmarkNode[] {
-  return (getFolderNode(state.tree, state.currentFolderId) ?? getDefaultFolder(state.tree, state.settings.rootFolderId))?.children ?? [];
-}
-
-function isItemSelected(state: AppState, itemId: string, surface: SelectionSurface, folderId: string): boolean {
-  const selectionScope = state.selectionScope;
-  return selectionScope !== null
-    && selectionScope.surface === surface
-    && selectionScope.folderId === folderId
-    && state.selectedIds.includes(itemId);
-}
-
-function setSelection(state: AppState, ids: string[], scope: SelectionScope | null, anchorId: string | null = ids[0] ?? null): void {
-  state.selectedIds = ids;
-  state.selectionAnchorId = anchorId;
-  state.selectionScope = ids.length && scope ? scope : null;
-}
-
-function getOrderedSelectedIds(state: AppState, scope: SelectionScope | null = state.selectionScope): string[] {
-  if (!scope) {
-    return [];
-  }
-
-  const selectedSet = new Set(state.selectedIds);
-  return getFolderChildren(state, scope.folderId)
-    .filter(node => selectedSet.has(node.id))
-    .map(node => node.id);
-}
-
-function getSelectedNodes(state: AppState, ids: string[] = getOrderedSelectedIds(state), scope: SelectionScope | null = state.selectionScope): BookmarkNode[] {
-  if (!scope) {
-    return [];
-  }
-
-  const idSet = new Set(ids);
-  return getFolderChildren(state, scope.folderId).filter(node => idSet.has(node.id));
-}
-
-function createSelectionContextMenuState(state: AppState, x: number, y: number, scope: SelectionScope | null = state.selectionScope): SelectionContextMenuState {
-  const selectedNodes = getSelectedNodes(state, getOrderedSelectedIds(state, scope), scope);
-  return {
-    kind: 'selection',
-    x,
-    y,
-    target: {
-      ids: selectedNodes.map(node => node.id),
-      bookmarkCount: selectedNodes.filter(node => Boolean(node.url)).length,
-      folderCount: selectedNodes.filter(node => !node.url).length,
-      scope,
-    },
-  };
-}
-
-function openSelectionInNewTabs(state: AppState, ids: string[], scope: SelectionScope | null = state.selectionScope): void {
-  for (const node of getSelectedNodes(state, ids, scope)) {
-    if (node.url) {
-      window.open(node.url, '_blank', 'noopener');
-      continue;
-    }
-
-    openFolderView(node.id, true);
-  }
-}
-
 async function deleteSelectedItems(rootElement: HTMLDivElement, state: AppState, ids: string[], scope: SelectionScope | null = state.selectionScope): Promise<void> {
   const selectedNodes = getSelectedNodes(state, ids, scope);
   if (!selectedNodes.length) {
@@ -1439,9 +1222,7 @@ async function deleteSelectedItems(rootElement: HTMLDivElement, state: AppState,
   }
 
   clearSelection(state);
-  await refreshBookmarkTree(state);
-  renderApp(rootElement, state);
-  queueVisibleIconPreload(state);
+  await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
 }
 
 function setupGridInteractions(rootElement: HTMLDivElement, state: AppState, bookmarkCanvas: HTMLElement | null, bookmarkGrid: HTMLElement | null, currentFolder: BookmarkNode): void {
@@ -1750,9 +1531,7 @@ function setupSurfaceInteractions(
         return;
       }
 
-      navigateToFolder(state, item.id);
-      renderApp(rootElement, state);
-      queueVisibleIconPreload(state);
+      navigateToFolderAndRender(rootElement, state, item.id, renderApp);
     });
   });
 
@@ -1912,10 +1691,6 @@ function setupSurfaceInteractions(
   });
 }
 
-function isSameScope(left: SelectionScope | null, right: SelectionScope | null): boolean {
-  return Boolean(left && right && left.surface === right.surface && left.folderId === right.folderId);
-}
-
 function ensureDragPreviewElement(shellElement: HTMLElement | null): HTMLElement | null {
   if (!shellElement) {
     return null;
@@ -2036,9 +1811,7 @@ async function reorderSelection(rootElement: HTMLDivElement, state: AppState, dr
   }
 
   setSelection(state, draggedItems.map(item => item.id), scope);
-  await refreshBookmarkTree(state);
-  renderApp(rootElement, state);
-  queueVisibleIconPreload(state);
+  await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
   return true;
 }
 
@@ -2066,85 +1839,8 @@ async function moveSelectionIntoFolder(rootElement: HTMLDivElement, state: AppSt
   }
 
   clearSelection(state);
-  await refreshBookmarkTree(state);
-  renderApp(rootElement, state);
-  queueVisibleIconPreload(state);
+  await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
   return true;
-}
-
-async function preloadVisibleIcons(state: AppState): Promise<void> {
-  const visibleBookmarks = collectVisibleBookmarks(state);
-  const pendingBookmarks = visibleBookmarks.filter(bookmark => !state.resolvedIcons[bookmark.url]);
-  if (!pendingBookmarks.length) {
-    return;
-  }
-
-  await Promise.allSettled(pendingBookmarks.map(async bookmark => {
-    const response = await sendRuntimeMessage<{
-      type: typeof messageTypes.getIcon;
-      bookmarkUrl: string;
-      bookmarkTitle?: string;
-    }, GetIconResponse>({
-      type: messageTypes.getIcon,
-      bookmarkUrl: bookmark.url,
-      bookmarkTitle: bookmark.title,
-    });
-
-    state.resolvedIcons[bookmark.url] = response.icon;
-  }));
-}
-
-function queueVisibleIconPreload(state: AppState): void {
-  void preloadVisibleIcons(state);
-}
-
-function collectVisibleBookmarks(state: AppState): BookmarkActionTarget[] {
-  const directTargets = collectVisibleBookmarkTargets(state.tree, state.currentFolderId, state.settings);
-  const previewTargets = collectDockPreviewBookmarkTargets(state.tree, state.settings);
-  const uniqueTargets = new Map<string, BookmarkActionTarget>();
-
-  for (const target of [...directTargets, ...previewTargets]) {
-    if (!target.url || uniqueTargets.has(target.url)) {
-      continue;
-    }
-
-    uniqueTargets.set(target.url, target);
-  }
-
-  return Array.from(uniqueTargets.values());
-}
-
-function collectDockPreviewBookmarkTargets(tree: BookmarkNode[], settings: AppSettings): BookmarkActionTarget[] {
-  const dockFolder = getDockFolder(tree, settings);
-  if (!dockFolder) {
-    return [];
-  }
-
-  const targets: BookmarkActionTarget[] = [];
-  for (const item of dockFolder.children ?? []) {
-    if (item.url) {
-      continue;
-    }
-
-    for (const child of getDockPreviewItems(item)) {
-      if (!child.url) {
-        continue;
-      }
-
-      targets.push({
-        id: child.id,
-        url: child.url,
-        title: child.title || getHostname(child.url),
-        parentId: child.parentId ?? '',
-      });
-    }
-  }
-
-  return targets;
-}
-
-function isClipboardCutItem(state: AppState, itemId: string): boolean {
-  return state.clipboard?.mode === 'cut' && state.clipboard.items.some(item => item.id === itemId);
 }
 
 function getDockPreviewItems(node: BookmarkNode): BookmarkNode[] {
@@ -2434,32 +2130,6 @@ function renderIconDialogResults(iconDialog: IconDialogState): string {
   `).join('');
 }
 
-function navigateToFolder(state: AppState, folderId: string): void {
-  if (!getFolderNode(state.tree, folderId)) {
-    return;
-  }
-  state.currentFolderId = folderId;
-  clearSelection(state);
-  state.contextMenu = null;
-  syncFolderHash(folderId, 'push');
-  persistLastFolder(state.settings, folderId);
-}
-
-function createClosedIconDialogState(): IconDialogState {
-  return {
-    open: false,
-    target: null,
-    draftTitle: '',
-    draftUrl: '',
-    query: '',
-    status: '',
-    statusKind: '',
-    loading: false,
-    results: [],
-    previewIcon: null,
-  };
-}
-
 async function openIconDialog(rootElement: HTMLDivElement, state: AppState, target: BookmarkActionTarget): Promise<void> {
   state.iconDialog = {
     open: true,
@@ -2569,31 +2239,7 @@ async function deleteBookmarkFromContext(rootElement: HTMLDivElement, state: App
     state.iconDialog = createClosedIconDialogState();
   }
 
-  await refreshBookmarkTree(state);
-  renderApp(rootElement, state);
-}
-
-async function refreshBookmarkTree(state: AppState): Promise<void> {
-  const response = await sendRuntimeMessage<{ type: typeof messageTypes.getBookmarkTree }, GetBookmarkTreeResponse>({
-    type: messageTypes.getBookmarkTree,
-  });
-  state.tree = response.tree;
-
-  if (!getFolderNode(state.tree, state.currentFolderId)) {
-    state.currentFolderId = resolveInitialFolderId(state.settings, state.tree, getLastFolder, getFolderIdFromHash);
-  }
-
-  if (state.iconDialog.target) {
-    const nextTarget = findBookmarkActionTargetById(state.tree, state.iconDialog.target.id);
-    if (nextTarget) {
-      state.iconDialog.target = nextTarget;
-    } else {
-      state.iconDialog = createClosedIconDialogState();
-    }
-  }
-
-  state.clipboard = refreshFolderClipboard(state.tree, state.clipboard);
-  normalizeSelection(state);
+  await refreshTreeAndRender(rootElement, state, renderApp);
 }
 
 async function handleBookmarkContextAction(rootElement: HTMLDivElement, state: AppState, action: string, target: BookmarkActionTarget): Promise<void> {
@@ -2734,30 +2380,6 @@ function setClipboardFromItemIds(state: AppState, mode: BookmarkClipboardState['
   };
 }
 
-function refreshFolderClipboard(tree: BookmarkNode[], clipboard: BookmarkClipboardState | null): BookmarkClipboardState | null {
-  if (!clipboard) {
-    return null;
-  }
-
-  if (clipboard.mode === 'copy') {
-    return clipboard;
-  }
-
-  const nextItems = clipboard.items
-    .map(item => findNodeById(tree, item.id))
-    .filter((node): node is BookmarkNode => Boolean(node))
-    .map(node => cloneBookmarkNode(node));
-
-  if (!nextItems.length) {
-    return null;
-  }
-
-  return {
-    mode: clipboard.mode,
-    items: nextItems,
-  };
-}
-
 function canPasteClipboardIntoFolder(state: AppState, targetFolderId: string): boolean {
   const clipboard = state.clipboard;
   if (!clipboard) {
@@ -2832,9 +2454,7 @@ async function createFolderInFolder(rootElement: HTMLDivElement, state: AppState
     title: nextTitle,
   });
 
-  await refreshBookmarkTree(state);
-  renderApp(rootElement, state);
-  queueVisibleIconPreload(state);
+  await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
 }
 
 async function renameFolder(rootElement: HTMLDivElement, state: AppState, target: FolderActionTarget): Promise<void> {
@@ -2854,8 +2474,7 @@ async function renameFolder(rootElement: HTMLDivElement, state: AppState, target
     changes: { title: nextTitle },
   });
 
-  await refreshBookmarkTree(state);
-  renderApp(rootElement, state);
+  await refreshTreeAndRender(rootElement, state, renderApp);
 }
 
 async function deleteFolderFromContext(rootElement: HTMLDivElement, state: AppState, target: FolderActionTarget): Promise<void> {
@@ -2881,9 +2500,7 @@ async function deleteFolderFromContext(rootElement: HTMLDivElement, state: AppSt
     state.currentFolderId = target.parentId || resolveInitialFolderId(state.settings, state.tree, getLastFolder, getFolderIdFromHash);
   }
 
-  await refreshBookmarkTree(state);
-  renderApp(rootElement, state);
-  queueVisibleIconPreload(state);
+  await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
 }
 
 async function pasteClipboardIntoFolder(rootElement: HTMLDivElement, state: AppState, targetFolderId: string): Promise<void> {
@@ -2922,9 +2539,7 @@ async function pasteClipboardIntoFolder(rootElement: HTMLDivElement, state: AppS
     }
   }
 
-  await refreshBookmarkTree(state);
-  renderApp(rootElement, state);
-  queueVisibleIconPreload(state);
+  await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
 }
 
 async function cloneBookmarkSubtree(parentId: string, sourceNode: BookmarkNode, index?: number): Promise<void> {
@@ -2979,16 +2594,6 @@ async function cloneBookmarkSubtree(parentId: string, sourceNode: BookmarkNode, 
   }
 }
 
-function cloneBookmarkNode(node: BookmarkNode): BookmarkNode {
-  return {
-    id: node.id,
-    parentId: node.parentId,
-    title: node.title,
-    url: node.url,
-    children: node.children?.map(child => cloneBookmarkNode(child)),
-  };
-}
-
 async function openBookmarkManager(rootElement: HTMLDivElement, state: AppState): Promise<void> {
   const response = await sendRuntimeMessage<{ type: typeof messageTypes.openBookmarkManager }, OpenBookmarkManagerResponse>({
     type: messageTypes.openBookmarkManager,
@@ -3006,227 +2611,9 @@ async function openBookmarkManager(rootElement: HTMLDivElement, state: AppState)
   state.statusMessage = null;
 }
 
-function openFolderView(folderId: string, openInNewTab: boolean): void {
-  const folderUrl = extensionApi.runtime.getURL(`newtab.html#folder=${encodeURIComponent(folderId)}`);
-  if (openInNewTab) {
-    window.open(folderUrl, '_blank', 'noopener');
-    return;
-  }
-
-  window.open(folderUrl, '_blank', 'noopener,noreferrer,width=1280,height=900');
-}
-
-function getFolderIdFromHash(): string | null {
-  const match = /^#folder=(.+)$/.exec(window.location.hash);
-  if (!match) {
-    return null;
-  }
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return null;
-  }
-}
-
-function syncFolderHash(folderId: string, mode: 'replace' | 'push' = 'replace'): void {
-  const nextHash = `#folder=${encodeURIComponent(folderId)}`;
-  if (window.location.hash !== nextHash) {
-    if (mode === 'push') {
-      history.pushState(null, '', nextHash);
-      return;
-    }
-
-    history.replaceState(null, '', nextHash);
-  }
-}
-
-function getLastFolder(): string | null {
-  try {
-    return window.localStorage.getItem(lastFolderStorageKey);
-  } catch {
-    return null;
-  }
-}
-
-function persistLastFolder(settings: AppSettings, folderId: string): void {
-  try {
-    if (settings.rememberLastFolder) {
-      window.localStorage.setItem(lastFolderStorageKey, folderId);
-    }
-  } catch {
-    // Ignore storage failures.
-  }
-}
-
-function removeLastFolder(): void {
-  try {
-    window.localStorage.removeItem(lastFolderStorageKey);
-  } catch {
-    // Ignore storage failures.
-  }
-}
-
-function openBookmark(url: string, openInNewTab: boolean): void {
-  if (openInNewTab) {
-    window.open(url, '_blank', 'noopener');
-    return;
-  }
-  window.location.assign(url);
-}
-
-function normalizeColor(value: string): string {
-  return /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#f4f0e8';
-}
-
-function isValidBookmarkUrl(value: string): boolean {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
-// Extracts the most meaningful label from a URL for use as a search term.
-// e.g. https://www.twitch.tv → "twitch", https://apps.google.com → "google"
-function getSearchName(url: string): string {
-  try {
-    const parts = new URL(url).hostname.replace(/^www\./, '').split('.');
-    return parts.length >= 2 ? parts[parts.length - 2] : (parts[0] ?? '');
-  } catch {
-    return '';
-  }
-}
-
 function getInitial(value: string): string {
   const trimmed = value.trim();
   return trimmed ? trimmed[0].toUpperCase() : '•';
-}
-
-async function hydrateBookmarkIcons(rootElement: HTMLDivElement, state: AppState, generation: number): Promise<void> {
-  const iconElements = Array.from(rootElement.querySelectorAll<HTMLElement>('[data-bookmark-icon]'));
-  await Promise.allSettled(iconElements.map(async element => {
-    const bookmarkUrl = element.dataset.iconUrl;
-    if (!bookmarkUrl) {
-      return;
-    }
-
-    const existingIcon = state.resolvedIcons[bookmarkUrl];
-    if (existingIcon) {
-      applyResolvedIcon(element, existingIcon);
-      return;
-    }
-
-    const bookmarkTitle = element.dataset.iconTitle;
-    try {
-      const response = await sendRuntimeMessage<{
-        type: typeof messageTypes.getIcon;
-        bookmarkUrl: string;
-        bookmarkTitle?: string;
-      }, GetIconResponse>({
-        type: messageTypes.getIcon,
-        bookmarkUrl,
-        bookmarkTitle,
-      });
-
-      if (generation !== iconRenderGeneration || !element.isConnected) {
-        return;
-      }
-
-      state.resolvedIcons[bookmarkUrl] = response.icon;
-      applyResolvedIcon(element, response.icon);
-    } catch {
-      if (generation !== iconRenderGeneration || !element.isConnected) {
-        return;
-      }
-
-      applyPendingIcon(element);
-    }
-  }));
-}
-
-async function normalizeUploadedImage(file: File): Promise<string> {
-  const sourceDataUrl = await readFileAsDataUrl(file);
-  const image = await loadImageElement(sourceDataUrl);
-  const canvas = document.createElement('canvas');
-  const size = 96;
-  canvas.width = size;
-  canvas.height = size;
-  const context = canvas.getContext('2d');
-  if (!context) {
-    throw new Error('Canvas is unavailable for icon normalization.');
-  }
-
-  context.clearRect(0, 0, size, size);
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = 'high';
-
-  const scale = Math.min(size / image.naturalWidth, size / image.naturalHeight);
-  const drawWidth = image.naturalWidth * scale;
-  const drawHeight = image.naturalHeight * scale;
-  const drawX = (size - drawWidth) / 2;
-  const drawY = (size - drawHeight) / 2;
-
-  context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
-  const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
-  if (!blob) {
-    throw new Error('Failed to export the uploaded icon.');
-  }
-
-  return readFileAsDataUrl(blob);
-}
-
-async function normalizeBackgroundImage(file: File): Promise<string> {
-  const sourceDataUrl = await readFileAsDataUrl(file);
-  const image = await loadImageElement(sourceDataUrl);
-  const maxDimension = 2200;
-  const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
-  const width = Math.max(1, Math.round(image.naturalWidth * scale));
-  const height = Math.max(1, Math.round(image.naturalHeight * scale));
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext('2d');
-  if (!context) {
-    throw new Error('Canvas is unavailable for background normalization.');
-  }
-
-  context.clearRect(0, 0, width, height);
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = 'high';
-  context.drawImage(image, 0, 0, width, height);
-
-  const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
-  if (!blob) {
-    throw new Error('Failed to export the uploaded background image.');
-  }
-
-  return readFileAsDataUrl(blob);
-}
-
-function readFileAsDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        resolve(reader.result);
-        return;
-      }
-      reject(new Error('Failed to read icon data.'));
-    };
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read icon data.'));
-    reader.readAsDataURL(blob);
-  });
-}
-
-function loadImageElement(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('Failed to decode the uploaded image.'));
-    image.src = src;
-  });
 }
 
 function escapeCssUrl(value: string): string {
