@@ -1,5 +1,10 @@
 import type { AppSettings, BookmarkNode } from '../shared/messages';
 
+const folderOptionsCache = new WeakMap<BookmarkNode[], Array<{ id: string; label: string }>>();
+const linkOptionsCache = new WeakMap<BookmarkNode[], Array<{ url: string; label: string }>>();
+const nodeIndexCache = new WeakMap<BookmarkNode[], Map<string, BookmarkNode>>();
+const breadcrumbCache = new WeakMap<BookmarkNode[], Map<string, BookmarkNode[]>>();
+
 export interface BookmarkActionTarget {
   id: string;
   url: string;
@@ -59,37 +64,52 @@ export function getFolderNode(tree: BookmarkNode[], folderId: string): BookmarkN
 }
 
 export function findNodeById(nodes: BookmarkNode[], targetId: string): BookmarkNode | null {
-  for (const node of nodes) {
-    if (node.id === targetId) {
-      return node;
-    }
-    const found = findNodeById(node.children ?? [], targetId);
-    if (found) {
-      return found;
-    }
-  }
-  return null;
+  return getNodeIndex(nodes).get(targetId) ?? null;
 }
 
 export function getBreadcrumbs(tree: BookmarkNode[], folderId: string): BookmarkNode[] {
-  return findPath(tree, folderId).filter(node => node.id !== tree[0]?.id);
+  const cached = breadcrumbCache.get(tree)?.get(folderId);
+  if (cached) {
+    return cached;
+  }
+
+  const breadcrumbs = findPath(tree, folderId).filter(node => node.id !== tree[0]?.id);
+  let treeCache = breadcrumbCache.get(tree);
+  if (!treeCache) {
+    treeCache = new Map<string, BookmarkNode[]>();
+    breadcrumbCache.set(tree, treeCache);
+  }
+  treeCache.set(folderId, breadcrumbs);
+  return breadcrumbs;
 }
 
 export function collectFolderOptions(tree: BookmarkNode[]): Array<{ id: string; label: string }> {
+  const cached = folderOptionsCache.get(tree);
+  if (cached) {
+    return cached;
+  }
+
   const options: Array<{ id: string; label: string }> = [];
   for (const child of tree[0]?.children ?? []) {
     if (!child.url) {
       collectFolderOptionsRecursive(child, '', options);
     }
   }
+  folderOptionsCache.set(tree, options);
   return options;
 }
 
 export function collectLinkOptions(tree: BookmarkNode[]): Array<{ url: string; label: string }> {
+  const cached = linkOptionsCache.get(tree);
+  if (cached) {
+    return cached;
+  }
+
   const options: Array<{ url: string; label: string }> = [];
   for (const child of tree[0]?.children ?? []) {
     collectLinkOptionsRecursive(child, '', options);
   }
+  linkOptionsCache.set(tree, options);
   return options;
 }
 
@@ -209,4 +229,29 @@ function collectFolderOptionsRecursive(node: BookmarkNode, prefix: string, optio
       collectFolderOptionsRecursive(child, label, options);
     }
   }
+}
+
+function getNodeIndex(nodes: BookmarkNode[]): Map<string, BookmarkNode> {
+  const cached = nodeIndexCache.get(nodes);
+  if (cached) {
+    return cached;
+  }
+
+  const index = new Map<string, BookmarkNode>();
+  const stack = [...nodes];
+  while (stack.length) {
+    const node = stack.pop();
+    if (!node) {
+      continue;
+    }
+
+    index.set(node.id, node);
+    const children = node.children ?? [];
+    for (let indexPointer = children.length - 1; indexPointer >= 0; indexPointer -= 1) {
+      stack.push(children[indexPointer]);
+    }
+  }
+
+  nodeIndexCache.set(nodes, index);
+  return index;
 }

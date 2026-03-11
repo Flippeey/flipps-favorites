@@ -150,7 +150,6 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
 
   syncFolderHash(state.currentFolderId, 'replace');
   persistLastFolder(state.settings, state.currentFolderId);
-  await preloadVisibleIcons(state);
   renderApp(rootElement, state);
 
   window.addEventListener('keydown', event => {
@@ -181,7 +180,7 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
     }
   });
 
-  window.addEventListener('hashchange', async () => {
+  window.addEventListener('hashchange', () => {
     const folderId = getFolderIdFromHash();
     if (!folderId || folderId === state.currentFolderId || !getFolderNode(state.tree, folderId)) {
       return;
@@ -189,8 +188,8 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
     state.currentFolderId = folderId;
     clearSelection(state);
     persistLastFolder(state.settings, folderId);
-    await preloadVisibleIcons(state);
     renderApp(rootElement, state);
+    queueVisibleIconPreload(state);
   });
 }
 
@@ -208,7 +207,6 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     persistLastFolder(state.settings, currentFolder.id);
   }
 
-  const allFolderOptions = collectFolderOptions(state.tree);
   const libraryFolders = getLibraryFolders(state.tree);
   const breadcrumbs = getBreadcrumbs(state.tree, currentFolder.id);
   const canvasItems = currentFolder.children ?? [];
@@ -216,6 +214,12 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const dockItems = dockFolder?.children ?? [];
   const activeSection: SettingsSectionId = state.settings.settingsSection === 'appearance' ? 'appearance' : 'general';
   const themeMode = normalizeThemeMode(state.settings.themeMode);
+  const drawerFolderOptions = state.drawerOpen && activeSection === 'general'
+    ? collectFolderOptions(state.tree)
+    : [];
+  const drawerSectionMarkup = state.drawerOpen
+    ? renderDrawerSection(activeSection, state.settings, drawerFolderOptions, state.generalSubpage, state.accentPicker)
+    : '';
 
   rootElement.innerHTML = `
     <div class="shell" data-theme-mode="${themeMode}" data-bookmark-icon-surface="${String(state.settings.showBookmarkIconBackground)}" data-dock-visible="${String(state.settings.showDock)}" style="${buildShellStyle(state.settings)}">
@@ -263,7 +267,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
             ${renderSectionButton('appearance', activeSection, 'Theme', 'palette')}
           </nav>
           <section class="drawer-section">
-            ${renderDrawerSection(activeSection, state.settings, allFolderOptions, state.generalSubpage, state.accentPicker)}
+            ${drawerSectionMarkup}
           </section>
         </div>
       </aside>
@@ -383,18 +387,18 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
       persistLastFolder(state.settings, state.currentFolderId);
     }
 
-    await preloadVisibleIcons(state);
     renderApp(rootElement, state);
+    queueVisibleIconPreload(state);
   };
 
-  homeButton?.addEventListener('click', async () => {
+  homeButton?.addEventListener('click', () => {
     const targetId = state.settings.rootFolderId || getDefaultFolder(state.tree, state.settings.rootFolderId)?.id;
     if (!targetId) {
       return;
     }
     navigateToFolder(state, targetId);
-    await preloadVisibleIcons(state);
     renderApp(rootElement, state);
+    queueVisibleIconPreload(state);
   });
 
   dockSettingsButton?.addEventListener('click', async () => {
@@ -649,7 +653,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   });
 
   folderButtons.forEach(button => {
-    button.addEventListener('click', async event => {
+    button.addEventListener('click', event => {
       if (button.dataset.gridItemId || button.dataset.dockItemId) {
         return;
       }
@@ -666,8 +670,8 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
         return;
       }
       navigateToFolder(state, folderId);
-      await preloadVisibleIcons(state);
       renderApp(rootElement, state);
+      queueVisibleIconPreload(state);
     });
   });
 
@@ -1436,8 +1440,8 @@ async function deleteSelectedItems(rootElement: HTMLDivElement, state: AppState,
 
   clearSelection(state);
   await refreshBookmarkTree(state);
-  await preloadVisibleIcons(state);
   renderApp(rootElement, state);
+  queueVisibleIconPreload(state);
 }
 
 function setupGridInteractions(rootElement: HTMLDivElement, state: AppState, bookmarkCanvas: HTMLElement | null, bookmarkGrid: HTMLElement | null, currentFolder: BookmarkNode): void {
@@ -1719,7 +1723,7 @@ function setupSurfaceInteractions(
       event.preventDefault();
     });
 
-    button.addEventListener('click', async event => {
+    button.addEventListener('click', event => {
       if (button.dataset.suppressClick === 'true') {
         button.dataset.suppressClick = 'false';
         event.preventDefault();
@@ -1747,8 +1751,8 @@ function setupSurfaceInteractions(
       }
 
       navigateToFolder(state, item.id);
-      await preloadVisibleIcons(state);
       renderApp(rootElement, state);
+      queueVisibleIconPreload(state);
     });
   });
 
@@ -2033,8 +2037,8 @@ async function reorderSelection(rootElement: HTMLDivElement, state: AppState, dr
 
   setSelection(state, draggedItems.map(item => item.id), scope);
   await refreshBookmarkTree(state);
-  await preloadVisibleIcons(state);
   renderApp(rootElement, state);
+  queueVisibleIconPreload(state);
   return true;
 }
 
@@ -2063,8 +2067,8 @@ async function moveSelectionIntoFolder(rootElement: HTMLDivElement, state: AppSt
 
   clearSelection(state);
   await refreshBookmarkTree(state);
-  await preloadVisibleIcons(state);
   renderApp(rootElement, state);
+  queueVisibleIconPreload(state);
   return true;
 }
 
@@ -2088,6 +2092,10 @@ async function preloadVisibleIcons(state: AppState): Promise<void> {
 
     state.resolvedIcons[bookmark.url] = response.icon;
   }));
+}
+
+function queueVisibleIconPreload(state: AppState): void {
+  void preloadVisibleIcons(state);
 }
 
 function collectVisibleBookmarks(state: AppState): BookmarkActionTarget[] {
@@ -2794,7 +2802,7 @@ async function createBookmarkInFolder(rootElement: HTMLDivElement, state: AppSta
   });
 
   await refreshBookmarkTree(state);
-  await preloadVisibleIcons(state);
+  queueVisibleIconPreload(state);
 
   const nextTarget = findBookmarkActionTargetById(state.tree, response.bookmark.id);
   if (nextTarget) {
@@ -2825,8 +2833,8 @@ async function createFolderInFolder(rootElement: HTMLDivElement, state: AppState
   });
 
   await refreshBookmarkTree(state);
-  await preloadVisibleIcons(state);
   renderApp(rootElement, state);
+  queueVisibleIconPreload(state);
 }
 
 async function renameFolder(rootElement: HTMLDivElement, state: AppState, target: FolderActionTarget): Promise<void> {
@@ -2874,8 +2882,8 @@ async function deleteFolderFromContext(rootElement: HTMLDivElement, state: AppSt
   }
 
   await refreshBookmarkTree(state);
-  await preloadVisibleIcons(state);
   renderApp(rootElement, state);
+  queueVisibleIconPreload(state);
 }
 
 async function pasteClipboardIntoFolder(rootElement: HTMLDivElement, state: AppState, targetFolderId: string): Promise<void> {
@@ -2915,8 +2923,8 @@ async function pasteClipboardIntoFolder(rootElement: HTMLDivElement, state: AppS
   }
 
   await refreshBookmarkTree(state);
-  await preloadVisibleIcons(state);
   renderApp(rootElement, state);
+  queueVisibleIconPreload(state);
 }
 
 async function cloneBookmarkSubtree(parentId: string, sourceNode: BookmarkNode, index?: number): Promise<void> {
