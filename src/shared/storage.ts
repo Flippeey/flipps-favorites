@@ -75,7 +75,7 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     backgroundPositionMode: settings.backgroundPositionMode === 'center' || settings.backgroundPositionMode === 'top' || settings.backgroundPositionMode === 'bottom'
       ? settings.backgroundPositionMode
       : defaultSettings.backgroundPositionMode,
-    settingsSection: settings.settingsSection === 'general' || settings.settingsSection === 'appearance'
+    settingsSection: settings.settingsSection === 'general' || settings.settingsSection === 'appearance' || settings.settingsSection === 'help'
       ? settings.settingsSection
       : defaultSettings.settingsSection,
     rootFolderId: typeof settings.rootFolderId === 'string' ? settings.rootFolderId : defaultSettings.rootFolderId,

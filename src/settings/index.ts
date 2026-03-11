@@ -24,7 +24,7 @@ export const themeModeOptions: Array<{ id: Exclude<ThemeMode, 'system'>; label: 
   { id: 'dark', label: 'Dark', description: 'Low-glare workspace', preview: 'dark' },
 ];
 
-export type GeneralSettingsSubpage = 'general' | 'layout' | 'dock' | 'shortcuts';
+export type GeneralSettingsSubpage = 'general' | 'layout' | 'dock';
 
 export const layoutPresetOptions: Array<{
   id: Exclude<LayoutPresetId, 'custom'>;
@@ -144,11 +144,14 @@ export function renderDrawerSection(section: SettingsSectionId, settings: AppSet
           ${renderGeneralSubpageButton('general', generalSubpage, 'General')}
           ${renderGeneralSubpageButton('layout', generalSubpage, 'Layout')}
           ${renderGeneralSubpageButton('dock', generalSubpage, 'Dock')}
-          ${renderGeneralSubpageButton('shortcuts', generalSubpage, 'Shortcuts')}
         </div>
         ${renderGeneralSubpageSection(settings, folderOptions, generalSubpage)}
       </div>
     `;
+  }
+
+  if (section === 'help') {
+    return renderHelpSection();
   }
 
   const accentColor = normalizeHexColor(settings.accentColor, defaultAccentColor);
@@ -274,7 +277,7 @@ export function resolveAppliedThemeMode(themeMode: ThemeMode): Exclude<ThemeMode
 }
 
 export function normalizeGeneralSubpage(value: string | undefined): GeneralSettingsSubpage {
-  if (value === 'layout' || value === 'dock' || value === 'general' || value === 'shortcuts') {
+  if (value === 'layout' || value === 'dock' || value === 'general') {
     return value;
   }
   return 'general';
@@ -423,32 +426,6 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
     `;
   }
 
-  if (subpage === 'shortcuts') {
-    return `
-      <div class="visual-section">
-        <div class="visual-section__header">
-          <h3>Shortcuts</h3>
-          <p class="field-hint">These shortcuts work on the main new-tab surface when a text field or settings control is not focused.</p>
-        </div>
-        <div class="shortcut-groups">
-          ${shortcutGroups.map(group => `
-            <section class="shortcut-card">
-              <h4>${group.label}</h4>
-              <div class="shortcut-list">
-                ${group.items.map(item => `
-                  <div class="shortcut-row">
-                    <span class="shortcut-keys">${item.keys}</span>
-                    <span class="shortcut-description">${item.description}</span>
-                  </div>
-                `).join('')}
-              </div>
-            </section>
-          `).join('')}
-        </div>
-      </div>
-    `;
-  }
-
   return `
     <div class="visual-section">
       <div class="visual-section__header">
@@ -470,6 +447,52 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
         <input name="openLinksInNewTab" type="checkbox" ${settings.openLinksInNewTab ? 'checked' : ''} />
         <span>Open links in a new tab instead of replacing the new tab page</span>
       </label>
+    </div>
+  `;
+}
+
+function renderHelpSection(): string {
+  return `
+    <div class="drawer-panel drawer-panel--help">
+      <div class="visual-section">
+        <div class="visual-section__header">
+          <h3>About</h3>
+          <p class="field-hint">Flipp's Favorites keeps bookmark navigation, organization, and visual customization inside the new tab page.</p>
+        </div>
+        <div class="shortcut-card">
+          <div class="shortcut-list">
+            <div class="shortcut-row">
+              <span class="shortcut-keys">New tab</span>
+              <span class="shortcut-description">Browse folders, reorder items, edit bookmarks, and keep a dock of favorite folders visible at the bottom of the page.</span>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-keys">Theme</span>
+              <span class="shortcut-description">Light, dark, accent, background image, and layout presets are all available from the right-side drawer.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="visual-section">
+        <div class="visual-section__header">
+          <h3>Shortcuts</h3>
+          <p class="field-hint">These shortcuts work on the main new-tab surface when a text field or settings control is not focused.</p>
+        </div>
+        <div class="shortcut-groups">
+          ${shortcutGroups.map(group => `
+            <section class="shortcut-card">
+              <h4>${group.label}</h4>
+              <div class="shortcut-list">
+                ${group.items.map(item => `
+                  <div class="shortcut-row">
+                    <span class="shortcut-keys">${item.keys}</span>
+                    <span class="shortcut-description">${item.description}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </section>
+          `).join('')}
+        </div>
+      </div>
     </div>
   `;
 }

@@ -2,7 +2,7 @@
 import { sendRuntimeMessage } from '../shared/browser';
 import { messageTypes, type AppSettings, type BookmarkNode, type CreateBookmarkResponse, type GetBookmarkTreeResponse, type GetSettingsResponse, type InvalidateIconResponse, type MoveBookmarkResponse, type OpenBookmarkManagerResponse, type PatchSettingsResponse, type PingResponse, type RemoveBookmarkResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SettingsSectionId, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../shared/messages';
 import { readBookmarkUsageRecords } from '../shared/storage';
-import { createClosedBookmarkDialogState, createInitialAppState, pushUndoEntry, type AppState, type BookmarkClipboardState, type DeleteHistoryEntry, type FolderActionTarget, type SelectionContextMenuTarget, type SelectionScope, type SurfaceContextMenuTarget, type UndoHistoryEntry } from './app-state';
+import { createClosedBookmarkDialogState, createInitialAppState, pushUndoEntry, type AppState, type AppStatus, type BookmarkClipboardState, type DeleteHistoryEntry, type FolderActionTarget, type SelectionContextMenuTarget, type SelectionScope, type SurfaceContextMenuTarget, type UndoHistoryEntry } from './app-state';
 import { syncDerivedTree } from './derived-tree';
 import { findBookmarkActionTargetById, findNodeById, getBookmarkActionTarget, getBookmarkLabelForUrl, getFolderChildIds, getFolderNode, getHostname, isFolderDescendantOf, resolveInitialFolderId, type BookmarkActionTarget } from './bookmark-navigation';
 import { cloneBookmarkSubtree, applyFolderOrder, removeBookmarkSubtree } from './bookmark-ops';
@@ -25,6 +25,7 @@ if (!root) {
 }
 
 let settingsFeedbackTimer: number | null = null;
+let statusMessageTimer: number | null = null;
 
 void bootstrap(root);
 
@@ -102,10 +103,12 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
   });
 }
 
-async function applySettingsPatch(rootElement: HTMLDivElement, state: AppState, patch: Partial<AppSettings>): Promise<void> {
+async function applySettingsPatch(rootElement: HTMLDivElement, state: AppState, patch: Partial<AppSettings>, options: { silent?: boolean } = {}): Promise<void> {
   try {
-    setSettingsFeedback(state, 'saving', 'Saving changes...');
-    renderApp(rootElement, state);
+    if (!options.silent) {
+      setSettingsFeedback(state, 'saving', 'Saving changes...');
+      renderApp(rootElement, state);
+    }
 
     const response = await sendRuntimeMessage<{ type: typeof messageTypes.patchSettings; patch: Partial<AppSettings> }, PatchSettingsResponse>({
       type: messageTypes.patchSettings,
@@ -113,10 +116,14 @@ async function applySettingsPatch(rootElement: HTMLDivElement, state: AppState, 
     });
 
     applySettingsResponse(state, response.settings);
-    setSettingsFeedback(state, 'saved', 'Saved');
+    if (!options.silent) {
+      setSettingsFeedback(state, 'saved', 'Saved');
+    }
     renderStateAndWarmIcons(rootElement, state, renderApp);
   } catch (error) {
-    setSettingsFeedback(state, 'error', error instanceof Error ? error.message : 'Failed to save settings.');
+    if (!options.silent) {
+      setSettingsFeedback(state, 'error', error instanceof Error ? error.message : 'Failed to save settings.');
+    }
     renderApp(rootElement, state);
   }
 }
@@ -131,7 +138,6 @@ function applySettingsResponse(state: AppState, settings: AppSettings): void {
     ...createAccentPickerState(settings.accentColor),
     open: state.accentPicker.open,
   };
-  state.drawerOpen = true;
 
   if (!state.settings.rememberLastFolder) {
     removeLastFolder();
@@ -160,6 +166,57 @@ function setSettingsFeedback(state: AppState, status: AppState['settingsFeedback
       }
     }, 1400);
   }
+
+  if (status === 'saved') {
+    showStatusMessage(state, 'success', message, 1800);
+    return;
+  }
+
+  if (status === 'error') {
+    showStatusMessage(state, 'error', message, 3200);
+  }
+}
+
+function showStatusMessage(state: AppState, kind: AppStatus['kind'], message: string, timeout = 0): void {
+  state.statusMessage = { kind, message };
+  if (statusMessageTimer) {
+    window.clearTimeout(statusMessageTimer);
+    statusMessageTimer = null;
+  }
+
+  if (timeout > 0) {
+    statusMessageTimer = window.setTimeout(() => {
+      state.statusMessage = null;
+      statusMessageTimer = null;
+      if (root) {
+        renderApp(root, state);
+      }
+    }, timeout);
+  }
+}
+
+function getBookmarkSortOptionValue(settings: AppSettings): string {
+  if (settings.bookmarkSortMode === 'manual') {
+    return 'manual';
+  }
+
+  return `${settings.bookmarkSortMode}:${settings.bookmarkSortDirection}`;
+}
+
+function parseBookmarkSortOptionValue(value: string): { bookmarkSortMode: AppSettings['bookmarkSortMode']; bookmarkSortDirection: AppSettings['bookmarkSortDirection'] } | null {
+  if (value === 'manual') {
+    return {
+      bookmarkSortMode: 'manual',
+      bookmarkSortDirection: 'asc',
+    };
+  }
+
+  if (value === 'name:asc' || value === 'name:desc' || value === 'lastUsed:asc' || value === 'lastUsed:desc' || value === 'created:asc' || value === 'created:desc') {
+    const [bookmarkSortMode, bookmarkSortDirection] = value.split(':') as [AppSettings['bookmarkSortMode'], AppSettings['bookmarkSortDirection']];
+    return { bookmarkSortMode, bookmarkSortDirection };
+  }
+
+  return null;
 }
 
 async function handleDelegatedClick(rootElement: HTMLDivElement, state: AppState, event: MouseEvent, target: HTMLElement): Promise<void> {
@@ -516,7 +573,11 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const resolvedCurrentFolder = currentFolder;
 
   const { libraryFolders, breadcrumbs, currentFolderChildren: canvasItems, allCurrentFolderChildren, dockFolder, dockItems, folderOptions } = state.derivedTree;
-  const activeSection: SettingsSectionId = state.settings.settingsSection === 'appearance' ? 'appearance' : 'general';
+  const activeSection: SettingsSectionId = state.settings.settingsSection === 'appearance'
+    ? 'appearance'
+    : state.settings.settingsSection === 'help'
+      ? 'help'
+      : 'general';
   const themeMode = normalizeThemeMode(state.settings.themeMode);
   const drawerFolderOptions = state.drawerOpen && activeSection === 'general'
     ? folderOptions
@@ -534,35 +595,27 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
         <div class="nav-scroll">
           ${renderNavTrail(libraryFolders, breadcrumbs)}
         </div>
-        <div class="nav-side nav-side--right">
+        <div class="nav-side nav-side--right nav-side--controls">
+          <label class="surface-search surface-search--nav" aria-label="Search this folder">
+            <span class="surface-search__icon">${renderUiIcon('search')}</span>
+            <input name="currentFolderSearch" type="search" value="${escapeAttribute(state.searchQuery)}" placeholder="Search" aria-label="Search this folder" />
+          </label>
+          <label class="sort-controls__field sort-controls__field--nav">
+            <select name="bookmarkSortOption" aria-label="Sort bookmarks">
+              <option value="manual" ${getBookmarkSortOptionValue(state.settings) === 'manual' ? 'selected' : ''}>Manual order</option>
+              <option value="name:asc" ${getBookmarkSortOptionValue(state.settings) === 'name:asc' ? 'selected' : ''}>Name (A-Z)</option>
+              <option value="name:desc" ${getBookmarkSortOptionValue(state.settings) === 'name:desc' ? 'selected' : ''}>Name (Z-A)</option>
+              <option value="lastUsed:desc" ${getBookmarkSortOptionValue(state.settings) === 'lastUsed:desc' ? 'selected' : ''}>Last used (newest first)</option>
+              <option value="lastUsed:asc" ${getBookmarkSortOptionValue(state.settings) === 'lastUsed:asc' ? 'selected' : ''}>Last used (oldest first)</option>
+              <option value="created:desc" ${getBookmarkSortOptionValue(state.settings) === 'created:desc' ? 'selected' : ''}>Created (newest first)</option>
+              <option value="created:asc" ${getBookmarkSortOptionValue(state.settings) === 'created:asc' ? 'selected' : ''}>Created (oldest first)</option>
+            </select>
+          </label>
           <button class="drawer-toggle nav-icon library-home button-with-icon" type="button" aria-label="Open settings">${renderUiIcon('settings')}<span>Settings</span></button>
         </div>
       </nav>
       <main class="workspace">
         <section class="bookmark-canvas" aria-label="Bookmarks grid">
-          <div class="workspace-toolbar surface-card">
-            <div class="workspace-toolbar__row">
-              <label class="surface-search">
-                <span class="surface-search__icon">${renderUiIcon('search')}</span>
-                <input name="currentFolderSearch" type="search" value="${escapeAttribute(state.searchQuery)}" placeholder="Search this folder" aria-label="Search the current folder" />
-              </label>
-              <div class="sort-controls">
-                <label class="sort-controls__field">
-                  <span>Sort</span>
-                  <select name="bookmarkSortMode">
-                    <option value="manual" ${state.settings.bookmarkSortMode === 'manual' ? 'selected' : ''}>Manual</option>
-                    <option value="name" ${state.settings.bookmarkSortMode === 'name' ? 'selected' : ''}>Name</option>
-                    <option value="lastUsed" ${state.settings.bookmarkSortMode === 'lastUsed' ? 'selected' : ''}>Last used</option>
-                    <option value="created" ${state.settings.bookmarkSortMode === 'created' ? 'selected' : ''}>Created</option>
-                  </select>
-                </label>
-                <button class="drawer-secondary-button sort-direction-button" data-sort-direction-toggle type="button" ${state.settings.bookmarkSortMode === 'manual' ? 'disabled' : ''}>${state.settings.bookmarkSortDirection === 'asc' ? 'Ascending' : 'Descending'}</button>
-              </div>
-            </div>
-            <div class="workspace-toolbar__meta">
-              ${renderSurfaceSummary(state, canvasItems.length, allCurrentFolderChildren.length)}
-            </div>
-          </div>
           <div class="bookmark-grid" data-limit-rows="${String(state.settings.favoritesRows > 0)}">
             ${canvasItems.map((item, index) => renderBookmarkTile(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'grid', resolvedCurrentFolder.id), isClipboardCutItem(state, item.id))).join('') || renderGridEmptyState(state)}
           </div>
@@ -571,7 +624,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
         ${state.settings.showDock ? `
           <aside class="bookmark-dock" aria-label="Dock">
             <div class="dock-inner">
-              ${state.settings.autoHideDock ? '<button class="dock-reveal-handle" type="button" aria-label="Reveal dock">Dock</button>' : ''}
+              ${state.settings.autoHideDock ? '<button class="dock-reveal-handle" type="button" aria-label="Reveal dock"><span class="dock-reveal-handle__line"></span></button>' : ''}
               <div class="dock-strip">
                 ${dockItems.map((item, index) => renderDockItem(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'dock', dockFolder?.id ?? ''), isClipboardCutItem(state, item.id))).join('') || renderDockEmptyState()}
               </div>
@@ -586,7 +639,6 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
           <div>
             <p class="eyebrow">Settings</p>
             <h2>Workspace controls</h2>
-            ${state.settingsFeedback.status !== 'idle' ? `<p class="drawer-feedback" data-status="${state.settingsFeedback.status}">${escapeHtml(state.settingsFeedback.message)}</p>` : ''}
           </div>
           <button class="drawer-close icon-button" type="button" aria-label="Close settings">${renderUiIcon('close')}</button>
         </div>
@@ -594,6 +646,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
           <nav class="drawer-nav">
             ${renderSectionButton('general', activeSection, 'General', 'grid')}
             ${renderSectionButton('appearance', activeSection, 'Theme', 'palette')}
+            ${renderSectionButton('help', activeSection, 'Help', 'link')}
           </nav>
           <section class="drawer-section">
             ${drawerSectionMarkup}
@@ -613,7 +666,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const accentHexInput = rootElement.querySelector<HTMLInputElement>('input[name="accentHex"]');
   const customBackgroundImageFileInput = rootElement.querySelector<HTMLInputElement>('input[name="customBackgroundImageFile"]');
   const currentFolderSearchInput = rootElement.querySelector<HTMLInputElement>('input[name="currentFolderSearch"]');
-  const bookmarkSortModeInput = rootElement.querySelector<HTMLSelectElement>('select[name="bookmarkSortMode"]');
+  const bookmarkSortOptionInput = rootElement.querySelector<HTMLSelectElement>('select[name="bookmarkSortOption"]');
   const backgroundOpacityInput = rootElement.querySelector<HTMLInputElement>('input[name="backgroundOpacity"]');
   const backgroundFitModeInput = rootElement.querySelector<HTMLSelectElement>('select[name="backgroundFitMode"]');
   const backgroundPositionModeInput = rootElement.querySelector<HTMLSelectElement>('select[name="backgroundPositionMode"]');
@@ -680,15 +733,6 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     });
   });
 
-  rootElement.querySelector<HTMLButtonElement>('[data-sort-direction-toggle]')?.addEventListener('click', async () => {
-    if (state.settings.bookmarkSortMode === 'manual') {
-      return;
-    }
-    await applySettingsPatch(rootElement, state, {
-      bookmarkSortDirection: state.settings.bookmarkSortDirection === 'asc' ? 'desc' : 'asc',
-    });
-  });
-
   currentFolderSearchInput?.addEventListener('input', () => {
     const selectionStart = currentFolderSearchInput.selectionStart ?? currentFolderSearchInput.value.length;
     const selectionEnd = currentFolderSearchInput.selectionEnd ?? currentFolderSearchInput.value.length;
@@ -703,12 +747,12 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     });
   });
 
-  bookmarkSortModeInput?.addEventListener('change', async () => {
-    const nextMode = bookmarkSortModeInput.value;
-    if (nextMode !== 'manual' && nextMode !== 'name' && nextMode !== 'lastUsed' && nextMode !== 'created') {
+  bookmarkSortOptionInput?.addEventListener('change', async () => {
+    const nextSortSettings = parseBookmarkSortOptionValue(bookmarkSortOptionInput.value);
+    if (!nextSortSettings) {
       return;
     }
-    await applySettingsPatch(rootElement, state, { bookmarkSortMode: nextMode });
+    await applySettingsPatch(rootElement, state, nextSortSettings, { silent: true });
   });
 
   const applyBookmarkCanvasBackgroundStyle = () => {
@@ -1088,7 +1132,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
 }
 
 async function switchSettingsSection(rootElement: HTMLDivElement, state: AppState, section: SettingsSectionId): Promise<void> {
-  await applySettingsPatch(rootElement, state, { settingsSection: section });
+  await applySettingsPatch(rootElement, state, { settingsSection: section }, { silent: true });
 }
 
 function dismissTransientUi(rootElement: HTMLDivElement, state: AppState): boolean {
