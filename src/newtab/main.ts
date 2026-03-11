@@ -187,6 +187,7 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
       return;
     }
     state.currentFolderId = folderId;
+    clearSelection(state);
     persistLastFolder(state.settings, folderId);
     await preloadVisibleIcons(state);
     renderApp(rootElement, state);
@@ -377,6 +378,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
 
     if (response.settings.rootFolderId && !isFolderDescendantOf(state.tree, state.currentFolderId, response.settings.rootFolderId)) {
       state.currentFolderId = response.settings.rootFolderId;
+      clearSelection(state);
       syncFolderHash(state.currentFolderId);
       persistLastFolder(state.settings, state.currentFolderId);
     }
@@ -648,6 +650,10 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
 
   folderButtons.forEach(button => {
     button.addEventListener('click', async event => {
+      if (button.dataset.gridItemId || button.dataset.dockItemId) {
+        return;
+      }
+
       if (button.dataset.suppressClick === 'true') {
         button.dataset.suppressClick = 'false';
         event.preventDefault();
@@ -689,6 +695,10 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
 
   linkButtons.forEach(button => {
     button.addEventListener('click', event => {
+      if (button.dataset.gridItemId || button.dataset.dockItemId) {
+        return;
+      }
+
       if (button.dataset.suppressClick === 'true') {
         button.dataset.suppressClick = 'false';
         event.preventDefault();
@@ -1539,7 +1549,10 @@ function setupSurfaceInteractions(
 
     const activeInteraction = interaction;
 
-    const surfaceRect = surfaceElement.getBoundingClientRect();
+    const marqueeBoundsElement = marqueeElement.parentElement instanceof HTMLElement
+      ? marqueeElement.parentElement
+      : surfaceElement;
+    const surfaceRect = marqueeBoundsElement.getBoundingClientRect();
     const left = Math.min(activeInteraction.startX, clientX) - surfaceRect.left;
     const top = Math.min(activeInteraction.startY, clientY) - surfaceRect.top;
     const width = Math.abs(clientX - activeInteraction.startX);
@@ -1649,6 +1662,38 @@ function setupSurfaceInteractions(
     button.addEventListener('dragstart', event => {
       event.preventDefault();
     });
+
+    button.addEventListener('click', async event => {
+      if (button.dataset.suppressClick === 'true') {
+        button.dataset.suppressClick = 'false';
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+
+      if (event.metaKey || event.ctrlKey) {
+        return;
+      }
+
+      const itemId = button.dataset[idDatasetKey];
+      if (!itemId) {
+        return;
+      }
+
+      const item = visibleItems.find(node => node.id === itemId);
+      if (!item) {
+        return;
+      }
+
+      if (item.url) {
+        openBookmark(item.url, state.settings.openLinksInNewTab);
+        return;
+      }
+
+      navigateToFolder(state, item.id);
+      await preloadVisibleIcons(state);
+      renderApp(rootElement, state);
+    });
   });
 
   surfaceElement.addEventListener('pointerdown', event => {
@@ -1705,7 +1750,6 @@ function setupSurfaceInteractions(
         : [itemId],
       dropTarget: null,
     };
-    surfaceElement.setPointerCapture(event.pointerId);
   });
 
   surfaceElement.addEventListener('pointermove', event => {
@@ -1724,6 +1768,10 @@ function setupSurfaceInteractions(
     }
 
     if (interaction.kind === 'pending-drag' && distance >= threshold) {
+      if (!surfaceElement.hasPointerCapture(event.pointerId)) {
+        surfaceElement.setPointerCapture(event.pointerId);
+      }
+
       interaction.kind = 'dragging';
       setSelection(state, interaction.dragIds, scope, interaction.dragIds[0] ?? null);
       setButtonSelectionState(interaction.dragIds);
