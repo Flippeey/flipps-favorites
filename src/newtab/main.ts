@@ -2,7 +2,8 @@ import './styles.css';
 import { sendRuntimeMessage } from '../shared/browser';
 import { messageTypes, type AppSettings, type BookmarkNode, type CreateBookmarkResponse, type GetBookmarkTreeResponse, type GetIconResponse, type GetSettingsResponse, type IconSearchCandidate, type InvalidateIconResponse, type MoveBookmarkResponse, type OpenBookmarkManagerResponse, type PatchSettingsResponse, type PingResponse, type RemoveBookmarkResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SearchIconsResponse, type SettingsSectionId, type SetIconOverrideFromUrlResponse, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../shared/messages';
 import { createClosedIconDialogState, createInitialAppState, type AppState, type AppStatus, type BookmarkClipboardState, type BookmarkItemKind, type ContextMenuState, type FolderActionTarget, type IconDialogState, type SelectionContextMenuState, type SelectionContextMenuTarget, type SelectionScope, type SelectionSurface, type SurfaceContextMenuTarget } from './app-state';
-import { collectFolderOptions, collectLinkOptions, collectVisibleBookmarks as collectVisibleBookmarkTargets, findBookmarkActionTargetById, findNodeById, getBookmarkActionTarget, getBookmarkLabelForUrl, getBreadcrumbs, getDefaultFolder, getDockFolder, getFolderNode, getHostname, getLibraryFolders, isFolderDescendantOf, resolveInitialFolderId, resolveInitialIconToolTarget, resolveIconToolTarget, type BookmarkActionTarget } from './bookmark-navigation';
+import { syncDerivedTree } from './derived-tree';
+import { findBookmarkActionTargetById, findNodeById, getBookmarkActionTarget, getBookmarkLabelForUrl, getFolderNode, getHostname, isFolderDescendantOf, resolveInitialFolderId, type BookmarkActionTarget } from './bookmark-navigation';
 import { escapeAttribute, escapeHtml } from './html';
 import { hydrateBookmarkIcons, queueVisibleIconPreload } from './icon-runtime';
 import { applyPendingIcon, applyResolvedIcon, getFaviconImageUrl, renderFaviconIconMarkup, renderIconPlaceholder, renderResolvedIconMarkup, renderBookmarkVisualIcon } from './icon-render';
@@ -61,6 +62,17 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
       state.contextMenu = null;
       renderApp(rootElement, state);
     }
+
+    void handleDelegatedClick(rootElement, state, event, target);
+  });
+
+  rootElement.addEventListener('contextmenu', event => {
+    const target = event.target as HTMLElement | null;
+    if (!target) {
+      return;
+    }
+
+    handleDelegatedContextMenu(rootElement, state, event, target);
   });
 
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
@@ -80,8 +92,370 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
   });
 }
 
+async function applySettingsPatch(rootElement: HTMLDivElement, state: AppState, patch: Partial<AppSettings>): Promise<void> {
+  const response = await sendRuntimeMessage<{ type: typeof messageTypes.patchSettings; patch: Partial<AppSettings> }, PatchSettingsResponse>({
+    type: messageTypes.patchSettings,
+    patch,
+  });
+
+  state.settings = response.settings;
+  syncDerivedTree(state);
+  state.iconToolTargetUrl = state.derivedTree.linkOptions.some(option => option.url === state.iconToolTargetUrl)
+    ? state.iconToolTargetUrl
+    : (state.derivedTree.linkOptions[0]?.url ?? '');
+  state.accentPicker = {
+    ...createAccentPickerState(response.settings.accentColor),
+    open: state.accentPicker.open,
+  };
+  state.drawerOpen = true;
+
+  if (!state.settings.rememberLastFolder) {
+    removeLastFolder();
+  } else {
+    persistLastFolder(state.settings, state.currentFolderId);
+  }
+
+  if (response.settings.rootFolderId && !isFolderDescendantOf(state.tree, state.currentFolderId, response.settings.rootFolderId)) {
+    navigateToFolder(state, response.settings.rootFolderId, 'replace');
+  }
+
+  renderStateAndWarmIcons(rootElement, state, renderApp);
+}
+
+async function handleDelegatedClick(rootElement: HTMLDivElement, state: AppState, event: MouseEvent, target: HTMLElement): Promise<void> {
+  const homeButton = target.closest<HTMLButtonElement>('.nav-side--left .library-home');
+  if (homeButton) {
+    const targetId = state.settings.rootFolderId || state.derivedTree.defaultFolder?.id;
+    if (targetId) {
+      navigateToFolderAndRender(rootElement, state, targetId, renderApp);
+    }
+    return;
+  }
+
+  if (target.closest('.dock-settings-link')) {
+    state.generalSubpage = 'dock';
+    await switchSettingsSection(rootElement, state, 'general');
+    return;
+  }
+
+  if (target.closest('.drawer-toggle')) {
+    openDrawer(rootElement, state);
+    return;
+  }
+
+  if (target.closest('.drawer-close, .drawer-scrim')) {
+    closeDrawer(rootElement, state);
+    return;
+  }
+
+  const themeModeButton = target.closest<HTMLButtonElement>('[data-theme-mode-option]');
+  if (themeModeButton) {
+    const nextMode = normalizeThemeMode(themeModeButton.dataset.themeModeOption);
+    await applySettingsPatch(rootElement, state, { themeMode: nextMode });
+    return;
+  }
+
+  const accentButton = target.closest<HTMLButtonElement>('[data-accent-option]');
+  if (accentButton) {
+    const accentOption = accentButton.dataset.accentOption;
+    if (!accentOption) {
+      return;
+    }
+
+    if (accentOption === 'custom') {
+      state.accentPicker = {
+        ...createAccentPickerState(state.settings.accentColor),
+        open: !state.accentPicker.open,
+      };
+      renderApp(rootElement, state);
+      return;
+    }
+
+    await applySettingsPatch(rootElement, state, { accentColor: accentOption });
+    return;
+  }
+
+  if (target.closest('.accent-picker-popover__close')) {
+    state.accentPicker = {
+      ...createAccentPickerState(state.settings.accentColor),
+      open: false,
+    };
+    renderApp(rootElement, state);
+    return;
+  }
+
+  if (target.closest('.background-upload-button')) {
+    rootElement.querySelector<HTMLInputElement>('input[name="customBackgroundImageFile"]')?.click();
+    return;
+  }
+
+  if (target.closest('.background-remove-button')) {
+    if (state.settings.customBackgroundImage) {
+      await applySettingsPatch(rootElement, state, { customBackgroundImage: '' });
+    }
+    return;
+  }
+
+  const generalSubpageButton = target.closest<HTMLButtonElement>('[data-general-subpage]');
+  if (generalSubpageButton) {
+    state.generalSubpage = normalizeGeneralSubpage(generalSubpageButton.dataset.generalSubpage);
+    renderApp(rootElement, state);
+    return;
+  }
+
+  const folderButton = target.closest<HTMLButtonElement>('[data-folder-id]');
+  if (folderButton && !folderButton.dataset.gridItemId && !folderButton.dataset.dockItemId) {
+    if (folderButton.dataset.suppressClick === 'true') {
+      folderButton.dataset.suppressClick = 'false';
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+
+    const folderId = folderButton.dataset.folderId;
+    if (folderId) {
+      navigateToFolderAndRender(rootElement, state, folderId, renderApp);
+    }
+    return;
+  }
+
+  const linkButton = target.closest<HTMLButtonElement>('[data-link-url]');
+  if (linkButton && !linkButton.dataset.gridItemId && !linkButton.dataset.dockItemId) {
+    if (linkButton.dataset.suppressClick === 'true') {
+      linkButton.dataset.suppressClick = 'false';
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+
+    if (event.metaKey || event.ctrlKey) {
+      return;
+    }
+
+    const url = linkButton.dataset.linkUrl;
+    if (url) {
+      openBookmark(url, state.settings.openLinksInNewTab);
+    }
+    return;
+  }
+
+  const contextMenuItem = target.closest<HTMLButtonElement>('[data-context-action]');
+  if (contextMenuItem) {
+    const action = contextMenuItem.dataset.contextAction;
+    const menuState = state.contextMenu;
+    if (!action || !menuState || contextMenuItem.disabled) {
+      return;
+    }
+
+    state.contextMenu = null;
+
+    switch (menuState.kind) {
+      case 'bookmark':
+        await handleBookmarkContextAction(rootElement, state, action, menuState.target);
+        return;
+      case 'folder':
+        await handleFolderContextAction(rootElement, state, action, menuState.target);
+        return;
+      case 'surface':
+        await handleSurfaceContextAction(rootElement, state, action, menuState.target);
+        return;
+      case 'selection':
+        await handleSelectionContextAction(rootElement, state, action, menuState.target);
+        return;
+    }
+  }
+
+  if (target.closest('.app-status__dismiss')) {
+    state.statusMessage = null;
+    renderApp(rootElement, state);
+    return;
+  }
+
+  if (target.closest('.icon-upload-trigger')) {
+    rootElement.querySelector<HTMLInputElement>('input[name="iconFile"]')?.click();
+    return;
+  }
+
+  if (target.closest('.icon-remove-button')) {
+    const bookmarkUrl = state.iconToolTargetUrl;
+    if (!bookmarkUrl) {
+      return;
+    }
+
+    const bookmarkTitle = getBookmarkLabelForUrl(state.tree, bookmarkUrl);
+    await sendRuntimeMessage<{
+      type: typeof messageTypes.removeIconOverride;
+      bookmarkUrl: string;
+      bookmarkTitle?: string;
+    }, RemoveIconOverrideResponse>({
+      type: messageTypes.removeIconOverride,
+      bookmarkUrl,
+      bookmarkTitle,
+    });
+
+    state.iconToolStatus = `Custom icon removed for ${bookmarkTitle || getHostname(bookmarkUrl)}.`;
+    renderApp(rootElement, state);
+    return;
+  }
+
+  if (target.closest('.icon-refresh-button')) {
+    const bookmarkUrl = state.iconToolTargetUrl;
+    if (!bookmarkUrl) {
+      return;
+    }
+
+    const bookmarkTitle = getBookmarkLabelForUrl(state.tree, bookmarkUrl);
+    await sendRuntimeMessage<{
+      type: typeof messageTypes.invalidateIcon;
+      bookmarkUrl: string;
+    }, InvalidateIconResponse>({
+      type: messageTypes.invalidateIcon,
+      bookmarkUrl,
+    });
+
+    state.iconToolStatus = `Icon cache refreshed for ${bookmarkTitle || getHostname(bookmarkUrl)}.`;
+    renderApp(rootElement, state);
+    return;
+  }
+
+  if (target.closest('.icon-dialog-scrim, .icon-dialog-close')) {
+    state.iconDialog = createClosedIconDialogState();
+    renderApp(rootElement, state);
+    return;
+  }
+
+  if (target.closest('.icon-dialog-search-button')) {
+    await searchIconDialog(rootElement, state, state.iconDialog.query);
+    return;
+  }
+
+  if (target.closest('.icon-dialog-upload-button')) {
+    rootElement.querySelector<HTMLInputElement>('input[name="iconDialogFile"]')?.click();
+    return;
+  }
+
+  if (target.closest('.icon-dialog-refresh-button')) {
+    const dialogTarget = state.iconDialog.target;
+    if (!dialogTarget) {
+      return;
+    }
+
+    await sendRuntimeMessage<{
+      type: typeof messageTypes.invalidateIcon;
+      bookmarkUrl: string;
+    }, InvalidateIconResponse>({
+      type: messageTypes.invalidateIcon,
+      bookmarkUrl: dialogTarget.url,
+    });
+
+    state.iconDialog.status = `Refreshed icon cache for ${dialogTarget.title || getHostname(dialogTarget.url)}.`;
+    state.iconDialog.statusKind = 'info';
+    await loadIconDialogPreview(state, dialogTarget, rootElement);
+    renderApp(rootElement, state);
+    return;
+  }
+
+  if (target.closest('.icon-dialog-remove-button')) {
+    const dialogTarget = state.iconDialog.target;
+    if (!dialogTarget) {
+      return;
+    }
+
+    await sendRuntimeMessage<{
+      type: typeof messageTypes.removeIconOverride;
+      bookmarkUrl: string;
+      bookmarkTitle?: string;
+    }, RemoveIconOverrideResponse>({
+      type: messageTypes.removeIconOverride,
+      bookmarkUrl: dialogTarget.url,
+      bookmarkTitle: dialogTarget.title,
+    });
+
+    state.iconDialog.status = `Removed custom icon for ${dialogTarget.title || getHostname(dialogTarget.url)}.`;
+    state.iconDialog.statusKind = 'info';
+    await loadIconDialogPreview(state, dialogTarget, rootElement);
+    renderApp(rootElement, state);
+    return;
+  }
+
+  const iconCandidateButton = target.closest<HTMLButtonElement>('[data-icon-candidate-url]');
+  if (iconCandidateButton) {
+    const dialogTarget = state.iconDialog.target;
+    const imageUrl = iconCandidateButton.dataset.iconCandidateUrl;
+    if (!dialogTarget || !imageUrl) {
+      return;
+    }
+
+    const response = await sendRuntimeMessage<{
+      type: typeof messageTypes.setIconOverrideFromUrl;
+      bookmarkUrl: string;
+      bookmarkTitle?: string;
+      imageUrl: string;
+      fileName?: string;
+    }, SetIconOverrideFromUrlResponse>({
+      type: messageTypes.setIconOverrideFromUrl,
+      bookmarkUrl: dialogTarget.url,
+      bookmarkTitle: dialogTarget.title,
+      imageUrl,
+    });
+
+    state.iconDialog.status = `Applied searched icon for ${dialogTarget.title || getHostname(dialogTarget.url)}.`;
+    state.iconDialog.statusKind = 'success';
+    state.iconDialog.previewIcon = response.icon;
+    state.resolvedIcons[dialogTarget.url] = response.icon;
+    renderApp(rootElement, state);
+    return;
+  }
+
+  const sectionButton = target.closest<HTMLButtonElement>('.section-button');
+  if (sectionButton) {
+    const section = sectionButton.dataset.section as SettingsSectionId;
+    if (section === 'general') {
+      state.generalSubpage = 'general';
+    }
+    await switchSettingsSection(rootElement, state, section);
+  }
+}
+
+function handleDelegatedContextMenu(rootElement: HTMLDivElement, state: AppState, event: MouseEvent, target: HTMLElement): void {
+  const folderCardButton = target.closest<HTMLButtonElement>('.folder-card[data-folder-id]');
+  if (folderCardButton && !folderCardButton.dataset.gridItemId && !folderCardButton.dataset.dockItemId) {
+    const menuTarget = getFolderActionTarget(folderCardButton);
+    if (!menuTarget) {
+      return;
+    }
+
+    event.preventDefault();
+    state.contextMenu = {
+      kind: 'folder',
+      x: event.clientX,
+      y: event.clientY,
+      target: menuTarget,
+    };
+    renderApp(rootElement, state);
+    return;
+  }
+
+  const linkButton = target.closest<HTMLButtonElement>('[data-link-url]');
+  if (linkButton && !linkButton.dataset.gridItemId && !linkButton.dataset.dockItemId) {
+    const menuTarget = getBookmarkActionTarget(linkButton);
+    if (!menuTarget) {
+      return;
+    }
+
+    event.preventDefault();
+    state.contextMenu = {
+      kind: 'bookmark',
+      x: event.clientX,
+      y: event.clientY,
+      target: menuTarget,
+    };
+    renderApp(rootElement, state);
+  }
+}
+
 function renderApp(rootElement: HTMLDivElement, state: AppState): void {
-  const currentFolder = getFolderNode(state.tree, state.currentFolderId) ?? getDefaultFolder(state.tree, state.settings.rootFolderId);
+  let currentFolder = state.derivedTree.currentFolder;
 
   if (!currentFolder) {
     rootElement.innerHTML = '<main class="empty-app"><h1>No bookmark folders available</h1><p>The dashboard needs at least one folder to render.</p></main>';
@@ -90,19 +464,23 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
 
   if (currentFolder.id !== state.currentFolderId) {
     state.currentFolderId = currentFolder.id;
+    syncDerivedTree(state);
+    currentFolder = state.derivedTree.currentFolder;
+    if (!currentFolder) {
+      rootElement.innerHTML = '<main class="empty-app"><h1>No bookmark folders available</h1><p>The dashboard needs at least one folder to render.</p></main>';
+      return;
+    }
     syncFolderHash(currentFolder.id, 'replace');
     persistLastFolder(state.settings, currentFolder.id);
   }
 
-  const libraryFolders = getLibraryFolders(state.tree);
-  const breadcrumbs = getBreadcrumbs(state.tree, currentFolder.id);
-  const canvasItems = currentFolder.children ?? [];
-  const dockFolder = getDockFolder(state.tree, state.settings);
-  const dockItems = dockFolder?.children ?? [];
+  const resolvedCurrentFolder = currentFolder;
+
+  const { libraryFolders, breadcrumbs, currentFolderChildren: canvasItems, dockFolder, dockItems, folderOptions } = state.derivedTree;
   const activeSection: SettingsSectionId = state.settings.settingsSection === 'appearance' ? 'appearance' : 'general';
   const themeMode = normalizeThemeMode(state.settings.themeMode);
   const drawerFolderOptions = state.drawerOpen && activeSection === 'general'
-    ? collectFolderOptions(state.tree)
+    ? folderOptions
     : [];
   const drawerSectionMarkup = state.drawerOpen
     ? renderDrawerSection(activeSection, state.settings, drawerFolderOptions, state.generalSubpage, state.accentPicker)
@@ -124,7 +502,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
       <main class="workspace">
         <section class="bookmark-canvas" aria-label="Bookmarks grid">
           <div class="bookmark-grid" data-limit-rows="${String(state.settings.favoritesRows > 0)}">
-            ${canvasItems.map((item, index) => renderBookmarkTile(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'grid', currentFolder.id), isClipboardCutItem(state, item.id))).join('') || '<p class="empty-state">This folder is empty.</p>'}
+            ${canvasItems.map((item, index) => renderBookmarkTile(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'grid', resolvedCurrentFolder.id), isClipboardCutItem(state, item.id))).join('') || '<p class="empty-state">This folder is empty.</p>'}
           </div>
           <div class="selection-marquee" hidden aria-hidden="true"></div>
         </section>
@@ -166,12 +544,6 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
 
   const drawer = rootElement.querySelector<HTMLElement>('.settings-drawer');
   const bookmarkCanvas = rootElement.querySelector<HTMLElement>('.bookmark-canvas');
-  const homeButton = rootElement.querySelector<HTMLButtonElement>('.library-home');
-  const dockSettingsButton = rootElement.querySelector<HTMLButtonElement>('.dock-settings-link');
-  const drawerScrim = rootElement.querySelector<HTMLButtonElement>('.drawer-scrim');
-  const toggleButton = rootElement.querySelector<HTMLButtonElement>('.drawer-toggle');
-  const closeButton = rootElement.querySelector<HTMLButtonElement>('.drawer-close');
-  const sectionButtons = rootElement.querySelectorAll<HTMLButtonElement>('.section-button');
   const useSystemThemeInput = rootElement.querySelector<HTMLInputElement>('input[name="useSystemTheme"]');
   const accentColorInput = rootElement.querySelector<HTMLInputElement>('input[name="accentColor"]');
   const accentHexInput = rootElement.querySelector<HTMLInputElement>('input[name="accentHex"]');
@@ -179,9 +551,6 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const backgroundOpacityInput = rootElement.querySelector<HTMLInputElement>('input[name="backgroundOpacity"]');
   const backgroundFitModeInput = rootElement.querySelector<HTMLSelectElement>('select[name="backgroundFitMode"]');
   const backgroundPositionModeInput = rootElement.querySelector<HTMLSelectElement>('select[name="backgroundPositionMode"]');
-  const backgroundUploadButton = rootElement.querySelector<HTMLButtonElement>('.background-upload-button');
-  const backgroundRemoveButton = rootElement.querySelector<HTMLButtonElement>('.background-remove-button');
-  const accentPickerClose = rootElement.querySelector<HTMLButtonElement>('.accent-picker-popover__close');
   const accentPickerHueInput = rootElement.querySelector<HTMLInputElement>('input[name="accentPickerHue"]');
   const accentPickerSaturationInput = rootElement.querySelector<HTMLInputElement>('input[name="accentPickerSaturation"]');
   const accentPickerLightnessInput = rootElement.querySelector<HTMLInputElement>('input[name="accentPickerLightness"]');
@@ -190,7 +559,6 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const rememberLastFolderInput = rootElement.querySelector<HTMLInputElement>('input[name="rememberLastFolder"]');
   const openLinksInNewTabInput = rootElement.querySelector<HTMLInputElement>('input[name="openLinksInNewTab"]');
   const showDockInput = rootElement.querySelector<HTMLInputElement>('input[name="showDock"]');
-  const generalSubpageButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-general-subpage]');
   const favoritesColumnsInput = rootElement.querySelector<HTMLInputElement>('input[name="favoritesColumns"]');
   const favoritesRowsInput = rootElement.querySelector<HTMLInputElement>('input[name="favoritesRows"]');
   const favoritesColumnGapInput = rootElement.querySelector<HTMLInputElement>('input[name="favoritesColumnGap"]');
@@ -200,31 +568,15 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const showBookmarkIconBackgroundInput = rootElement.querySelector<HTMLInputElement>('input[name="showBookmarkIconBackground"]');
   const iconToolTargetInput = rootElement.querySelector<HTMLSelectElement>('select[name="iconToolTargetUrl"]');
   const iconFileInput = rootElement.querySelector<HTMLInputElement>('input[name="iconFile"]');
-  const iconUploadTrigger = rootElement.querySelector<HTMLButtonElement>('.icon-upload-trigger');
-  const iconRemoveButton = rootElement.querySelector<HTMLButtonElement>('.icon-remove-button');
-  const iconRefreshButton = rootElement.querySelector<HTMLButtonElement>('.icon-refresh-button');
-  const appStatusDismissButton = rootElement.querySelector<HTMLButtonElement>('.app-status__dismiss');
-  const contextMenuItems = rootElement.querySelectorAll<HTMLButtonElement>('[data-context-action]');
-  const iconDialogDismiss = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-scrim');
-  const iconDialogClose = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-close');
   const iconDialogSearchInput = rootElement.querySelector<HTMLInputElement>('input[name="iconDialogSearchQuery"]');
   const iconDialogSearchButton = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-search-button');
   const iconDialogTitleInput = rootElement.querySelector<HTMLInputElement>('input[name="iconDialogTitle"]');
   const iconDialogUrlInput = rootElement.querySelector<HTMLInputElement>('input[name="iconDialogUrl"]');
   const iconDialogSaveButton = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-save-button');
-  const iconDialogUploadButton = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-upload-button');
   const iconDialogFileInput = rootElement.querySelector<HTMLInputElement>('input[name="iconDialogFile"]');
-  const iconDialogRefreshButton = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-refresh-button');
-  const iconDialogRemoveButton = rootElement.querySelector<HTMLButtonElement>('.icon-dialog-remove-button');
-  const iconDialogResultButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-icon-candidate-url]');
-  const themeModeButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-theme-mode-option]');
-  const accentButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-accent-option]');
   const bookmarkGrid = rootElement.querySelector<HTMLElement>('.bookmark-grid');
   const bookmarkDock = rootElement.querySelector<HTMLElement>('.bookmark-dock');
   const dockStrip = rootElement.querySelector<HTMLElement>('.dock-strip');
-  const folderButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-folder-id]');
-  const folderCardButtons = rootElement.querySelectorAll<HTMLButtonElement>('.folder-card[data-folder-id]');
-  const linkButtons = rootElement.querySelectorAll<HTMLButtonElement>('[data-link-url]');
 
   const applyBookmarkCanvasBackgroundStyle = () => {
     if (!bookmarkCanvas) {
@@ -248,80 +600,9 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
 
   applyBookmarkCanvasBackgroundStyle();
 
-  const applySettingsPatch = async (patch: Partial<AppSettings>) => {
-    const response = await sendRuntimeMessage<{ type: typeof messageTypes.patchSettings; patch: Partial<AppSettings> }, PatchSettingsResponse>({
-      type: messageTypes.patchSettings,
-      patch,
-    });
-
-    state.settings = response.settings;
-    state.accentPicker = {
-      ...createAccentPickerState(response.settings.accentColor),
-      open: state.accentPicker.open,
-    };
-    state.drawerOpen = true;
-
-    if (!state.settings.rememberLastFolder) {
-      removeLastFolder();
-    } else {
-      persistLastFolder(state.settings, state.currentFolderId);
-    }
-
-    if (response.settings.rootFolderId && !isFolderDescendantOf(state.tree, state.currentFolderId, response.settings.rootFolderId)) {
-      navigateToFolder(state, response.settings.rootFolderId, 'replace');
-    }
-
-    renderStateAndWarmIcons(rootElement, state, renderApp);
-  };
-
-  homeButton?.addEventListener('click', () => {
-    const targetId = state.settings.rootFolderId || getDefaultFolder(state.tree, state.settings.rootFolderId)?.id;
-    if (!targetId) {
-      return;
-    }
-    navigateToFolderAndRender(rootElement, state, targetId, renderApp);
-  });
-
-  dockSettingsButton?.addEventListener('click', async () => {
-    state.generalSubpage = 'dock';
-    await switchSettingsSection(rootElement, state, 'general');
-  });
-
-  toggleButton?.addEventListener('click', () => openDrawer(rootElement, state));
-  closeButton?.addEventListener('click', () => closeDrawer(rootElement, state));
-
-  drawerScrim?.addEventListener('click', () => closeDrawer(rootElement, state));
-
-  themeModeButtons.forEach(button => {
-    button.addEventListener('click', async () => {
-      const nextMode = normalizeThemeMode(button.dataset.themeModeOption);
-      await applySettingsPatch({ themeMode: nextMode });
-    });
-  });
-
   useSystemThemeInput?.addEventListener('change', async () => {
-    await applySettingsPatch({
+    await applySettingsPatch(rootElement, state, {
       themeMode: useSystemThemeInput.checked ? 'system' : resolveAppliedThemeMode(state.settings.themeMode),
-    });
-  });
-
-  accentButtons.forEach(button => {
-    button.addEventListener('click', async () => {
-      const accentOption = button.dataset.accentOption;
-      if (!accentOption) {
-        return;
-      }
-
-      if (accentOption === 'custom') {
-        state.accentPicker = {
-          ...createAccentPickerState(state.settings.accentColor),
-          open: !state.accentPicker.open,
-        };
-        renderApp(rootElement, state);
-        return;
-      }
-
-      await applySettingsPatch({ accentColor: accentOption });
     });
   });
 
@@ -334,15 +615,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
       ...createAccentPickerState(nextAccent),
       open: state.accentPicker.open,
     };
-    await applySettingsPatch({ accentColor: nextAccent });
-  });
-
-  accentPickerClose?.addEventListener('click', () => {
-    state.accentPicker = {
-      ...createAccentPickerState(state.settings.accentColor),
-      open: false,
-    };
-    renderApp(rootElement, state);
+    await applySettingsPatch(rootElement, state, { accentColor: nextAccent });
   });
 
   accentPickerHueInput?.addEventListener('input', () => {
@@ -402,10 +675,6 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     };
   });
 
-  backgroundUploadButton?.addEventListener('click', () => {
-    customBackgroundImageFileInput?.click();
-  });
-
   customBackgroundImageFileInput?.addEventListener('change', async () => {
     const file = customBackgroundImageFileInput.files?.[0];
     if (!file) {
@@ -413,15 +682,8 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     }
 
     const normalizedDataUrl = await normalizeBackgroundImage(file);
-    await applySettingsPatch({ customBackgroundImage: normalizedDataUrl });
+    await applySettingsPatch(rootElement, state, { customBackgroundImage: normalizedDataUrl });
     customBackgroundImageFileInput.value = '';
-  });
-
-  backgroundRemoveButton?.addEventListener('click', async () => {
-    if (!state.settings.customBackgroundImage) {
-      return;
-    }
-    await applySettingsPatch({ customBackgroundImage: '' });
   });
 
   backgroundOpacityInput?.addEventListener('input', () => {
@@ -448,7 +710,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     if (nextFitMode !== 'cover' && nextFitMode !== 'contain' && nextFitMode !== 'fill') {
       return;
     }
-    await applySettingsPatch({ backgroundFitMode: nextFitMode });
+    await applySettingsPatch(rootElement, state, { backgroundFitMode: nextFitMode });
   });
 
   backgroundPositionModeInput?.addEventListener('change', async () => {
@@ -456,62 +718,55 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     if (nextPositionMode !== 'center' && nextPositionMode !== 'top' && nextPositionMode !== 'bottom') {
       return;
     }
-    await applySettingsPatch({ backgroundPositionMode: nextPositionMode });
+    await applySettingsPatch(rootElement, state, { backgroundPositionMode: nextPositionMode });
   });
 
   rootFolderInput?.addEventListener('change', async () => {
-    await applySettingsPatch({ rootFolderId: rootFolderInput.value });
+    await applySettingsPatch(rootElement, state, { rootFolderId: rootFolderInput.value });
   });
 
   dockFolderInput?.addEventListener('change', async () => {
-    await applySettingsPatch({ dockFolderId: dockFolderInput.value });
+    await applySettingsPatch(rootElement, state, { dockFolderId: dockFolderInput.value });
   });
 
   rememberLastFolderInput?.addEventListener('change', async () => {
-    await applySettingsPatch({ rememberLastFolder: rememberLastFolderInput.checked });
+    await applySettingsPatch(rootElement, state, { rememberLastFolder: rememberLastFolderInput.checked });
   });
 
   openLinksInNewTabInput?.addEventListener('change', async () => {
-    await applySettingsPatch({ openLinksInNewTab: openLinksInNewTabInput.checked });
+    await applySettingsPatch(rootElement, state, { openLinksInNewTab: openLinksInNewTabInput.checked });
   });
 
   showDockInput?.addEventListener('change', async () => {
-    await applySettingsPatch({ showDock: showDockInput.checked });
+    await applySettingsPatch(rootElement, state, { showDock: showDockInput.checked });
   });
 
   favoritesColumnsInput?.addEventListener('change', async () => {
-    await applySettingsPatch({ favoritesColumns: Number(favoritesColumnsInput.value) });
+    await applySettingsPatch(rootElement, state, { favoritesColumns: Number(favoritesColumnsInput.value) });
   });
 
   favoritesRowsInput?.addEventListener('change', async () => {
-    await applySettingsPatch({ favoritesRows: Number(favoritesRowsInput.value) });
+    await applySettingsPatch(rootElement, state, { favoritesRows: Number(favoritesRowsInput.value) });
   });
 
   favoritesColumnGapInput?.addEventListener('change', async () => {
-    await applySettingsPatch({ favoritesColumnGap: Number(favoritesColumnGapInput.value) });
+    await applySettingsPatch(rootElement, state, { favoritesColumnGap: Number(favoritesColumnGapInput.value) });
   });
 
   favoritesRowGapInput?.addEventListener('change', async () => {
-    await applySettingsPatch({ favoritesRowGap: Number(favoritesRowGapInput.value) });
+    await applySettingsPatch(rootElement, state, { favoritesRowGap: Number(favoritesRowGapInput.value) });
   });
 
   bookmarkTileWidthInput?.addEventListener('change', async () => {
-    await applySettingsPatch({ bookmarkTileWidth: Number(bookmarkTileWidthInput.value) });
+    await applySettingsPatch(rootElement, state, { bookmarkTileWidth: Number(bookmarkTileWidthInput.value) });
   });
 
   bookmarkIconSizeInput?.addEventListener('change', async () => {
-    await applySettingsPatch({ bookmarkIconSize: Number(bookmarkIconSizeInput.value) });
+    await applySettingsPatch(rootElement, state, { bookmarkIconSize: Number(bookmarkIconSizeInput.value) });
   });
 
   showBookmarkIconBackgroundInput?.addEventListener('change', async () => {
-    await applySettingsPatch({ showBookmarkIconBackground: showBookmarkIconBackgroundInput.checked });
-  });
-
-  generalSubpageButtons.forEach(button => {
-    button.addEventListener('click', () => {
-      state.generalSubpage = normalizeGeneralSubpage(button.dataset.generalSubpage);
-      renderApp(rootElement, state);
-    });
+    await applySettingsPatch(rootElement, state, { showBookmarkIconBackground: showBookmarkIconBackgroundInput.checked });
   });
 
   [
@@ -533,93 +788,6 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     });
   });
 
-  folderButtons.forEach(button => {
-    button.addEventListener('click', event => {
-      if (button.dataset.gridItemId || button.dataset.dockItemId) {
-        return;
-      }
-
-      if (button.dataset.suppressClick === 'true') {
-        button.dataset.suppressClick = 'false';
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        return;
-      }
-
-      const folderId = button.dataset.folderId;
-      if (!folderId) {
-        return;
-      }
-      navigateToFolderAndRender(rootElement, state, folderId, renderApp);
-    });
-  });
-
-  folderCardButtons.forEach(button => {
-    button.addEventListener('contextmenu', event => {
-      if (button.dataset.gridItemId || button.dataset.dockItemId) {
-        return;
-      }
-
-      const target = getFolderActionTarget(button);
-      if (!target) {
-        return;
-      }
-
-      event.preventDefault();
-      state.contextMenu = {
-        kind: 'folder',
-        x: event.clientX,
-        y: event.clientY,
-        target,
-      };
-      renderApp(rootElement, state);
-    });
-  });
-
-  linkButtons.forEach(button => {
-    button.addEventListener('click', event => {
-      if (button.dataset.gridItemId || button.dataset.dockItemId) {
-        return;
-      }
-
-      if (button.dataset.suppressClick === 'true') {
-        button.dataset.suppressClick = 'false';
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        return;
-      }
-
-      if (event.metaKey || event.ctrlKey) {
-        return;
-      }
-
-      const url = button.dataset.linkUrl;
-      if (!url) {
-        return;
-      }
-      openBookmark(url, state.settings.openLinksInNewTab);
-    });
-
-    button.addEventListener('contextmenu', event => {
-      if (button.dataset.gridItemId || button.dataset.dockItemId) {
-        return;
-      }
-
-      const target = getBookmarkActionTarget(button);
-      if (!target) {
-        return;
-      }
-      event.preventDefault();
-      state.contextMenu = {
-        kind: 'bookmark',
-        x: event.clientX,
-        y: event.clientY,
-        target,
-      };
-      renderApp(rootElement, state);
-    });
-  });
-
   bookmarkCanvas?.addEventListener('contextmenu', event => {
     const target = event.target as HTMLElement | null;
     if (target?.closest('[data-link-url], .folder-card[data-folder-id]')) {
@@ -627,7 +795,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     }
 
     event.preventDefault();
-    const gridScope: SelectionScope = { surface: 'grid', folderId: currentFolder.id };
+    const gridScope: SelectionScope = { surface: 'grid', folderId: resolvedCurrentFolder.id };
     if (state.selectedIds.length > 1 && isSameScope(state.selectionScope, gridScope)) {
       state.contextMenu = createSelectionContextMenuState(state, event.clientX, event.clientY, gridScope);
       renderApp(rootElement, state);
@@ -639,8 +807,8 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
       x: event.clientX,
       y: event.clientY,
       target: {
-        id: currentFolder.id,
-        title: currentFolder.title || 'Untitled',
+        id: resolvedCurrentFolder.id,
+        title: resolvedCurrentFolder.title || 'Untitled',
         surface: 'grid',
       },
     };
@@ -674,45 +842,9 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     renderApp(rootElement, state);
   });
 
-  contextMenuItems.forEach(button => {
-    button.addEventListener('click', async () => {
-      const action = button.dataset.contextAction;
-      const menuState = state.contextMenu;
-      if (!action || !menuState || button.disabled) {
-        return;
-      }
-
-      state.contextMenu = null;
-
-      switch (menuState.kind) {
-        case 'bookmark':
-          await handleBookmarkContextAction(rootElement, state, action, menuState.target);
-          return;
-        case 'folder':
-          await handleFolderContextAction(rootElement, state, action, menuState.target);
-          return;
-        case 'surface':
-          await handleSurfaceContextAction(rootElement, state, action, menuState.target);
-          return;
-        case 'selection':
-          await handleSelectionContextAction(rootElement, state, action, menuState.target);
-          return;
-      }
-    });
-  });
-
-  appStatusDismissButton?.addEventListener('click', () => {
-    state.statusMessage = null;
-    renderApp(rootElement, state);
-  });
-
   iconToolTargetInput?.addEventListener('change', () => {
     state.iconToolTargetUrl = iconToolTargetInput.value;
     state.iconToolStatus = '';
-  });
-
-  iconUploadTrigger?.addEventListener('click', () => {
-    iconFileInput?.click();
   });
 
   iconFileInput?.addEventListener('change', async () => {
@@ -745,55 +877,6 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     renderApp(rootElement, state);
   });
 
-  iconRemoveButton?.addEventListener('click', async () => {
-    const bookmarkUrl = state.iconToolTargetUrl;
-    if (!bookmarkUrl) {
-      return;
-    }
-
-    const bookmarkTitle = getBookmarkLabelForUrl(state.tree, bookmarkUrl);
-    await sendRuntimeMessage<{
-      type: typeof messageTypes.removeIconOverride;
-      bookmarkUrl: string;
-      bookmarkTitle?: string;
-    }, RemoveIconOverrideResponse>({
-      type: messageTypes.removeIconOverride,
-      bookmarkUrl,
-      bookmarkTitle,
-    });
-
-    state.iconToolStatus = `Custom icon removed for ${bookmarkTitle || getHostname(bookmarkUrl)}.`;
-    renderApp(rootElement, state);
-  });
-
-  iconRefreshButton?.addEventListener('click', async () => {
-    const bookmarkUrl = state.iconToolTargetUrl;
-    if (!bookmarkUrl) {
-      return;
-    }
-
-    const bookmarkTitle = getBookmarkLabelForUrl(state.tree, bookmarkUrl);
-    await sendRuntimeMessage<{
-      type: typeof messageTypes.invalidateIcon;
-      bookmarkUrl: string;
-    }, InvalidateIconResponse>({
-      type: messageTypes.invalidateIcon,
-      bookmarkUrl,
-    });
-
-    state.iconToolStatus = `Icon cache refreshed for ${bookmarkTitle || getHostname(bookmarkUrl)}.`;
-    renderApp(rootElement, state);
-  });
-
-  iconDialogDismiss?.addEventListener('click', () => {
-    state.iconDialog = createClosedIconDialogState();
-    renderApp(rootElement, state);
-  });
-
-  iconDialogClose?.addEventListener('click', () => {
-    state.iconDialog = createClosedIconDialogState();
-    renderApp(rootElement, state);
-  });
 
   iconDialogSearchInput?.addEventListener('input', () => {
     state.iconDialog.query = iconDialogSearchInput.value;
@@ -927,14 +1010,6 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     await searchIconDialog(rootElement, state, state.iconDialog.query);
   });
 
-  iconDialogSearchButton?.addEventListener('click', async () => {
-    await searchIconDialog(rootElement, state, state.iconDialog.query);
-  });
-
-  iconDialogUploadButton?.addEventListener('click', () => {
-    iconDialogFileInput?.click();
-  });
-
   iconDialogFileInput?.addEventListener('change', async () => {
     const file = iconDialogFileInput.files?.[0];
     const target = state.iconDialog.target;
@@ -973,88 +1048,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     renderApp(rootElement, state);
   });
 
-  iconDialogRefreshButton?.addEventListener('click', async () => {
-    const target = state.iconDialog.target;
-    if (!target) {
-      return;
-    }
-
-    await sendRuntimeMessage<{
-      type: typeof messageTypes.invalidateIcon;
-      bookmarkUrl: string;
-    }, InvalidateIconResponse>({
-      type: messageTypes.invalidateIcon,
-      bookmarkUrl: target.url,
-    });
-
-    state.iconDialog.status = `Refreshed icon cache for ${target.title || getHostname(target.url)}.`;
-    state.iconDialog.statusKind = 'info';
-    await loadIconDialogPreview(state, target, rootElement);
-    renderApp(rootElement, state);
-  });
-
-  iconDialogRemoveButton?.addEventListener('click', async () => {
-    const target = state.iconDialog.target;
-    if (!target) {
-      return;
-    }
-
-    await sendRuntimeMessage<{
-      type: typeof messageTypes.removeIconOverride;
-      bookmarkUrl: string;
-      bookmarkTitle?: string;
-    }, RemoveIconOverrideResponse>({
-      type: messageTypes.removeIconOverride,
-      bookmarkUrl: target.url,
-      bookmarkTitle: target.title,
-    });
-
-    state.iconDialog.status = `Removed custom icon for ${target.title || getHostname(target.url)}.`;
-    state.iconDialog.statusKind = 'info';
-    await loadIconDialogPreview(state, target, rootElement);
-    renderApp(rootElement, state);
-  });
-
-  iconDialogResultButtons.forEach(button => {
-    button.addEventListener('click', async () => {
-      const target = state.iconDialog.target;
-      const imageUrl = button.dataset.iconCandidateUrl;
-      if (!target || !imageUrl) {
-        return;
-      }
-
-      const response = await sendRuntimeMessage<{
-        type: typeof messageTypes.setIconOverrideFromUrl;
-        bookmarkUrl: string;
-        bookmarkTitle?: string;
-        imageUrl: string;
-        fileName?: string;
-      }, SetIconOverrideFromUrlResponse>({
-        type: messageTypes.setIconOverrideFromUrl,
-        bookmarkUrl: target.url,
-        bookmarkTitle: target.title,
-        imageUrl,
-      });
-
-      state.iconDialog.status = `Applied searched icon for ${target.title || getHostname(target.url)}.`;
-      state.iconDialog.statusKind = 'success';
-      state.iconDialog.previewIcon = response.icon;
-      state.resolvedIcons[target.url] = response.icon;
-      renderApp(rootElement, state);
-    });
-  });
-
-  sectionButtons.forEach(button => {
-    button.addEventListener('click', async () => {
-      const section = button.dataset.section as SettingsSectionId;
-      if (section === 'general') {
-        state.generalSubpage = 'general';
-      }
-      await switchSettingsSection(rootElement, state, section);
-    });
-  });
-
-  setupGridInteractions(rootElement, state, bookmarkCanvas, bookmarkGrid, currentFolder);
+  setupGridInteractions(rootElement, state, bookmarkCanvas, bookmarkGrid, resolvedCurrentFolder);
   setupDockInteractions(rootElement, state, bookmarkDock, dockStrip, dockFolder);
 
   hydrateBookmarkIcons(rootElement, state);

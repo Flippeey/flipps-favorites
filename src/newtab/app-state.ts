@@ -1,10 +1,12 @@
 import type { AppSettings, BookmarkNode, IconSearchCandidate, ResolvedIcon } from '../shared/messages';
 import { createAccentPickerState, type AccentPickerState, type GeneralSettingsSubpage } from '../settings';
+import { deriveTreeState, type DerivedTreeState } from './derived-tree';
 import { resolveInitialFolderId, resolveInitialIconToolTarget, type BookmarkActionTarget } from './bookmark-navigation';
 
 export interface AppState {
   settings: AppSettings;
   tree: BookmarkNode[];
+  derivedTree: DerivedTreeState;
   currentFolderId: string;
   drawerOpen: boolean;
   generalSubpage: GeneralSettingsSubpage;
@@ -109,10 +111,12 @@ export function createInitialAppState(args: {
   getFolderIdFromHash: () => string | null;
 }): AppState {
   const { settings, tree, getLastFolder, getFolderIdFromHash } = args;
+  const currentFolderId = resolveInitialFolderId(settings, tree, getLastFolder, getFolderIdFromHash);
   return {
     settings,
     tree,
-    currentFolderId: resolveInitialFolderId(settings, tree, getLastFolder, getFolderIdFromHash),
+    derivedTree: deriveTreeState(tree, settings, currentFolderId),
+    currentFolderId,
     drawerOpen: false,
     generalSubpage: 'general',
     accentPicker: createAccentPickerState(settings.accentColor),

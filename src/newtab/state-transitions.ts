@@ -1,6 +1,7 @@
 import { sendRuntimeMessage } from '../shared/browser';
 import { messageTypes, type BookmarkNode, type GetBookmarkTreeResponse } from '../shared/messages';
 import { createClosedIconDialogState, type AppState, type BookmarkClipboardState } from './app-state';
+import { syncDerivedTree } from './derived-tree';
 import { findBookmarkActionTargetById, findNodeById, getFolderNode, resolveInitialFolderId } from './bookmark-navigation';
 import { queueVisibleIconPreload } from './icon-runtime';
 import { getFolderIdFromHash, getLastFolder, persistLastFolder, syncFolderHash } from './runtime-helpers';
@@ -29,6 +30,7 @@ export function navigateToFolder(state: AppState, folderId: string, mode: 'repla
     syncFolderHash(folderId, mode);
   }
   persistLastFolder(state.settings, folderId);
+  syncDerivedTree(state);
   return true;
 }
 
@@ -50,6 +52,8 @@ export async function refreshBookmarkTree(state: AppState): Promise<void> {
   if (!getFolderNode(state.tree, state.currentFolderId)) {
     state.currentFolderId = resolveInitialFolderId(state.settings, state.tree, getLastFolder, getFolderIdFromHash);
   }
+
+  syncDerivedTree(state);
 
   if (state.iconDialog.target) {
     const nextTarget = findBookmarkActionTargetById(state.tree, state.iconDialog.target.id);

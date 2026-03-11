@@ -35,7 +35,7 @@ export function getFolderChildren(state: AppState, folderId: string): BookmarkNo
 }
 
 export function getCurrentFolderChildren(state: AppState): BookmarkNode[] {
-  return (getFolderNode(state.tree, state.currentFolderId) ?? getDefaultFolder(state.tree, state.settings.rootFolderId))?.children ?? [];
+  return state.derivedTree.currentFolderChildren;
 }
 
 export function isItemSelected(state: AppState, itemId: string, surface: SelectionSurface, folderId: string): boolean {
