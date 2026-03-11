@@ -4,18 +4,29 @@ import { createClosedIconDialogState, type AppState, type BookmarkClipboardState
 import { syncDerivedTree } from './derived-tree';
 import { findBookmarkActionTargetById, findNodeById, getFolderNode, resolveInitialFolderId } from './bookmark-navigation';
 import { queueVisibleIconPreload } from './icon-runtime';
+import { measureAsync, measureSync } from './performance';
 import { getFolderIdFromHash, getLastFolder, persistLastFolder, syncFolderHash } from './runtime-helpers';
 import { clearSelection, normalizeSelection } from './selection-state';
 
 export type RenderAppFn = (rootElement: HTMLDivElement, state: AppState) => void;
 
 export function renderState(rootElement: HTMLDivElement, state: AppState, renderApp: RenderAppFn): void {
-  renderApp(rootElement, state);
+  measureSync('render-state', {
+    folderId: state.currentFolderId,
+    drawerOpen: state.drawerOpen,
+  }, () => {
+    renderApp(rootElement, state);
+  });
 }
 
 export function renderStateAndWarmIcons(rootElement: HTMLDivElement, state: AppState, renderApp: RenderAppFn): void {
-  renderApp(rootElement, state);
-  queueVisibleIconPreload(state);
+  measureSync('render-state-and-warm-icons', {
+    folderId: state.currentFolderId,
+    visibleIconTargets: state.derivedTree.visibleIconTargets.length,
+  }, () => {
+    renderApp(rootElement, state);
+    queueVisibleIconPreload(state);
+  });
 }
 
 export function navigateToFolder(state: AppState, folderId: string, mode: 'replace' | 'push' | 'none' = 'push'): boolean {
@@ -35,47 +46,61 @@ export function navigateToFolder(state: AppState, folderId: string, mode: 'repla
 }
 
 export function navigateToFolderAndRender(rootElement: HTMLDivElement, state: AppState, folderId: string, renderApp: RenderAppFn, mode: 'replace' | 'push' | 'none' = 'push'): boolean {
-  if (!navigateToFolder(state, folderId, mode)) {
-    return false;
-  }
+  return measureSync('navigate-to-folder', {
+    folderId,
+    mode,
+  }, () => {
+    if (!navigateToFolder(state, folderId, mode)) {
+      return false;
+    }
 
-  renderStateAndWarmIcons(rootElement, state, renderApp);
-  return true;
+    renderStateAndWarmIcons(rootElement, state, renderApp);
+    return true;
+  });
 }
 
 export async function refreshBookmarkTree(state: AppState): Promise<void> {
-  const response = await sendRuntimeMessage<{ type: typeof messageTypes.getBookmarkTree }, GetBookmarkTreeResponse>({
-    type: messageTypes.getBookmarkTree,
-  });
-  state.tree = response.tree;
+  await measureAsync('refresh-bookmark-tree', {
+    folderId: state.currentFolderId,
+  }, async () => {
+    const response = await sendRuntimeMessage<{ type: typeof messageTypes.getBookmarkTree }, GetBookmarkTreeResponse>({
+      type: messageTypes.getBookmarkTree,
+    });
+    state.tree = response.tree;
 
-  if (!getFolderNode(state.tree, state.currentFolderId)) {
-    state.currentFolderId = resolveInitialFolderId(state.settings, state.tree, getLastFolder, getFolderIdFromHash);
-  }
-
-  syncDerivedTree(state);
-
-  if (state.iconDialog.target) {
-    const nextTarget = findBookmarkActionTargetById(state.tree, state.iconDialog.target.id);
-    if (nextTarget) {
-      state.iconDialog.target = nextTarget;
-    } else {
-      state.iconDialog = createClosedIconDialogState();
+    if (!getFolderNode(state.tree, state.currentFolderId)) {
+      state.currentFolderId = resolveInitialFolderId(state.settings, state.tree, getLastFolder, getFolderIdFromHash);
     }
-  }
 
-  state.clipboard = refreshFolderClipboard(state.tree, state.clipboard);
-  normalizeSelection(state);
+    syncDerivedTree(state);
+
+    if (state.iconDialog.target) {
+      const nextTarget = findBookmarkActionTargetById(state.tree, state.iconDialog.target.id);
+      if (nextTarget) {
+        state.iconDialog.target = nextTarget;
+      } else {
+        state.iconDialog = createClosedIconDialogState();
+      }
+    }
+
+    state.clipboard = refreshFolderClipboard(state.tree, state.clipboard);
+    normalizeSelection(state);
+  });
 }
 
 export async function refreshTreeAndRender(rootElement: HTMLDivElement, state: AppState, renderApp: RenderAppFn, options: { warmIcons?: boolean } = {}): Promise<void> {
-  await refreshBookmarkTree(state);
-  if (options.warmIcons) {
-    renderStateAndWarmIcons(rootElement, state, renderApp);
-    return;
-  }
+  await measureAsync('refresh-tree-and-render', {
+    folderId: state.currentFolderId,
+    warmIcons: Boolean(options.warmIcons),
+  }, async () => {
+    await refreshBookmarkTree(state);
+    if (options.warmIcons) {
+      renderStateAndWarmIcons(rootElement, state, renderApp);
+      return;
+    }
 
-  renderState(rootElement, state, renderApp);
+    renderState(rootElement, state, renderApp);
+  });
 }
 
 export function cloneBookmarkNode(node: BookmarkNode): BookmarkNode {
