@@ -233,7 +233,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
       <main class="workspace">
         <section class="bookmark-canvas" aria-label="Bookmarks grid">
           <div class="bookmark-grid" data-limit-rows="${String(state.settings.favoritesRows > 0)}">
-            ${canvasItems.map((item, index) => renderBookmarkTile(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'grid', currentFolder.id))).join('') || '<p class="empty-state">This folder is empty.</p>'}
+            ${canvasItems.map((item, index) => renderBookmarkTile(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'grid', currentFolder.id), isClipboardCutItem(state, item.id))).join('') || '<p class="empty-state">This folder is empty.</p>'}
           </div>
           <div class="selection-marquee" hidden aria-hidden="true"></div>
         </section>
@@ -241,7 +241,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
           <aside class="bookmark-dock" aria-label="Dock">
             <div class="dock-inner">
               <div class="dock-strip">
-                ${dockItems.map((item, index) => renderDockItem(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'dock', dockFolder?.id ?? ''))).join('') || '<p class="dock-empty">Choose a dock folder in settings.</p>'}
+                ${dockItems.map((item, index) => renderDockItem(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'dock', dockFolder?.id ?? ''), isClipboardCutItem(state, item.id))).join('') || '<p class="dock-empty">Choose a dock folder in settings.</p>'}
               </div>
               <div class="selection-marquee selection-marquee--dock" hidden aria-hidden="true"></div>
             </div>
@@ -1490,6 +1490,8 @@ function setupSurfaceInteractions(
   }
 
   const scope: SelectionScope = { surface, folderId };
+  const shellElement = rootElement.querySelector<HTMLElement>('.shell');
+  const dragPreviewElement = ensureDragPreviewElement(shellElement);
   const marqueeElement = surfaceElement.querySelector<HTMLElement>(marqueeSelector);
   const itemButtons = Array.from(itemContainer.querySelectorAll<HTMLButtonElement>(itemSelector));
   const folderButtons = Array.from(itemContainer.querySelectorAll<HTMLButtonElement>(`.folder-card${itemSelector}`));
@@ -1528,7 +1530,49 @@ function setupSurfaceInteractions(
     itemButtons.forEach(button => {
       delete button.dataset.dropPosition;
       delete button.dataset.dragSource;
+      delete button.dataset.dragLead;
+      delete button.dataset.dragCount;
     });
+
+    if (shellElement) {
+      delete shellElement.dataset.dragActive;
+      delete shellElement.dataset.dragSurface;
+      delete shellElement.dataset.dragCount;
+    }
+  };
+
+  const hideDragPreview = () => {
+    if (!dragPreviewElement) {
+      return;
+    }
+
+    dragPreviewElement.hidden = true;
+    dragPreviewElement.removeAttribute('data-visible');
+    dragPreviewElement.style.removeProperty('left');
+    dragPreviewElement.style.removeProperty('top');
+  };
+
+  const updateDragPreview = (clientX: number, clientY: number, dragIds: string[]) => {
+    if (!dragPreviewElement) {
+      return;
+    }
+
+    const dragNodes = visibleItems.filter(node => dragIds.includes(node.id));
+    const visualElement = dragPreviewElement.querySelector<HTMLElement>('[data-drag-preview-visual]');
+    const countElement = dragPreviewElement.querySelector<HTMLElement>('[data-drag-preview-count]');
+
+    if (visualElement) {
+      visualElement.innerHTML = renderDragPreviewVisuals(dragNodes, state.resolvedIcons);
+    }
+    if (countElement) {
+      countElement.textContent = String(dragNodes.length);
+      countElement.hidden = dragNodes.length <= 1;
+    }
+
+    dragPreviewElement.hidden = false;
+    dragPreviewElement.dataset.visible = 'true';
+    dragPreviewElement.style.left = `${clientX + 18}px`;
+    dragPreviewElement.style.top = `${clientY + 18}px`;
   };
 
   const hideMarquee = () => {
@@ -1585,9 +1629,20 @@ function setupSurfaceInteractions(
 
     const dragIdSet = new Set(interaction.dragIds);
     clearDropIndicator();
+    if (shellElement) {
+      shellElement.dataset.dragActive = 'true';
+      shellElement.dataset.dragSurface = surface;
+      shellElement.dataset.dragCount = String(interaction.dragIds.length);
+    }
     interaction.dragIds.forEach(id => {
       buttonById.get(id)?.setAttribute('data-drag-source', 'true');
     });
+    const leadButton = buttonById.get(interaction.dragIds[0] || '');
+    leadButton?.setAttribute('data-drag-lead', 'true');
+    if (leadButton) {
+      leadButton.dataset.dragCount = String(interaction.dragIds.length);
+    }
+    updateDragPreview(clientX, clientY, interaction.dragIds);
 
     const hoveredButton = (document.elementFromPoint(clientX, clientY) as HTMLElement | null)?.closest<HTMLButtonElement>(itemSelector);
     if (!hoveredButton) {
@@ -1624,6 +1679,7 @@ function setupSurfaceInteractions(
 
   const finishInteraction = async () => {
     hideMarquee();
+    hideDragPreview();
     if (!interaction) {
       return;
     }
@@ -1850,6 +1906,68 @@ function isSameScope(left: SelectionScope | null, right: SelectionScope | null):
   return Boolean(left && right && left.surface === right.surface && left.folderId === right.folderId);
 }
 
+function ensureDragPreviewElement(shellElement: HTMLElement | null): HTMLElement | null {
+  if (!shellElement) {
+    return null;
+  }
+
+  const existing = shellElement.querySelector<HTMLElement>('.drag-cursor-preview');
+  if (existing) {
+    return existing;
+  }
+
+  const element = document.createElement('div');
+  element.className = 'drag-cursor-preview';
+  element.hidden = true;
+  element.setAttribute('aria-hidden', 'true');
+  element.innerHTML = `
+    <div class="drag-cursor-preview__visual" data-drag-preview-visual></div>
+    <span class="drag-cursor-preview__count" data-drag-preview-count hidden>1</span>
+  `;
+  shellElement.appendChild(element);
+  return element;
+}
+
+function renderDragPreviewVisuals(nodes: BookmarkNode[], resolvedIcons: Record<string, ResolvedIcon>): string {
+  return nodes.slice(0, 3).map((node, index) => renderDragPreviewVisual(node, resolvedIcons, index)).join('');
+}
+
+function renderDragPreviewVisual(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>, index: number): string {
+  const offsetStyle = `style="--drag-preview-offset:${String(index)};"`;
+  if (node.url) {
+    const label = node.title || getHostname(node.url);
+    const resolvedIcon = resolvedIcons[node.url];
+    const visualMarkup = renderBookmarkVisualIcon(node.url, label, resolvedIcon, 'dock');
+    return `<span class="drag-cursor-preview__thumb drag-cursor-preview__thumb--bookmark" ${offsetStyle}>${visualMarkup}</span>`;
+  }
+
+  return `
+    <span class="drag-cursor-preview__thumb drag-cursor-preview__thumb--folder" ${offsetStyle}>
+      <span class="drag-cursor-preview__folder-grid">
+        ${renderDragPreviewFolderCells(node, resolvedIcons)}
+      </span>
+    </span>
+  `;
+}
+
+function renderDragPreviewFolderCells(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>): string {
+  const previewItems = getFolderPreviewItems(node, 'tile').slice(0, 4);
+  if (!previewItems.length) {
+    return `<span class="drag-cursor-preview__folder-cell drag-cursor-preview__folder-cell--empty">${escapeHtml(getInitial(node.title || 'Folder'))}</span>`;
+  }
+
+  return previewItems.map(child => {
+    if (child.url) {
+      const label = child.title || getHostname(child.url);
+      const resolvedIcon = resolvedIcons[child.url];
+      return `<span class="drag-cursor-preview__folder-cell drag-cursor-preview__folder-cell--bookmark">${renderBookmarkVisualIcon(child.url, label, resolvedIcon, 'dock')}</span>`;
+    }
+
+    const childCount = child.children?.length ?? 0;
+    return `<span class="drag-cursor-preview__folder-cell drag-cursor-preview__folder-cell--folder">${escapeHtml(childCount > 0 ? String(childCount) : getInitial(child.title || 'Folder'))}</span>`;
+  }).join('');
+}
+
 function rectsIntersect(a: DOMRect, b: { left: number; right: number; top: number; bottom: number }): boolean {
   return a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top;
 }
@@ -2011,6 +2129,10 @@ function collectDockPreviewBookmarkTargets(tree: BookmarkNode[], settings: AppSe
   return targets;
 }
 
+function isClipboardCutItem(state: AppState, itemId: string): boolean {
+  return state.clipboard?.mode === 'cut' && state.clipboard.items.some(item => item.id === itemId);
+}
+
 function getDockPreviewItems(node: BookmarkNode): BookmarkNode[] {
   return (node.children ?? []).slice(0, 6);
 }
@@ -2037,7 +2159,7 @@ function renderBreadcrumb(node: BookmarkNode, index: number, items: BookmarkNode
   return `<button class="breadcrumb" data-folder-id="${node.id}" data-last="${String(isLast)}" type="button">${escapeHtml(node.title || 'Untitled')}</button>`;
 }
 
-function renderBookmarkTile(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>, index: number, selected: boolean): string {
+function renderBookmarkTile(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>, index: number, selected: boolean, clipboardCut: boolean): string {
   if (node.url) {
     const label = node.title || getHostname(node.url);
     const resolvedIcon = resolvedIcons[node.url];
@@ -2046,17 +2168,17 @@ function renderBookmarkTile(node: BookmarkNode, resolvedIcons: Record<string, Re
       ? (resolvedIcon.isFallback ? 'fallback' : 'resolved')
       : 'favicon';
     return `
-      <button class="bookmark-tile link-tile" data-link-url="${escapeAttribute(node.url)}" data-bookmark-id="${node.id}" data-bookmark-title="${escapeAttribute(label)}" data-parent-id="${escapeAttribute(node.parentId ?? '')}" data-grid-item-id="${node.id}" data-grid-item-index="${String(index)}" data-grid-item-kind="bookmark" data-selected="${String(selected)}" type="button">
+      <button class="bookmark-tile link-tile" data-link-url="${escapeAttribute(node.url)}" data-bookmark-id="${node.id}" data-bookmark-title="${escapeAttribute(label)}" data-parent-id="${escapeAttribute(node.parentId ?? '')}" data-grid-item-id="${node.id}" data-grid-item-index="${String(index)}" data-grid-item-kind="bookmark" data-selected="${String(selected)}" data-clipboard-cut="${String(clipboardCut)}" type="button">
         <div class="tile-icon tile-icon--link" data-bookmark-icon data-icon-url="${escapeAttribute(node.url)}" data-icon-title="${escapeAttribute(label)}" data-icon-placeholder="${escapeAttribute(getInitial(label))}" data-icon-state="${visualState}">${visualIconMarkup}</div>
         <span class="tile-label">${escapeHtml(label)}</span>
       </button>
     `;
   }
 
-  return renderFolderCard(node, resolvedIcons, 'tile', index, selected);
+  return renderFolderCard(node, resolvedIcons, 'tile', index, selected, clipboardCut);
 }
 
-function renderDockItem(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>, index: number, selected: boolean): string {
+function renderDockItem(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>, index: number, selected: boolean, clipboardCut: boolean): string {
   if (node.url) {
     const label = node.title || getHostname(node.url);
     const meta = getHostname(node.url);
@@ -2066,7 +2188,7 @@ function renderDockItem(node: BookmarkNode, resolvedIcons: Record<string, Resolv
       ? (resolvedIcon.isFallback ? 'fallback' : 'resolved')
       : 'favicon';
     return `
-      <button class="dock-item dock-item--link-card" data-link-url="${escapeAttribute(node.url)}" data-bookmark-id="${node.id}" data-bookmark-title="${escapeAttribute(label)}" data-parent-id="${escapeAttribute(node.parentId ?? '')}" data-dock-item-id="${node.id}" data-dock-item-index="${String(index)}" data-dock-item-kind="bookmark" data-selected="${String(selected)}" type="button">
+      <button class="dock-item dock-item--link-card" data-link-url="${escapeAttribute(node.url)}" data-bookmark-id="${node.id}" data-bookmark-title="${escapeAttribute(label)}" data-parent-id="${escapeAttribute(node.parentId ?? '')}" data-dock-item-id="${node.id}" data-dock-item-index="${String(index)}" data-dock-item-kind="bookmark" data-selected="${String(selected)}" data-clipboard-cut="${String(clipboardCut)}" type="button">
         <span class="dock-item__preview dock-item__preview--link">
           <span class="dock-item__icon dock-item__icon--link" data-bookmark-icon data-icon-url="${escapeAttribute(node.url)}" data-icon-title="${escapeAttribute(label)}" data-icon-placeholder="${escapeAttribute(getInitial(label))}" data-icon-state="${visualState}">${visualIconMarkup}</span>
         </span>
@@ -2076,10 +2198,10 @@ function renderDockItem(node: BookmarkNode, resolvedIcons: Record<string, Resolv
     `;
   }
 
-  return renderFolderCard(node, resolvedIcons, 'dock', index, selected);
+  return renderFolderCard(node, resolvedIcons, 'dock', index, selected, clipboardCut);
 }
 
-function renderFolderCard(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>, variant: 'tile' | 'dock', index?: number, selected = false): string {
+function renderFolderCard(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>, variant: 'tile' | 'dock', index?: number, selected = false, clipboardCut = false): string {
   const itemCount = node.children?.length ?? 0;
   const previewItems = getFolderPreviewItems(node, variant);
   const classes = variant === 'tile'
@@ -2090,7 +2212,7 @@ function renderFolderCard(node: BookmarkNode, resolvedIcons: Record<string, Reso
     : '';
 
   return `
-    <button class="${classes}" data-folder-id="${node.id}" data-folder-title="${escapeAttribute(node.title || 'Untitled')}" data-parent-id="${escapeAttribute(node.parentId ?? '')}" ${variant === 'tile' ? `data-grid-item-id="${node.id}" data-grid-item-index="${String(index ?? 0)}" data-grid-item-kind="folder" data-selected="${String(selected)}"` : `data-dock-item-id="${node.id}" data-dock-item-index="${String(index ?? 0)}" data-dock-item-kind="folder" data-selected="${String(selected)}"`} type="button">
+    <button class="${classes}" data-folder-id="${node.id}" data-folder-title="${escapeAttribute(node.title || 'Untitled')}" data-parent-id="${escapeAttribute(node.parentId ?? '')}" ${variant === 'tile' ? `data-grid-item-id="${node.id}" data-grid-item-index="${String(index ?? 0)}" data-grid-item-kind="folder" data-selected="${String(selected)}" data-clipboard-cut="${String(clipboardCut)}"` : `data-dock-item-id="${node.id}" data-dock-item-index="${String(index ?? 0)}" data-dock-item-kind="folder" data-selected="${String(selected)}" data-clipboard-cut="${String(clipboardCut)}"`} type="button">
       <span class="folder-card__preview">
         <span class="folder-card__grid" data-folder-preview-variant="${variant}">
           ${previewItems.map(child => renderFolderPreviewCell(child, resolvedIcons)).join('') || `<span class="folder-card__cell folder-card__cell--empty">${escapeHtml(getInitial(node.title || 'Folder'))}</span>`}

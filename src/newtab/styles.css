@@ -386,6 +386,117 @@ button {
   pointer-events: none;
 }
 
+.drag-cursor-preview {
+  position: fixed;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  min-height: 58px;
+  padding: 8px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface-layer-2) 94%, rgba(8, 14, 24, 0.14));
+  border: 1px solid color-mix(in srgb, var(--interactive-accent) 24%, var(--border-subtle));
+  box-shadow: 0 18px 34px rgba(8, 14, 24, 0.24);
+  backdrop-filter: blur(18px);
+  pointer-events: none;
+  transform: translate3d(0, 0, 0) scale(0.96);
+  opacity: 0;
+  transition: opacity 100ms ease, transform 120ms ease;
+}
+
+.drag-cursor-preview[data-visible="true"] {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+}
+
+.drag-cursor-preview__visual {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 46px;
+  height: 46px;
+}
+
+.drag-cursor-preview__thumb {
+  --drag-preview-offset: 0;
+  position: absolute;
+  left: calc(var(--drag-preview-offset) * 10px);
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-layer-1) 86%, rgba(8, 14, 24, 0.16));
+  border: 1px solid color-mix(in srgb, var(--interactive-accent) 18%, var(--border-subtle));
+  box-shadow: 0 10px 18px rgba(8, 14, 24, 0.16);
+  overflow: hidden;
+}
+
+.drag-cursor-preview__thumb--bookmark .bookmark-icon-image {
+  width: 22px;
+  height: 22px;
+  object-fit: cover;
+}
+
+.drag-cursor-preview__thumb--folder {
+  background: color-mix(in srgb, var(--field-bg) 88%, rgba(8, 14, 24, 0.08));
+}
+
+.drag-cursor-preview__folder-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  width: 26px;
+  height: 26px;
+}
+
+.drag-cursor-preview__folder-cell {
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--interactive-accent-soft) 72%, var(--field-bg));
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.drag-cursor-preview__folder-cell .bookmark-icon-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.drag-cursor-preview__folder-cell--folder {
+  background: color-mix(in srgb, var(--interactive-accent) 14%, var(--field-bg));
+}
+
+.drag-cursor-preview__folder-cell--empty {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+}
+
+.drag-cursor-preview__count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--interactive-accent-gradient);
+  color: var(--interactive-on-accent);
+  font-size: 10px;
+  font-weight: 700;
+  box-shadow: 0 10px 18px var(--accent-shadow);
+}
+
 .selection-marquee--dock {
   left: 0;
   top: 0;
@@ -447,6 +558,32 @@ button {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 42%, var(--border-subtle)), var(--elevation-low);
 }
 
+.bookmark-tile[data-clipboard-cut="true"],
+.dock-item[data-clipboard-cut="true"],
+.folder-card[data-clipboard-cut="true"] {
+  opacity: 0.52;
+  filter: saturate(0.84);
+}
+
+.bookmark-tile[data-clipboard-cut="true"]::before,
+.dock-item[data-clipboard-cut="true"]::before,
+.folder-card[data-clipboard-cut="true"]::before {
+  content: 'Cut';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-layer-2) 86%, rgba(10, 15, 24, 0.35));
+  border: 1px solid color-mix(in srgb, var(--interactive-accent) 24%, var(--border-subtle));
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .bookmark-tile[data-selected="true"] .tile-label,
 .dock-item[data-selected="true"] .dock-item__label,
 .dock-item[data-selected="true"] .dock-item__meta,
@@ -458,8 +595,42 @@ button {
 .bookmark-tile[data-drag-source="true"],
 .dock-item[data-drag-source="true"],
 .folder-card[data-drag-source="true"] {
-  opacity: 0.48;
-  transform: scale(0.98);
+  opacity: 0.34;
+  transform: scale(0.97);
+}
+
+.shell[data-drag-active="true"] .bookmark-grid,
+.shell[data-drag-active="true"] .dock-strip {
+  cursor: grabbing;
+}
+
+.shell[data-drag-active="true"] .bookmark-tile,
+.shell[data-drag-active="true"] .dock-item,
+.shell[data-drag-active="true"] .folder-card {
+  transition-duration: 110ms;
+}
+
+.shell[data-drag-active="true"] [data-drag-lead="true"] {
+  opacity: 0.92;
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 40%, var(--border-subtle)), 0 18px 32px rgba(8, 14, 24, 0.22);
+}
+
+.shell[data-drag-active="true"] [data-drag-lead="true"][data-drag-count]:not([data-drag-count="1"])::before {
+  content: attr(data-drag-count) ' items';
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  transform: translateX(-50%);
+  z-index: 4;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-color) 90%, white 10%), var(--accent-color-strong));
+  color: var(--interactive-on-accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: 0 10px 18px var(--accent-shadow);
 }
 
 .bookmark-grid [data-drop-position]:not([data-drop-position="inside"])::after,
@@ -488,7 +659,18 @@ button {
 .bookmark-grid [data-drop-position="inside"],
 .dock-strip [data-drop-position="inside"] {
   background: color-mix(in srgb, var(--interactive-accent-soft) 84%, var(--surface-layer-1));
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 52%, var(--border-subtle)), var(--elevation-low);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 52%, var(--border-subtle)), 0 0 0 4px color-mix(in srgb, var(--interactive-accent) 14%, transparent), var(--elevation-low);
+}
+
+.bookmark-grid .folder-card[data-drop-position="inside"] .folder-card__preview::before,
+.dock-strip .folder-card[data-drop-position="inside"] .folder-card__preview::before {
+  border-color: color-mix(in srgb, var(--interactive-accent) 62%, var(--folder-outline-color));
+  box-shadow: 0 14px 28px rgba(8, 14, 24, 0.18);
+}
+
+.bookmark-grid .folder-card[data-drop-position="inside"] .folder-card__label,
+.dock-strip .folder-card[data-drop-position="inside"] .folder-card__label {
+  color: var(--interactive-accent-strong);
 }
 
 .bookmark-tile:hover {
