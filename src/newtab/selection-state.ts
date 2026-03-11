@@ -1,4 +1,5 @@
 import type { BookmarkNode } from '../shared/messages';
+import { markBookmarkUsed } from './bookmark-usage';
 import { getDefaultFolder, getFolderNode } from './bookmark-navigation';
 import { openBookmark, openFolderView } from './runtime-helpers';
 import type { AppState, SelectionContextMenuState, SelectionScope, SelectionSurface } from './app-state';
@@ -15,7 +16,7 @@ export function normalizeSelection(state: AppState): void {
     return;
   }
 
-  const visibleIds = new Set(getFolderChildren(state, state.selectionScope.folderId).map(node => node.id));
+  const visibleIds = new Set(getVisibleChildren(state, state.selectionScope).map(node => node.id));
   state.selectedIds = state.selectedIds.filter(id => visibleIds.has(id));
   if (state.selectionAnchorId && !visibleIds.has(state.selectionAnchorId)) {
     state.selectionAnchorId = state.selectedIds[0] ?? null;
@@ -38,6 +39,14 @@ export function getCurrentFolderChildren(state: AppState): BookmarkNode[] {
   return state.derivedTree.currentFolderChildren;
 }
 
+export function getVisibleChildren(state: AppState, scope: SelectionScope): BookmarkNode[] {
+  if (scope.surface === 'grid' && scope.folderId === state.currentFolderId) {
+    return state.derivedTree.currentFolderChildren;
+  }
+
+  return getFolderChildren(state, scope.folderId);
+}
+
 export function isItemSelected(state: AppState, itemId: string, surface: SelectionSurface, folderId: string): boolean {
   const selectionScope = state.selectionScope;
   return selectionScope !== null
@@ -58,7 +67,7 @@ export function getOrderedSelectedIds(state: AppState, scope: SelectionScope | n
   }
 
   const selectedSet = new Set(state.selectedIds);
-  return getFolderChildren(state, scope.folderId)
+  return getVisibleChildren(state, scope)
     .filter(node => selectedSet.has(node.id))
     .map(node => node.id);
 }
@@ -89,6 +98,7 @@ export function createSelectionContextMenuState(state: AppState, x: number, y: n
 
 export function openSelectionInNewTabs(state: AppState, ids: string[], scope: SelectionScope | null = state.selectionScope): void {
   for (const node of getSelectedNodes(state, ids, scope)) {
+    markBookmarkUsed(state, node.id);
     if (node.url) {
       openBookmark(node.url, true);
       continue;

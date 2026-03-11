@@ -63,6 +63,10 @@ export function getFolderNode(tree: BookmarkNode[], folderId: string): BookmarkN
   return node && !node.url ? node : null;
 }
 
+export function getFolderChildIds(tree: BookmarkNode[], folderId: string): string[] {
+  return getFolderNode(tree, folderId)?.children?.map(node => node.id) ?? [];
+}
+
 export function findNodeById(nodes: BookmarkNode[], targetId: string): BookmarkNode | null {
   return getNodeIndex(nodes).get(targetId) ?? null;
 }

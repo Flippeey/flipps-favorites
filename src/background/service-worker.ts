@@ -77,6 +77,7 @@ function normalizeBookmarkNode(node: any): BookmarkNode {
     parentId: node.parentId ? String(node.parentId) : undefined,
     title: node.title || 'Untitled',
     url: node.url,
+    dateAdded: typeof node.dateAdded === 'number' ? node.dateAdded : undefined,
     children: node.children ? normalizeBookmarkNodes(node.children) : undefined,
   };
 }

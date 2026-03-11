@@ -1,4 +1,4 @@
-import type { AppSettings, SettingsSectionId, ThemeMode } from '../shared/messages';
+import type { AppSettings, LayoutPresetId, SettingsSectionId, ThemeMode } from '../shared/messages';
 import { escapeAttribute, escapeHtml } from '../newtab/html';
 import { renderUiIcon, type UiIconName } from '../newtab/ui-icons';
 
@@ -24,7 +24,105 @@ export const themeModeOptions: Array<{ id: Exclude<ThemeMode, 'system'>; label: 
   { id: 'dark', label: 'Dark', description: 'Low-glare workspace', preview: 'dark' },
 ];
 
-export type GeneralSettingsSubpage = 'general' | 'layout' | 'dock';
+export type GeneralSettingsSubpage = 'general' | 'layout' | 'dock' | 'shortcuts';
+
+export const layoutPresetOptions: Array<{
+  id: Exclude<LayoutPresetId, 'custom'>;
+  label: string;
+  description: string;
+  settings: Pick<AppSettings, 'favoritesColumns' | 'favoritesRows' | 'favoritesColumnGap' | 'favoritesRowGap' | 'bookmarkTileWidth' | 'bookmarkIconSize' | 'showBookmarkIconBackground'>;
+}> = [
+  {
+    id: 'balanced',
+    label: 'Balanced',
+    description: 'A comfortable all-purpose grid.',
+    settings: {
+      favoritesColumns: 10,
+      favoritesRows: 0,
+      favoritesColumnGap: 24,
+      favoritesRowGap: 20,
+      bookmarkTileWidth: 130,
+      bookmarkIconSize: 75,
+      showBookmarkIconBackground: false,
+    },
+  },
+  {
+    id: 'compact',
+    label: 'Compact',
+    description: 'Fit more bookmarks on screen at once.',
+    settings: {
+      favoritesColumns: 12,
+      favoritesRows: 0,
+      favoritesColumnGap: 16,
+      favoritesRowGap: 14,
+      bookmarkTileWidth: 108,
+      bookmarkIconSize: 60,
+      showBookmarkIconBackground: false,
+    },
+  },
+  {
+    id: 'spacious',
+    label: 'Spacious',
+    description: 'Larger tiles with more breathing room.',
+    settings: {
+      favoritesColumns: 8,
+      favoritesRows: 0,
+      favoritesColumnGap: 28,
+      favoritesRowGap: 24,
+      bookmarkTileWidth: 146,
+      bookmarkIconSize: 82,
+      showBookmarkIconBackground: true,
+    },
+  },
+  {
+    id: 'presentation',
+    label: 'Presentation',
+    description: 'Big visuals for wall displays and touch use.',
+    settings: {
+      favoritesColumns: 6,
+      favoritesRows: 0,
+      favoritesColumnGap: 32,
+      favoritesRowGap: 28,
+      bookmarkTileWidth: 168,
+      bookmarkIconSize: 96,
+      showBookmarkIconBackground: true,
+    },
+  },
+];
+
+const shortcutGroups = [
+  {
+    label: 'Selection',
+    items: [
+      { keys: 'Ctrl/Cmd+Click', description: 'Add or remove a single item from the selection.' },
+      { keys: 'Drag on empty space', description: 'Create a marquee selection in the current surface.' },
+      { keys: 'Escape', description: 'Clear the selection or dismiss the current overlay.' },
+    ],
+  },
+  {
+    label: 'Clipboard',
+    items: [
+      { keys: 'Ctrl/Cmd+C', description: 'Copy the current selection.' },
+      { keys: 'Ctrl/Cmd+X', description: 'Cut the current selection.' },
+      { keys: 'Ctrl/Cmd+V', description: 'Paste into the current folder.' },
+    ],
+  },
+  {
+    label: 'History',
+    items: [
+      { keys: 'Ctrl/Cmd+Z', description: 'Undo the last delete or move.' },
+      { keys: 'Ctrl/Cmd+Shift+Z', description: 'Redo the last undone action.' },
+      { keys: 'Ctrl/Cmd+Y', description: 'Redo on keyboards that use the alternate shortcut.' },
+    ],
+  },
+  {
+    label: 'Actions',
+    items: [
+      { keys: 'Delete / Backspace', description: 'Delete the current selection.' },
+      { keys: 'Ctrl/Cmd+Click', description: 'Open a bookmark or folder in a new tab.' },
+    ],
+  },
+] as const;
 
 export interface AccentPickerState {
   open: boolean;
@@ -46,6 +144,7 @@ export function renderDrawerSection(section: SettingsSectionId, settings: AppSet
           ${renderGeneralSubpageButton('general', generalSubpage, 'General')}
           ${renderGeneralSubpageButton('layout', generalSubpage, 'Layout')}
           ${renderGeneralSubpageButton('dock', generalSubpage, 'Dock')}
+          ${renderGeneralSubpageButton('shortcuts', generalSubpage, 'Shortcuts')}
         </div>
         ${renderGeneralSubpageSection(settings, folderOptions, generalSubpage)}
       </div>
@@ -175,10 +274,22 @@ export function resolveAppliedThemeMode(themeMode: ThemeMode): Exclude<ThemeMode
 }
 
 export function normalizeGeneralSubpage(value: string | undefined): GeneralSettingsSubpage {
-  if (value === 'layout' || value === 'dock' || value === 'general') {
+  if (value === 'layout' || value === 'dock' || value === 'general' || value === 'shortcuts') {
     return value;
   }
   return 'general';
+}
+
+export function getLayoutPresetPatch(layoutPreset: Exclude<LayoutPresetId, 'custom'>): Partial<AppSettings> {
+  const preset = layoutPresetOptions.find(option => option.id === layoutPreset);
+  if (!preset) {
+    return { layoutPreset: 'balanced' };
+  }
+
+  return {
+    layoutPreset: preset.id,
+    ...preset.settings,
+  };
 }
 
 export function createAccentPickerState(color: string): AccentPickerState {
@@ -246,24 +357,42 @@ function renderGeneralSubpageButton(subpage: GeneralSettingsSubpage, currentSubp
 
 function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array<{ id: string; label: string }>, subpage: GeneralSettingsSubpage): string {
   if (subpage === 'layout') {
+    const activePreset = settings.layoutPreset;
     return `
       <div class="visual-section">
         <div class="visual-section__header">
           <h3>Layout</h3>
-          <p class="field-hint">Control the favorites grid density, spacing, and how bookmark icons are presented.</p>
+          <p class="field-hint">Choose a layout preset first, or switch to custom controls for exact spacing and sizing.</p>
         </div>
-        <div class="settings-slider-grid">
-          ${renderSettingsSlider('favoritesColumns', 'Columns', settings.favoritesColumns, 3, 12)}
-          ${renderSettingsSlider('favoritesRows', 'Rows', settings.favoritesRows, 0, 8)}
-          ${renderSettingsSlider('favoritesColumnGap', 'Column gap', settings.favoritesColumnGap, 0, 48, 'px')}
-          ${renderSettingsSlider('favoritesRowGap', 'Row gap', settings.favoritesRowGap, 0, 48, 'px')}
-          ${renderSettingsSlider('bookmarkTileWidth', 'Tile width', settings.bookmarkTileWidth, 88, 180, 'px')}
-          ${renderSettingsSlider('bookmarkIconSize', 'Icon size', settings.bookmarkIconSize, 40, 112, 'px')}
+        <div class="layout-preset-grid" role="group" aria-label="Layout presets">
+          ${layoutPresetOptions.map(option => renderLayoutPresetCard(option, activePreset)).join('')}
+          <button class="layout-preset-card layout-preset-card--custom" data-layout-preset-option="custom" data-active="${String(activePreset === 'custom')}" type="button">
+            <span class="layout-preset-card__preview layout-preset-card__preview--custom">
+              <span class="layout-preset-card__tile layout-preset-card__tile--custom a"></span>
+              <span class="layout-preset-card__tile layout-preset-card__tile--custom b"></span>
+              <span class="layout-preset-card__tile layout-preset-card__tile--custom c"></span>
+              <span class="layout-preset-card__tile layout-preset-card__tile--custom d"></span>
+            </span>
+            <span class="layout-preset-card__copy">
+              <strong>Custom</strong>
+              <span>Tune columns, gaps, tile width, and icon size manually.</span>
+            </span>
+          </button>
         </div>
-        <label class="toggle-field toggle-field--card">
-          <input name="showBookmarkIconBackground" type="checkbox" ${settings.showBookmarkIconBackground ? 'checked' : ''} />
-          <span>Show accent background behind bookmark icons</span>
-        </label>
+        ${activePreset === 'custom'
+          ? `<div class="settings-slider-grid">
+              ${renderSettingsSlider('favoritesColumns', 'Columns', settings.favoritesColumns, 3, 12)}
+              ${renderSettingsSlider('favoritesRows', 'Rows', settings.favoritesRows, 0, 8)}
+              ${renderSettingsSlider('favoritesColumnGap', 'Column gap', settings.favoritesColumnGap, 0, 48, 'px')}
+              ${renderSettingsSlider('favoritesRowGap', 'Row gap', settings.favoritesRowGap, 0, 48, 'px')}
+              ${renderSettingsSlider('bookmarkTileWidth', 'Tile width', settings.bookmarkTileWidth, 88, 180, 'px')}
+              ${renderSettingsSlider('bookmarkIconSize', 'Icon size', settings.bookmarkIconSize, 40, 112, 'px')}
+            </div>
+            <label class="toggle-field toggle-field--card">
+              <input name="showBookmarkIconBackground" type="checkbox" ${settings.showBookmarkIconBackground ? 'checked' : ''} />
+              <span>Show accent background behind bookmark icons</span>
+            </label>`
+          : `<p class="field-hint">Switch to Custom if you want to fine-tune spacing, row limits, and icon treatment.</p>`}
       </div>
     `;
   }
@@ -279,6 +408,10 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
           <input name="showDock" type="checkbox" ${settings.showDock ? 'checked' : ''} />
           <span>Show the bookmark dock at the bottom of the page</span>
         </label>
+        <label class="toggle-field toggle-field--card">
+          <input name="autoHideDock" type="checkbox" ${settings.autoHideDock ? 'checked' : ''} />
+          <span>Auto-hide the dock until the bottom edge is hovered or focused</span>
+        </label>
         <label class="field field--card">
           <span>Dock folder</span>
           <select name="dockFolderId">
@@ -286,6 +419,32 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
             ${folderOptions.map(option => `<option value="${option.id}" ${option.id === settings.dockFolderId ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
           </select>
         </label>
+      </div>
+    `;
+  }
+
+  if (subpage === 'shortcuts') {
+    return `
+      <div class="visual-section">
+        <div class="visual-section__header">
+          <h3>Shortcuts</h3>
+          <p class="field-hint">These shortcuts work on the main new-tab surface when a text field or settings control is not focused.</p>
+        </div>
+        <div class="shortcut-groups">
+          ${shortcutGroups.map(group => `
+            <section class="shortcut-card">
+              <h4>${group.label}</h4>
+              <div class="shortcut-list">
+                ${group.items.map(item => `
+                  <div class="shortcut-row">
+                    <span class="shortcut-keys">${item.keys}</span>
+                    <span class="shortcut-description">${item.description}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </section>
+          `).join('')}
+        </div>
       </div>
     `;
   }
@@ -312,6 +471,26 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
         <span>Open links in a new tab instead of replacing the new tab page</span>
       </label>
     </div>
+  `;
+}
+
+function renderLayoutPresetCard(
+  option: typeof layoutPresetOptions[number],
+  activePreset: LayoutPresetId,
+): string {
+  return `
+    <button class="layout-preset-card" data-layout-preset-option="${option.id}" data-active="${String(activePreset === option.id)}" type="button">
+      <span class="layout-preset-card__preview layout-preset-card__preview--${option.id}">
+        <span class="layout-preset-card__tile layout-preset-card__tile--${option.id} a"></span>
+        <span class="layout-preset-card__tile layout-preset-card__tile--${option.id} b"></span>
+        <span class="layout-preset-card__tile layout-preset-card__tile--${option.id} c"></span>
+        <span class="layout-preset-card__tile layout-preset-card__tile--${option.id} d"></span>
+      </span>
+      <span class="layout-preset-card__copy">
+        <strong>${option.label}</strong>
+        <span>${option.description}</span>
+      </span>
+    </button>
   `;
 }
 

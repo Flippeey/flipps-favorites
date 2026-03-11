@@ -1,10 +1,11 @@
 import { extensionApi } from './browser';
-import type { AppSettings, IconCacheRecord, IconOverrideRecord } from './messages';
+import type { AppSettings, BookmarkUsageRecord, IconCacheRecord, IconOverrideRecord } from './messages';
 import { createCachedRecordStore, createCachedValueStore } from './storage-buckets';
 
 const storageKey = 'app-settings';
 const iconCacheKey = 'icon-cache-records';
 const iconOverrideKey = 'icon-override-records';
+const bookmarkUsageKey = 'bookmark-usage-records';
 
 const settingsStore = createCachedValueStore<AppSettings>({
   storageKey,
@@ -15,6 +16,7 @@ const settingsStore = createCachedValueStore<AppSettings>({
 
 const iconCacheStore = createCachedRecordStore<IconCacheRecord>(iconCacheKey);
 const iconOverrideStore = createCachedRecordStore<IconOverrideRecord>(iconOverrideKey);
+const bookmarkUsageStore = createCachedRecordStore<BookmarkUsageRecord>(bookmarkUsageKey);
 
 export const defaultSettings: AppSettings = {
   themeMode: 'system',
@@ -28,7 +30,10 @@ export const defaultSettings: AppSettings = {
   rememberLastFolder: true,
   openLinksInNewTab: false,
   showDock: false,
+  autoHideDock: false,
   dockFolderId: '',
+  bookmarkSortMode: 'manual',
+  bookmarkSortDirection: 'asc',
   favoritesColumns: 10,
   favoritesRows: 0,
   favoritesColumnGap: 24,
@@ -36,6 +41,7 @@ export const defaultSettings: AppSettings = {
   bookmarkTileWidth: 130,
   bookmarkIconSize: 75,
   showBookmarkIconBackground: false,
+  layoutPreset: 'balanced',
 };
 
 export async function readSettings(): Promise<AppSettings> {
@@ -76,7 +82,14 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     rememberLastFolder: typeof settings.rememberLastFolder === 'boolean' ? settings.rememberLastFolder : defaultSettings.rememberLastFolder,
     openLinksInNewTab: typeof settings.openLinksInNewTab === 'boolean' ? settings.openLinksInNewTab : defaultSettings.openLinksInNewTab,
     showDock: typeof settings.showDock === 'boolean' ? settings.showDock : defaultSettings.showDock,
+    autoHideDock: typeof settings.autoHideDock === 'boolean' ? settings.autoHideDock : defaultSettings.autoHideDock,
     dockFolderId: typeof settings.dockFolderId === 'string' ? settings.dockFolderId : defaultSettings.dockFolderId,
+    bookmarkSortMode: settings.bookmarkSortMode === 'manual' || settings.bookmarkSortMode === 'name' || settings.bookmarkSortMode === 'lastUsed' || settings.bookmarkSortMode === 'created'
+      ? settings.bookmarkSortMode
+      : defaultSettings.bookmarkSortMode,
+    bookmarkSortDirection: settings.bookmarkSortDirection === 'asc' || settings.bookmarkSortDirection === 'desc'
+      ? settings.bookmarkSortDirection
+      : defaultSettings.bookmarkSortDirection,
     favoritesColumns: normalizeNumber(settings.favoritesColumns, defaultSettings.favoritesColumns, 3, 12),
     favoritesRows: normalizeNumber(settings.favoritesRows, defaultSettings.favoritesRows, 0, 8),
     favoritesColumnGap: normalizeNumber(settings.favoritesColumnGap, defaultSettings.favoritesColumnGap, 0, 48),
@@ -86,6 +99,9 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     showBookmarkIconBackground: typeof settings.showBookmarkIconBackground === 'boolean'
       ? settings.showBookmarkIconBackground
       : defaultSettings.showBookmarkIconBackground,
+    layoutPreset: settings.layoutPreset === 'balanced' || settings.layoutPreset === 'compact' || settings.layoutPreset === 'spacious' || settings.layoutPreset === 'presentation' || settings.layoutPreset === 'custom'
+      ? settings.layoutPreset
+      : defaultSettings.layoutPreset,
   };
 }
 
@@ -132,4 +148,20 @@ export async function writeIconOverrideRecord(record: IconOverrideRecord): Promi
 
 export async function deleteIconOverrideRecord(bookmarkUrl: string): Promise<void> {
   await iconOverrideStore.deleteOne(bookmarkUrl);
+}
+
+export async function readBookmarkUsageRecords(): Promise<Record<string, BookmarkUsageRecord>> {
+  return bookmarkUsageStore.readAll();
+}
+
+export async function readBookmarkUsageRecord(bookmarkId: string): Promise<BookmarkUsageRecord | null> {
+  return bookmarkUsageStore.readOne(bookmarkId);
+}
+
+export async function writeBookmarkUsageRecord(record: BookmarkUsageRecord): Promise<void> {
+  await bookmarkUsageStore.writeOne(record.bookmarkId, record);
+}
+
+export async function deleteBookmarkUsageRecord(bookmarkId: string): Promise<void> {
+  await bookmarkUsageStore.deleteOne(bookmarkId);
 }

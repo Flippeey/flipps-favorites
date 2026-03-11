@@ -1,9 +1,12 @@
 ﻿import './styles.css';
 import { sendRuntimeMessage } from '../shared/browser';
 import { messageTypes, type AppSettings, type BookmarkNode, type CreateBookmarkResponse, type GetBookmarkTreeResponse, type GetSettingsResponse, type InvalidateIconResponse, type MoveBookmarkResponse, type OpenBookmarkManagerResponse, type PatchSettingsResponse, type PingResponse, type RemoveBookmarkResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SettingsSectionId, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../shared/messages';
-import { createClosedBookmarkDialogState, createInitialAppState, type AppState, type BookmarkClipboardState, type FolderActionTarget, type SelectionContextMenuTarget, type SelectionScope, type SurfaceContextMenuTarget } from './app-state';
+import { readBookmarkUsageRecords } from '../shared/storage';
+import { createClosedBookmarkDialogState, createInitialAppState, pushUndoEntry, type AppState, type BookmarkClipboardState, type DeleteHistoryEntry, type FolderActionTarget, type SelectionContextMenuTarget, type SelectionScope, type SurfaceContextMenuTarget, type UndoHistoryEntry } from './app-state';
 import { syncDerivedTree } from './derived-tree';
-import { findBookmarkActionTargetById, findNodeById, getBookmarkActionTarget, getBookmarkLabelForUrl, getFolderNode, getHostname, isFolderDescendantOf, resolveInitialFolderId, type BookmarkActionTarget } from './bookmark-navigation';
+import { findBookmarkActionTargetById, findNodeById, getBookmarkActionTarget, getBookmarkLabelForUrl, getFolderChildIds, getFolderNode, getHostname, isFolderDescendantOf, resolveInitialFolderId, type BookmarkActionTarget } from './bookmark-navigation';
+import { cloneBookmarkSubtree, applyFolderOrder, removeBookmarkSubtree } from './bookmark-ops';
+import { markBookmarkUsed } from './bookmark-usage';
 import { escapeAttribute, escapeHtml } from './html';
 import { applyBookmarkDialogCandidate, loadBookmarkDialogPreview, openBookmarkDialog, refreshBookmarkDialogIcon, removeBookmarkDialogOverride, renderBookmarkDialog, saveBookmarkDialogBookmark, searchBookmarkDialog, uploadBookmarkDialogImage } from './bookmark-dialog';
 import { hydrateBookmarkIcons, queueVisibleIconPreload } from './icon-runtime';
@@ -14,12 +17,14 @@ import { clearSelection, createSelectionContextMenuState, getCurrentFolderChildr
 import { getFolderActionTarget, setupDockInteractions, setupGridInteractions } from './surface-interactions';
 import { cloneBookmarkNode, navigateToFolder, navigateToFolderAndRender, refreshBookmarkTree, refreshTreeAndRender, renderStateAndWarmIcons } from './state-transitions';
 import { renderUiIcon } from './ui-icons';
-import { buildShellStyle, createAccentPickerState, hslToHex, normalizeGeneralSubpage, normalizeHexColor, normalizeThemeMode, renderDrawerSection, renderSectionButton, resolveAppliedThemeMode, type AccentPickerState, type GeneralSettingsSubpage } from '../settings';
+import { buildShellStyle, createAccentPickerState, getLayoutPresetPatch, hslToHex, normalizeGeneralSubpage, normalizeHexColor, normalizeThemeMode, renderDrawerSection, renderSectionButton, resolveAppliedThemeMode, type AccentPickerState, type GeneralSettingsSubpage } from '../settings';
 
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) {
   throw new Error('App root not found.');
 }
+
+let settingsFeedbackTimer: number | null = null;
 
 void bootstrap(root);
 
@@ -29,6 +34,7 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
     sendRuntimeMessage<{ type: typeof messageTypes.getSettings }, GetSettingsResponse>({ type: messageTypes.getSettings }),
     sendRuntimeMessage<{ type: typeof messageTypes.getBookmarkTree }, GetBookmarkTreeResponse>({ type: messageTypes.getBookmarkTree }),
   ]);
+  const bookmarkUsage = await readBookmarkUsageRecords();
 
   if (!ping.ok) {
     throw new Error('Background service is unavailable.');
@@ -37,6 +43,7 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
   const state: AppState = createInitialAppState({
     settings: settingsResponse.settings,
     tree: bookmarkResponse.tree,
+    bookmarkUsage,
     getLastFolder,
     getFolderIdFromHash,
   });
@@ -96,18 +103,32 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
 }
 
 async function applySettingsPatch(rootElement: HTMLDivElement, state: AppState, patch: Partial<AppSettings>): Promise<void> {
-  const response = await sendRuntimeMessage<{ type: typeof messageTypes.patchSettings; patch: Partial<AppSettings> }, PatchSettingsResponse>({
-    type: messageTypes.patchSettings,
-    patch,
-  });
+  try {
+    setSettingsFeedback(state, 'saving', 'Saving changes...');
+    renderApp(rootElement, state);
 
-  state.settings = response.settings;
+    const response = await sendRuntimeMessage<{ type: typeof messageTypes.patchSettings; patch: Partial<AppSettings> }, PatchSettingsResponse>({
+      type: messageTypes.patchSettings,
+      patch,
+    });
+
+    applySettingsResponse(state, response.settings);
+    setSettingsFeedback(state, 'saved', 'Saved');
+    renderStateAndWarmIcons(rootElement, state, renderApp);
+  } catch (error) {
+    setSettingsFeedback(state, 'error', error instanceof Error ? error.message : 'Failed to save settings.');
+    renderApp(rootElement, state);
+  }
+}
+
+function applySettingsResponse(state: AppState, settings: AppSettings): void {
+  state.settings = settings;
   syncDerivedTree(state);
   state.iconToolTargetUrl = state.derivedTree.linkOptions.some(option => option.url === state.iconToolTargetUrl)
     ? state.iconToolTargetUrl
     : (state.derivedTree.linkOptions[0]?.url ?? '');
   state.accentPicker = {
-    ...createAccentPickerState(response.settings.accentColor),
+    ...createAccentPickerState(settings.accentColor),
     open: state.accentPicker.open,
   };
   state.drawerOpen = true;
@@ -118,11 +139,27 @@ async function applySettingsPatch(rootElement: HTMLDivElement, state: AppState, 
     persistLastFolder(state.settings, state.currentFolderId);
   }
 
-  if (response.settings.rootFolderId && !isFolderDescendantOf(state.tree, state.currentFolderId, response.settings.rootFolderId)) {
-    navigateToFolder(state, response.settings.rootFolderId, 'replace');
+  if (settings.rootFolderId && !isFolderDescendantOf(state.tree, state.currentFolderId, settings.rootFolderId)) {
+    navigateToFolder(state, settings.rootFolderId, 'replace');
+  }
+}
+
+function setSettingsFeedback(state: AppState, status: AppState['settingsFeedback']['status'], message: string): void {
+  state.settingsFeedback = { status, message };
+  if (settingsFeedbackTimer) {
+    window.clearTimeout(settingsFeedbackTimer);
+    settingsFeedbackTimer = null;
   }
 
-  renderStateAndWarmIcons(rootElement, state, renderApp);
+  if (status === 'saved') {
+    settingsFeedbackTimer = window.setTimeout(() => {
+      state.settingsFeedback = { status: 'idle', message: '' };
+      settingsFeedbackTimer = null;
+      if (root) {
+        renderApp(root, state);
+      }
+    }, 1400);
+  }
 }
 
 async function handleDelegatedClick(rootElement: HTMLDivElement, state: AppState, event: MouseEvent, target: HTMLElement): Promise<void> {
@@ -438,7 +475,18 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   let currentFolder = state.derivedTree.currentFolder;
 
   if (!currentFolder) {
-    rootElement.innerHTML = '<main class="empty-app"><h1>No bookmark folders available</h1><p>The dashboard needs at least one folder to render.</p></main>';
+    rootElement.innerHTML = `
+      <main class="empty-app">
+        <h1>No bookmark folders available</h1>
+        <p>The dashboard needs at least one folder to render.</p>
+        <div class="empty-state__actions">
+          <button class="drawer-secondary-button" data-empty-action="open-manager" type="button">Open Bookmark Manager</button>
+        </div>
+      </main>
+    `;
+    rootElement.querySelector<HTMLButtonElement>('[data-empty-action="open-manager"]')?.addEventListener('click', () => {
+      void openBookmarkManager(rootElement, state);
+    });
     return;
   }
 
@@ -447,7 +495,18 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     syncDerivedTree(state);
     currentFolder = state.derivedTree.currentFolder;
     if (!currentFolder) {
-      rootElement.innerHTML = '<main class="empty-app"><h1>No bookmark folders available</h1><p>The dashboard needs at least one folder to render.</p></main>';
+      rootElement.innerHTML = `
+        <main class="empty-app">
+          <h1>No bookmark folders available</h1>
+          <p>The dashboard needs at least one folder to render.</p>
+          <div class="empty-state__actions">
+            <button class="drawer-secondary-button" data-empty-action="open-manager" type="button">Open Bookmark Manager</button>
+          </div>
+        </main>
+      `;
+      rootElement.querySelector<HTMLButtonElement>('[data-empty-action="open-manager"]')?.addEventListener('click', () => {
+        void openBookmarkManager(rootElement, state);
+      });
       return;
     }
     syncFolderHash(currentFolder.id, 'replace');
@@ -456,7 +515,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
 
   const resolvedCurrentFolder = currentFolder;
 
-  const { libraryFolders, breadcrumbs, currentFolderChildren: canvasItems, dockFolder, dockItems, folderOptions } = state.derivedTree;
+  const { libraryFolders, breadcrumbs, currentFolderChildren: canvasItems, allCurrentFolderChildren, dockFolder, dockItems, folderOptions } = state.derivedTree;
   const activeSection: SettingsSectionId = state.settings.settingsSection === 'appearance' ? 'appearance' : 'general';
   const themeMode = normalizeThemeMode(state.settings.themeMode);
   const drawerFolderOptions = state.drawerOpen && activeSection === 'general'
@@ -467,7 +526,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     : '';
 
   rootElement.innerHTML = `
-    <div class="shell" data-theme-mode="${themeMode}" data-bookmark-icon-surface="${String(state.settings.showBookmarkIconBackground)}" data-dock-visible="${String(state.settings.showDock)}" style="${buildShellStyle(state.settings)}">
+    <div class="shell" data-theme-mode="${themeMode}" data-bookmark-icon-surface="${String(state.settings.showBookmarkIconBackground)}" data-dock-visible="${String(state.settings.showDock)}" data-dock-autohide="${String(state.settings.autoHideDock)}" style="${buildShellStyle(state.settings)}">
       <nav class="bookmarks-navbar" aria-label="Folder path">
         <div class="nav-side nav-side--left">
           <button class="nav-icon library-home button-with-icon" type="button">${renderUiIcon('home')}<span>Home</span></button>
@@ -481,16 +540,40 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
       </nav>
       <main class="workspace">
         <section class="bookmark-canvas" aria-label="Bookmarks grid">
+          <div class="workspace-toolbar surface-card">
+            <div class="workspace-toolbar__row">
+              <label class="surface-search">
+                <span class="surface-search__icon">${renderUiIcon('search')}</span>
+                <input name="currentFolderSearch" type="search" value="${escapeAttribute(state.searchQuery)}" placeholder="Search this folder" aria-label="Search the current folder" />
+              </label>
+              <div class="sort-controls">
+                <label class="sort-controls__field">
+                  <span>Sort</span>
+                  <select name="bookmarkSortMode">
+                    <option value="manual" ${state.settings.bookmarkSortMode === 'manual' ? 'selected' : ''}>Manual</option>
+                    <option value="name" ${state.settings.bookmarkSortMode === 'name' ? 'selected' : ''}>Name</option>
+                    <option value="lastUsed" ${state.settings.bookmarkSortMode === 'lastUsed' ? 'selected' : ''}>Last used</option>
+                    <option value="created" ${state.settings.bookmarkSortMode === 'created' ? 'selected' : ''}>Created</option>
+                  </select>
+                </label>
+                <button class="drawer-secondary-button sort-direction-button" data-sort-direction-toggle type="button" ${state.settings.bookmarkSortMode === 'manual' ? 'disabled' : ''}>${state.settings.bookmarkSortDirection === 'asc' ? 'Ascending' : 'Descending'}</button>
+              </div>
+            </div>
+            <div class="workspace-toolbar__meta">
+              ${renderSurfaceSummary(state, canvasItems.length, allCurrentFolderChildren.length)}
+            </div>
+          </div>
           <div class="bookmark-grid" data-limit-rows="${String(state.settings.favoritesRows > 0)}">
-            ${canvasItems.map((item, index) => renderBookmarkTile(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'grid', resolvedCurrentFolder.id), isClipboardCutItem(state, item.id))).join('') || '<p class="empty-state">This folder is empty.</p>'}
+            ${canvasItems.map((item, index) => renderBookmarkTile(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'grid', resolvedCurrentFolder.id), isClipboardCutItem(state, item.id))).join('') || renderGridEmptyState(state)}
           </div>
           <div class="selection-marquee" hidden aria-hidden="true"></div>
         </section>
         ${state.settings.showDock ? `
           <aside class="bookmark-dock" aria-label="Dock">
             <div class="dock-inner">
+              ${state.settings.autoHideDock ? '<button class="dock-reveal-handle" type="button" aria-label="Reveal dock">Dock</button>' : ''}
               <div class="dock-strip">
-                ${dockItems.map((item, index) => renderDockItem(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'dock', dockFolder?.id ?? ''), isClipboardCutItem(state, item.id))).join('') || '<p class="dock-empty">Choose a dock folder in settings.</p>'}
+                ${dockItems.map((item, index) => renderDockItem(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'dock', dockFolder?.id ?? ''), isClipboardCutItem(state, item.id))).join('') || renderDockEmptyState()}
               </div>
               <div class="selection-marquee selection-marquee--dock" hidden aria-hidden="true"></div>
             </div>
@@ -503,6 +586,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
           <div>
             <p class="eyebrow">Settings</p>
             <h2>Workspace controls</h2>
+            ${state.settingsFeedback.status !== 'idle' ? `<p class="drawer-feedback" data-status="${state.settingsFeedback.status}">${escapeHtml(state.settingsFeedback.message)}</p>` : ''}
           </div>
           <button class="drawer-close icon-button" type="button" aria-label="Close settings">${renderUiIcon('close')}</button>
         </div>
@@ -528,6 +612,8 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const accentColorInput = rootElement.querySelector<HTMLInputElement>('input[name="accentColor"]');
   const accentHexInput = rootElement.querySelector<HTMLInputElement>('input[name="accentHex"]');
   const customBackgroundImageFileInput = rootElement.querySelector<HTMLInputElement>('input[name="customBackgroundImageFile"]');
+  const currentFolderSearchInput = rootElement.querySelector<HTMLInputElement>('input[name="currentFolderSearch"]');
+  const bookmarkSortModeInput = rootElement.querySelector<HTMLSelectElement>('select[name="bookmarkSortMode"]');
   const backgroundOpacityInput = rootElement.querySelector<HTMLInputElement>('input[name="backgroundOpacity"]');
   const backgroundFitModeInput = rootElement.querySelector<HTMLSelectElement>('select[name="backgroundFitMode"]');
   const backgroundPositionModeInput = rootElement.querySelector<HTMLSelectElement>('select[name="backgroundPositionMode"]');
@@ -539,6 +625,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const rememberLastFolderInput = rootElement.querySelector<HTMLInputElement>('input[name="rememberLastFolder"]');
   const openLinksInNewTabInput = rootElement.querySelector<HTMLInputElement>('input[name="openLinksInNewTab"]');
   const showDockInput = rootElement.querySelector<HTMLInputElement>('input[name="showDock"]');
+  const autoHideDockInput = rootElement.querySelector<HTMLInputElement>('input[name="autoHideDock"]');
   const favoritesColumnsInput = rootElement.querySelector<HTMLInputElement>('input[name="favoritesColumns"]');
   const favoritesRowsInput = rootElement.querySelector<HTMLInputElement>('input[name="favoritesRows"]');
   const favoritesColumnGapInput = rootElement.querySelector<HTMLInputElement>('input[name="favoritesColumnGap"]');
@@ -557,6 +644,72 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const bookmarkGrid = rootElement.querySelector<HTMLElement>('.bookmark-grid');
   const bookmarkDock = rootElement.querySelector<HTMLElement>('.bookmark-dock');
   const dockStrip = rootElement.querySelector<HTMLElement>('.dock-strip');
+
+  rootElement.querySelectorAll<HTMLButtonElement>('[data-empty-action="open-dock-settings"]').forEach(button => {
+    button.addEventListener('click', async () => {
+      state.generalSubpage = 'dock';
+      await switchSettingsSection(rootElement, state, 'general');
+    });
+  });
+
+  rootElement.querySelectorAll<HTMLButtonElement>('[data-empty-action="open-manager"]').forEach(button => {
+    button.addEventListener('click', () => {
+      void openBookmarkManager(rootElement, state);
+    });
+  });
+
+  rootElement.querySelectorAll<HTMLButtonElement>('[data-empty-action="create-folder"]').forEach(button => {
+    button.addEventListener('click', () => {
+      void createFolderInFolder(rootElement, state, resolvedCurrentFolder.id);
+    });
+  });
+
+  rootElement.querySelectorAll<HTMLButtonElement>('[data-layout-preset-option]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const layoutPreset = button.dataset.layoutPresetOption;
+      if (!layoutPreset) {
+        return;
+      }
+
+      if (layoutPreset === 'custom') {
+        await applySettingsPatch(rootElement, state, { layoutPreset: 'custom' });
+        return;
+      }
+
+      await applySettingsPatch(rootElement, state, getLayoutPresetPatch(layoutPreset as 'balanced' | 'compact' | 'spacious' | 'presentation'));
+    });
+  });
+
+  rootElement.querySelector<HTMLButtonElement>('[data-sort-direction-toggle]')?.addEventListener('click', async () => {
+    if (state.settings.bookmarkSortMode === 'manual') {
+      return;
+    }
+    await applySettingsPatch(rootElement, state, {
+      bookmarkSortDirection: state.settings.bookmarkSortDirection === 'asc' ? 'desc' : 'asc',
+    });
+  });
+
+  currentFolderSearchInput?.addEventListener('input', () => {
+    const selectionStart = currentFolderSearchInput.selectionStart ?? currentFolderSearchInput.value.length;
+    const selectionEnd = currentFolderSearchInput.selectionEnd ?? currentFolderSearchInput.value.length;
+    state.searchQuery = currentFolderSearchInput.value;
+    syncDerivedTree(state);
+    normalizeSelection(state);
+    renderApp(rootElement, state);
+    window.requestAnimationFrame(() => {
+      const nextSearchInput = rootElement.querySelector<HTMLInputElement>('input[name="currentFolderSearch"]');
+      nextSearchInput?.focus();
+      nextSearchInput?.setSelectionRange(selectionStart, selectionEnd);
+    });
+  });
+
+  bookmarkSortModeInput?.addEventListener('change', async () => {
+    const nextMode = bookmarkSortModeInput.value;
+    if (nextMode !== 'manual' && nextMode !== 'name' && nextMode !== 'lastUsed' && nextMode !== 'created') {
+      return;
+    }
+    await applySettingsPatch(rootElement, state, { bookmarkSortMode: nextMode });
+  });
 
   const applyBookmarkCanvasBackgroundStyle = () => {
     if (!bookmarkCanvas) {
@@ -605,14 +758,9 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   });
 
   accentPickerHueInput?.addEventListener('change', async () => {
-    const response = await sendRuntimeMessage<{ type: typeof messageTypes.patchSettings; patch: Partial<AppSettings> }, PatchSettingsResponse>({
-      type: messageTypes.patchSettings,
-      patch: { accentColor: state.accentPicker.draftColor },
-    });
-
-    state.settings = response.settings;
+    await applySettingsPatch(rootElement, state, { accentColor: state.accentPicker.draftColor });
     state.accentPicker = {
-      ...createAccentPickerState(response.settings.accentColor),
+      ...createAccentPickerState(state.settings.accentColor),
       open: true,
     };
   });
@@ -624,14 +772,9 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   });
 
   accentPickerSaturationInput?.addEventListener('change', async () => {
-    const response = await sendRuntimeMessage<{ type: typeof messageTypes.patchSettings; patch: Partial<AppSettings> }, PatchSettingsResponse>({
-      type: messageTypes.patchSettings,
-      patch: { accentColor: state.accentPicker.draftColor },
-    });
-
-    state.settings = response.settings;
+    await applySettingsPatch(rootElement, state, { accentColor: state.accentPicker.draftColor });
     state.accentPicker = {
-      ...createAccentPickerState(response.settings.accentColor),
+      ...createAccentPickerState(state.settings.accentColor),
       open: true,
     };
   });
@@ -643,14 +786,9 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   });
 
   accentPickerLightnessInput?.addEventListener('change', async () => {
-    const response = await sendRuntimeMessage<{ type: typeof messageTypes.patchSettings; patch: Partial<AppSettings> }, PatchSettingsResponse>({
-      type: messageTypes.patchSettings,
-      patch: { accentColor: state.accentPicker.draftColor },
-    });
-
-    state.settings = response.settings;
+    await applySettingsPatch(rootElement, state, { accentColor: state.accentPicker.draftColor });
     state.accentPicker = {
-      ...createAccentPickerState(response.settings.accentColor),
+      ...createAccentPickerState(state.settings.accentColor),
       open: true,
     };
   });
@@ -676,12 +814,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
 
   backgroundOpacityInput?.addEventListener('change', async () => {
     const nextOpacity = Math.max(0, Math.min(100, Number(backgroundOpacityInput.value)));
-    const response = await sendRuntimeMessage<{ type: typeof messageTypes.patchSettings; patch: Partial<AppSettings> }, PatchSettingsResponse>({
-      type: messageTypes.patchSettings,
-      patch: { backgroundOpacity: nextOpacity },
-    });
-
-    state.settings = response.settings;
+    await applySettingsPatch(rootElement, state, { backgroundOpacity: nextOpacity });
     applyBookmarkCanvasBackgroundStyle();
   });
 
@@ -721,32 +854,36 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     await applySettingsPatch(rootElement, state, { showDock: showDockInput.checked });
   });
 
+  autoHideDockInput?.addEventListener('change', async () => {
+    await applySettingsPatch(rootElement, state, { autoHideDock: autoHideDockInput.checked });
+  });
+
   favoritesColumnsInput?.addEventListener('change', async () => {
-    await applySettingsPatch(rootElement, state, { favoritesColumns: Number(favoritesColumnsInput.value) });
+    await applySettingsPatch(rootElement, state, { favoritesColumns: Number(favoritesColumnsInput.value), layoutPreset: 'custom' });
   });
 
   favoritesRowsInput?.addEventListener('change', async () => {
-    await applySettingsPatch(rootElement, state, { favoritesRows: Number(favoritesRowsInput.value) });
+    await applySettingsPatch(rootElement, state, { favoritesRows: Number(favoritesRowsInput.value), layoutPreset: 'custom' });
   });
 
   favoritesColumnGapInput?.addEventListener('change', async () => {
-    await applySettingsPatch(rootElement, state, { favoritesColumnGap: Number(favoritesColumnGapInput.value) });
+    await applySettingsPatch(rootElement, state, { favoritesColumnGap: Number(favoritesColumnGapInput.value), layoutPreset: 'custom' });
   });
 
   favoritesRowGapInput?.addEventListener('change', async () => {
-    await applySettingsPatch(rootElement, state, { favoritesRowGap: Number(favoritesRowGapInput.value) });
+    await applySettingsPatch(rootElement, state, { favoritesRowGap: Number(favoritesRowGapInput.value), layoutPreset: 'custom' });
   });
 
   bookmarkTileWidthInput?.addEventListener('change', async () => {
-    await applySettingsPatch(rootElement, state, { bookmarkTileWidth: Number(bookmarkTileWidthInput.value) });
+    await applySettingsPatch(rootElement, state, { bookmarkTileWidth: Number(bookmarkTileWidthInput.value), layoutPreset: 'custom' });
   });
 
   bookmarkIconSizeInput?.addEventListener('change', async () => {
-    await applySettingsPatch(rootElement, state, { bookmarkIconSize: Number(bookmarkIconSizeInput.value) });
+    await applySettingsPatch(rootElement, state, { bookmarkIconSize: Number(bookmarkIconSizeInput.value), layoutPreset: 'custom' });
   });
 
   showBookmarkIconBackgroundInput?.addEventListener('change', async () => {
-    await applySettingsPatch(rootElement, state, { showBookmarkIconBackground: showBookmarkIconBackgroundInput.checked });
+    await applySettingsPatch(rootElement, state, { showBookmarkIconBackground: showBookmarkIconBackgroundInput.checked, layoutPreset: 'custom' });
   });
 
   [
@@ -951,13 +1088,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
 }
 
 async function switchSettingsSection(rootElement: HTMLDivElement, state: AppState, section: SettingsSectionId): Promise<void> {
-  const response = await sendRuntimeMessage<{ type: typeof messageTypes.patchSettings; patch: Partial<AppSettings> }, PatchSettingsResponse>({
-    type: messageTypes.patchSettings,
-    patch: { settingsSection: section },
-  });
-  state.settings = response.settings;
-  state.drawerOpen = true;
-  renderApp(rootElement, state);
+  await applySettingsPatch(rootElement, state, { settingsSection: section });
 }
 
 function dismissTransientUi(rootElement: HTMLDivElement, state: AppState): boolean {
@@ -1031,6 +1162,105 @@ function queueDrawerFocus(rootElement: HTMLDivElement, isOpen: boolean): void {
   });
 }
 
+function collectDeleteHistoryItems(state: AppState, nodes: BookmarkNode[]): DeleteHistoryEntry['items'] {
+  return nodes.map(node => {
+    const parentId = node.parentId ?? '';
+    const index = parentId
+      ? (getFolderNode(state.tree, parentId)?.children?.findIndex(child => child.id === node.id) ?? 0)
+      : 0;
+    return {
+      parentId,
+      index,
+      node: cloneBookmarkNode(node),
+    };
+  }).sort((left, right) => {
+    if (left.parentId === right.parentId) {
+      return left.index - right.index;
+    }
+
+    return left.parentId.localeCompare(right.parentId, undefined, { sensitivity: 'base', numeric: true });
+  });
+}
+
+async function undoLastAction(rootElement: HTMLDivElement, state: AppState): Promise<void> {
+  const entry = state.undoStack.shift();
+  if (!entry) {
+    return;
+  }
+
+  if (entry.kind === 'move') {
+    await applyHistorySnapshots(state, entry, 'before');
+    state.redoStack.unshift(entry);
+    state.statusMessage = {
+      kind: 'success',
+      message: `${entry.label} undone.`,
+    };
+    await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
+    return;
+  }
+
+  const restoredIds: string[] = [];
+  for (const item of entry.items) {
+    const restoredNode = await cloneBookmarkSubtree(item.parentId, item.node, item.index);
+    restoredIds.push(restoredNode.id);
+  }
+
+  entry.activeRootIds = restoredIds;
+  state.redoStack.unshift(entry);
+  state.statusMessage = {
+    kind: 'success',
+    message: `${entry.label} undone.`,
+  };
+  await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
+}
+
+async function redoLastAction(rootElement: HTMLDivElement, state: AppState): Promise<void> {
+  const entry = state.redoStack.shift();
+  if (!entry) {
+    return;
+  }
+
+  if (entry.kind === 'move') {
+    await applyHistorySnapshots(state, entry, 'after');
+    state.undoStack.unshift(entry);
+    state.statusMessage = {
+      kind: 'success',
+      message: `${entry.label} restored.`,
+    };
+    await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
+    return;
+  }
+
+  const currentIds = [...entry.activeRootIds];
+  for (const bookmarkId of currentIds) {
+    const node = findNodeById(state.tree, bookmarkId);
+    if (!node) {
+      continue;
+    }
+
+    await removeBookmarkSubtree(bookmarkId, !node.url);
+  }
+
+  entry.activeRootIds = [];
+  state.undoStack.unshift(entry);
+  state.statusMessage = {
+    kind: 'success',
+    message: `${entry.label} restored.`,
+  };
+  await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
+}
+
+async function applyHistorySnapshots(state: AppState, entry: Extract<UndoHistoryEntry, { kind: 'move' }>, field: 'before' | 'after'): Promise<void> {
+  for (const snapshot of entry.snapshots) {
+    const orderedIds = snapshot[field].filter(bookmarkId => Boolean(findNodeById(state.tree, bookmarkId)));
+    if (!orderedIds.length) {
+      continue;
+    }
+
+    await applyFolderOrder(snapshot.folderId, orderedIds);
+  }
+}
+
 function handleGlobalKeydown(rootElement: HTMLDivElement, state: AppState, event: KeyboardEvent): boolean {
   if (event.key === 'Escape') {
     return dismissTransientUi(rootElement, state);
@@ -1042,6 +1272,16 @@ function handleGlobalKeydown(rootElement: HTMLDivElement, state: AppState, event
 
   const shortcutKey = event.ctrlKey || event.metaKey;
   const key = event.key.toLowerCase();
+
+  if (shortcutKey && key === 'z' && !event.shiftKey) {
+    void undoLastAction(rootElement, state);
+    return true;
+  }
+
+  if (shortcutKey && ((key === 'z' && event.shiftKey) || key === 'y')) {
+    void redoLastAction(rootElement, state);
+    return true;
+  }
 
   if (shortcutKey && key === 'c' && state.selectedIds.length) {
     setClipboardFromItemIds(state, 'copy', getOrderedSelectedIds(state));
@@ -1099,6 +1339,8 @@ async function deleteSelectedItems(rootElement: HTMLDivElement, state: AppState,
     return;
   }
 
+  const historyItems = collectDeleteHistoryItems(state, selectedNodes);
+
   for (const node of selectedNodes) {
     await sendRuntimeMessage<{
       type: typeof messageTypes.removeBookmark;
@@ -1112,6 +1354,16 @@ async function deleteSelectedItems(rootElement: HTMLDivElement, state: AppState,
   }
 
   clearSelection(state);
+  pushUndoEntry(state, {
+    kind: 'delete',
+    label: `Deleted ${labelParts.join(' and ')}`,
+    items: historyItems,
+    activeRootIds: [],
+  });
+  state.statusMessage = {
+    kind: 'success',
+    message: `${labelParts.join(' and ')} deleted. Undo with Ctrl/Cmd+Z.`,
+  };
   await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
 }
 
@@ -1139,6 +1391,57 @@ function renderLibraryPill(node: BookmarkNode, breadcrumbs: BookmarkNode[]): str
 function renderBreadcrumb(node: BookmarkNode, index: number, items: BookmarkNode[]): string {
   const isLast = index === items.length - 1;
   return `<button class="breadcrumb" data-folder-id="${node.id}" data-last="${String(isLast)}" type="button">${escapeHtml(node.title || 'Untitled')}</button>`;
+}
+
+function renderSurfaceSummary(state: AppState, visibleCount: number, totalCount: number): string {
+  const parts = [`${String(visibleCount)} of ${String(totalCount)} items`];
+  if (state.selectedIds.length) {
+    parts.push(`${String(state.selectedIds.length)} selected`);
+  }
+
+  if (state.clipboard) {
+    parts.push(`${state.clipboard.mode === 'cut' ? 'Cut' : 'Copied'} ${String(state.clipboard.items.length)} item${state.clipboard.items.length === 1 ? '' : 's'}`);
+  }
+
+  if (state.searchQuery.trim()) {
+    parts.push(`Filtered by "${escapeHtml(state.searchQuery.trim())}"`);
+  }
+
+  return parts.map(part => `<span class="workspace-pill">${part}</span>`).join('');
+}
+
+function renderGridEmptyState(state: AppState): string {
+  if (state.searchQuery.trim()) {
+    return `
+      <div class="empty-state empty-state--rich">
+        <strong>No matches in this folder</strong>
+        <p>Try a different search term or clear the current filter.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="empty-state empty-state--rich">
+      <strong>This folder is empty</strong>
+      <p>Add a folder, add bookmarks, or open the browser bookmark manager to organize your library.</p>
+      <div class="empty-state__actions">
+        <button class="drawer-secondary-button" data-empty-action="create-folder" type="button">Add Folder</button>
+        <button class="drawer-secondary-button" data-empty-action="open-manager" type="button">Open Bookmark Manager</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderDockEmptyState(): string {
+  return `
+    <div class="dock-empty">
+      <strong>Dock is ready for a folder</strong>
+      <span>Pick a bookmark folder to keep your most-used links within reach.</span>
+      <div class="empty-state__actions">
+        <button class="drawer-secondary-button" data-empty-action="open-dock-settings" type="button">Choose Dock Folder</button>
+      </div>
+    </div>
+  `;
 }
 
 function renderBookmarkTile(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>, index: number, selected: boolean, clipboardCut: boolean): string {
@@ -1229,6 +1532,9 @@ async function deleteBookmarkFromContext(rootElement: HTMLDivElement, state: App
     return;
   }
 
+  const node = findNodeById(state.tree, target.id);
+  const historyItems = node ? collectDeleteHistoryItems(state, [node]) : [];
+
   await sendRuntimeMessage<{
     type: typeof messageTypes.removeBookmark;
     bookmarkId: string;
@@ -1242,15 +1548,30 @@ async function deleteBookmarkFromContext(rootElement: HTMLDivElement, state: App
     state.bookmarkDialog = createClosedBookmarkDialogState();
   }
 
+  if (historyItems.length) {
+    pushUndoEntry(state, {
+      kind: 'delete',
+      label: `Deleted ${target.title || getHostname(target.url)}`,
+      items: historyItems,
+      activeRootIds: [],
+    });
+    state.statusMessage = {
+      kind: 'success',
+      message: `${target.title || getHostname(target.url)} deleted. Undo with Ctrl/Cmd+Z.`,
+    };
+  }
+
   await refreshTreeAndRender(rootElement, state, renderApp);
 }
 
 async function handleBookmarkContextAction(rootElement: HTMLDivElement, state: AppState, action: string, target: BookmarkActionTarget): Promise<void> {
   switch (action) {
     case 'open-tab':
+      markBookmarkUsed(state, target.id);
       openBookmark(target.url, true);
       return;
     case 'open-window':
+      markBookmarkUsed(state, target.id);
       window.open(target.url, '_blank', 'noopener,noreferrer,width=1280,height=900');
       return;
     case 'cut':
@@ -1282,9 +1603,11 @@ async function handleBookmarkContextAction(rootElement: HTMLDivElement, state: A
 async function handleFolderContextAction(rootElement: HTMLDivElement, state: AppState, action: string, target: FolderActionTarget): Promise<void> {
   switch (action) {
     case 'open-tab':
+      markBookmarkUsed(state, target.id);
       openFolderView(target.id, true);
       return;
     case 'open-window':
+      markBookmarkUsed(state, target.id);
       openFolderView(target.id, false);
       return;
     case 'cut':
@@ -1367,6 +1690,11 @@ function setClipboardFromItemIds(state: AppState, mode: BookmarkClipboardState['
   state.clipboard = {
     mode,
     items,
+  };
+
+  state.statusMessage = {
+    kind: 'info',
+    message: `${mode === 'cut' ? 'Cut' : 'Copied'} ${String(items.length)} item${items.length === 1 ? '' : 's'}.`,
   };
 }
 
@@ -1476,6 +1804,8 @@ async function deleteFolderFromContext(rootElement: HTMLDivElement, state: AppSt
     return;
   }
 
+  const historyItems = folder ? collectDeleteHistoryItems(state, [folder]) : [];
+
   await sendRuntimeMessage<{
     type: typeof messageTypes.removeBookmark;
     bookmarkId: string;
@@ -1490,6 +1820,19 @@ async function deleteFolderFromContext(rootElement: HTMLDivElement, state: AppSt
     state.currentFolderId = target.parentId || resolveInitialFolderId(state.settings, state.tree, getLastFolder, getFolderIdFromHash);
   }
 
+  if (historyItems.length) {
+    pushUndoEntry(state, {
+      kind: 'delete',
+      label: `Deleted folder ${target.title || 'Untitled'}`,
+      items: historyItems,
+      activeRootIds: [],
+    });
+    state.statusMessage = {
+      kind: 'success',
+      message: `Folder ${target.title || 'Untitled'} deleted. Undo with Ctrl/Cmd+Z.`,
+    };
+  }
+
   await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
 }
 
@@ -1499,7 +1842,14 @@ async function pasteClipboardIntoFolder(rootElement: HTMLDivElement, state: AppS
     return;
   }
 
+  const clipboardCount = state.clipboard.items.length;
+
   if (state.clipboard.mode === 'cut') {
+    const sourceFolderIds = Array.from(new Set(state.clipboard.items.map(item => item.parentId).filter((parentId): parentId is string => Boolean(parentId))));
+    const beforeSnapshots = Array.from(new Set([...sourceFolderIds, targetFolderId])).map(folderId => ({
+      folderId,
+      before: getFolderChildIds(state.tree, folderId),
+    }));
     const targetFolder = getFolderNode(state.tree, targetFolderId);
     let nextIndex = targetFolder?.children?.length ?? 0;
 
@@ -1519,6 +1869,21 @@ async function pasteClipboardIntoFolder(rootElement: HTMLDivElement, state: AppS
     }
 
     state.clipboard = null;
+    await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
+    pushUndoEntry(state, {
+      kind: 'move',
+      label: clipboardCount === 1 ? 'Moved 1 item' : `Moved ${String(clipboardCount)} items`,
+      snapshots: beforeSnapshots.map(snapshot => ({
+        folderId: snapshot.folderId,
+        before: snapshot.before,
+        after: getFolderChildIds(state.tree, snapshot.folderId),
+      })),
+    });
+    state.statusMessage = {
+      kind: 'success',
+      message: `${clipboardCount === 1 ? 'Item moved' : `${String(clipboardCount)} items moved`}. Undo with Ctrl/Cmd+Z.`,
+    };
+    return;
   } else {
     const targetFolder = getFolderNode(state.tree, targetFolderId);
     let nextIndex = targetFolder?.children?.length ?? 0;
@@ -1530,58 +1895,10 @@ async function pasteClipboardIntoFolder(rootElement: HTMLDivElement, state: AppS
   }
 
   await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
-}
-
-async function cloneBookmarkSubtree(parentId: string, sourceNode: BookmarkNode, index?: number): Promise<void> {
-  if (sourceNode.url) {
-    await sendRuntimeMessage<{
-      type: typeof messageTypes.createBookmark;
-      parentId: string;
-      title: string;
-      url?: string;
-      index?: number;
-    }, CreateBookmarkResponse>({
-      type: messageTypes.createBookmark,
-      parentId,
-      title: sourceNode.title || getHostname(sourceNode.url),
-      url: sourceNode.url,
-      index,
-    });
-    return;
-  }
-
-  const response = await sendRuntimeMessage<{
-    type: typeof messageTypes.createBookmark;
-    parentId: string;
-    title: string;
-    url?: string;
-    index?: number;
-  }, CreateBookmarkResponse>({
-    type: messageTypes.createBookmark,
-    parentId,
-    title: sourceNode.title || 'Untitled',
-    index,
-  });
-
-  for (const child of sourceNode.children ?? []) {
-    if (child.url) {
-      await sendRuntimeMessage<{
-        type: typeof messageTypes.createBookmark;
-        parentId: string;
-        title: string;
-        url?: string;
-        index?: number;
-      }, CreateBookmarkResponse>({
-        type: messageTypes.createBookmark,
-        parentId: response.bookmark.id,
-        title: child.title || getHostname(child.url),
-        url: child.url,
-      });
-      continue;
-    }
-
-    await cloneBookmarkSubtree(response.bookmark.id, child);
-  }
+  state.statusMessage = {
+    kind: 'success',
+    message: `Pasted ${String(clipboardCount)} item${clipboardCount === 1 ? '' : 's'}.`,
+  };
 }
 
 async function openBookmarkManager(rootElement: HTMLDivElement, state: AppState): Promise<void> {

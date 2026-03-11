@@ -1,12 +1,13 @@
 import { sendRuntimeMessage } from '../shared/browser';
 import { messageTypes, type BookmarkNode, type MoveBookmarkResponse, type ResolvedIcon } from '../shared/messages';
-import { type AppState, type BookmarkItemKind, type FolderActionTarget, type SelectionScope, type SelectionSurface } from './app-state';
-import { getBookmarkActionTarget, getFolderNode, getHostname, isFolderDescendantOf } from './bookmark-navigation';
+import { pushUndoEntry, type AppState, type BookmarkItemKind, type FolderActionTarget, type SelectionScope, type SelectionSurface } from './app-state';
+import { getBookmarkActionTarget, getFolderChildIds, getFolderNode, getHostname, isFolderDescendantOf } from './bookmark-navigation';
+import { markBookmarkUsed } from './bookmark-usage';
 import { escapeHtml } from './html';
 import { renderBookmarkVisualIcon } from './icon-render';
 import { measureAsync } from './performance';
-import { openBookmark } from './runtime-helpers';
-import { clearSelection, createSelectionContextMenuState, getFolderChildren, getOrderedSelectedIds, getSelectedNodes, isSameScope, setSelection } from './selection-state';
+import { openBookmark, openFolderView } from './runtime-helpers';
+import { clearSelection, createSelectionContextMenuState, getFolderChildren, getOrderedSelectedIds, getSelectedNodes, getVisibleChildren, isSameScope, setSelection } from './selection-state';
 import { navigateToFolderAndRender, refreshTreeAndRender, type RenderAppFn } from './state-transitions';
 
 export function setupGridInteractions(rootElement: HTMLDivElement, state: AppState, bookmarkCanvas: HTMLElement | null, bookmarkGrid: HTMLElement | null, currentFolder: BookmarkNode, renderApp: RenderAppFn): void {
@@ -99,8 +100,9 @@ function setupSurfaceInteractions(
       }
     | null = null;
 
-  const visibleItems = getFolderChildren(state, folderId);
+  const visibleItems = getVisibleChildren(state, scope);
   const buttonById = new Map(itemButtons.map(button => [button.dataset[idDatasetKey] || '', button]));
+  const dragDisabled = surface === 'grid' && folderId === state.currentFolderId && state.settings.bookmarkSortMode !== 'manual';
 
   const setButtonSelectionState = (selectedIds: string[]) => {
     const selectedSet = new Set(selectedIds);
@@ -309,10 +311,6 @@ function setupSurfaceInteractions(
         return;
       }
 
-      if (event.metaKey || event.ctrlKey) {
-        return;
-      }
-
       const itemId = button.dataset[idDatasetKey];
       if (!itemId) {
         return;
@@ -323,11 +321,24 @@ function setupSurfaceInteractions(
         return;
       }
 
+      if (event.metaKey || event.ctrlKey) {
+        markBookmarkUsed(state, item.id);
+        if (item.url) {
+          openBookmark(item.url, true);
+          return;
+        }
+
+        openFolderView(item.id, true);
+        return;
+      }
+
       if (item.url) {
+        markBookmarkUsed(state, item.id);
         openBookmark(item.url, state.settings.openLinksInNewTab);
         return;
       }
 
+      markBookmarkUsed(state, item.id);
       navigateToFolderAndRender(rootElement, state, item.id, renderApp);
     });
   });
@@ -378,6 +389,10 @@ function setupSurfaceInteractions(
       state.contextMenu = null;
       suppressNextClick(itemButton);
       renderApp(rootElement, state);
+      return;
+    }
+
+    if (dragDisabled) {
       return;
     }
 
@@ -580,6 +595,7 @@ async function reorderSelection(rootElement: HTMLDivElement, state: AppState, re
     dragCount: dragIds.length,
     dropIndex,
   }, async () => {
+    const beforeOrder = getFolderChildIds(state.tree, scope.folderId);
     const currentChildren = getFolderChildren(state, scope.folderId);
     const dragIdSet = new Set(dragIds);
     const draggedItems = currentChildren.filter(node => dragIdSet.has(node.id));
@@ -615,6 +631,15 @@ async function reorderSelection(rootElement: HTMLDivElement, state: AppState, re
 
     setSelection(state, draggedItems.map(item => item.id), scope);
     await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
+    pushUndoEntry(state, {
+      kind: 'move',
+      label: draggedItems.length === 1 ? 'Reordered 1 item' : `Reordered ${String(draggedItems.length)} items`,
+      snapshots: [{
+        folderId: scope.folderId,
+        before: beforeOrder,
+        after: getFolderChildIds(state.tree, scope.folderId),
+      }],
+    });
     return true;
   });
 }
@@ -630,6 +655,8 @@ async function moveSelectionIntoFolder(rootElement: HTMLDivElement, state: AppSt
       return false;
     }
 
+    const beforeSourceOrder = getFolderChildIds(state.tree, scope.folderId);
+    const beforeTargetOrder = getFolderChildIds(state.tree, targetFolderId);
     const dragNodes = getSelectedNodes(state, dragIds, scope);
     const targetChildren = getFolderChildren(state, targetFolderId);
     let nextIndex = targetChildren.length;
@@ -650,6 +677,22 @@ async function moveSelectionIntoFolder(rootElement: HTMLDivElement, state: AppSt
 
     clearSelection(state);
     await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
+    pushUndoEntry(state, {
+      kind: 'move',
+      label: dragNodes.length === 1 ? 'Moved 1 item' : `Moved ${String(dragNodes.length)} items`,
+      snapshots: [
+        {
+          folderId: scope.folderId,
+          before: beforeSourceOrder,
+          after: getFolderChildIds(state.tree, scope.folderId),
+        },
+        {
+          folderId: targetFolderId,
+          before: beforeTargetOrder,
+          after: getFolderChildIds(state.tree, targetFolderId),
+        },
+      ],
+    });
     return true;
   });
 }

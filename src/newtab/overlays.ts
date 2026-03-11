@@ -11,6 +11,10 @@ export function renderStatusMessage(statusMessage: AppStatus): string {
   `;
 }
 
+function renderMenuItem(action: string, iconName: Parameters<typeof renderUiIcon>[0], label: string, shortcut = '', disabled = false): string {
+  return `<button class="bookmark-context-menu__item button-with-icon" data-context-action="${action}" type="button" role="menuitem" ${disabled ? 'disabled' : ''}>${renderUiIcon(iconName)}<span>${label}</span>${shortcut ? `<span class="bookmark-context-menu__shortcut">${shortcut}</span>` : ''}</button>`;
+}
+
 export function renderContextMenu(state: AppState, contextMenu: ContextMenuState, canPasteIntoFolder: (targetFolderId: string) => boolean): string {
   const x = clamp(contextMenu.x, 12, Math.max(12, window.innerWidth - 287));
   const estimatedHeight = contextMenu.kind === 'surface' ? 304 : contextMenu.kind === 'selection' ? 284 : 356;
@@ -27,15 +31,15 @@ export function renderContextMenu(state: AppState, contextMenu: ContextMenuState
     return `
       <div class="context-menu-layer">
         <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="Bookmark actions">
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-tab" type="button" role="menuitem">${renderUiIcon('external')}<span>Open in new tab</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-window" type="button" role="menuitem">${renderUiIcon('window')}<span>Open in new window</span></button>
+          ${renderMenuItem('open-tab', 'external', 'Open in new tab', 'Ctrl/Cmd+Click')}
+          ${renderMenuItem('open-window', 'window', 'Open in new window')}
           <div class="bookmark-context-menu__divider"></div>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="cut" type="button" role="menuitem">${renderUiIcon('scissors')}<span>Cut</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="copy" type="button" role="menuitem">${renderUiIcon('copy')}<span>Copy</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="paste" type="button" role="menuitem" ${canPaste ? '' : 'disabled'}>${renderUiIcon('clipboard')}<span>Paste</span></button>
+          ${renderMenuItem('cut', 'scissors', 'Cut', 'Ctrl/Cmd+X')}
+          ${renderMenuItem('copy', 'copy', 'Copy', 'Ctrl/Cmd+C')}
+          ${renderMenuItem('paste', 'clipboard', 'Paste', 'Ctrl/Cmd+V', !canPaste)}
           <div class="bookmark-context-menu__divider"></div>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="edit" type="button" role="menuitem">${renderUiIcon('edit')}<span>Edit...</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="delete" type="button" role="menuitem">${renderUiIcon('trash')}<span>Delete...</span></button>
+          ${renderMenuItem('edit', 'edit', 'Edit...')}
+          ${renderMenuItem('delete', 'trash', 'Delete...', 'Delete')}
         </div>
       </div>
     `;
@@ -46,15 +50,15 @@ export function renderContextMenu(state: AppState, contextMenu: ContextMenuState
     return `
       <div class="context-menu-layer">
         <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="Folder actions">
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-tab" type="button" role="menuitem">${renderUiIcon('external')}<span>Open in new tab</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-window" type="button" role="menuitem">${renderUiIcon('window')}<span>Open in new window</span></button>
+          ${renderMenuItem('open-tab', 'external', 'Open in new tab', 'Ctrl/Cmd+Click')}
+          ${renderMenuItem('open-window', 'window', 'Open in new window')}
           <div class="bookmark-context-menu__divider"></div>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="cut" type="button" role="menuitem">${renderUiIcon('scissors')}<span>Cut</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="copy" type="button" role="menuitem">${renderUiIcon('copy')}<span>Copy</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="paste" type="button" role="menuitem" ${canPaste ? '' : 'disabled'}>${renderUiIcon('clipboard')}<span>Paste</span></button>
+          ${renderMenuItem('cut', 'scissors', 'Cut', 'Ctrl/Cmd+X')}
+          ${renderMenuItem('copy', 'copy', 'Copy', 'Ctrl/Cmd+C')}
+          ${renderMenuItem('paste', 'clipboard', 'Paste', 'Ctrl/Cmd+V', !canPaste)}
           <div class="bookmark-context-menu__divider"></div>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="edit-folder" type="button" role="menuitem">${renderUiIcon('edit')}<span>Edit</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="delete-folder" type="button" role="menuitem">${renderUiIcon('trash')}<span>Delete</span></button>
+          ${renderMenuItem('edit-folder', 'edit', 'Edit')}
+          ${renderMenuItem('delete-folder', 'trash', 'Delete', 'Delete')}
         </div>
       </div>
     `;
@@ -73,11 +77,11 @@ export function renderContextMenu(state: AppState, contextMenu: ContextMenuState
       <div class="context-menu-layer">
         <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="Selection actions">
           <p class="bookmark-context-menu__label">${escapeHtml(summary.join(' · ') || 'Selection')}</p>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-tabs" type="button" role="menuitem">${renderUiIcon('external')}<span>Open all links in new tabs</span></button>
+          ${renderMenuItem('open-tabs', 'external', 'Open all links in new tabs')}
           <div class="bookmark-context-menu__divider"></div>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="cut-selection" type="button" role="menuitem">${renderUiIcon('scissors')}<span>Cut</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="copy-selection" type="button" role="menuitem">${renderUiIcon('copy')}<span>Copy</span></button>
-          <button class="bookmark-context-menu__item button-with-icon" data-context-action="delete-selection" type="button" role="menuitem">${renderUiIcon('trash')}<span>Delete</span></button>
+          ${renderMenuItem('cut-selection', 'scissors', 'Cut', 'Ctrl/Cmd+X')}
+          ${renderMenuItem('copy-selection', 'copy', 'Copy', 'Ctrl/Cmd+C')}
+          ${renderMenuItem('delete-selection', 'trash', 'Delete', 'Delete')}
         </div>
       </div>
     `;
@@ -87,13 +91,13 @@ export function renderContextMenu(state: AppState, contextMenu: ContextMenuState
   return `
     <div class="context-menu-layer">
       <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="${contextMenu.target.surface === 'dock' ? 'Dock actions' : 'Grid actions'}">
-        <button class="bookmark-context-menu__item button-with-icon" data-context-action="add-bookmark" type="button" role="menuitem">${renderUiIcon('plus')}<span>Add Bookmark</span></button>
-        <button class="bookmark-context-menu__item button-with-icon" data-context-action="add-folder" type="button" role="menuitem">${renderUiIcon('folderPlus')}<span>Add Folder</span></button>
-        <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-manager" type="button" role="menuitem">${renderUiIcon('grid')}<span>Open Bookmark Manager</span></button>
+        ${renderMenuItem('add-bookmark', 'plus', 'Add Bookmark')}
+        ${renderMenuItem('add-folder', 'folderPlus', 'Add Folder')}
+        ${renderMenuItem('open-manager', 'grid', 'Open Bookmark Manager')}
         <div class="bookmark-context-menu__divider"></div>
-        <button class="bookmark-context-menu__item button-with-icon" data-context-action="paste" type="button" role="menuitem" ${canPaste ? '' : 'disabled'}>${renderUiIcon('clipboard')}<span>Paste</span></button>
+        ${renderMenuItem('paste', 'clipboard', 'Paste', 'Ctrl/Cmd+V', !canPaste)}
         <div class="bookmark-context-menu__divider"></div>
-        <button class="bookmark-context-menu__item button-with-icon" data-context-action="open-settings" type="button" role="menuitem">${renderUiIcon('settings')}<span>Open Settings</span></button>
+        ${renderMenuItem('open-settings', 'settings', 'Open Settings')}
       </div>
     </div>
   `;

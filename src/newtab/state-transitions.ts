@@ -109,6 +109,7 @@ export function cloneBookmarkNode(node: BookmarkNode): BookmarkNode {
     parentId: node.parentId,
     title: node.title,
     url: node.url,
+    dateAdded: node.dateAdded,
     children: node.children?.map(child => cloneBookmarkNode(child)),
   };
 }

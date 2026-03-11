@@ -22,6 +22,9 @@ export type SettingsSectionId = 'general' | 'appearance';
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type BackgroundFitMode = 'cover' | 'contain' | 'fill';
 export type BackgroundPositionMode = 'center' | 'top' | 'bottom';
+export type BookmarkSortMode = 'manual' | 'name' | 'lastUsed' | 'created';
+export type SortDirection = 'asc' | 'desc';
+export type LayoutPresetId = 'balanced' | 'compact' | 'spacious' | 'presentation' | 'custom';
 
 export interface AppSettings {
   themeMode: ThemeMode;
@@ -35,7 +38,10 @@ export interface AppSettings {
   rememberLastFolder: boolean;
   openLinksInNewTab: boolean;
   showDock: boolean;
+  autoHideDock: boolean;
   dockFolderId: string;
+  bookmarkSortMode: BookmarkSortMode;
+  bookmarkSortDirection: SortDirection;
   favoritesColumns: number;
   favoritesRows: number;
   favoritesColumnGap: number;
@@ -43,6 +49,7 @@ export interface AppSettings {
   bookmarkTileWidth: number;
   bookmarkIconSize: number;
   showBookmarkIconBackground: boolean;
+  layoutPreset: LayoutPresetId;
 }
 
 export interface BookmarkNode {
@@ -50,7 +57,13 @@ export interface BookmarkNode {
   parentId?: string;
   title: string;
   url?: string;
+  dateAdded?: number;
   children?: BookmarkNode[];
+}
+
+export interface BookmarkUsageRecord {
+  bookmarkId: string;
+  usedAt: number;
 }
 
 export type IconSourceKind = 'override' | 'favicon' | 'search' | 'generated';

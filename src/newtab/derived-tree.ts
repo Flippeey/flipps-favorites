@@ -1,10 +1,11 @@
-import type { AppSettings, BookmarkNode } from '../shared/messages';
+import type { AppSettings, BookmarkNode, BookmarkUsageRecord } from '../shared/messages';
 import { collectFolderOptions, collectLinkOptions, collectVisibleBookmarks, getBreadcrumbs, getDefaultFolder, getDockFolder, getHostname, getLibraryFolders, type BookmarkActionTarget } from './bookmark-navigation';
 import type { AppState } from './app-state';
 
 export interface DerivedTreeState {
   defaultFolder: BookmarkNode | null;
   currentFolder: BookmarkNode | null;
+  allCurrentFolderChildren: BookmarkNode[];
   currentFolderChildren: BookmarkNode[];
   dockFolder: BookmarkNode | null;
   dockItems: BookmarkNode[];
@@ -15,27 +16,27 @@ export interface DerivedTreeState {
   visibleIconTargets: BookmarkActionTarget[];
 }
 
-const derivedTreeCache = new WeakMap<BookmarkNode[], Map<string, DerivedTreeState>>();
-
 export function syncDerivedTree(state: AppState): void {
-  state.derivedTree = deriveTreeState(state.tree, state.settings, state.currentFolderId);
+  state.derivedTree = deriveTreeState(state.tree, state.settings, state.currentFolderId, state.searchQuery, state.bookmarkUsage);
 }
 
-export function deriveTreeState(tree: BookmarkNode[], settings: AppSettings, currentFolderId: string): DerivedTreeState {
-  const cacheKey = [currentFolderId, settings.rootFolderId, settings.dockFolderId, settings.showDock ? '1' : '0'].join('|');
-  const cached = derivedTreeCache.get(tree)?.get(cacheKey);
-  if (cached) {
-    return cached;
-  }
-
+export function deriveTreeState(
+  tree: BookmarkNode[],
+  settings: AppSettings,
+  currentFolderId: string,
+  searchQuery: string,
+  bookmarkUsage: Record<string, BookmarkUsageRecord>,
+): DerivedTreeState {
   const defaultFolder = getDefaultFolder(tree, settings.rootFolderId);
   const currentFolder = getFolderOrDefault(tree, currentFolderId, defaultFolder);
   const dockFolder = getDockFolder(tree, settings);
   const visibleIconTargets = collectUniqueVisibleIconTargets(tree, settings, currentFolder?.id ?? defaultFolder?.id ?? '');
+  const allCurrentFolderChildren = currentFolder?.children ?? [];
   const derived: DerivedTreeState = {
     defaultFolder,
     currentFolder,
-    currentFolderChildren: currentFolder?.children ?? [],
+    allCurrentFolderChildren,
+    currentFolderChildren: applyCurrentFolderView(allCurrentFolderChildren, settings, searchQuery, bookmarkUsage),
     dockFolder,
     dockItems: dockFolder?.children ?? [],
     libraryFolders: getLibraryFolders(tree),
@@ -44,14 +45,73 @@ export function deriveTreeState(tree: BookmarkNode[], settings: AppSettings, cur
     linkOptions: collectLinkOptions(tree),
     visibleIconTargets,
   };
-
-  let treeCache = derivedTreeCache.get(tree);
-  if (!treeCache) {
-    treeCache = new Map<string, DerivedTreeState>();
-    derivedTreeCache.set(tree, treeCache);
-  }
-  treeCache.set(cacheKey, derived);
   return derived;
+}
+
+function applyCurrentFolderView(
+  children: BookmarkNode[],
+  settings: AppSettings,
+  searchQuery: string,
+  bookmarkUsage: Record<string, BookmarkUsageRecord>,
+): BookmarkNode[] {
+  const query = searchQuery.trim().toLowerCase();
+  const filtered = query
+    ? children.filter(node => matchesSearchQuery(node, query))
+    : [...children];
+
+  if (settings.bookmarkSortMode === 'manual') {
+    return filtered;
+  }
+
+  return filtered.sort((left, right) => compareNodes(left, right, settings, bookmarkUsage));
+}
+
+function matchesSearchQuery(node: BookmarkNode, query: string): boolean {
+  const title = (node.title || 'Untitled').toLowerCase();
+  if (title.includes(query)) {
+    return true;
+  }
+
+  if (!node.url) {
+    return false;
+  }
+
+  return node.url.toLowerCase().includes(query) || getHostname(node.url).toLowerCase().includes(query);
+}
+
+function compareNodes(
+  left: BookmarkNode,
+  right: BookmarkNode,
+  settings: AppSettings,
+  bookmarkUsage: Record<string, BookmarkUsageRecord>,
+): number {
+  const direction = settings.bookmarkSortDirection === 'desc' ? -1 : 1;
+
+  if (settings.bookmarkSortMode === 'name') {
+    return direction * compareStrings(left.title || fallbackName(left), right.title || fallbackName(right));
+  }
+
+  if (settings.bookmarkSortMode === 'created') {
+    const createdDelta = (left.dateAdded ?? 0) - (right.dateAdded ?? 0);
+    return createdDelta === 0
+      ? direction * compareStrings(left.title || fallbackName(left), right.title || fallbackName(right))
+      : direction * createdDelta;
+  }
+
+  const leftUsedAt = bookmarkUsage[left.id]?.usedAt ?? 0;
+  const rightUsedAt = bookmarkUsage[right.id]?.usedAt ?? 0;
+  const usageDelta = leftUsedAt - rightUsedAt;
+  return usageDelta === 0
+    ? direction * compareStrings(left.title || fallbackName(left), right.title || fallbackName(right))
+    : direction * usageDelta;
+}
+
+function fallbackName(node: BookmarkNode): string {
+  return node.url ? getHostname(node.url) : 'Untitled';
+}
+
+function compareStrings(left: string, right: string): number {
+  return left.localeCompare(right, undefined, { sensitivity: 'base', numeric: true });
 }
 
 function getFolderOrDefault(tree: BookmarkNode[], folderId: string, defaultFolder: BookmarkNode | null): BookmarkNode | null {

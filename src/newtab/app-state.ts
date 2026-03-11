@@ -1,4 +1,4 @@
-﻿import type { AppSettings, BookmarkNode, IconSearchCandidate, ResolvedIcon } from '../shared/messages';
+﻿import type { AppSettings, BookmarkNode, BookmarkUsageRecord, IconSearchCandidate, ResolvedIcon } from '../shared/messages';
 import { createAccentPickerState, type AccentPickerState, type GeneralSettingsSubpage } from '../settings';
 import { deriveTreeState, type DerivedTreeState } from './derived-tree';
 import { resolveInitialFolderId, resolveInitialIconToolTarget, type BookmarkActionTarget } from './bookmark-navigation';
@@ -13,6 +13,8 @@ export interface AppState {
   accentPicker: AccentPickerState;
   iconToolTargetUrl: string;
   iconToolStatus: string;
+  searchQuery: string;
+  bookmarkUsage: Record<string, BookmarkUsageRecord>;
   clipboard: BookmarkClipboardState | null;
   contextMenu: ContextMenuState | null;
   bookmarkDialog: BookmarkDialogState;
@@ -21,6 +23,9 @@ export interface AppState {
   selectionAnchorId: string | null;
   selectionScope: SelectionScope | null;
   statusMessage: AppStatus | null;
+  undoStack: UndoHistoryEntry[];
+  redoStack: UndoHistoryEntry[];
+  settingsFeedback: SettingsFeedbackState;
 }
 
 export type BookmarkItemKind = 'bookmark' | 'folder';
@@ -86,6 +91,38 @@ export interface BookmarkClipboardState {
   items: BookmarkNode[];
 }
 
+export interface FolderOrderSnapshot {
+  folderId: string;
+  before: string[];
+  after: string[];
+}
+
+export interface DeleteHistoryItem {
+  parentId: string;
+  index: number;
+  node: BookmarkNode;
+}
+
+export interface DeleteHistoryEntry {
+  kind: 'delete';
+  label: string;
+  items: DeleteHistoryItem[];
+  activeRootIds: string[];
+}
+
+export interface MoveHistoryEntry {
+  kind: 'move';
+  label: string;
+  snapshots: FolderOrderSnapshot[];
+}
+
+export type UndoHistoryEntry = DeleteHistoryEntry | MoveHistoryEntry;
+
+export interface SettingsFeedbackState {
+  status: 'idle' | 'saving' | 'saved' | 'error';
+  message: string;
+}
+
 export interface AppStatus {
   message: string;
   kind: 'error' | 'success' | 'info';
@@ -107,21 +144,24 @@ export interface BookmarkDialogState {
 export function createInitialAppState(args: {
   settings: AppSettings;
   tree: BookmarkNode[];
+  bookmarkUsage: Record<string, BookmarkUsageRecord>;
   getLastFolder: () => string | null;
   getFolderIdFromHash: () => string | null;
 }): AppState {
-  const { settings, tree, getLastFolder, getFolderIdFromHash } = args;
+  const { settings, tree, bookmarkUsage, getLastFolder, getFolderIdFromHash } = args;
   const currentFolderId = resolveInitialFolderId(settings, tree, getLastFolder, getFolderIdFromHash);
   return {
     settings,
     tree,
-    derivedTree: deriveTreeState(tree, settings, currentFolderId),
+    derivedTree: deriveTreeState(tree, settings, currentFolderId, '', bookmarkUsage),
     currentFolderId,
     drawerOpen: false,
     generalSubpage: 'general',
     accentPicker: createAccentPickerState(settings.accentColor),
     iconToolTargetUrl: resolveInitialIconToolTarget(tree),
     iconToolStatus: '',
+    searchQuery: '',
+    bookmarkUsage,
     clipboard: null,
     contextMenu: null,
     bookmarkDialog: createClosedBookmarkDialogState(),
@@ -130,6 +170,12 @@ export function createInitialAppState(args: {
     selectionAnchorId: null,
     selectionScope: null,
     statusMessage: null,
+    undoStack: [],
+    redoStack: [],
+    settingsFeedback: {
+      status: 'idle',
+      message: '',
+    },
   };
 }
 
@@ -146,4 +192,9 @@ export function createClosedBookmarkDialogState(): BookmarkDialogState {
     results: [],
     previewIcon: null,
   };
+}
+
+export function pushUndoEntry(state: AppState, entry: UndoHistoryEntry): void {
+  state.undoStack.unshift(entry);
+  state.redoStack = [];
 }
