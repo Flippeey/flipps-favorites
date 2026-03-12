@@ -12,7 +12,9 @@ const extensionVersion = process.env.EXTENSION_VERSION ?? '0.1.0';
 const extensionDescription = process.env.EXTENSION_DESCRIPTION
   ?? "Flipp's Favorites replaces your new tab page with a fast, customizable bookmark dashboard featuring folder navigation, bookmark search, visual tiles, shortcuts. Use the theme controls to customize the look and feel of your new tab page and make it your own.";
 const firefoxExtensionId = process.env.FIREFOX_EXTENSION_ID ?? 'com.flipps-favorites@flippflix.com';
-const firefoxStrictMinVersion = process.env.FIREFOX_STRICT_MIN_VERSION ?? '128.0';
+const firefoxStrictMinVersion = process.env.FIREFOX_STRICT_MIN_VERSION ?? '140.0';
+const firefoxAndroidStrictMinVersion = process.env.FIREFOX_ANDROID_STRICT_MIN_VERSION ?? '142.0';
+const firefoxUpdateUrl = process.env.FIREFOX_UPDATE_URL;
 const includeHttpHosts = process.env.INCLUDE_HTTP_HOSTS === '1';
 
 const hostPermissions = includeHttpHosts
@@ -73,10 +75,20 @@ const browserSpecific = {
       gecko: {
         id: firefoxExtensionId,
         strict_min_version: firefoxStrictMinVersion,
+        data_collection_permissions: {
+          required: ['none'],
+        },
+      },
+      gecko_android: {
+        strict_min_version: firefoxAndroidStrictMinVersion,
       },
     },
   },
 };
+
+if (firefoxUpdateUrl) {
+  browserSpecific.firefox.browser_specific_settings.gecko.update_url = firefoxUpdateUrl;
+}
 
 if (!(target in browserSpecific)) {
   throw new Error(`Unsupported target: ${target}`);
