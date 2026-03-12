@@ -1,7 +1,16 @@
 import { extensionApi } from './browser';
 
+export type StorageAreaPreference = 'local' | 'sync-preferred';
+type ResolvedStorageAreaName = 'local' | 'sync';
+
+interface ResolvedStorageArea {
+  name: ResolvedStorageAreaName;
+  api: any;
+}
+
 export interface CachedValueStore<T> {
   read: () => Promise<T>;
+  readFresh: () => Promise<T>;
   write: (value: T) => Promise<T>;
   clearCache: () => void;
 }
@@ -18,11 +27,106 @@ export function createCachedValueStore<T>(args: {
   storageKey: string;
   deserialize: (storedValue: unknown) => T;
   serialize?: (value: T) => unknown;
+  area?: StorageAreaPreference;
+  migrateFromLocal?: boolean;
 }): CachedValueStore<T> {
-  const { storageKey, deserialize, serialize = identity } = args;
+  const {
+    storageKey,
+    deserialize,
+    serialize = identity,
+    area = 'local',
+    migrateFromLocal = false,
+  } = args;
   let hasCache = false;
   let cacheValue: T;
   let loadPromise: Promise<T> | null = null;
+  let areaPromise: Promise<ResolvedStorageArea> | null = null;
+  let listenerAttached = false;
+
+  const getLocalArea = (): ResolvedStorageArea => ({
+    name: 'local',
+    api: extensionApi.storage.local,
+  });
+
+  function attachStorageChangeListener(areaName: ResolvedStorageAreaName): void {
+    if (listenerAttached || !extensionApi.storage?.onChanged?.addListener) {
+      return;
+    }
+
+    extensionApi.storage.onChanged.addListener((changes: Record<string, unknown>, changedArea: string) => {
+      if (changedArea !== areaName || !(storageKey in changes)) {
+        return;
+      }
+
+      hasCache = false;
+      loadPromise = null;
+    });
+
+    listenerAttached = true;
+  }
+
+  async function resolveStorageArea(): Promise<ResolvedStorageArea> {
+    if (!areaPromise) {
+      areaPromise = (async () => {
+        if (area !== 'sync-preferred') {
+          return getLocalArea();
+        }
+
+        const syncArea = extensionApi.storage?.sync;
+        if (!syncArea?.get || !syncArea?.set) {
+          return getLocalArea();
+        }
+
+        try {
+          await syncArea.get(null);
+          return {
+            name: 'sync',
+            api: syncArea,
+          };
+        } catch {
+          return getLocalArea();
+        }
+      })();
+    }
+
+    const resolved = await areaPromise;
+    attachStorageChangeListener(resolved.name);
+    return resolved;
+  }
+
+  async function readStorageValue(storageArea: ResolvedStorageArea): Promise<unknown> {
+    const stored = await storageArea.api.get(storageKey) as Record<string, unknown>;
+    return stored[storageKey];
+  }
+
+  async function writeStorageValue(storageArea: ResolvedStorageArea, value: unknown): Promise<void> {
+    await storageArea.api.set({
+      [storageKey]: value,
+    });
+  }
+
+  async function loadValue(forceRefresh: boolean): Promise<T> {
+    if (!forceRefresh && hasCache) {
+      return cacheValue;
+    }
+
+    const storageArea = await resolveStorageArea();
+    let storedValue = await readStorageValue(storageArea);
+
+    if (storedValue === undefined && migrateFromLocal && storageArea.name !== 'local') {
+      const localValue = await readStorageValue(getLocalArea());
+      if (localValue !== undefined) {
+        await writeStorageValue(storageArea, localValue);
+        storedValue = localValue;
+      }
+    }
+
+    const value = deserialize(storedValue);
+    cacheValue = value;
+    hasCache = true;
+    loadPromise = null;
+    return value;
+  }
 
   return {
     async read(): Promise<T> {
@@ -31,14 +135,7 @@ export function createCachedValueStore<T>(args: {
       }
 
       if (!loadPromise) {
-        loadPromise = (async () => {
-          const stored = await extensionApi.storage.local.get(storageKey) as Record<string, unknown>;
-          const value = deserialize(stored[storageKey]);
-          cacheValue = value;
-          hasCache = true;
-          loadPromise = null;
-          return value;
-        })().catch(error => {
+        loadPromise = loadValue(false).catch(error => {
           loadPromise = null;
           throw error;
         });
@@ -46,10 +143,12 @@ export function createCachedValueStore<T>(args: {
 
       return loadPromise;
     },
+    async readFresh(): Promise<T> {
+      return loadValue(true);
+    },
     async write(value: T): Promise<T> {
-      await extensionApi.storage.local.set({
-        [storageKey]: serialize(value),
-      });
+      const storageArea = await resolveStorageArea();
+      await writeStorageValue(storageArea, serialize(value));
 
       cacheValue = value;
       hasCache = true;
@@ -63,9 +162,17 @@ export function createCachedValueStore<T>(args: {
   };
 }
 
-export function createCachedRecordStore<T>(storageKey: string): CachedRecordStore<T> {
+export function createCachedRecordStore<T>(args: {
+  storageKey: string;
+  area?: StorageAreaPreference;
+  migrateFromLocal?: boolean;
+  resolveConflict?: (current: T, incoming: T) => T;
+}): CachedRecordStore<T> {
+  const { storageKey, area, migrateFromLocal, resolveConflict } = args;
   const valueStore = createCachedValueStore<Record<string, T>>({
     storageKey,
+    area,
+    migrateFromLocal,
     deserialize(storedValue) {
       if (!storedValue || typeof storedValue !== 'object') {
         return {};
@@ -87,10 +194,13 @@ export function createCachedRecordStore<T>(storageKey: string): CachedRecordStor
       return records[key] ?? null;
     },
     async writeOne(key: string, value: T): Promise<void> {
-      const records = await valueStore.read();
+      const records = await valueStore.readFresh();
+      const nextValue = key in records && resolveConflict
+        ? resolveConflict(records[key] as T, value)
+        : value;
       await valueStore.write({
         ...records,
-        [key]: value,
+        [key]: nextValue,
       });
     },
     async deleteOne(key: string): Promise<void> {

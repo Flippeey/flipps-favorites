@@ -9,14 +9,35 @@ const bookmarkUsageKey = 'bookmark-usage-records';
 
 const settingsStore = createCachedValueStore<AppSettings>({
   storageKey,
+  area: 'sync-preferred',
+  migrateFromLocal: true,
   deserialize(storedValue) {
     return normalizeSettings((storedValue as Partial<AppSettings> | undefined) ?? {});
   },
 });
 
-const iconCacheStore = createCachedRecordStore<IconCacheRecord>(iconCacheKey);
-const iconOverrideStore = createCachedRecordStore<IconOverrideRecord>(iconOverrideKey);
-const bookmarkUsageStore = createCachedRecordStore<BookmarkUsageRecord>(bookmarkUsageKey);
+const iconCacheStore = createCachedRecordStore<IconCacheRecord>({
+  storageKey: iconCacheKey,
+  area: 'local',
+});
+
+const iconOverrideStore = createCachedRecordStore<IconOverrideRecord>({
+  storageKey: iconOverrideKey,
+  area: 'sync-preferred',
+  migrateFromLocal: true,
+  resolveConflict(current, incoming) {
+    return incoming.updatedAt >= current.updatedAt ? incoming : current;
+  },
+});
+
+const bookmarkUsageStore = createCachedRecordStore<BookmarkUsageRecord>({
+  storageKey: bookmarkUsageKey,
+  area: 'sync-preferred',
+  migrateFromLocal: true,
+  resolveConflict(current, incoming) {
+    return incoming.usedAt >= current.usedAt ? incoming : current;
+  },
+});
 
 export const defaultSettings: AppSettings = {
   themeMode: 'system',
