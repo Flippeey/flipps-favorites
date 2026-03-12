@@ -8,21 +8,54 @@ if (!target || !outDir) {
   throw new Error('Usage: node scripts/write-manifest.mjs <chrome|firefox> <outDir>');
 }
 
+const extensionVersion = process.env.EXTENSION_VERSION ?? '0.1.0';
+const extensionDescription = process.env.EXTENSION_DESCRIPTION
+  ?? "Flipp's Favorites replaces your new tab page with a fast, customizable bookmark dashboard featuring folder navigation, bookmark search, visual tiles, shortcuts. Use the theme controls to customize the look and feel of your new tab page and make it your own.";
+const firefoxExtensionId = process.env.FIREFOX_EXTENSION_ID ?? 'com.flipps-favorites@flippflix.com';
+const firefoxStrictMinVersion = process.env.FIREFOX_STRICT_MIN_VERSION ?? '128.0';
+const includeHttpHosts = process.env.INCLUDE_HTTP_HOSTS === '1';
+
+const hostPermissions = includeHttpHosts
+  ? ['https://*/*', 'http://*/*']
+  : ['https://*/*'];
+
+const homepageUrl = process.env.EXTENSION_HOMEPAGE_URL;
+const extensionIcons = {
+  16: 'icons/ff-icon-16.png',
+  32: 'icons/ff-icon-32.png',
+  48: 'icons/ff-icon-48.png',
+  96: 'icons/ff-icon-96.png',
+  128: 'icons/ff-icon-128.png',
+  256: 'icons/ff-icon-256.png',
+};
+
+const actionIcons = {
+  16: 'icons/ff-icon-16.png',
+  24: 'icons/ff-icon-24.png',
+  32: 'icons/ff-icon-32.png',
+};
+
 const baseManifest = {
   manifest_version: 3,
   name: "Flipp's Favorites - Bookmarks & more",
   short_name: "Flipp's Favorites",
-  version: '0.1.0',
-  description: 'A clean-room bookmark dashboard for new tabs.',
+  version: extensionVersion,
+  description: extensionDescription,
   permissions: ['bookmarks', 'storage'],
-  host_permissions: ['https://*/*', 'http://*/*'],
+  host_permissions: hostPermissions,
+  icons: extensionIcons,
   chrome_url_overrides: {
     newtab: 'newtab.html',
   },
   action: {
     default_title: "Flipp's Favorites - Bookmarks & more",
+    default_icon: actionIcons,
   },
 };
+
+if (homepageUrl) {
+  baseManifest.homepage_url = homepageUrl;
+}
 
 const browserSpecific = {
   chrome: {
@@ -38,8 +71,8 @@ const browserSpecific = {
     },
     browser_specific_settings: {
       gecko: {
-        id: 'flipps-favorites-bookmarks-more@personal',
-        strict_min_version: '128.0',
+        id: firefoxExtensionId,
+        strict_min_version: firefoxStrictMinVersion,
       },
     },
   },
