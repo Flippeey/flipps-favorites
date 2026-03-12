@@ -1,4 +1,4 @@
-import type { AppSettings, BookmarkNode } from '../shared/messages';
+import type { AppSettings, BookmarkNode } from '../../shared/messages';
 
 const folderOptionsCache = new WeakMap<BookmarkNode[], Array<{ id: string; label: string }>>();
 const linkOptionsCache = new WeakMap<BookmarkNode[], Array<{ url: string; label: string }>>();

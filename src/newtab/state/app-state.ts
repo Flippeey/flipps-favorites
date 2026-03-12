@@ -1,7 +1,7 @@
-﻿import type { AppSettings, BookmarkNode, BookmarkUsageRecord, IconSearchCandidate, ResolvedIcon } from '../shared/messages';
-import { createAccentPickerState, type AccentPickerState, type GeneralSettingsSubpage } from '../settings';
+﻿import type { AppSettings, BookmarkNode, BookmarkUsageRecord, IconSearchCandidate, ResolvedIcon } from '../../shared/messages';
+import { createAccentPickerState, type AccentPickerState, type GeneralSettingsSubpage } from '../../settings';
 import { deriveTreeState, type DerivedTreeState } from './derived-tree';
-import { resolveInitialFolderId, resolveInitialIconToolTarget, type BookmarkActionTarget } from './bookmark-navigation';
+import { resolveInitialFolderId, resolveInitialIconToolTarget, type BookmarkActionTarget } from '../bookmarks/bookmark-navigation';
 
 export interface AppState {
   settings: AppSettings;

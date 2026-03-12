@@ -1,7 +1,8 @@
-import type { BookmarkNode } from '../shared/messages';
-import { markBookmarkUsed } from './bookmark-usage';
-import { getDefaultFolder, getFolderNode } from './bookmark-navigation';
-import { openBookmark, openFolderView } from './runtime-helpers';
+import type { BookmarkNode } from '../../shared/messages';
+import { markBookmarkUsed } from '../bookmarks/bookmark-usage';
+import { getDefaultFolder, getFolderNode } from '../bookmarks/bookmark-navigation';
+import { openBookmark } from '../helpers/bookmark-operations';
+import { openFolderView } from '../helpers/folder-navigation';
 import type { AppState, SelectionContextMenuState, SelectionScope, SelectionSurface } from './app-state';
 
 export function clearSelection(state: AppState): void {

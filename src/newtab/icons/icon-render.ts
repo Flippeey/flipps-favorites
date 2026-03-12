@@ -1,6 +1,6 @@
-import type { ResolvedIcon } from '../shared/messages';
-import { getHostname } from './bookmark-navigation';
-import { escapeAttribute, escapeHtml } from './html';
+import type { ResolvedIcon } from '../../shared/messages';
+import { getHostname } from '../bookmarks/bookmark-navigation';
+import { escapeAttribute, escapeHtml } from '../../shared/html-escape';
 
 const tileFaviconCssSize = 64;
 const dockFaviconCssSize = 32;

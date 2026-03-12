@@ -1,12 +1,13 @@
-﻿import { sendRuntimeMessage } from '../shared/browser';
-import { messageTypes, type CreateBookmarkResponse, type GetIconResponse, type InvalidateIconResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SearchIconsResponse, type SetIconOverrideFromUrlResponse, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../shared/messages';
-import { type AppState, type BookmarkDialogState } from './app-state';
+﻿import { sendRuntimeMessage } from '../../shared/browser';
+import { messageTypes, type CreateBookmarkResponse, type GetIconResponse, type InvalidateIconResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SearchIconsResponse, type SetIconOverrideFromUrlResponse, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../../shared/messages';
+import { type AppState, type BookmarkDialogState } from '../state/app-state';
 import { getHostname, type BookmarkActionTarget } from './bookmark-navigation';
-import { escapeAttribute, escapeHtml } from './html';
-import { getFaviconImageUrl, renderIconPlaceholder } from './icon-render';
-import { getSearchName, isValidBookmarkUrl, normalizeUploadedImage } from './runtime-helpers';
-import { type RenderAppFn, refreshBookmarkTree } from './state-transitions';
-import { renderUiIcon } from './ui-icons';
+import { escapeAttribute, escapeHtml } from '../../shared/html-escape';
+import { getFaviconImageUrl, renderIconPlaceholder } from '../icons/icon-render';
+import { getSearchName, isValidBookmarkUrl } from '../helpers/bookmark-validation';
+import { normalizeUploadedImage } from '../helpers/image-normalization';
+import { type RenderAppFn, refreshBookmarkTree } from '../state/state-transitions';
+import { renderUiIcon } from '../../shared/ui-icons';
 
 export function renderBookmarkDialog(bookmarkDialog: BookmarkDialogState): string {
   const title = bookmarkDialog.target?.title || 'Bookmark';

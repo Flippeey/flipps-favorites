@@ -1,5 +1,5 @@
-import { sendRuntimeMessage } from '../shared/browser';
-import { messageTypes, type BookmarkNode, type CreateBookmarkResponse, type MoveBookmarkResponse, type RemoveBookmarkResponse } from '../shared/messages';
+import { sendRuntimeMessage } from '../../shared/browser';
+import { messageTypes, type BookmarkNode, type CreateBookmarkResponse, type MoveBookmarkResponse, type RemoveBookmarkResponse } from '../../shared/messages';
 import { getHostname } from './bookmark-navigation';
 
 export async function cloneBookmarkSubtree(parentId: string, sourceNode: BookmarkNode, index?: number): Promise<BookmarkNode> {

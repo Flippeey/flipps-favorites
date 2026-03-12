@@ -1,14 +1,15 @@
-import { sendRuntimeMessage } from '../shared/browser';
-import { messageTypes, type BookmarkNode, type MoveBookmarkResponse, type ResolvedIcon } from '../shared/messages';
-import { pushUndoEntry, type AppState, type BookmarkItemKind, type FolderActionTarget, type SelectionScope, type SelectionSurface } from './app-state';
-import { getBookmarkActionTarget, getFolderChildIds, getFolderNode, getHostname, isFolderDescendantOf } from './bookmark-navigation';
-import { markBookmarkUsed } from './bookmark-usage';
-import { escapeHtml } from './html';
-import { renderBookmarkVisualIcon } from './icon-render';
-import { measureAsync } from './performance';
-import { openBookmark, openFolderView } from './runtime-helpers';
-import { clearSelection, createSelectionContextMenuState, getFolderChildren, getOrderedSelectedIds, getSelectedNodes, getVisibleChildren, isSameScope, setSelection } from './selection-state';
-import { navigateToFolderAndRender, refreshTreeAndRender, type RenderAppFn } from './state-transitions';
+import { sendRuntimeMessage } from '../../shared/browser';
+import { messageTypes, type BookmarkNode, type MoveBookmarkResponse, type ResolvedIcon } from '../../shared/messages';
+import { pushUndoEntry, type AppState, type BookmarkItemKind, type FolderActionTarget, type SelectionScope, type SelectionSurface } from '../state/app-state';
+import { getBookmarkActionTarget, getFolderChildIds, getFolderNode, getHostname, isFolderDescendantOf } from '../bookmarks/bookmark-navigation';
+import { markBookmarkUsed } from '../bookmarks/bookmark-usage';
+import { escapeHtml } from '../../shared/html-escape';
+import { renderBookmarkVisualIcon } from '../icons/icon-render';
+import { measureAsync } from '../performance';
+import { openBookmark } from '../helpers/bookmark-operations';
+import { openFolderView } from '../helpers/folder-navigation';
+import { clearSelection, createSelectionContextMenuState, getFolderChildren, getOrderedSelectedIds, getSelectedNodes, getVisibleChildren, isSameScope, setSelection } from '../state/selection-state';
+import { navigateToFolderAndRender, refreshTreeAndRender, type RenderAppFn } from '../state/state-transitions';
 
 export function setupGridInteractions(rootElement: HTMLDivElement, state: AppState, bookmarkCanvas: HTMLElement | null, bookmarkGrid: HTMLElement | null, currentFolder: BookmarkNode, renderApp: RenderAppFn): void {
   setupSurfaceInteractions(rootElement, state, renderApp, {

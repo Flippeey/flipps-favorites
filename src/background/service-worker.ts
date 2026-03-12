@@ -1,7 +1,7 @@
 import { extensionApi } from '../shared/browser';
 import { messageTypes, type AppRequest, type AppResponse, type BookmarkNode } from '../shared/messages';
 import { readSettings, writeSettings } from '../shared/storage';
-import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl } from './icon-service';
+import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl } from './icons/icon-service';
 
 extensionApi.runtime.onInstalled.addListener(() => {
   console.info('Flipp\'s Favorites - Bookmarks & more installed');

@@ -1,5 +1,5 @@
-import type { AppSettings, BookmarkNode, BookmarkUsageRecord } from '../shared/messages';
-import { collectFolderOptions, collectLinkOptions, collectVisibleBookmarks, getBreadcrumbs, getDefaultFolder, getDockFolder, getHostname, getLibraryFolders, type BookmarkActionTarget } from './bookmark-navigation';
+import type { AppSettings, BookmarkNode, BookmarkUsageRecord } from '../../shared/messages';
+import { collectFolderOptions, collectLinkOptions, collectVisibleBookmarks, getBreadcrumbs, getDefaultFolder, getDockFolder, getHostname, getLibraryFolders, type BookmarkActionTarget } from '../bookmarks/bookmark-navigation';
 import type { AppState } from './app-state';
 
 export interface DerivedTreeState {

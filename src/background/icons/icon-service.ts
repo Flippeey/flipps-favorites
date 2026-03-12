@@ -1,5 +1,5 @@
-import type { GetIconRequest, IconCacheRecord, IconOverrideRecord, IconSearchCandidate, ResolvedIcon, SetIconOverrideRequest } from '../shared/messages';
-import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRecord, readIconCacheRecord, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideRecord } from '../shared/storage';
+import type { GetIconRequest, IconCacheRecord, IconOverrideRecord, IconSearchCandidate, ResolvedIcon, SetIconOverrideRequest } from '../../shared/messages';
+import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRecord, readIconCacheRecord, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideRecord } from '../../shared/storage';
 
 const iconPipelineVersion = 'bookmark-icons-v3';
 const faviconProviderUrl = 'https://www.google.com/s2/favicons';

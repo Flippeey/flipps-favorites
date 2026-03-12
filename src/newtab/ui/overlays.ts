@@ -1,6 +1,6 @@
-import type { AppState, AppStatus, ContextMenuState } from './app-state';
-import { escapeHtml } from './html';
-import { renderUiIcon } from './ui-icons';
+import type { AppState, AppStatus, ContextMenuState } from '../state/app-state';
+import { escapeHtml } from '../../shared/html-escape';
+import { renderUiIcon } from '../../shared/ui-icons';
 
 export function renderStatusMessage(statusMessage: AppStatus): string {
   return `

@@ -1,11 +1,12 @@
-﻿import { sendRuntimeMessage } from '../shared/browser';
-import { messageTypes, type BookmarkNode, type GetBookmarkTreeResponse } from '../shared/messages';
+﻿import { sendRuntimeMessage } from '../../shared/browser';
+import { messageTypes, type BookmarkNode, type GetBookmarkTreeResponse } from '../../shared/messages';
 import { createClosedBookmarkDialogState, type AppState, type BookmarkClipboardState } from './app-state';
 import { syncDerivedTree } from './derived-tree';
-import { findBookmarkActionTargetById, findNodeById, getFolderNode, resolveInitialFolderId } from './bookmark-navigation';
-import { queueVisibleIconPreload } from './icon-runtime';
-import { measureAsync, measureSync } from './performance';
-import { getFolderIdFromHash, getLastFolder, persistLastFolder, syncFolderHash } from './runtime-helpers';
+import { findBookmarkActionTargetById, findNodeById, getFolderNode, resolveInitialFolderId } from '../bookmarks/bookmark-navigation';
+import { queueVisibleIconPreload } from '../icons/icon-runtime';
+import { measureAsync, measureSync } from '../performance';
+import { getLastFolder, persistLastFolder } from '../helpers/folder-state';
+import { getFolderIdFromHash, syncFolderHash } from '../helpers/folder-navigation';
 import { clearSelection, normalizeSelection } from './selection-state';
 
 export type RenderAppFn = (rootElement: HTMLDivElement, state: AppState) => void;

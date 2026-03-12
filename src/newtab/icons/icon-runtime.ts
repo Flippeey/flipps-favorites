@@ -1,6 +1,6 @@
-import { sendRuntimeMessage } from '../shared/browser';
-import { messageTypes, type GetIconResponse } from '../shared/messages';
-import type { AppState } from './app-state';
+import { sendRuntimeMessage } from '../../shared/browser';
+import { messageTypes, type GetIconResponse } from '../../shared/messages';
+import type { AppState } from '../state/app-state';
 import { applyPendingIcon, applyResolvedIcon } from './icon-render';
 
 let iconRenderGeneration = 0;
