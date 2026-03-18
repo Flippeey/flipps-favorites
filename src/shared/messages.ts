@@ -18,7 +18,7 @@ export const messageTypes = {
 
 export type MessageType = (typeof messageTypes)[keyof typeof messageTypes];
 
-export type SettingsSectionId = 'general' | 'appearance' | 'help';
+export type SettingsSectionId = 'general' | 'appearance' | 'backup' | 'help';
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type BackgroundFitMode = 'cover' | 'contain' | 'fill';
 export type BackgroundPositionMode = 'center' | 'top' | 'bottom';

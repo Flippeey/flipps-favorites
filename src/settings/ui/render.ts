@@ -39,6 +39,10 @@ export function renderDrawerSection(section: SettingsSectionId, settings: AppSet
     `;
   }
 
+  if (section === 'backup') {
+    return renderBackupSection();
+  }
+
   if (section === 'help') {
     return renderHelpSection();
   }
@@ -282,7 +286,7 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
               ${renderSettingsSlider('bookmarkTileWidth', 'Tile width', settings.bookmarkTileWidth, 88, 180, 'px')}
               ${renderSettingsSlider('bookmarkIconSize', 'Icon size', settings.bookmarkIconSize, 40, 112, 'px')}
             </div>`
-          : `<p class="field-hint">Switch to Custom if you want to fine-tune spacing, row limits, and icon treatment.</p>`}
+          : ``}
         <label class="toggle-field toggle-field--card">
           <input name="showBookmarkIconBackground" type="checkbox" ${settings.showBookmarkIconBackground ? 'checked' : ''} />
           <span>Show accent background behind bookmark icons</span>
@@ -298,6 +302,13 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
           <h3>Dock</h3>
           <p class="field-hint">Pin a folder to the bottom dock to keep visual previews of favorite folders and links centered on the page.</p>
         </div>
+         <label class="field field--card">
+          <span>Dock folder</span>
+          <select name="dockFolderId">
+            <option value="">Mirror the main library root</option>
+            ${folderOptions.map(option => `<option value="${option.id}" ${option.id === settings.dockFolderId ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
+          </select>
+        </label>
         <label class="toggle-field toggle-field--card">
           <input name="showDock" type="checkbox" ${settings.showDock ? 'checked' : ''} />
           <span>Show the bookmark dock at the bottom of the page</span>
@@ -306,13 +317,7 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
           <input name="autoHideDock" type="checkbox" ${settings.autoHideDock ? 'checked' : ''} />
           <span>Auto-hide the dock until the bottom edge is hovered or focused</span>
         </label>
-        <label class="field field--card">
-          <span>Dock folder</span>
-          <select name="dockFolderId">
-            <option value="">Mirror the main library root</option>
-            ${folderOptions.map(option => `<option value="${option.id}" ${option.id === settings.dockFolderId ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
-          </select>
-        </label>
+       
       </div>
     `;
   }
@@ -338,21 +343,47 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
         <input name="openLinksInNewTab" type="checkbox" ${settings.openLinksInNewTab ? 'checked' : ''} />
         <span>Open links in a new tab instead of replacing the new tab page</span>
       </label>
-      <div class="field field--card">
-        <span>Workspace transfer</span>
-        <p class="field-hint">Export or import your workspace settings and custom bookmark icon overrides. Bookmarks and folders are synced automatically.</p>
-        <label class="field background-upload-card__field">
-          <span>Import mode</span>
-          <select name="workspaceImportMode">
-            <option value="merge">Merge with current workspace</option>
-            <option value="replace">Replace current settings and custom icons</option>
-          </select>
-        </label>
-        <div class="empty-state__actions">
-          <button class="drawer-secondary-button workspace-export-button" type="button">Export workspace data</button>
-          <button class="drawer-secondary-button workspace-import-button" type="button">Import workspace data</button>
+    </div>
+  `;
+}
+
+function renderBackupSection(): string {
+  return `
+    <div class="drawer-panel">
+      <div class="visual-section">
+        <div class="visual-section__header">
+          <h3>Export data</h3>
+          <p class="field-hint">Download a backup of your current workspace settings and custom bookmark icon overrides. Bookmarks and folders are synced automatically.</p>
         </div>
-        <input class="icon-file-input" name="workspaceImportFile" type="file" accept="application/json,.json" />
+        <div class="field field--card">
+          <span>Export workspace backup</span>
+          <p class="field-hint">Creates a JSON file you can keep for safekeeping or move to another browser profile.</p>
+          <div class="empty-state__actions">
+            <button class="drawer-secondary-button workspace-export-button" type="button">Export workspace data</button>
+          </div>
+        </div>
+      </div>
+      <div class="settings-section-divider" aria-hidden="true"></div>
+      <div class="visual-section">
+        <div class="visual-section__header">
+          <h3>Import data</h3>
+          <p class="field-hint">Restore settings and icon overrides from a previous workspace backup.</p>
+        </div>
+        <div class="field field--card">
+          <span>Import workspace backup</span>
+          <p class="field-hint">Choose whether to merge with your current setup or replace existing settings and icon overrides.</p>
+          <label class="field background-upload-card__field">
+            <span>Import mode</span>
+            <select name="workspaceImportMode">
+              <option value="merge">Merge with current workspace</option>
+              <option value="replace">Replace current settings and custom icons</option>
+            </select>
+          </label>
+          <div class="empty-state__actions">
+            <button class="drawer-secondary-button workspace-import-button" type="button">Import workspace data</button>
+          </div>
+          <input class="icon-file-input" name="workspaceImportFile" type="file" accept="application/json,.json" />
+        </div>
       </div>
     </div>
   `;

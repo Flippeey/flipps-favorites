@@ -647,11 +647,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const resolvedCurrentFolder = currentFolder;
 
   const { libraryFolders, breadcrumbs, currentFolderChildren: canvasItems, allCurrentFolderChildren, dockFolder, dockItems, folderOptions } = state.derivedTree;
-  const activeSection: SettingsSectionId = state.settings.settingsSection === 'appearance'
-    ? 'appearance'
-    : state.settings.settingsSection === 'help'
-      ? 'help'
-      : 'general';
+  const activeSection: SettingsSectionId = state.settings.settingsSection;
   const themeMode = normalizeThemeMode(state.settings.themeMode);
   const drawerFolderOptions = state.drawerOpen && activeSection === 'general'
     ? folderOptions
@@ -723,6 +719,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
           <nav class="drawer-nav">
             ${renderSectionButton('general', activeSection, 'General', 'grid')}
             ${renderSectionButton('appearance', activeSection, 'Theme', 'palette')}
+            ${renderSectionButton('backup', activeSection, 'Backup', 'save')}
             ${renderSectionButton('help', activeSection, 'Help', 'link')}
           </nav>
           <section class="drawer-section">
@@ -1676,6 +1673,9 @@ async function importWorkspaceData(file: File, mode: WorkspaceImportMode, rootEl
     }, InvalidateIconResponse>({
       type: messageTypes.invalidateIcon,
     });
+
+    // Force icon re-fetch so imported overrides are reflected immediately.
+    state.resolvedIcons = {};
 
     showStatusMessage(
       state,
