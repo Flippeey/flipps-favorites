@@ -8,20 +8,20 @@ import { findBookmarkActionTargetById, findNodeById, getBookmarkActionTarget, ge
 import { cloneBookmarkSubtree, applyFolderOrder, removeBookmarkSubtree } from './bookmarks/bookmark-ops';
 import { markBookmarkUsed } from './bookmarks/bookmark-usage';
 import { escapeAttribute, escapeHtml } from '../shared/html-escape';
-import { applyBookmarkDialogCandidate, loadBookmarkDialogPreview, openBookmarkDialog, refreshBookmarkDialogIcon, removeBookmarkDialogOverride, renderBookmarkDialog, saveBookmarkDialogBookmark, searchBookmarkDialog, uploadBookmarkDialogImage } from './bookmarks/bookmark-dialog';
+import { applyBookmarkDialogCandidate, openBookmarkDialog, refreshBookmarkDialogIcon, removeBookmarkDialogOverride, renderBookmarkDialog, saveBookmarkDialogBookmark, searchBookmarkDialog, uploadBookmarkDialogImage } from './bookmarks/bookmark-dialog';
 import { hydrateBookmarkIcons, queueVisibleIconPreload } from './icons/icon-runtime';
-import { applyPendingIcon, applyResolvedIcon, getFaviconImageUrl, renderFaviconIconMarkup, renderIconPlaceholder, renderResolvedIconMarkup, renderBookmarkVisualIcon } from './icons/icon-render';
+import { renderBookmarkVisualIcon } from './icons/icon-render';
 import { renderContextMenu, renderStatusMessage } from './ui/overlays';
 import { openBookmark } from './helpers/bookmark-operations';
-import { getSearchName, isValidBookmarkUrl } from './helpers/bookmark-validation';
+import { isValidBookmarkUrl } from './helpers/bookmark-validation';
 import { getLastFolder, persistLastFolder, removeLastFolder } from './helpers/folder-state';
 import { getFolderIdFromHash, openFolderView, syncFolderHash } from './helpers/folder-navigation';
 import { normalizeBackgroundImage, normalizeUploadedImage } from './helpers/image-normalization';
-import { clearSelection, createSelectionContextMenuState, getCurrentFolderChildren, getFolderChildren, getOrderedSelectedIds, getSelectedNodes, isClipboardCutItem, isItemSelected, isSameScope, normalizeSelection, openSelectionInNewTabs } from './state/selection-state';
+import { clearSelection, createSelectionContextMenuState, getOrderedSelectedIds, getSelectedNodes, isClipboardCutItem, isItemSelected, isSameScope, normalizeSelection, openSelectionInNewTabs } from './state/selection-state';
 import { getFolderActionTarget, setupDockInteractions, setupGridInteractions } from './interaction/surface-interactions';
 import { cloneBookmarkNode, navigateToFolder, navigateToFolderAndRender, refreshBookmarkTree, refreshTreeAndRender, renderStateAndWarmIcons } from './state/state-transitions';
 import { renderUiIcon } from '../shared/ui-icons';
-import { buildShellStyle, createAccentPickerState, getLayoutPresetPatch, hslToHex, normalizeGeneralSubpage, normalizeHexColor, normalizeThemeMode, renderDrawerSection, renderSectionButton, resolveAppliedThemeMode, type AccentPickerState, type GeneralSettingsSubpage } from '../settings';
+import { buildShellStyle, createAccentPickerState, getLayoutPresetPatch, hslToHex, normalizeGeneralSubpage, normalizeHexColor, normalizeThemeMode, renderDrawerSection, renderSectionButton, resolveAppliedThemeMode, type AccentPickerState } from '../settings';
 
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) {
