@@ -23,12 +23,13 @@ const iconCacheStore = createCachedRecordStore<IconCacheRecord>({
 
 const iconOverrideStore = createCachedRecordStore<IconOverrideRecord>({
   storageKey: iconOverrideKey,
-  area: 'sync-preferred',
-  migrateFromLocal: true,
+  area: 'local',
   resolveConflict(current, incoming) {
     return incoming.updatedAt >= current.updatedAt ? incoming : current;
   },
 });
+
+let iconOverrideMigrationPromise: Promise<void> | null = null;
 
 const bookmarkUsageStore = createCachedRecordStore<BookmarkUsageRecord>({
   storageKey: bookmarkUsageKey,
@@ -156,18 +157,22 @@ export async function deleteAllIconCacheRecords(): Promise<void> {
 }
 
 export async function readIconOverrideRecords(): Promise<Record<string, IconOverrideRecord>> {
+  await ensureIconOverrideRecordsMigratedToLocal();
   return iconOverrideStore.readAll();
 }
 
 export async function readIconOverrideRecord(bookmarkUrl: string): Promise<IconOverrideRecord | null> {
+  await ensureIconOverrideRecordsMigratedToLocal();
   return iconOverrideStore.readOne(bookmarkUrl);
 }
 
 export async function writeIconOverrideRecord(record: IconOverrideRecord): Promise<void> {
+  await ensureIconOverrideRecordsMigratedToLocal();
   await iconOverrideStore.writeOne(record.bookmarkUrl, record);
 }
 
 export async function deleteIconOverrideRecord(bookmarkUrl: string): Promise<void> {
+  await ensureIconOverrideRecordsMigratedToLocal();
   await iconOverrideStore.deleteOne(bookmarkUrl);
 }
 
@@ -185,4 +190,49 @@ export async function writeBookmarkUsageRecord(record: BookmarkUsageRecord): Pro
 
 export async function deleteBookmarkUsageRecord(bookmarkId: string): Promise<void> {
   await bookmarkUsageStore.deleteOne(bookmarkId);
+}
+
+async function ensureIconOverrideRecordsMigratedToLocal(): Promise<void> {
+  if (!iconOverrideMigrationPromise) {
+    iconOverrideMigrationPromise = (async () => {
+      const syncArea = extensionApi.storage?.sync;
+      const localArea = extensionApi.storage?.local;
+      if (!syncArea?.get || !syncArea?.remove || !localArea?.get || !localArea?.set) {
+        return;
+      }
+
+      try {
+        const [localStored, syncStored] = await Promise.all([
+          localArea.get(iconOverrideKey),
+          syncArea.get(iconOverrideKey),
+        ]) as [Record<string, unknown>, Record<string, unknown>];
+
+        const localRecords = asIconOverrideRecordMap(localStored[iconOverrideKey]);
+        const syncRecords = asIconOverrideRecordMap(syncStored[iconOverrideKey]);
+        if (!Object.keys(syncRecords).length) {
+          return;
+        }
+
+        if (!Object.keys(localRecords).length) {
+          await localArea.set({
+            [iconOverrideKey]: syncRecords,
+          });
+        }
+
+        await syncArea.remove(iconOverrideKey);
+      } catch (error) {
+        console.warn('Failed to migrate icon overrides from sync storage to local storage.', error);
+      }
+    })();
+  }
+
+  await iconOverrideMigrationPromise;
+}
+
+function asIconOverrideRecordMap(value: unknown): Record<string, IconOverrideRecord> {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+
+  return { ...(value as Record<string, IconOverrideRecord>) };
 }

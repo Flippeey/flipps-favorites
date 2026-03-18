@@ -227,33 +227,39 @@ export async function uploadBookmarkDialogImage(rootElement: HTMLDivElement, sta
     return;
   }
 
-  const normalizedDataUrl = await normalizeUploadedImage(file);
-  await sendRuntimeMessage<{
-    type: typeof messageTypes.setIconOverride;
-    bookmarkUrl: string;
-    bookmarkTitle?: string;
-    dataUrl: string;
-    fileName: string;
-    mimeType: string;
-  }, SetIconOverrideResponse>({
-    type: messageTypes.setIconOverride,
-    bookmarkUrl: target.url,
-    bookmarkTitle: target.title,
-    dataUrl: normalizedDataUrl,
-    fileName: file.name,
-    mimeType: 'image/png',
-  });
+  try {
+    const normalizedDataUrl = await normalizeUploadedImage(file);
+    await sendRuntimeMessage<{
+      type: typeof messageTypes.setIconOverride;
+      bookmarkUrl: string;
+      bookmarkTitle?: string;
+      dataUrl: string;
+      fileName: string;
+      mimeType: string;
+    }, SetIconOverrideResponse>({
+      type: messageTypes.setIconOverride,
+      bookmarkUrl: target.url,
+      bookmarkTitle: target.title,
+      dataUrl: normalizedDataUrl,
+      fileName: file.name,
+      mimeType: 'image/png',
+    });
 
-  state.bookmarkDialog.status = `Custom icon saved for ${target.title || getHostname(target.url)}.`;
-  state.bookmarkDialog.statusKind = 'success';
-  state.bookmarkDialog.previewIcon = {
-    cacheKey: `override:${target.url}`,
-    sourceKind: 'override',
-    dataUrl: normalizedDataUrl,
-    lastUpdated: Date.now(),
-    isFallback: false,
-  };
-  state.resolvedIcons[target.url] = state.bookmarkDialog.previewIcon;
+    state.bookmarkDialog.status = `Custom icon saved for ${target.title || getHostname(target.url)}.`;
+    state.bookmarkDialog.statusKind = 'success';
+    state.bookmarkDialog.previewIcon = {
+      cacheKey: `override:${target.url}`,
+      sourceKind: 'override',
+      dataUrl: normalizedDataUrl,
+      lastUpdated: Date.now(),
+      isFallback: false,
+    };
+    state.resolvedIcons[target.url] = state.bookmarkDialog.previewIcon;
+  } catch (error) {
+    state.bookmarkDialog.status = getIconPersistenceErrorMessage(error, 'upload');
+    state.bookmarkDialog.statusKind = 'error';
+  }
+
   renderApp(rootElement, state);
 }
 
@@ -305,23 +311,29 @@ export async function applyBookmarkDialogCandidate(rootElement: HTMLDivElement, 
     return;
   }
 
-  const response = await sendRuntimeMessage<{
-    type: typeof messageTypes.setIconOverrideFromUrl;
-    bookmarkUrl: string;
-    bookmarkTitle?: string;
-    imageUrl: string;
-    fileName?: string;
-  }, SetIconOverrideFromUrlResponse>({
-    type: messageTypes.setIconOverrideFromUrl,
-    bookmarkUrl: dialogTarget.url,
-    bookmarkTitle: dialogTarget.title,
-    imageUrl,
-  });
+  try {
+    const response = await sendRuntimeMessage<{
+      type: typeof messageTypes.setIconOverrideFromUrl;
+      bookmarkUrl: string;
+      bookmarkTitle?: string;
+      imageUrl: string;
+      fileName?: string;
+    }, SetIconOverrideFromUrlResponse>({
+      type: messageTypes.setIconOverrideFromUrl,
+      bookmarkUrl: dialogTarget.url,
+      bookmarkTitle: dialogTarget.title,
+      imageUrl,
+    });
 
-  state.bookmarkDialog.status = `Applied searched icon for ${dialogTarget.title || getHostname(dialogTarget.url)}.`;
-  state.bookmarkDialog.statusKind = 'success';
-  state.bookmarkDialog.previewIcon = response.icon;
-  state.resolvedIcons[dialogTarget.url] = response.icon;
+    state.bookmarkDialog.status = `Applied searched icon for ${dialogTarget.title || getHostname(dialogTarget.url)}.`;
+    state.bookmarkDialog.statusKind = 'success';
+    state.bookmarkDialog.previewIcon = response.icon;
+    state.resolvedIcons[dialogTarget.url] = response.icon;
+  } catch (error) {
+    state.bookmarkDialog.status = getIconPersistenceErrorMessage(error, 'search');
+    state.bookmarkDialog.statusKind = 'error';
+  }
+
   renderApp(rootElement, state);
 }
 
@@ -340,4 +352,17 @@ function renderBookmarkDialogResults(bookmarkDialog: BookmarkDialogState): strin
       <span class="icon-result-card__label">${escapeHtml(candidate.label)}</span>
     </button>
   `).join('');
+}
+
+function getIconPersistenceErrorMessage(error: unknown, source: 'upload' | 'search'): string {
+  const message = String(error instanceof Error ? error.message : error).toLowerCase();
+  if (message.includes('quota')) {
+    return 'Could not save that icon because extension storage is full.';
+  }
+
+  if (source === 'search' && (message.includes('fetch') || message.includes('network'))) {
+    return 'Could not download that search result. Try another result or upload a local image.';
+  }
+
+  return 'Could not save that icon. Try another image.';
 }

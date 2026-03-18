@@ -100,9 +100,14 @@ export function createCachedValueStore<T>(args: {
   }
 
   async function writeStorageValue(storageArea: ResolvedStorageArea, value: unknown): Promise<void> {
-    await storageArea.api.set({
-      [storageKey]: value,
-    });
+    try {
+      await storageArea.api.set({
+        [storageKey]: value,
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to write ${storageArea.name} storage key "${storageKey}": ${detail}`);
+    }
   }
 
   async function loadValue(forceRefresh: boolean): Promise<T> {
