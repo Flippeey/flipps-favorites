@@ -260,7 +260,7 @@ function setSettingsFeedback(state: AppState, status: AppState['settingsFeedback
   }
 }
 
-function showStatusMessage(state: AppState, kind: AppStatus['kind'], message: string, timeout = 0): void {
+function showStatusMessage(state: AppState, kind: AppStatus['kind'], message: string, timeout = 7000): void {
   state.statusMessage = { kind, message };
   if (statusMessageTimer) {
     window.clearTimeout(statusMessageTimer);
@@ -1465,10 +1465,7 @@ async function undoLastAction(rootElement: HTMLDivElement, state: AppState): Pro
   if (entry.kind === 'move') {
     await applyHistorySnapshots(state, entry, 'before');
     state.redoStack.unshift(entry);
-    state.statusMessage = {
-      kind: 'success',
-      message: `${entry.label} undone.`,
-    };
+    showStatusMessage(state, 'success', `${entry.label} undone.`);
     await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
     return;
   }
@@ -1481,10 +1478,7 @@ async function undoLastAction(rootElement: HTMLDivElement, state: AppState): Pro
 
   entry.activeRootIds = restoredIds;
   state.redoStack.unshift(entry);
-  state.statusMessage = {
-    kind: 'success',
-    message: `${entry.label} undone.`,
-  };
+  showStatusMessage(state, 'success', `${entry.label} undone.`);
   await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
 }
 
@@ -1497,10 +1491,7 @@ async function redoLastAction(rootElement: HTMLDivElement, state: AppState): Pro
   if (entry.kind === 'move') {
     await applyHistorySnapshots(state, entry, 'after');
     state.undoStack.unshift(entry);
-    state.statusMessage = {
-      kind: 'success',
-      message: `${entry.label} restored.`,
-    };
+    showStatusMessage(state, 'success', `${entry.label} restored.`);
     await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
     return;
   }
@@ -1517,10 +1508,7 @@ async function redoLastAction(rootElement: HTMLDivElement, state: AppState): Pro
 
   entry.activeRootIds = [];
   state.undoStack.unshift(entry);
-  state.statusMessage = {
-    kind: 'success',
-    message: `${entry.label} restored.`,
-  };
+  showStatusMessage(state, 'success', `${entry.label} restored.`);
   await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
 }
 
@@ -1633,10 +1621,13 @@ async function deleteSelectedItems(rootElement: HTMLDivElement, state: AppState,
     labelParts.push(`${String(folderCount)} folder${folderCount === 1 ? '' : 's'}`);
   }
 
-  const confirmed = window.confirm(`Delete ${labelParts.join(' and ')}?`);
-  if (!confirmed) {
-    renderApp(rootElement, state);
-    return;
+  const requiresConfirmation = folderCount > 0;
+  if (requiresConfirmation) {
+    const confirmed = window.confirm(`Delete ${labelParts.join(' and ')}?`);
+    if (!confirmed) {
+      renderApp(rootElement, state);
+      return;
+    }
   }
 
   const historyItems = collectDeleteHistoryItems(state, selectedNodes);
@@ -1660,10 +1651,7 @@ async function deleteSelectedItems(rootElement: HTMLDivElement, state: AppState,
     items: historyItems,
     activeRootIds: [],
   });
-  state.statusMessage = {
-    kind: 'success',
-    message: `${labelParts.join(' and ')} deleted. Undo with Ctrl/Cmd+Z.`,
-  };
+  showStatusMessage(state, 'success', `${labelParts.join(' and ')} deleted.`);
   await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
 }
 
@@ -2052,12 +2040,6 @@ function renderFolderPreviewCell(node: BookmarkNode, resolvedIcons: Record<strin
 }
 
 async function deleteBookmarkFromContext(rootElement: HTMLDivElement, state: AppState, target: BookmarkActionTarget): Promise<void> {
-  const confirmed = window.confirm(`Delete ${target.title || getHostname(target.url)}?`);
-  if (!confirmed) {
-    renderApp(rootElement, state);
-    return;
-  }
-
   const node = findNodeById(state.tree, target.id);
   const historyItems = node ? collectDeleteHistoryItems(state, [node]) : [];
 
@@ -2081,10 +2063,7 @@ async function deleteBookmarkFromContext(rootElement: HTMLDivElement, state: App
       items: historyItems,
       activeRootIds: [],
     });
-    state.statusMessage = {
-      kind: 'success',
-      message: `${target.title || getHostname(target.url)} deleted. Undo with Ctrl/Cmd+Z.`,
-    };
+    showStatusMessage(state, 'success', `${target.title || getHostname(target.url)} deleted.`);
   }
 
   await refreshTreeAndRender(rootElement, state, renderApp);
@@ -2218,10 +2197,7 @@ function setClipboardFromItemIds(state: AppState, mode: BookmarkClipboardState['
     items,
   };
 
-  state.statusMessage = {
-    kind: 'info',
-    message: `${mode === 'cut' ? 'Cut' : 'Copied'} ${String(items.length)} item${items.length === 1 ? '' : 's'}.`,
-  };
+  showStatusMessage(state, 'info', `${mode === 'cut' ? 'Cut' : 'Copied'} ${String(items.length)} item${items.length === 1 ? '' : 's'}.`);
 }
 
 function canPasteClipboardIntoFolder(state: AppState, targetFolderId: string): boolean {
@@ -2353,10 +2329,7 @@ async function deleteFolderFromContext(rootElement: HTMLDivElement, state: AppSt
       items: historyItems,
       activeRootIds: [],
     });
-    state.statusMessage = {
-      kind: 'success',
-      message: `Folder ${target.title || 'Untitled'} deleted. Undo with Ctrl/Cmd+Z.`,
-    };
+    showStatusMessage(state, 'success', `Folder ${target.title || 'Untitled'} deleted.`);
   }
 
   await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
@@ -2405,10 +2378,7 @@ async function pasteClipboardIntoFolder(rootElement: HTMLDivElement, state: AppS
         after: getFolderChildIds(state.tree, snapshot.folderId),
       })),
     });
-    state.statusMessage = {
-      kind: 'success',
-      message: `${clipboardCount === 1 ? 'Item moved' : `${String(clipboardCount)} items moved`}. Undo with Ctrl/Cmd+Z.`,
-    };
+    showStatusMessage(state, 'success', `${clipboardCount === 1 ? 'Item moved' : `${String(clipboardCount)} items moved`}. Undo with Ctrl/Cmd+Z.`);
     return;
   } else {
     const targetFolder = getFolderNode(state.tree, targetFolderId);
@@ -2421,10 +2391,7 @@ async function pasteClipboardIntoFolder(rootElement: HTMLDivElement, state: AppS
   }
 
   await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
-  state.statusMessage = {
-    kind: 'success',
-    message: `Pasted ${String(clipboardCount)} item${clipboardCount === 1 ? '' : 's'}.`,
-  };
+  showStatusMessage(state, 'success', `Pasted ${String(clipboardCount)} item${clipboardCount === 1 ? '' : 's'}.`);
 }
 
 async function openBookmarkManager(rootElement: HTMLDivElement, state: AppState): Promise<void> {
@@ -2433,10 +2400,7 @@ async function openBookmarkManager(rootElement: HTMLDivElement, state: AppState)
   });
 
   if (!response.opened) {
-    state.statusMessage = {
-      kind: 'error',
-      message: response.message || 'The browser blocked the native bookmark manager page.',
-    };
+    showStatusMessage(state, 'error', response.message || 'The browser blocked the native bookmark manager page.');
     renderApp(rootElement, state);
     return;
   }
