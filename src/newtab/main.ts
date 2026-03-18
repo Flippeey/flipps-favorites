@@ -794,6 +794,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
             ${renderSectionButton('general', activeSection, 'General', 'grid')}
             ${renderSectionButton('appearance', activeSection, 'Theme', 'palette')}
             ${renderSectionButton('backup', activeSection, 'Backup', 'save')}
+            <div class="drawer-nav-divider" aria-hidden="true"></div>
             ${renderSectionButton('help', activeSection, 'Help', 'link')}
           </nav>
           <section class="drawer-section">
@@ -1133,7 +1134,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   });
 
   showBookmarkIconBackgroundInput?.addEventListener('change', async () => {
-    await applySettingsPatch(rootElement, state, { showBookmarkIconBackground: showBookmarkIconBackgroundInput.checked, layoutPreset: 'custom' });
+    await applySettingsPatch(rootElement, state, { showBookmarkIconBackground: showBookmarkIconBackgroundInput.checked });
   });
 
   [
@@ -1317,6 +1318,10 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     }
 
     event.preventDefault();
+    await searchBookmarkDialog(rootElement, state, state.bookmarkDialog.query, renderApp);
+  });
+
+  bookmarkDialogSearchButton?.addEventListener('click', async () => {
     await searchBookmarkDialog(rootElement, state, state.bookmarkDialog.query, renderApp);
   });
 

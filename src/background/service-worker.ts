@@ -8,6 +8,9 @@ extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }
   if (details.reason === 'install') {
     await markOnboardingPending();
   }
+  if (details.reason === 'install' || details.reason === 'update') {
+    await invalidateIcon();
+  }
   console.info(`Flipp's Favorites install event reason: ${reason}`);
   console.info('Flipp\'s Favorites - Bookmarks & more installed');
 });

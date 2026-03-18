@@ -63,6 +63,12 @@
   padding: 6px 0;
 }
 
+.drawer-nav-divider {
+  height: 1px;
+  margin: 8px 20px;
+  background: color-mix(in srgb, var(--border-subtle) 88%, transparent);
+}
+
 .section-button {
   display: flex;
   align-items: center;

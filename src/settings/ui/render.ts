@@ -83,6 +83,10 @@ export function renderDrawerSection(section: SettingsSectionId, settings: AppSet
         </div>
         <input name="accentColor" type="hidden" value="${accentColor}" />
         ${renderAccentPickerPopover(accentPicker)}
+        <label class="toggle-field toggle-field--card">
+          <input name="showBookmarkIconBackground" type="checkbox" ${settings.showBookmarkIconBackground ? 'checked' : ''} />
+          <span>Show accent background behind bookmark icons</span>
+        </label>
       </div>
       <div class="settings-section-divider" aria-hidden="true"></div>
       <div class="visual-section">
@@ -287,10 +291,6 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
               ${renderSettingsSlider('bookmarkIconSize', 'Icon size', settings.bookmarkIconSize, 40, 112, 'px')}
             </div>`
           : ``}
-        <label class="toggle-field toggle-field--card">
-          <input name="showBookmarkIconBackground" type="checkbox" ${settings.showBookmarkIconBackground ? 'checked' : ''} />
-          <span>Show accent background behind bookmark icons</span>
-        </label>
       </div>
     `;
   }

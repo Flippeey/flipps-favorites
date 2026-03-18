@@ -1,12 +1,12 @@
 import type { GetIconRequest, IconCacheRecord, IconOverrideRecord, IconSearchCandidate, ResolvedIcon, SetIconOverrideRequest } from '../../shared/messages';
 import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRecord, readIconCacheRecord, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideRecord } from '../../shared/storage';
 
-const iconPipelineVersion = 'bookmark-icons-v3';
+const iconPipelineVersion = 'bookmark-icons-v5';
 const faviconProviderUrl = 'https://www.google.com/s2/favicons';
-const faviconSize = 256;
+const faviconRequestSize = 256;
 const duckDuckGoSearchUrl = 'https://duckduckgo.com/';
 const minimumAcceptedIconSize = 48;
-const maxDuckDuckGoResults = 50;
+const maxDuckDuckGoResults = 30;
 const inFlightIcons = new Map<string, Promise<ResolvedIcon>>();
 
 export async function getIcon(request: GetIconRequest): Promise<ResolvedIcon> {
@@ -125,7 +125,7 @@ async function resolveIcon(request: GetIconRequest, cacheKey: string): Promise<R
 }
 
 async function createFaviconRecord(bookmarkUrl: string, cacheKey: string): Promise<IconCacheRecord> {
-  const providerRequestUrl = `${faviconProviderUrl}?domain_url=${encodeURIComponent(bookmarkUrl)}&sz=${String(faviconSize)}`;
+  const providerRequestUrl = `${faviconProviderUrl}?domain_url=${encodeURIComponent(bookmarkUrl)}&sz=${String(clampFaviconSize(faviconRequestSize))}`;
   const response = await fetch(providerRequestUrl, { cache: 'force-cache' });
   if (!response.ok) {
     throw new Error(`Favicon request failed with ${String(response.status)}`);
@@ -137,7 +137,8 @@ async function createFaviconRecord(bookmarkUrl: string, cacheKey: string): Promi
     throw new Error('Favicon response is not an image.');
   }
 
-  await assertImageIsUseful(blob);
+  const dimensions = await getImageDimensions(blob);
+  assertImageIsUseful(dimensions);
 
   const dataUrl = await blobToDataUrl(blob, mimeType);
   if (!isDataUrl(dataUrl)) {
@@ -174,7 +175,7 @@ async function createSearchRecord(bookmarkUrl: string, bookmarkTitle: string | u
     throw new Error('DuckDuckGo icon response is not an image.');
   }
 
-  await assertImageIsUseful(blob);
+  assertImageIsUseful(await getImageDimensions(blob));
 
   return {
     cacheKey,
@@ -514,8 +515,8 @@ function getDomainCandidates(bookmarkUrl: string): IconSearchCandidate[] {
   }
 
   return [{
-    imageUrl: `${faviconProviderUrl}?domain=${encodeURIComponent(hostname)}&sz=256`,
-    previewUrl: `${faviconProviderUrl}?domain=${encodeURIComponent(hostname)}&sz=128`,
+    imageUrl: `${faviconProviderUrl}?domain_url=${encodeURIComponent(bookmarkUrl)}&sz=256`,
+    previewUrl: `${faviconProviderUrl}?domain_url=${encodeURIComponent(bookmarkUrl)}&sz=128`,
     label: hostname,
     sourceKind: 'favicon',
     sourcePageUrl: `https://${hostname}`,
@@ -536,14 +537,23 @@ function stripHtml(value: string): string {
   return value.replace(/<[^>]+>/g, '').trim();
 }
 
-async function assertImageIsUseful(blob: Blob): Promise<void> {
+function clampFaviconSize(value: number): number {
+  const rounded = Math.round(value);
+  return Math.max(128, Math.min(256, rounded));
+}
+
+async function getImageDimensions(blob: Blob): Promise<{ width: number; height: number }> {
   const bitmap = await createImageBitmap(blob);
   try {
-    if (bitmap.width < minimumAcceptedIconSize || bitmap.height < minimumAcceptedIconSize) {
-      throw new Error('Icon image is too small to use.');
-    }
+    return { width: bitmap.width, height: bitmap.height };
   } finally {
     bitmap.close();
+  }
+}
+
+function assertImageIsUseful(dimensions: { width: number; height: number }): void {
+  if (dimensions.width < minimumAcceptedIconSize || dimensions.height < minimumAcceptedIconSize) {
+    throw new Error('Icon image is too small to use.');
   }
 }
 
