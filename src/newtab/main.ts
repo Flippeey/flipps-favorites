@@ -1,7 +1,7 @@
 ﻿import './styles/index.css';
 import { sendRuntimeMessage } from '../shared/browser';
 import { messageTypes, type AppSettings, type BookmarkNode, type CreateBookmarkResponse, type GetBookmarkTreeResponse, type GetSettingsResponse, type InvalidateIconResponse, type MoveBookmarkResponse, type OpenBookmarkManagerResponse, type PatchSettingsResponse, type PingResponse, type RemoveBookmarkResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SettingsSectionId, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../shared/messages';
-import { readBookmarkUsageRecords } from '../shared/storage';
+import { defaultSettings, deleteIconOverrideRecord, readBookmarkUsageRecords, readIconOverrideRecords, writeIconOverrideRecord } from '../shared/storage';
 import { createClosedBookmarkDialogState, createInitialAppState, pushUndoEntry, type AppState, type AppStatus, type BookmarkClipboardState, type DeleteHistoryEntry, type FolderActionTarget, type SelectionContextMenuTarget, type SelectionScope, type SurfaceContextMenuTarget, type UndoHistoryEntry } from './state/app-state';
 import { syncDerivedTree } from './state/derived-tree';
 import { findBookmarkActionTargetById, findNodeById, getBookmarkActionTarget, getBookmarkLabelForUrl, getFolderChildIds, getFolderNode, getHostname, isFolderDescendantOf, resolveInitialFolderId, type BookmarkActionTarget } from './bookmarks/bookmark-navigation';
@@ -33,6 +33,7 @@ let statusMessageTimer: number | null = null;
 let searchDebounceTimer: number | null = null;
 
 const SEARCH_DEBOUNCE_MS = 180;
+const WORKSPACE_EXPORT_SCHEMA_VERSION = 1;
 
 void bootstrap(root);
 
@@ -771,6 +772,10 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const bookmarkDialogUrlInput = rootElement.querySelector<HTMLInputElement>('input[name="bookmarkDialogUrl"]');
   const bookmarkDialogSaveButton = rootElement.querySelector<HTMLButtonElement>('.bookmark-dialog-save-button');
   const bookmarkDialogFileInput = rootElement.querySelector<HTMLInputElement>('input[name="bookmarkDialogFile"]');
+  const workspaceExportButton = rootElement.querySelector<HTMLButtonElement>('.workspace-export-button');
+  const workspaceImportButton = rootElement.querySelector<HTMLButtonElement>('.workspace-import-button');
+  const workspaceImportModeInput = rootElement.querySelector<HTMLSelectElement>('select[name="workspaceImportMode"]');
+  const workspaceImportFileInput = rootElement.querySelector<HTMLInputElement>('input[name="workspaceImportFile"]');
   const bookmarkGrid = rootElement.querySelector<HTMLElement>('.bookmark-grid');
   const bookmarkDock = rootElement.querySelector<HTMLElement>('.bookmark-dock');
   const dockStrip = rootElement.querySelector<HTMLElement>('.dock-strip');
@@ -956,6 +961,25 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     const normalizedDataUrl = await normalizeBackgroundImage(file);
     await applySettingsPatch(rootElement, state, { customBackgroundImage: normalizedDataUrl });
     customBackgroundImageFileInput.value = '';
+  });
+
+  workspaceExportButton?.addEventListener('click', async () => {
+    await exportWorkspaceData(state);
+  });
+
+  workspaceImportButton?.addEventListener('click', () => {
+    workspaceImportFileInput?.click();
+  });
+
+  workspaceImportFileInput?.addEventListener('change', async () => {
+    const file = workspaceImportFileInput.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const importMode = workspaceImportModeInput?.value === 'replace' ? 'replace' : 'merge';
+    await importWorkspaceData(file, importMode, rootElement, state);
+    workspaceImportFileInput.value = '';
   });
 
   backgroundOpacityInput?.addEventListener('input', () => {
@@ -1554,6 +1578,229 @@ function getDockPreviewItems(node: BookmarkNode): BookmarkNode[] {
 function getFolderPreviewItems(node: BookmarkNode, variant: 'tile' | 'dock'): BookmarkNode[] {
   const limit = variant === 'tile' ? 4 : 6;
   return (node.children ?? []).slice(0, limit);
+}
+
+interface IconOverrideTransferRecord {
+  bookmarkUrl: string;
+  dataUrl: string;
+  fileName: string;
+  mimeType: string;
+  updatedAt: number;
+}
+
+interface WorkspaceExportPayload {
+  schema: 'flipps-workspace-transfer';
+  schemaVersion: number;
+  exportedAt: number;
+  settings: Partial<AppSettings>;
+  iconOverrides: IconOverrideTransferRecord[];
+}
+
+async function exportWorkspaceData(state: AppState): Promise<void> {
+  try {
+    const allRecords = await readIconOverrideRecords();
+    const iconOverrides = Object.values(allRecords).map(record => ({
+      bookmarkUrl: record.bookmarkUrl,
+      dataUrl: record.dataUrl,
+      fileName: record.fileName,
+      mimeType: record.mimeType,
+      updatedAt: record.updatedAt,
+    }));
+
+    const payload: WorkspaceExportPayload = {
+      schema: 'flipps-workspace-transfer',
+      schemaVersion: WORKSPACE_EXPORT_SCHEMA_VERSION,
+      exportedAt: Date.now(),
+      settings: { ...state.settings },
+      iconOverrides,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const dateSuffix = new Date().toISOString().slice(0, 10);
+    downloadBlob(blob, `flipps-workspace-data-${dateSuffix}.json`);
+    showStatusMessage(
+      state,
+      'success',
+      `Exported workspace settings and ${String(iconOverrides.length)} custom icon override${iconOverrides.length === 1 ? '' : 's'}.`,
+      3200,
+    );
+    if (root) {
+      renderApp(root, state);
+    }
+  } catch (error) {
+    showStatusMessage(state, 'error', error instanceof Error ? error.message : 'Failed to export workspace data.', 3200);
+    if (root) {
+      renderApp(root, state);
+    }
+  }
+}
+
+type WorkspaceImportMode = 'merge' | 'replace';
+
+async function importWorkspaceData(file: File, mode: WorkspaceImportMode, rootElement: HTMLDivElement, state: AppState): Promise<void> {
+  try {
+    const payload = await parseWorkspacePayload(file);
+    const deduped = new Map<string, IconOverrideTransferRecord>();
+
+    for (const record of payload.iconOverrides) {
+      const current = deduped.get(record.bookmarkUrl);
+      if (!current || record.updatedAt >= current.updatedAt) {
+        deduped.set(record.bookmarkUrl, record);
+      }
+    }
+
+    if (mode === 'replace') {
+      const existingRecords = await readIconOverrideRecords();
+      await Promise.all(Object.keys(existingRecords).map(bookmarkUrl => deleteIconOverrideRecord(bookmarkUrl)));
+    }
+
+    const settingsPatch = mode === 'replace'
+      ? ({ ...defaultSettings, ...payload.settings } as Partial<AppSettings>)
+      : payload.settings;
+    await applySettingsPatch(rootElement, state, settingsPatch, { silent: true });
+
+    for (const record of deduped.values()) {
+      await writeIconOverrideRecord({
+        overrideKey: `override:${record.bookmarkUrl}`,
+        bookmarkUrl: record.bookmarkUrl,
+        dataUrl: record.dataUrl,
+        fileName: record.fileName,
+        mimeType: record.mimeType,
+        updatedAt: record.updatedAt,
+      });
+    }
+
+    await sendRuntimeMessage<{
+      type: typeof messageTypes.invalidateIcon;
+      bookmarkUrl?: string;
+    }, InvalidateIconResponse>({
+      type: messageTypes.invalidateIcon,
+    });
+
+    showStatusMessage(
+      state,
+      'success',
+      `Imported workspace settings and ${String(deduped.size)} custom icon override${deduped.size === 1 ? '' : 's'} (${mode} mode).`,
+      3600,
+    );
+    renderStateAndWarmIcons(rootElement, state, renderApp);
+  } catch (error) {
+    showStatusMessage(state, 'error', error instanceof Error ? error.message : 'Failed to import workspace data.', 3600);
+    renderApp(rootElement, state);
+  }
+}
+
+async function parseWorkspacePayload(file: File): Promise<WorkspaceExportPayload> {
+  const text = await file.text();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch {
+    throw new Error('Import file is not valid JSON.');
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Import file has an invalid structure.');
+  }
+
+  const payload = parsed as Partial<WorkspaceExportPayload>;
+  if (payload.schema !== 'flipps-workspace-transfer' || !Array.isArray(payload.iconOverrides)) {
+    throw new Error('Import file does not match the workspace export format.');
+  }
+
+  const iconOverrides = payload.iconOverrides
+    .map(normalizeTransferRecord)
+    .filter((record): record is IconOverrideTransferRecord => Boolean(record));
+
+  const settings = normalizeImportedSettings(payload.settings);
+
+  return {
+    schema: 'flipps-workspace-transfer',
+    schemaVersion: typeof payload.schemaVersion === 'number' ? payload.schemaVersion : WORKSPACE_EXPORT_SCHEMA_VERSION,
+    exportedAt: typeof payload.exportedAt === 'number' ? payload.exportedAt : Date.now(),
+    settings,
+    iconOverrides,
+  };
+}
+
+function normalizeImportedSettings(value: unknown): Partial<AppSettings> {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+
+  const incoming = value as Partial<AppSettings>;
+  const normalized: Partial<AppSettings> = {};
+
+  if (typeof incoming.themeMode === 'string') normalized.themeMode = incoming.themeMode;
+  if (typeof incoming.accentColor === 'string') normalized.accentColor = incoming.accentColor;
+  if (typeof incoming.customBackgroundImage === 'string') normalized.customBackgroundImage = incoming.customBackgroundImage;
+  if (typeof incoming.backgroundOpacity === 'number') normalized.backgroundOpacity = incoming.backgroundOpacity;
+  if (typeof incoming.backgroundFitMode === 'string') normalized.backgroundFitMode = incoming.backgroundFitMode;
+  if (typeof incoming.backgroundPositionMode === 'string') normalized.backgroundPositionMode = incoming.backgroundPositionMode;
+  if (typeof incoming.settingsSection === 'string') normalized.settingsSection = incoming.settingsSection;
+  if (typeof incoming.rootFolderId === 'string') normalized.rootFolderId = incoming.rootFolderId;
+  if (typeof incoming.rememberLastFolder === 'boolean') normalized.rememberLastFolder = incoming.rememberLastFolder;
+  if (typeof incoming.openLinksInNewTab === 'boolean') normalized.openLinksInNewTab = incoming.openLinksInNewTab;
+  if (typeof incoming.showDock === 'boolean') normalized.showDock = incoming.showDock;
+  if (typeof incoming.autoHideDock === 'boolean') normalized.autoHideDock = incoming.autoHideDock;
+  if (typeof incoming.dockFolderId === 'string') normalized.dockFolderId = incoming.dockFolderId;
+  if (typeof incoming.bookmarkSortMode === 'string') normalized.bookmarkSortMode = incoming.bookmarkSortMode;
+  if (typeof incoming.bookmarkSortDirection === 'string') normalized.bookmarkSortDirection = incoming.bookmarkSortDirection;
+  if (typeof incoming.favoritesColumns === 'number') normalized.favoritesColumns = incoming.favoritesColumns;
+  if (typeof incoming.favoritesRows === 'number') normalized.favoritesRows = incoming.favoritesRows;
+  if (typeof incoming.favoritesColumnGap === 'number') normalized.favoritesColumnGap = incoming.favoritesColumnGap;
+  if (typeof incoming.favoritesRowGap === 'number') normalized.favoritesRowGap = incoming.favoritesRowGap;
+  if (typeof incoming.bookmarkTileWidth === 'number') normalized.bookmarkTileWidth = incoming.bookmarkTileWidth;
+  if (typeof incoming.bookmarkIconSize === 'number') normalized.bookmarkIconSize = incoming.bookmarkIconSize;
+  if (typeof incoming.showBookmarkIconBackground === 'boolean') normalized.showBookmarkIconBackground = incoming.showBookmarkIconBackground;
+  if (typeof incoming.layoutPreset === 'string') normalized.layoutPreset = incoming.layoutPreset;
+
+  return normalized;
+}
+
+function normalizeTransferRecord(value: unknown): IconOverrideTransferRecord | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as Partial<IconOverrideTransferRecord>;
+  if (typeof candidate.bookmarkUrl !== 'string' || !candidate.bookmarkUrl.trim()) {
+    return null;
+  }
+
+  if (typeof candidate.dataUrl !== 'string' || !candidate.dataUrl.startsWith('data:image/')) {
+    return null;
+  }
+
+  if (typeof candidate.fileName !== 'string' || !candidate.fileName.trim()) {
+    return null;
+  }
+
+  if (typeof candidate.mimeType !== 'string' || !candidate.mimeType.startsWith('image/')) {
+    return null;
+  }
+
+  const updatedAt = typeof candidate.updatedAt === 'number' && Number.isFinite(candidate.updatedAt)
+    ? Math.max(0, Math.floor(candidate.updatedAt))
+    : Date.now();
+
+  return {
+    bookmarkUrl: candidate.bookmarkUrl,
+    dataUrl: candidate.dataUrl,
+    fileName: candidate.fileName,
+    mimeType: candidate.mimeType,
+    updatedAt,
+  };
+}
+
+function downloadBlob(blob: Blob, fileName: string): void {
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = fileName;
+  anchor.rel = 'noopener';
+  anchor.click();
+  URL.revokeObjectURL(objectUrl);
 }
 
 function renderNavTrail(libraryFolders: BookmarkNode[], breadcrumbs: BookmarkNode[]): string {

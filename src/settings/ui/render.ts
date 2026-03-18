@@ -338,6 +338,22 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
         <input name="openLinksInNewTab" type="checkbox" ${settings.openLinksInNewTab ? 'checked' : ''} />
         <span>Open links in a new tab instead of replacing the new tab page</span>
       </label>
+      <div class="field field--card">
+        <span>Workspace transfer</span>
+        <p class="field-hint">Export or import your workspace settings and custom bookmark icon overrides. Bookmarks and folders are synced automatically.</p>
+        <label class="field background-upload-card__field">
+          <span>Import mode</span>
+          <select name="workspaceImportMode">
+            <option value="merge">Merge with current workspace</option>
+            <option value="replace">Replace current settings and custom icons</option>
+          </select>
+        </label>
+        <div class="empty-state__actions">
+          <button class="drawer-secondary-button workspace-export-button" type="button">Export workspace data</button>
+          <button class="drawer-secondary-button workspace-import-button" type="button">Import workspace data</button>
+        </div>
+        <input class="icon-file-input" name="workspaceImportFile" type="file" accept="application/json,.json" />
+      </div>
     </div>
   `;
 }
