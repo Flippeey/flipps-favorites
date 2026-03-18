@@ -1,9 +1,14 @@
 import { extensionApi } from '../shared/browser';
 import { messageTypes, type AppRequest, type AppResponse, type BookmarkNode } from '../shared/messages';
-import { readSettings, writeSettings } from '../shared/storage';
+import { markOnboardingPending, readSettings, writeSettings } from '../shared/storage';
 import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl } from './icons/icon-service';
 
-extensionApi.runtime.onInstalled.addListener(() => {
+extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }) => {
+  const reason = details.reason ?? 'unknown';
+  if (details.reason === 'install') {
+    await markOnboardingPending();
+  }
+  console.info(`Flipp's Favorites install event reason: ${reason}`);
   console.info('Flipp\'s Favorites - Bookmarks & more installed');
 });
 

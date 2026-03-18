@@ -6,6 +6,7 @@ const storageKey = 'app-settings';
 const iconCacheKey = 'icon-cache-records';
 const iconOverrideKey = 'icon-override-records';
 const bookmarkUsageKey = 'bookmark-usage-records';
+const onboardingStateKey = 'onboarding-state';
 
 const settingsStore = createCachedValueStore<AppSettings>({
   storageKey,
@@ -37,6 +38,32 @@ const bookmarkUsageStore = createCachedRecordStore<BookmarkUsageRecord>({
   migrateFromLocal: true,
   resolveConflict(current, incoming) {
     return incoming.usedAt >= current.usedAt ? incoming : current;
+  },
+});
+
+export type OnboardingStatus = 'pending' | 'completed' | 'skipped';
+
+export interface OnboardingState {
+  version: 1;
+  status: OnboardingStatus;
+  updatedAt: number;
+  completedAt: number | null;
+  skippedAt: number | null;
+}
+
+const defaultOnboardingState: OnboardingState = {
+  version: 1,
+  status: 'completed',
+  updatedAt: 0,
+  completedAt: 0,
+  skippedAt: null,
+};
+
+const onboardingStateStore = createCachedValueStore<OnboardingState>({
+  storageKey: onboardingStateKey,
+  area: 'local',
+  deserialize(storedValue) {
+    return normalizeOnboardingState((storedValue as Partial<OnboardingState> | undefined) ?? {});
   },
 });
 
@@ -192,6 +219,43 @@ export async function deleteBookmarkUsageRecord(bookmarkId: string): Promise<voi
   await bookmarkUsageStore.deleteOne(bookmarkId);
 }
 
+export async function readOnboardingState(): Promise<OnboardingState> {
+  return onboardingStateStore.read();
+}
+
+export async function markOnboardingPending(): Promise<OnboardingState> {
+  const now = Date.now();
+  return onboardingStateStore.write({
+    version: 1,
+    status: 'pending',
+    updatedAt: now,
+    completedAt: null,
+    skippedAt: null,
+  });
+}
+
+export async function markOnboardingCompleted(): Promise<OnboardingState> {
+  const now = Date.now();
+  return onboardingStateStore.write({
+    version: 1,
+    status: 'completed',
+    updatedAt: now,
+    completedAt: now,
+    skippedAt: null,
+  });
+}
+
+export async function markOnboardingSkipped(): Promise<OnboardingState> {
+  const now = Date.now();
+  return onboardingStateStore.write({
+    version: 1,
+    status: 'skipped',
+    updatedAt: now,
+    completedAt: null,
+    skippedAt: now,
+  });
+}
+
 async function ensureIconOverrideRecordsMigratedToLocal(): Promise<void> {
   if (!iconOverrideMigrationPromise) {
     iconOverrideMigrationPromise = (async () => {
@@ -235,4 +299,41 @@ function asIconOverrideRecordMap(value: unknown): Record<string, IconOverrideRec
   }
 
   return { ...(value as Record<string, IconOverrideRecord>) };
+}
+
+function normalizeOnboardingState(value: Partial<OnboardingState>): OnboardingState {
+  const status = value.status === 'pending' || value.status === 'completed' || value.status === 'skipped'
+    ? value.status
+    : defaultOnboardingState.status;
+  const updatedAt = normalizeNonNegativeTimestamp(value.updatedAt, defaultOnboardingState.updatedAt);
+  const completedAt = status === 'completed'
+    ? normalizeNullableTimestamp(value.completedAt, updatedAt)
+    : null;
+  const skippedAt = status === 'skipped'
+    ? normalizeNullableTimestamp(value.skippedAt, updatedAt)
+    : null;
+
+  return {
+    version: 1,
+    status,
+    updatedAt,
+    completedAt,
+    skippedAt,
+  };
+}
+
+function normalizeNonNegativeTimestamp(value: unknown, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.round(value));
+}
+
+function normalizeNullableTimestamp(value: unknown, fallback: number): number | null {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  return normalizeNonNegativeTimestamp(value, fallback);
 }

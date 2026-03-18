@@ -1,4 +1,5 @@
 ﻿import type { AppSettings, BookmarkNode, BookmarkUsageRecord, IconSearchCandidate, ResolvedIcon } from '../../shared/messages';
+import type { OnboardingStatus } from '../../shared/storage';
 import { createAccentPickerState, type AccentPickerState, type GeneralSettingsSubpage } from '../../settings';
 import { deriveTreeState, type DerivedTreeState } from './derived-tree';
 import { resolveInitialFolderId, resolveInitialIconToolTarget, type BookmarkActionTarget } from '../bookmarks/bookmark-navigation';
@@ -27,6 +28,16 @@ export interface AppState {
   undoStack: UndoHistoryEntry[];
   redoStack: UndoHistoryEntry[];
   settingsFeedback: SettingsFeedbackState;
+  onboarding: OnboardingState;
+}
+
+export type OnboardingStepId = 'welcome' | 'theme' | 'root-folder' | 'dock' | 'layout';
+
+export interface OnboardingState {
+  open: boolean;
+  status: OnboardingStatus;
+  stepIndex: number;
+  steps: OnboardingStepId[];
 }
 
 export type BookmarkItemKind = 'bookmark' | 'folder';
@@ -146,10 +157,11 @@ export function createInitialAppState(args: {
   settings: AppSettings;
   tree: BookmarkNode[];
   bookmarkUsage: Record<string, BookmarkUsageRecord>;
+  onboardingStatus: OnboardingStatus;
   getLastFolder: () => string | null;
   getFolderIdFromHash: () => string | null;
 }): AppState {
-  const { settings, tree, bookmarkUsage, getLastFolder, getFolderIdFromHash } = args;
+  const { settings, tree, bookmarkUsage, onboardingStatus, getLastFolder, getFolderIdFromHash } = args;
   const currentFolderId = resolveInitialFolderId(settings, tree, getLastFolder, getFolderIdFromHash);
   return {
     settings,
@@ -178,6 +190,7 @@ export function createInitialAppState(args: {
       status: 'idle',
       message: '',
     },
+    onboarding: createOnboardingState(onboardingStatus),
   };
 }
 
@@ -199,4 +212,13 @@ export function createClosedBookmarkDialogState(): BookmarkDialogState {
 export function pushUndoEntry(state: AppState, entry: UndoHistoryEntry): void {
   state.undoStack.unshift(entry);
   state.redoStack = [];
+}
+
+function createOnboardingState(status: OnboardingStatus): OnboardingState {
+  return {
+    open: status === 'pending',
+    status,
+    stepIndex: 0,
+    steps: ['welcome', 'theme', 'root-folder', 'dock', 'layout'],
+  };
 }

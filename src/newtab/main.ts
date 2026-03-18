@@ -1,7 +1,7 @@
 ﻿import './styles/index.css';
 import { sendRuntimeMessage } from '../shared/browser';
 import { messageTypes, type AppSettings, type BookmarkNode, type CreateBookmarkResponse, type GetBookmarkTreeResponse, type GetSettingsResponse, type InvalidateIconResponse, type MoveBookmarkResponse, type OpenBookmarkManagerResponse, type PatchSettingsResponse, type PingResponse, type RemoveBookmarkResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SettingsSectionId, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../shared/messages';
-import { defaultSettings, deleteIconOverrideRecord, readBookmarkUsageRecords, readIconOverrideRecords, writeIconOverrideRecord } from '../shared/storage';
+import { defaultSettings, deleteIconOverrideRecord, markOnboardingCompleted, markOnboardingSkipped, readBookmarkUsageRecords, readIconOverrideRecords, readOnboardingState, writeIconOverrideRecord } from '../shared/storage';
 import { createClosedBookmarkDialogState, createInitialAppState, pushUndoEntry, type AppState, type AppStatus, type BookmarkClipboardState, type DeleteHistoryEntry, type FolderActionTarget, type SelectionContextMenuTarget, type SelectionScope, type SurfaceContextMenuTarget, type UndoHistoryEntry } from './state/app-state';
 import { syncDerivedTree } from './state/derived-tree';
 import { findBookmarkActionTargetById, findNodeById, getBookmarkActionTarget, getBookmarkLabelForUrl, getFolderChildIds, getFolderNode, getHostname, isFolderDescendantOf, resolveInitialFolderId, type BookmarkActionTarget } from './bookmarks/bookmark-navigation';
@@ -20,6 +20,7 @@ import { normalizeBackgroundImage, normalizeUploadedImage } from './helpers/imag
 import { clearSelection, createSelectionContextMenuState, getOrderedSelectedIds, getSelectedNodes, isClipboardCutItem, isItemSelected, isSameScope, normalizeSelection, openSelectionInNewTabs } from './state/selection-state';
 import { getFolderActionTarget, setupDockInteractions, setupGridInteractions } from './interaction/surface-interactions';
 import { cloneBookmarkNode, navigateToFolder, navigateToFolderAndRender, refreshBookmarkTree, refreshTreeAndRender, renderStateAndWarmIcons } from './state/state-transitions';
+import { renderOnboardingWizard } from './onboarding/onboarding-wizard';
 import { renderUiIcon } from '../shared/ui-icons';
 import { buildShellStyle, createAccentPickerState, getLayoutPresetPatch, hslToHex, normalizeGeneralSubpage, normalizeHexColor, normalizeThemeMode, renderDrawerSection, renderSectionButton, resolveAppliedThemeMode, type AccentPickerState } from '../settings';
 
@@ -38,10 +39,11 @@ const WORKSPACE_EXPORT_SCHEMA_VERSION = 1;
 void bootstrap(root);
 
 async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
-  const [ping, settingsResponse, bookmarkResponse] = await Promise.all([
+  const [ping, settingsResponse, bookmarkResponse, onboardingState] = await Promise.all([
     sendRuntimeMessage<{ type: typeof messageTypes.ping }, PingResponse>({ type: messageTypes.ping }),
     sendRuntimeMessage<{ type: typeof messageTypes.getSettings }, GetSettingsResponse>({ type: messageTypes.getSettings }),
     sendRuntimeMessage<{ type: typeof messageTypes.getBookmarkTree }, GetBookmarkTreeResponse>({ type: messageTypes.getBookmarkTree }),
+    readOnboardingState(),
   ]);
   const bookmarkUsage = await readBookmarkUsageRecords();
 
@@ -53,9 +55,16 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
     settings: settingsResponse.settings,
     tree: bookmarkResponse.tree,
     bookmarkUsage,
+    onboardingStatus: onboardingState.status,
     getLastFolder,
     getFolderIdFromHash,
   });
+
+  if (shouldForceOnboardingForDebug()) {
+    state.onboarding.open = true;
+    state.onboarding.status = 'pending';
+    state.onboarding.stepIndex = 0;
+  }
 
   syncFolderHash(state.currentFolderId, 'replace');
   persistLastFolder(state.settings, state.currentFolderId);
@@ -294,6 +303,53 @@ function parseBookmarkSortOptionValue(value: string): { bookmarkSortMode: AppSet
 }
 
 async function handleDelegatedClick(rootElement: HTMLDivElement, state: AppState, event: MouseEvent, target: HTMLElement): Promise<void> {
+  if (state.onboarding.open) {
+    if (target.closest('.onboarding-wizard-scrim, .onboarding-wizard-close')) {
+      await skipOnboarding(rootElement, state);
+      return;
+    }
+
+    const onboardingActionButton = target.closest<HTMLButtonElement>('[data-onboarding-action]');
+    if (onboardingActionButton) {
+      const action = onboardingActionButton.dataset.onboardingAction;
+      if (action === 'skip') {
+        await skipOnboarding(rootElement, state);
+        return;
+      }
+
+      if (action === 'finish') {
+        await finishOnboarding(rootElement, state);
+        return;
+      }
+
+      if (action === 'next') {
+        state.onboarding.stepIndex = Math.min(state.onboarding.steps.length - 1, state.onboarding.stepIndex + 1);
+        renderApp(rootElement, state);
+        return;
+      }
+
+      if (action === 'back') {
+        state.onboarding.stepIndex = Math.max(0, state.onboarding.stepIndex - 1);
+        renderApp(rootElement, state);
+        return;
+      }
+    }
+
+    const onboardingStepButton = target.closest<HTMLButtonElement>('[data-onboarding-step]');
+    if (onboardingStepButton) {
+      const nextIndex = Number(onboardingStepButton.dataset.onboardingStep);
+      if (Number.isFinite(nextIndex)) {
+        state.onboarding.stepIndex = Math.max(0, Math.min(state.onboarding.steps.length - 1, Math.round(nextIndex)));
+        renderApp(rootElement, state);
+      }
+      return;
+    }
+
+    if (!target.closest('.onboarding-wizard')) {
+      return;
+    }
+  }
+
   const homeButton = target.closest<HTMLButtonElement>('.nav-side--left .library-home');
   if (homeButton) {
     const targetId = state.settings.rootFolderId || state.derivedTree.defaultFolder?.id;
@@ -371,6 +427,18 @@ async function handleDelegatedClick(rootElement: HTMLDivElement, state: AppState
   if (generalSubpageButton) {
     state.generalSubpage = normalizeGeneralSubpage(generalSubpageButton.dataset.generalSubpage);
     renderApp(rootElement, state);
+    return;
+  }
+
+  const dockVisibilityButton = target.closest<HTMLButtonElement>('[data-dock-visibility-option]');
+  if (dockVisibilityButton) {
+    const visibility = dockVisibilityButton.dataset.dockVisibilityOption;
+    if (visibility === 'always' || visibility === 'hover') {
+      await applySettingsPatch(rootElement, state, {
+        showDock: true,
+        autoHideDock: visibility === 'hover',
+      });
+    }
     return;
   }
 
@@ -603,6 +671,12 @@ function handleDelegatedContextMenu(rootElement: HTMLDivElement, state: AppState
 }
 
 function renderApp(rootElement: HTMLDivElement, state: AppState): void {
+  if (state.onboarding.open) {
+    state.drawerOpen = false;
+    state.contextMenu = null;
+    state.bookmarkDialog = createClosedBookmarkDialogState();
+  }
+
   let currentFolder = state.derivedTree.currentFolder;
 
   if (!currentFolder) {
@@ -730,6 +804,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
       ${state.statusMessage ? renderStatusMessage(state.statusMessage) : ''}
       ${state.contextMenu ? renderContextMenu(state, state.contextMenu, targetFolderId => canPasteClipboardIntoFolder(state, targetFolderId)) : ''}
       ${state.bookmarkDialog.open ? renderBookmarkDialog(state.bookmarkDialog) : ''}
+      ${state.onboarding.open ? renderOnboardingWizard(state.onboarding, state.settings, folderOptions) : ''}
     </div>
   `;
 
@@ -1267,6 +1342,11 @@ async function switchSettingsSection(rootElement: HTMLDivElement, state: AppStat
 }
 
 function dismissTransientUi(rootElement: HTMLDivElement, state: AppState): boolean {
+  if (state.onboarding.open) {
+    void skipOnboarding(rootElement, state);
+    return true;
+  }
+
   if (state.bookmarkDialog.open) {
     state.bookmarkDialog = createClosedBookmarkDialogState();
     renderApp(rootElement, state);
@@ -1309,6 +1389,10 @@ function dismissTransientUi(rootElement: HTMLDivElement, state: AppState): boole
 }
 
 function openDrawer(rootElement: HTMLDivElement, state: AppState): void {
+  if (state.onboarding.open) {
+    return;
+  }
+
   state.drawerOpen = true;
   renderApp(rootElement, state);
   queueDrawerFocus(rootElement, true);
@@ -1335,6 +1419,21 @@ function queueDrawerFocus(rootElement: HTMLDivElement, isOpen: boolean): void {
       : rootElement.querySelector<HTMLButtonElement>('.drawer-toggle');
     nextTarget?.focus();
   });
+}
+
+async function skipOnboarding(rootElement: HTMLDivElement, state: AppState): Promise<void> {
+  await markOnboardingSkipped();
+  state.onboarding.status = 'skipped';
+  state.onboarding.open = false;
+  renderApp(rootElement, state);
+}
+
+async function finishOnboarding(rootElement: HTMLDivElement, state: AppState): Promise<void> {
+  await markOnboardingCompleted();
+  state.onboarding.status = 'completed';
+  state.onboarding.open = false;
+  showStatusMessage(state, 'success', 'Onboarding complete. You can change these settings anytime.', 2600);
+  renderApp(rootElement, state);
 }
 
 function collectDeleteHistoryItems(state: AppState, nodes: BookmarkNode[]): DeleteHistoryEntry['items'] {
@@ -1514,7 +1613,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
     return false;
   }
 
-  return Boolean(target.closest('input, textarea, select, [contenteditable="true"], .bookmark-dialog, .settings-drawer'));
+  return Boolean(target.closest('input, textarea, select, [contenteditable="true"], .bookmark-dialog, .settings-drawer, .onboarding-wizard'));
 }
 
 async function deleteSelectedItems(rootElement: HTMLDivElement, state: AppState, ids: string[], scope: SelectionScope | null = state.selectionScope): Promise<void> {
@@ -2422,4 +2521,14 @@ function syncSliderValueLabel(rootElement: HTMLDivElement, input: HTMLInputEleme
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function shouldForceOnboardingForDebug(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  const queryValue = params.get('onboarding');
+  if (queryValue === '1' || queryValue === 'true') {
+    return true;
+  }
+
+  return localStorage.getItem('flipps:favorites:force-onboarding') === '1';
 }

@@ -296,6 +296,8 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
   }
 
   if (subpage === 'dock') {
+    const dockVisibilityMode = settings.showDock && settings.autoHideDock ? 'hover' : 'always';
+    const selectedDockFolderId = resolveDockFolderSelection(folderOptions, settings.dockFolderId);
     return `
       <div class="visual-section">
         <div class="visual-section__header">
@@ -305,19 +307,17 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
          <label class="field field--card">
           <span>Dock folder</span>
           <select name="dockFolderId">
-            <option value="">Mirror the main library root</option>
-            ${folderOptions.map(option => `<option value="${option.id}" ${option.id === settings.dockFolderId ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
+            ${folderOptions.map(option => `<option value="${option.id}" ${option.id === selectedDockFolderId ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
           </select>
         </label>
-        <label class="toggle-field toggle-field--card">
-          <input name="showDock" type="checkbox" ${settings.showDock ? 'checked' : ''} />
-          <span>Show the bookmark dock at the bottom of the page</span>
-        </label>
-        <label class="toggle-field toggle-field--card">
-          <input name="autoHideDock" type="checkbox" ${settings.autoHideDock ? 'checked' : ''} />
-          <span>Auto-hide the dock until the bottom edge is hovered or focused</span>
-        </label>
-       
+        <div class="field field--card">
+          <span>Visibility</span>
+          <div class="settings-subnav" role="group" aria-label="Dock visibility">
+            <button class="settings-subnav__button" data-dock-visibility-option="always" data-active="${String(dockVisibilityMode === 'always')}" type="button">Always</button>
+            <button class="settings-subnav__button" data-dock-visibility-option="hover" data-active="${String(dockVisibilityMode === 'hover')}" type="button">Hover</button>
+          </div>
+          <p class="field-hint">Always keeps the dock visible. Hover hides it until the bottom edge is hovered or focused.</p>
+        </div>
       </div>
     `;
   }
@@ -345,6 +345,19 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
       </label>
     </div>
   `;
+}
+
+function resolveDockFolderSelection(folderOptions: Array<{ id: string; label: string }>, dockFolderId: string): string {
+  if (dockFolderId && folderOptions.some(option => option.id === dockFolderId)) {
+    return dockFolderId;
+  }
+
+  const bookmarksMenuOption = folderOptions.find(option => option.label.trim().toLowerCase() === 'bookmarks menu');
+  if (bookmarksMenuOption) {
+    return bookmarksMenuOption.id;
+  }
+
+  return folderOptions[0]?.id ?? '';
 }
 
 function renderBackupSection(): string {
@@ -440,7 +453,7 @@ function renderHelpSection(): string {
   `;
 }
 
-function renderLayoutPresetCard(
+export function renderLayoutPresetCard(
   option: typeof layoutPresetOptions[number],
   activePreset: LayoutPresetId,
 ): string {
@@ -460,7 +473,7 @@ function renderLayoutPresetCard(
   `;
 }
 
-function renderSettingsSlider(name: string, label: string, value: number, min: number, max: number, suffix = ''): string {
+export function renderSettingsSlider(name: string, label: string, value: number, min: number, max: number, suffix = ''): string {
   return `
     <label class="settings-slider">
       <span class="settings-slider__meta">
@@ -473,7 +486,7 @@ function renderSettingsSlider(name: string, label: string, value: number, min: n
   `;
 }
 
-function renderThemeModeCard(option: { id: Exclude<ThemeMode, 'system'>; label: string; description: string; preview: 'light' | 'dark' }, currentMode: ThemeMode): string {
+export function renderThemeModeCard(option: { id: Exclude<ThemeMode, 'system'>; label: string; description: string; preview: 'light' | 'dark' }, currentMode: ThemeMode): string {
   const activeMode = resolveAppliedThemeMode(currentMode);
   return `
     <button class="theme-mode-card" data-theme-mode-option="${option.id}" data-active="${String(activeMode === option.id)}" type="button">

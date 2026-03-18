@@ -55,7 +55,20 @@ export function getDockFolder(tree: BookmarkNode[], settings: AppSettings): Book
       return dockFolder;
     }
   }
+  const bookmarksMenuFolder = getBookmarksMenuFolder(tree);
+  if (bookmarksMenuFolder) {
+    return bookmarksMenuFolder;
+  }
   return getDefaultFolder(tree, settings.rootFolderId);
+}
+
+function getBookmarksMenuFolder(tree: BookmarkNode[]): BookmarkNode | null {
+  const topLevelFolders = (tree[0]?.children ?? []).filter(node => !node.url);
+  return topLevelFolders.find(node => normalizeLabel(node.title) === 'bookmarks menu') ?? null;
+}
+
+function normalizeLabel(value: string | undefined): string {
+  return (value ?? '').trim().toLowerCase();
 }
 
 export function getFolderNode(tree: BookmarkNode[], folderId: string): BookmarkNode | null {
