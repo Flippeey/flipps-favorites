@@ -8,7 +8,7 @@ if (!target || !outDir) {
   throw new Error('Usage: node scripts/write-manifest.mjs <chrome|firefox> <outDir>');
 }
 
-const extensionVersion = process.env.EXTENSION_VERSION ?? '0.3.4';
+const extensionVersion = process.env.EXTENSION_VERSION ?? '0.3.5';
 const extensionDescription = process.env.EXTENSION_DESCRIPTION
   ?? "Flipp's Favorites replaces your new tab page with a fast, customizable bookmark dashboard featuring folder navigation, bookmark search, visual tiles, shortcuts. Use the theme controls to customize the look and feel of your new tab page and make it your own.";
 const firefoxExtensionId = process.env.FIREFOX_EXTENSION_ID ?? 'com.flipps-favorites@flippflix.com';
@@ -45,7 +45,7 @@ const baseManifest = {
   short_name: "Flipp's Favorites",
   version: extensionVersion,
   description: extensionDescription,
-  permissions: ['bookmarks', 'storage'],
+  permissions: ['bookmarks', 'storage', 'declarativeNetRequest'],
   host_permissions: hostPermissions,
   icons: extensionIcons,
   chrome_url_overrides: {
