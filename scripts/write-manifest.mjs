@@ -8,7 +8,7 @@ if (!target || !outDir) {
   throw new Error('Usage: node scripts/write-manifest.mjs <chrome|firefox> <outDir>');
 }
 
-const extensionVersion = process.env.EXTENSION_VERSION ?? '0.3.2';
+const extensionVersion = process.env.EXTENSION_VERSION ?? '0.3.3';
 const extensionDescription = process.env.EXTENSION_DESCRIPTION
   ?? "Flipp's Favorites replaces your new tab page with a fast, customizable bookmark dashboard featuring folder navigation, bookmark search, visual tiles, shortcuts. Use the theme controls to customize the look and feel of your new tab page and make it your own.";
 const firefoxExtensionId = process.env.FIREFOX_EXTENSION_ID ?? 'com.flipps-favorites@flippflix.com';
@@ -70,8 +70,10 @@ const browserSpecific = {
   },
   firefox: {
     background: {
-      scripts: ['background.js'],
-      type: 'module',
+      // Use a background page (not a service worker) so that XMLHttpRequest is
+      // available for host_permissions CORS bypass. Firefox 140 runs background.scripts
+      // as a service worker where fetch() does not get the CORS bypass.
+      page: 'background.html',
     },
     browser_specific_settings: {
       gecko: {
