@@ -1,5 +1,17 @@
+# Ignore build artifacts, dependencies, and generated files
 dist/
 node_modules/
-.github/*
-.claude/*
+releases/
 docs/*
+
+# Claude Code & claude-flow (config, agents, runtime data)
+.claude/
+.claude-flow/
+CLAUDE.md
+.mcp.json
+
+# Runtime / generated data
+.swarm/
+
+# Ignore GitHub workflows and actions
+.github/*
