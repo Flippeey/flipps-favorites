@@ -66,7 +66,7 @@ export async function searchIcons(query: string, bookmarkUrl?: string): Promise<
 
   const remoteCandidates = await searchDuckDuckGoImages(fallbackQuery, bookmarkUrl).catch(() => []);
   if (remoteCandidates.length) {
-    return dedupeIconCandidates(remoteCandidates).slice(0, maxDuckDuckGoResults);
+    return dedupeIconCandidates([...remoteCandidates, ...fallbackCandidates]).slice(0, maxDuckDuckGoResults);
   }
 
   return fallbackCandidates;
@@ -311,7 +311,6 @@ async function searchDuckDuckGoImages(query: string, bookmarkUrl?: string): Prom
     headers: {
       Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.5',
-      'X-Requested-With': 'XMLHttpRequest',
     },
   }).then(response => response.text());
 
@@ -355,7 +354,12 @@ async function searchDuckDuckGoImages(query: string, bookmarkUrl?: string): Prom
 }
 
 function extractDuckDuckGoToken(html: string): string | null {
-  const match = html.match(/vqd=['"]([^'"]+)['"]/) ?? html.match(/"vqd"\s*:\s*"([^"]+)"/) ?? html.match(/vqd=([A-Za-z0-9%._-]+)/);
+  const match =
+    html.match(/vqd=['"]([^'"]+)['"]/) ??
+    html.match(/"vqd"\s*:\s*"([^"]+)"/) ??
+    html.match(/data-vqd=["']([^"']+)["']/) ??
+    html.match(/vqd\s*=\s*['"]([^'"]+)['"]/) ??
+    html.match(/vqd=([A-Za-z0-9%._-]+)/);
   return match?.[1] ?? null;
 }
 
