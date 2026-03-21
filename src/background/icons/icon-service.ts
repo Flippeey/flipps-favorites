@@ -306,7 +306,10 @@ function getFileNameFromUrl(imageUrl: string): string {
 async function searchDuckDuckGoImages(query: string, bookmarkUrl?: string): Promise<IconSearchCandidate[]> {
   const queryText = /logo/i.test(query) ? query : `${query} logo`;
   const searchPageUrl = `${duckDuckGoSearchUrl}?q=${encodeURIComponent(queryText)}&ia=images&iax=images`;
-  const html = await fetch(searchPageUrl, {
+  // Use the plain search URL for token extraction — the image-specific URL (&iax=images)
+  // triggers a JS-rendered page where vqd is never embedded in the server-sent HTML.
+  const tokenUrl = `${duckDuckGoSearchUrl}?q=${encodeURIComponent(queryText)}`;
+  const html = await fetch(tokenUrl, {
     cache: 'no-store',
     headers: {
       Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',

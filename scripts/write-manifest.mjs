@@ -8,7 +8,7 @@ if (!target || !outDir) {
   throw new Error('Usage: node scripts/write-manifest.mjs <chrome|firefox> <outDir>');
 }
 
-const extensionVersion = process.env.EXTENSION_VERSION ?? '0.3.0';
+const extensionVersion = process.env.EXTENSION_VERSION ?? '0.3.1';
 const extensionDescription = process.env.EXTENSION_DESCRIPTION
   ?? "Flipp's Favorites replaces your new tab page with a fast, customizable bookmark dashboard featuring folder navigation, bookmark search, visual tiles, shortcuts. Use the theme controls to customize the look and feel of your new tab page and make it your own.";
 const firefoxExtensionId = process.env.FIREFOX_EXTENSION_ID ?? 'com.flipps-favorites@flippflix.com';
@@ -17,9 +17,11 @@ const firefoxAndroidStrictMinVersion = process.env.FIREFOX_ANDROID_STRICT_MIN_VE
 const firefoxUpdateUrl = process.env.FIREFOX_UPDATE_URL;
 const includeHttpHosts = process.env.INCLUDE_HTTP_HOSTS === '1';
 
+// https://duckduckgo.com/* is listed explicitly because Firefox MV3 does not
+// honour the https://*/* wildcard for CORS bypass on extension background fetches.
 const hostPermissions = includeHttpHosts
-  ? ['https://*/*', 'http://*/*']
-  : ['https://*/*'];
+  ? ['https://*/*', 'http://*/*', 'https://duckduckgo.com/*']
+  : ['https://*/*', 'https://duckduckgo.com/*'];
 
 const homepageUrl = process.env.EXTENSION_HOMEPAGE_URL;
 const extensionIcons = {
