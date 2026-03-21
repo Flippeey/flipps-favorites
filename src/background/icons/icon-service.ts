@@ -64,12 +64,9 @@ export async function searchIcons(query: string, bookmarkUrl?: string): Promise<
     return fallbackCandidates;
   }
 
-  const hasDdgPermission = await extensionApi.permissions.contains({ origins: ['https://duckduckgo.com/*'] }).catch(() => false);
-  if (hasDdgPermission) {
-    const remoteCandidates = await searchDuckDuckGoImages(fallbackQuery, bookmarkUrl).catch(() => []);
-    if (remoteCandidates.length) {
-      return dedupeIconCandidates(remoteCandidates).slice(0, maxDuckDuckGoResults);
-    }
+  const remoteCandidates = await searchDuckDuckGoImages(fallbackQuery, bookmarkUrl).catch(() => []);
+  if (remoteCandidates.length) {
+    return dedupeIconCandidates(remoteCandidates).slice(0, maxDuckDuckGoResults);
   }
 
   return fallbackCandidates;
@@ -323,7 +320,7 @@ async function searchDuckDuckGoImages(query: string, bookmarkUrl?: string): Prom
     return [];
   }
 
-  const data = await fetch(`${duckDuckGoSearchUrl}i.js?q=${encodeURIComponent(queryText)}&o=json&vqd=${encodeURIComponent(vqd)}&f=,,,&p=1&l=us-en`, {
+  const data = await fetch(`${duckDuckGoSearchUrl}i.js?q=${encodeURIComponent(queryText)}&o=json&vqd=${encodeURIComponent(vqd)}&f=,,Medium,Square&p=1&l=us-en`, {
     cache: 'no-store',
     headers: {
       Accept: 'application/json',
