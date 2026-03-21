@@ -1,4 +1,5 @@
 import type { GetIconRequest, IconCacheRecord, IconOverrideRecord, IconSearchCandidate, ResolvedIcon, SetIconOverrideRequest } from '../../shared/messages';
+import { extensionApi } from '../../shared/browser';
 import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRecord, readIconCacheRecord, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideRecord } from '../../shared/storage';
 
 const iconPipelineVersion = 'bookmark-icons-v5';
@@ -63,9 +64,12 @@ export async function searchIcons(query: string, bookmarkUrl?: string): Promise<
     return fallbackCandidates;
   }
 
-  const remoteCandidates = await searchDuckDuckGoImages(fallbackQuery, bookmarkUrl).catch(() => []);
-  if (remoteCandidates.length) {
-    return dedupeIconCandidates(remoteCandidates).slice(0, maxDuckDuckGoResults);
+  const hasDdgPermission = await extensionApi.permissions.contains({ origins: ['https://duckduckgo.com/*'] }).catch(() => false);
+  if (hasDdgPermission) {
+    const remoteCandidates = await searchDuckDuckGoImages(fallbackQuery, bookmarkUrl).catch(() => []);
+    if (remoteCandidates.length) {
+      return dedupeIconCandidates(remoteCandidates).slice(0, maxDuckDuckGoResults);
+    }
   }
 
   return fallbackCandidates;
@@ -107,16 +111,13 @@ async function resolveIcon(request: GetIconRequest, cacheKey: string): Promise<R
     return toResolvedIcon(cached);
   }
 
-  const faviconRecord = await createFaviconRecord(request.bookmarkUrl, cacheKey).catch(() => null);
-  if (faviconRecord) {
-    await writeIconCacheRecord(faviconRecord);
-    return toResolvedIcon(faviconRecord);
-  }
-
-  const searchRecord = await createSearchRecord(request.bookmarkUrl, request.bookmarkTitle, cacheKey).catch(() => null);
-  if (searchRecord) {
-    await writeIconCacheRecord(searchRecord);
-    return toResolvedIcon(searchRecord);
+  const hasFaviconPermission = await extensionApi.permissions.contains({ origins: ['https://www.google.com/*'] }).catch(() => false);
+  if (hasFaviconPermission) {
+    const faviconRecord = await createFaviconRecord(request.bookmarkUrl, cacheKey).catch(() => null);
+    if (faviconRecord) {
+      await writeIconCacheRecord(faviconRecord);
+      return toResolvedIcon(faviconRecord);
+    }
   }
 
   const generatedRecord = createGeneratedRecord(request.bookmarkUrl, request.bookmarkTitle, cacheKey);
@@ -156,37 +157,6 @@ async function createFaviconRecord(bookmarkUrl: string, cacheKey: string): Promi
   };
 }
 
-async function createSearchRecord(bookmarkUrl: string, bookmarkTitle: string | undefined, cacheKey: string): Promise<IconCacheRecord> {
-  const query = buildSearchQuery(bookmarkUrl, bookmarkTitle);
-  const candidates = await searchDuckDuckGoImages(query, bookmarkUrl);
-  const firstCandidate = candidates[0];
-  if (!firstCandidate) {
-    throw new Error('No DuckDuckGo icon candidates found.');
-  }
-
-  const response = await fetch(firstCandidate.imageUrl, { cache: 'force-cache' });
-  if (!response.ok) {
-    throw new Error(`DuckDuckGo icon fetch failed with ${String(response.status)}`);
-  }
-
-  const blob = await response.blob();
-  const mimeType = blob.type || 'image/png';
-  if (!mimeType.startsWith('image/')) {
-    throw new Error('DuckDuckGo icon response is not an image.');
-  }
-
-  assertImageIsUseful(await getImageDimensions(blob));
-
-  return {
-    cacheKey,
-    bookmarkUrl,
-    sourceKind: 'search',
-    dataUrl: await blobToDataUrl(blob, mimeType),
-    mimeType,
-    updatedAt: Date.now(),
-    pipelineVersion: iconPipelineVersion,
-  };
-}
 
 function createGeneratedRecord(bookmarkUrl: string, bookmarkTitle: string | undefined, cacheKey: string): IconCacheRecord {
   const label = getIconLabel(bookmarkTitle, bookmarkUrl);
@@ -285,14 +255,6 @@ function extractHostname(value: string | undefined): string | null {
   }
 }
 
-function buildSearchQuery(bookmarkUrl: string, bookmarkTitle: string | undefined): string {
-  const trimmedTitle = bookmarkTitle?.trim();
-  if (trimmedTitle) {
-    return /logo/i.test(trimmedTitle) ? trimmedTitle : `${trimmedTitle} logo`;
-  }
-
-  return buildSearchQueryFromBookmark(bookmarkUrl) || 'website logo';
-}
 
 function buildSearchQueryFromBookmark(bookmarkUrl?: string): string {
   const hostname = extractHostname(bookmarkUrl);
