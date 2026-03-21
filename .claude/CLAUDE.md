@@ -1,14 +1,3 @@
-# Project Agents
-
-## Active Agents
-- [Frontend Developer](./agents/engineering/frontend-developer.md)
-- [Backend Architect](./agents/engineering/backend-architect.md)
-- [UI Designer](./agents/design/ui-designer.md)
-- [UX Researcher](./agents/design/ux-researcher.md)
-- [AI Engineer](./agents/engineering/ai-engineer.md)
-
----
-
 # Project: Flipp's Favorites
 
 A browser extension that replaces the new tab page with a bookmark dashboard. Targets Chrome (Manifest V3) and Firefox (MV3, Firefox 140+). No frontend framework — vanilla TypeScript + DOM + CSS.
@@ -107,8 +96,3 @@ src/
 - **Build both targets**: Changes should work for both Chrome and Firefox. Use `extensionApi` from `shared/browser.ts` instead of `chrome.*` directly.
 - **No tests currently**: Validate logic changes by running the build and type-checking. Do not add a test framework without discussion.
 - **Permissions**: Avoid requesting new manifest permissions unless strictly necessary. The extension is intentionally least-privilege.
-
-## Docs
-
-- `docs/rewrite-plan.md` — Architecture decisions and phased implementation plan
-- `docs/style-token-contract.md` — Design token specifications for CSS theming
