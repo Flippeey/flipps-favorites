@@ -6,6 +6,7 @@ const tileFaviconCssSize = 64;
 const dockFaviconCssSize = 32;
 const dialogFaviconCssSize = 96;
 const maxFaviconRequestSize = 256;
+const minimumFaviconDisplaySize = 48;
 
 export function renderIconPlaceholder(label: string): string {
   return `<span class="bookmark-icon-placeholder">${escapeHtml(getInitial(label))}</span>`;
@@ -38,6 +39,31 @@ export function applyResolvedIcon(element: HTMLElement, icon: ResolvedIcon): voi
     element.dataset.iconState = 'favicon';
     element.dataset.iconSource = 'favicon';
     element.innerHTML = renderFaviconIconMarkup(bookmarkUrl, element.classList.contains('tile-icon') ? 'tile' : 'dock');
+
+    const img = element.querySelector<HTMLImageElement>('img');
+    if (img) {
+      const applyFallback = (): void => {
+        if (!element.isConnected) {
+          return;
+        }
+        element.dataset.iconState = 'fallback';
+        element.dataset.iconSource = 'generated';
+        element.innerHTML = renderResolvedIconMarkup(icon);
+      };
+
+      if (img.complete) {
+        if (img.naturalWidth < minimumFaviconDisplaySize || img.naturalHeight < minimumFaviconDisplaySize) {
+          applyFallback();
+        }
+      } else {
+        img.addEventListener('load', () => {
+          if (img.naturalWidth < minimumFaviconDisplaySize || img.naturalHeight < minimumFaviconDisplaySize) {
+            applyFallback();
+          }
+        }, { once: true });
+        img.addEventListener('error', applyFallback, { once: true });
+      }
+    }
     return;
   }
 
