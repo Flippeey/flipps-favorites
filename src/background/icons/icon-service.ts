@@ -8,6 +8,7 @@ const faviconRequestSize = 256;
 const duckDuckGoSearchUrl = 'https://duckduckgo.com/';
 const minimumAcceptedIconSize = 48;
 const maxDuckDuckGoResults = 30;
+let ddgRuleCounter = 0;
 const inFlightIcons = new Map<string, Promise<ResolvedIcon>>();
 
 export async function getIcon(request: GetIconRequest): Promise<ResolvedIcon> {
@@ -306,54 +307,90 @@ function getFileNameFromUrl(imageUrl: string): string {
 async function searchDuckDuckGoImages(query: string, bookmarkUrl?: string): Promise<IconSearchCandidate[]> {
   const queryText = /logo/i.test(query) ? query : `${query} logo`;
   const searchPageUrl = `${duckDuckGoSearchUrl}?q=${encodeURIComponent(queryText)}&ia=images&iax=images`;
-  // Use the plain search URL for token extraction — the image-specific URL (&iax=images)
-  // triggers a JS-rendered page where vqd is never embedded in the server-sent HTML.
-  const tokenUrl = `${duckDuckGoSearchUrl}?q=${encodeURIComponent(queryText)}`;
-  const html = await fetch(tokenUrl, {
-    cache: 'no-store',
-    headers: {
-      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.5',
-    },
-  }).then(response => response.text());
 
-  const vqd = extractDuckDuckGoToken(html);
-  if (!vqd) {
-    return [];
+  // Firefox 140 broke the host_permissions CORS bypass for MV3 background pages. As a
+  // workaround, temporarily inject Access-Control-Allow-Origin via a declarativeNetRequest
+  // session rule so fetch() can read the DDG response. The rule is removed immediately after.
+  const ruleId = ++ddgRuleCounter;
+  let ruleAdded = false;
+  if (extensionApi.declarativeNetRequest?.updateSessionRules) {
+    try {
+      await extensionApi.declarativeNetRequest.updateSessionRules({
+        addRules: [{
+          id: ruleId,
+          priority: 1,
+          action: {
+            type: 'modifyHeaders',
+            responseHeaders: [
+              { header: 'access-control-allow-origin', operation: 'set', value: '*' },
+            ],
+          },
+          condition: {
+            urlFilter: '||duckduckgo.com/',
+            resourceTypes: ['xmlhttprequest', 'other'],
+          },
+        }],
+      });
+      ruleAdded = true;
+    } catch {
+      // declarativeNetRequest unavailable — proceed without CORS header injection
+    }
   }
 
-  const data = await fetch(`${duckDuckGoSearchUrl}i.js?q=${encodeURIComponent(queryText)}&o=json&vqd=${encodeURIComponent(vqd)}&f=,,Medium,Square&p=1&l=us-en`, {
-    cache: 'no-store',
-    headers: {
-      Accept: 'application/json',
-      'X-Requested-With': 'XMLHttpRequest',
-    },
-    referrer: searchPageUrl,
-    referrerPolicy: 'origin-when-cross-origin',
-  }).then(async response => {
-    if (!response.ok) {
-      throw new Error(`DuckDuckGo search failed with ${String(response.status)}`);
-    }
-    return response.json() as Promise<{ results?: Array<{ image: string; thumbnail: string; title: string; url: string; width: number; height: number }> }>;
-  });
+  try {
+    const html = await fetch(searchPageUrl, {
+      cache: 'no-store',
+      headers: {
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    }).then(response => response.text());
 
-  const results = data.results ?? [];
-  const bookmarkHostname = extractHostname(bookmarkUrl);
-  const queryTerms = tokenizeQuery(queryText);
-  return results
-    .filter(result => typeof result.image === 'string' && typeof result.thumbnail === 'string')
-    .filter(result => result.width >= 200 && result.height >= 200)
-    .filter(result => result.width <= 1600 && result.height <= 1600)
-    .filter(result => Math.max(result.width, result.height) / Math.min(result.width, result.height) <= 2)
-    .sort((left, right) => scoreDuckDuckGoResult(right, bookmarkHostname, queryTerms) - scoreDuckDuckGoResult(left, bookmarkHostname, queryTerms))
-    .slice(0, maxDuckDuckGoResults)
-    .map(result => ({
-      imageUrl: result.image,
-      previewUrl: result.thumbnail || result.image,
-      label: stripHtml(result.title) || query,
-      sourceKind: 'search' as const,
-      sourcePageUrl: result.url,
-    }));
+    const vqd = extractDuckDuckGoToken(html);
+    if (!vqd) {
+      return [];
+    }
+
+    const data = await fetch(`${duckDuckGoSearchUrl}i.js?q=${encodeURIComponent(queryText)}&o=json&vqd=${encodeURIComponent(vqd)}&f=,,Medium,Square&p=1&l=us-en`, {
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      referrer: searchPageUrl,
+      referrerPolicy: 'origin-when-cross-origin',
+    }).then(async response => {
+      if (!response.ok) {
+        throw new Error(`DuckDuckGo search failed with ${String(response.status)}`);
+      }
+      return response.json() as Promise<{ results?: Array<{ image: string; thumbnail: string; title: string; url: string; width: number; height: number }> }>;
+    });
+
+    const results = data.results ?? [];
+    const bookmarkHostname = extractHostname(bookmarkUrl);
+    const queryTerms = tokenizeQuery(queryText);
+    return results
+      .filter(result => typeof result.image === 'string' && typeof result.thumbnail === 'string')
+      .filter(result => result.width >= 200 && result.height >= 200)
+      .filter(result => result.width <= 1600 && result.height <= 1600)
+      .filter(result => Math.max(result.width, result.height) / Math.min(result.width, result.height) <= 2)
+      .sort((left, right) => scoreDuckDuckGoResult(right, bookmarkHostname, queryTerms) - scoreDuckDuckGoResult(left, bookmarkHostname, queryTerms))
+      .slice(0, maxDuckDuckGoResults)
+      .map(result => ({
+        imageUrl: result.image,
+        previewUrl: result.thumbnail || result.image,
+        label: stripHtml(result.title) || query,
+        sourceKind: 'search' as const,
+        sourcePageUrl: result.url,
+      }));
+  } finally {
+    if (ruleAdded) {
+      await extensionApi.declarativeNetRequest.updateSessionRules({
+        removeRuleIds: [ruleId],
+      }).catch(() => undefined);
+    }
+  }
 }
 
 function extractDuckDuckGoToken(html: string): string | null {
@@ -474,6 +511,10 @@ function isLikelyAggregatorHost(hostname: string | null): boolean {
   ].some(fragment => hostname.includes(fragment));
 }
 
+function stripHtml(value: string): string {
+  return value.replace(/<[^>]+>/g, '').trim();
+}
+
 function getDomainCandidates(bookmarkUrl: string): IconSearchCandidate[] {
   const hostname = extractHostname(bookmarkUrl);
   if (!hostname) {
@@ -497,10 +538,6 @@ function dedupeIconCandidates(candidates: IconSearchCandidate[]): IconSearchCand
     }
   }
   return Array.from(unique.values());
-}
-
-function stripHtml(value: string): string {
-  return value.replace(/<[^>]+>/g, '').trim();
 }
 
 function clampFaviconSize(value: number): number {
