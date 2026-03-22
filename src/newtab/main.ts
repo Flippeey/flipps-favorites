@@ -840,8 +840,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const iconToolTargetInput = rootElement.querySelector<HTMLSelectElement>('select[name="iconToolTargetUrl"]');
   const iconFileInput = rootElement.querySelector<HTMLInputElement>('input[name="iconFile"]');
   const bookmarkDialogSearchInput = rootElement.querySelector<HTMLInputElement>('input[name="bookmarkDialogSearchQuery"]');
-  const bookmarkDialogSearchButton = rootElement.querySelector<HTMLButtonElement>('.bookmark-dialog-search-button');
-  const bookmarkDialogTitleInput = rootElement.querySelector<HTMLInputElement>('input[name="bookmarkDialogTitle"]');
+const bookmarkDialogTitleInput = rootElement.querySelector<HTMLInputElement>('input[name="bookmarkDialogTitle"]');
   const bookmarkDialogUrlInput = rootElement.querySelector<HTMLInputElement>('input[name="bookmarkDialogUrl"]');
   const bookmarkDialogSaveButton = rootElement.querySelector<HTMLButtonElement>('.bookmark-dialog-save-button');
   const bookmarkDialogFileInput = rootElement.querySelector<HTMLInputElement>('input[name="bookmarkDialogFile"]');
@@ -1318,10 +1317,6 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     }
 
     event.preventDefault();
-    await searchBookmarkDialog(rootElement, state, state.bookmarkDialog.query, renderApp);
-  });
-
-  bookmarkDialogSearchButton?.addEventListener('click', async () => {
     await searchBookmarkDialog(rootElement, state, state.bookmarkDialog.query, renderApp);
   });
 

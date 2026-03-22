@@ -81,7 +81,7 @@ export async function openBookmarkDialog(rootElement: HTMLDivElement, state: App
     target,
     draftTitle: target.title || '',
     draftUrl: target.url,
-    query: `${target.title || getSearchName(target.url)} logo`,
+    query: `${getSearchName(target.url) || target.title} logo`,
     status: '',
     statusKind: '',
     loading: true,
