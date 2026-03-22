@@ -8,10 +8,19 @@
     "build": "npm run build:chrome && npm run build:firefox",
     "build:chrome": "vite build --mode chrome --outDir dist/chrome && node scripts/write-manifest.mjs chrome dist/chrome",
     "build:firefox": "vite build --mode firefox --outDir dist/firefox && node scripts/write-manifest.mjs firefox dist/firefox",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "playwright test",
+    "test:firefox": "playwright test --project=firefox",
+    "test:chrome": "playwright test --project=chrome",
+    "test:ui": "playwright test --ui",
+    "test:build": "npm run build && npm test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/firefox-webext-browser": "^143.0.0",
     "@types/node": "^22.13.10",
+    "playwright-webextext": "^0.0.3",
+    "tslib": "^2.8.1",
     "typescript": "^5.8.2",
     "vite": "^6.2.0"
   }
