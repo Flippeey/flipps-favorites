@@ -13,5 +13,10 @@ CLAUDE.md
 # Runtime / generated data
 .swarm/
 
+# Playwright
+tests/.firefox-profile/
+test-results/
+playwright-report/
+
 # Ignore GitHub workflows and actions
 .github/*
