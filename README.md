@@ -1,24 +1,29 @@
-# Flipp's Favorites
+<p align="center">
+  <img src="public/icons/ff-icon-128.png" width="96" alt="Flipp's Favorites icon" />
+</p>
 
-A browser extension that replaces the new tab page with a fast, customizable bookmark dashboard. Works on Chrome and Firefox.
+<h1 align="center">Flipp's Favorites</h1>
 
----
-
-## Features
-
-- **Bookmark dashboard** — navigate your bookmark folders directly in the new tab page
-- **Visual tiles** — see site icons at a glance; override any icon with a custom image or URL
-- **Search** — filter bookmarks instantly from the hero search bar
-- **Themes** — light and dark modes, accent color picker, and wallpaper support
-- **Drag & drop** — reorder and move bookmarks and folders
-- **Multi-select** — select, cut, paste, and move multiple items at once
-- **Settings drawer** — all appearance and behavior options in one place
-- **Import / export** — back up and restore your settings and icon overrides across devices
-- **Privacy-first** — requests only the permissions it actually needs
+<p align="center">A browser extension that replaces the new tab page with a fast, customizable bookmark dashboard.<br/>Works on Chrome and Firefox.</p>
 
 ---
 
-## Development
+## ✨ Features
+
+- 📁 **Bookmark dashboard** — navigate your bookmark folders directly in the new tab page
+- 🖼️ **Visual tiles** — see site icons at a glance; override any icon with a custom image or URL
+- 🔍 **Search** — filter bookmarks instantly from the hero search bar
+- 🎨 **Themes** — light and dark modes, accent color picker, and wallpaper support
+- 🖱️ **Drag & drop** — reorder and move bookmarks and folders
+- ☑️ **Multi-select** — select, cut, paste, and move multiple items at once
+- ⚙️ **Settings drawer** — all appearance and behavior options in one place
+- 🧙 **Onboarding wizard** — guided first-time setup to get your workspace ready in under a minute
+- 💾 **Import / export** — back up and restore your settings and icon overrides across devices
+- 🔒 **Privacy-first** — requests only the permissions it actually needs
+
+---
+
+## 🛠️ Development
 
 **Requirements:** Node.js 18+
 
@@ -62,7 +67,7 @@ The manifest is generated post-build by `scripts/write-manifest.mjs` and support
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 The extension has two entry points:
 
@@ -73,7 +78,7 @@ All cross-boundary message types are defined in `src/shared/messages.ts`.
 
 ---
 
-## Privacy
+## 🔐 Privacy
 
 - No accounts, no sign-in, no external servers
 - All data (settings, icon overrides) is stored in local browser extension storage
@@ -82,7 +87,7 @@ All cross-boundary message types are defined in `src/shared/messages.ts`.
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
 Bug reports and feature requests are welcome — please [open an issue](https://github.com/Flippeey/flipps-favorites/issues).
 
@@ -90,7 +95,7 @@ Pull requests are not being accepted at this time.
 
 ---
 
-## License
+## 📄 License
 
 Copyright (c) 2026 Jason Leeraert. All rights reserved.
 
