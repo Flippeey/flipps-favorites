@@ -387,7 +387,7 @@
   margin: 0;
   padding: 20px 24px;
   text-align: center;
-  border-radius: 8px;
+  border-radius: 16px;
   background: var(--empty-bg);
   border: 1px solid var(--border-subtle);
 }
