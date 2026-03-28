@@ -1,5 +1,4 @@
 :root {
-  color-scheme: light;
   font-family: "Segoe UI", Helvetica, Arial, sans-serif;
   background: #eef1f5;
   color: #2f3338;
@@ -96,7 +95,8 @@ button {
   --dock-height: 36px;
 }
 
-.shell[data-theme-mode="light"] {
+.shell[data-theme-mode="light"],
+.shell[data-theme-mode="system"] {
   --page-bg: #e7ebf1;
   --page-bg-secondary: #eef1f5;
   --text-color: #2f3338;
@@ -130,21 +130,6 @@ button {
   --elevation-low: 0 10px 20px rgba(5, 9, 15, 0.22);
   --elevation-medium: 0 16px 30px rgba(5, 9, 15, 0.28);
   --elevation-high: 0 24px 44px rgba(5, 9, 15, 0.34);
-}
-
-.shell[data-theme-mode="system"] {
-  --page-bg: #e7ebf1;
-  --page-bg-secondary: #eef1f5;
-  --text-color: #2f3338;
-  --muted-text: #6e7781;
-  --nav-bg: rgba(255, 255, 255, 0.08);
-  --panel-bg: rgba(250, 251, 252, 0.92);
-  --panel-bg-strong: rgba(255, 255, 255, 0.72);
-  --panel-border: rgba(0, 0, 0, 0.08);
-  --field-bg: #ffffff;
-  --field-border: #d8dee6;
-  --drawer-bg: rgba(248, 249, 250, 0.97);
-  --empty-bg: rgba(255, 255, 255, 0.72);
 }
 
 @media (prefers-color-scheme: dark) {
