@@ -170,8 +170,8 @@ function captureDrawerUiState(rootElement: HTMLDivElement): {
   scrollTop: number;
   focusSelector: string | null;
 } | null {
-  const drawerBody = rootElement.querySelector<HTMLElement>('.drawer-body');
-  if (!drawerBody) {
+  const drawer = rootElement.querySelector<HTMLElement>('.settings-drawer');
+  if (!drawer) {
     return null;
   }
 
@@ -186,7 +186,7 @@ function captureDrawerUiState(rootElement: HTMLDivElement): {
   }
 
   return {
-    scrollTop: drawerBody.scrollTop,
+    scrollTop: drawer.scrollTop,
     focusSelector,
   };
 }
@@ -197,9 +197,9 @@ function restoreDrawerUiState(rootElement: HTMLDivElement, snapshot: { scrollTop
   }
 
   window.requestAnimationFrame(() => {
-    const drawerBody = rootElement.querySelector<HTMLElement>('.drawer-body');
-    if (drawerBody) {
-      drawerBody.scrollTop = snapshot.scrollTop;
+    const drawer = rootElement.querySelector<HTMLElement>('.settings-drawer');
+    if (drawer) {
+      drawer.scrollTop = snapshot.scrollTop;
     }
 
     if (!snapshot.focusSelector) {

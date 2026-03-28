@@ -7,7 +7,6 @@
   width: min(920px, 92vw);
   padding: 24px 0 0;
   transform: translateX(calc(100% + 24px));
-  transition: transform 160ms ease;
   overflow: auto;
   background: var(--drawer-bg);
   border-left: 1px solid var(--border-subtle);
@@ -602,3 +601,17 @@
   transform: scale(1.06);
 }
 
+@media (max-width: 720px) {
+  .drawer-nav-divider {
+    display: none;
+  }
+
+  .layout-preset-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .shortcut-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

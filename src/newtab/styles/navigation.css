@@ -1,4 +1,7 @@
 .bookmarks-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   width: 100%;
   min-height: 56px;
   height: 56px;
@@ -97,5 +100,47 @@
   color: var(--text-secondary);
   opacity: 0.72;
   font-size: 14px;
+}
+
+@media (max-width: 720px) {
+  /* Collapse breadcrumbs: show only the active library pill or the current (last) folder */
+  .library-pill:not([data-active="true"]),
+  .breadcrumb:not([data-last="true"]),
+  .nav-separator {
+    display: none;
+  }
+
+  /* Icon-only nav buttons — hide text labels, keep .ui-icon spans */
+  .library-home > span:not(.ui-icon),
+  .drawer-toggle > span:not(.ui-icon) {
+    display: none;
+  }
+
+  .library-home,
+  .drawer-toggle {
+    padding: 6px;
+    min-width: 40px;
+    justify-content: center;
+  }
+
+  /* Icon-only sort control — collapse pill width, overlay select on top of icon */
+  .sort-controls__field--nav {
+    position: relative;
+    padding: 0 9px;
+    gap: 0;
+    background-image: none;
+  }
+
+  .sort-controls--nav .sort-controls__field select,
+  .shell .sort-controls__field--nav select {
+    position: absolute;
+    inset: 0;
+    min-width: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
 }
 
