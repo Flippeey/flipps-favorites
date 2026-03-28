@@ -375,6 +375,23 @@
   align-items: end;
 }
 
+/* Per-preset overrides: gap and padding proportionally reflect the actual layout settings */
+.layout-preset-card__preview--compact {
+  gap: 3px;
+  padding: 7px;
+}
+
+.layout-preset-card__preview--spacious {
+  gap: 13px;
+  padding: 13px;
+}
+
+.layout-preset-card__preview--presentation {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  padding: 14px;
+}
+
 .layout-preset-card__tile {
   display: block;
   border-radius: 10px;
@@ -382,11 +399,24 @@
   box-shadow: 0 8px 18px var(--accent-shadow);
 }
 
+.layout-preset-card__tile--compact {
+  border-radius: 6px;
+}
+
+.layout-preset-card__tile--spacious {
+  border-radius: 12px;
+}
+
+.layout-preset-card__tile--presentation,
+.layout-preset-card__tile--custom {
+  border-radius: 14px;
+}
+
 .layout-preset-card__tile--compact.a,
 .layout-preset-card__tile--compact.b,
 .layout-preset-card__tile--compact.c,
 .layout-preset-card__tile--compact.d {
-  height: 38px;
+  height: 36px;
 }
 
 .layout-preset-card__tile--balanced.a,

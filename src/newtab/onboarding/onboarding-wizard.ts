@@ -206,13 +206,21 @@ function renderOnboardingStep(stepId: OnboardingStepId, settings: AppSettings, f
   `;
 }
 
+const ILLUSTRATION_SRCS: Partial<Record<OnboardingStepId, string>> = {
+    // Uncomment each entry once the screenshot is ready:
+    // welcome: 'img/onboarding-welcome.png',
+    // theme: 'img/onboarding-theme.png',
+    // 'root-folder': 'img/onboarding-root-folder.png',
+    // dock: 'img/onboarding-dock.png',
+    // layout: 'img/onboarding-layout.png',
+};
+
 function renderIllustrationSlot(stepId: OnboardingStepId): string {
+    const src = ILLUSTRATION_SRCS[stepId];
+    if (!src) return '';
     return `
     <aside class="onboarding-illustration" data-illustration-step="${stepId}">
-      <div class="onboarding-illustration__placeholder">
-        <span class="onboarding-illustration__badge">Screenshot slot</span>
-        <p>Add step-specific imagery here later.</p>
-      </div>
+      <img class="onboarding-illustration__img" src="${src}" alt="" />
     </aside>
   `;
 }
