@@ -407,7 +407,7 @@
 
 .tile-icon[data-icon-state="fallback"],
 .dock-item__icon[data-icon-state="fallback"] {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-color) 78%, white), var(--accent-color-strong));
+  background: transparent;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
 }
 
