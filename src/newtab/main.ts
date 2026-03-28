@@ -740,13 +740,6 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
           ${renderNavTrail(libraryFolders, breadcrumbs)}
         </div>
         <div class="nav-side nav-side--right nav-side--controls">
-          <label class="surface-search surface-search--nav" aria-label="Search all bookmarks">
-            <span class="surface-search__icon">${renderUiIcon('search')}</span>
-            <input name="currentFolderSearch" type="search" value="${escapeAttribute(state.searchDraft)}" placeholder="Search all bookmarks" aria-label="Search all bookmarks" />
-            ${state.searchDraft
-      ? `<button class="surface-search__clear" type="button" aria-label="Clear search">${renderUiIcon('close')}</button>`
-      : ''}
-          </label>
           <label class="sort-controls__field sort-controls__field--nav">
             <select name="bookmarkSortOption" aria-label="Sort bookmarks">
               <option value="manual" ${getBookmarkSortOptionValue(state.settings) === 'manual' ? 'selected' : ''}>Manual order</option>
@@ -761,6 +754,15 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
           <button class="drawer-toggle nav-icon library-home button-with-icon" type="button" aria-label="Open settings">${renderUiIcon('settings')}<span>Settings</span></button>
         </div>
       </nav>
+      <div class="search-band">
+        <label class="surface-search surface-search--hero" aria-label="Search bookmarks">
+          <span class="surface-search__icon">${renderUiIcon('search')}</span>
+          <input name="currentFolderSearch" type="search" value="${escapeAttribute(state.searchDraft)}" placeholder="Search bookmarks..." aria-label="Search bookmarks" />
+          ${state.searchDraft
+      ? `<button class="surface-search__clear" type="button" aria-label="Clear search">${renderUiIcon('close')}</button>`
+      : ''}
+        </label>
+      </div>
       <main class="workspace">
         <section class="bookmark-canvas" aria-label="Bookmarks grid">
           <div class="bookmark-grid" data-limit-rows="${String(state.settings.favoritesRows > 0)}">

@@ -412,6 +412,11 @@
     padding-right: 20px;
   }
 
+  .search-band {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
   .nav-side--controls {
     gap: 8px;
   }
@@ -428,21 +433,12 @@
     min-width: 100%;
   }
 
-  .surface-search--nav {
-    min-width: 0;
-    max-width: 220px;
-  }
-
   .sort-controls--nav .sort-controls__field select {
     min-width: 180px;
   }
 }
 
 @media (max-width: 720px) {
-  .nav-side--controls .surface-search--nav {
-    flex: 0 1 150px;
-  }
-
   .sort-controls--nav .sort-controls__field select {
     min-width: 150px;
   }
