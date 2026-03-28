@@ -18,18 +18,6 @@ A browser extension that replaces the new tab page with a fast, customizable boo
 
 ---
 
-## Installation
-
-### Chrome
-Load unpacked from `dist/chrome/` in `chrome://extensions` (Developer mode on).
-
-### Firefox
-Load temporary add-on from `dist/firefox/manifest.json` in `about:debugging`.
-
-> Store listings coming soon.
-
----
-
 ## Development
 
 **Requirements:** Node.js 18+
@@ -46,6 +34,15 @@ npm install
 | `npm run build:firefox` | Firefox only → `dist/firefox/` |
 | `npm run typecheck` | Type-check without emitting |
 | `npm test` | Run Playwright E2E tests |
+
+### Load in browser
+
+After running `npm run build`:
+
+- **Chrome** — go to `chrome://extensions`, enable Developer mode, load unpacked from `dist/chrome/`
+- **Firefox** — go to `about:debugging`, load temporary add-on from `dist/firefox/manifest.json`
+
+> Store listings coming soon.
 
 ### How it's built
 
