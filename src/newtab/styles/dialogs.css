@@ -205,7 +205,7 @@
 
 .bookmark-dialog__field input {
   min-height: 38px;
-  border-radius: 9px;
+  border-radius: 10px;
 }
 
 .bookmark-dialog-save-button {

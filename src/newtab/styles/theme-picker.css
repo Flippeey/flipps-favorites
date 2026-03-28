@@ -554,7 +554,7 @@
 
 .drawer-note {
   padding: 20px;
-  border-radius: 4px;
+  border-radius: 14px;
   background: var(--field-bg);
   border: 1px solid var(--border-subtle);
   color: var(--text-primary);

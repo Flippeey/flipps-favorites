@@ -175,7 +175,7 @@ button {
 .save-button,
 .section-button {
   border: 0;
-  border-radius: 4px;
+  border-radius: 10px;
   background: var(--interactive-accent);
   color: var(--interactive-on-accent);
   padding: 9px 15px;
