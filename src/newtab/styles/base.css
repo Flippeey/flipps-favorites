@@ -180,6 +180,25 @@ button {
   color: var(--interactive-on-accent);
   padding: 9px 15px;
   font-size: 13px;
+  transition: background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.save-button:hover,
+.section-button:hover {
+  background: var(--interactive-accent-strong);
+  box-shadow: 0 6px 18px var(--accent-shadow);
+}
+
+.save-button:active,
+.section-button:active {
+  transform: scale(0.98);
+  box-shadow: 0 4px 12px var(--accent-shadow);
+}
+
+.save-button:focus-visible,
+.section-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .icon-button {
