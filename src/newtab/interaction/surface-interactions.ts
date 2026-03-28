@@ -356,6 +356,9 @@ function setupSurfaceInteractions(
     }
 
     const target = event.target as HTMLElement | null;
+    if (target?.closest('[data-empty-action]')) {
+      return;
+    }
     const itemButton = target?.closest<HTMLButtonElement>(itemSelector);
     if (!itemButton) {
       state.contextMenu = null;

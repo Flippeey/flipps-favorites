@@ -15,7 +15,7 @@ function renderMenuItem(action: string, iconName: Parameters<typeof renderUiIcon
   return `<button class="bookmark-context-menu__item button-with-icon" data-context-action="${action}" type="button" role="menuitem" ${disabled ? 'disabled' : ''}>${renderUiIcon(iconName)}<span>${label}</span>${shortcut ? `<span class="bookmark-context-menu__shortcut">${shortcut}</span>` : ''}</button>`;
 }
 
-export function renderContextMenu(state: AppState, contextMenu: ContextMenuState, canPasteIntoFolder: (targetFolderId: string) => boolean): string {
+export function renderContextMenu(state: AppState, contextMenu: ContextMenuState, canPasteIntoFolder: (targetFolderId: string) => boolean, showBookmarkManager = true): string {
   const x = clamp(contextMenu.x, 12, Math.max(12, window.innerWidth - 287));
   const estimatedHeight = contextMenu.kind === 'surface' ? 304 : contextMenu.kind === 'selection' ? 284 : 356;
   const shouldOpenUpward = contextMenu.y + estimatedHeight > window.innerHeight - 12;
@@ -93,7 +93,7 @@ export function renderContextMenu(state: AppState, contextMenu: ContextMenuState
       <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="${contextMenu.target.surface === 'dock' ? 'Dock actions' : 'Grid actions'}">
         ${renderMenuItem('add-bookmark', 'plus', 'Add Bookmark')}
         ${renderMenuItem('add-folder', 'folderPlus', 'Add Folder')}
-        ${renderMenuItem('open-manager', 'grid', 'Open Bookmark Manager')}
+        ${showBookmarkManager ? renderMenuItem('open-manager', 'grid', 'Open Bookmark Manager') : ''}
         <div class="bookmark-context-menu__divider"></div>
         ${renderMenuItem('paste', 'clipboard', 'Paste', 'Ctrl/Cmd+V', !canPaste)}
         <div class="bookmark-context-menu__divider"></div>

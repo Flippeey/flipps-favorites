@@ -24,6 +24,8 @@ import { renderOnboardingWizard } from './onboarding/onboarding-wizard';
 import { renderUiIcon } from '../shared/ui-icons';
 import { buildShellStyle, createAccentPickerState, getLayoutPresetPatch, hslToHex, normalizeGeneralSubpage, normalizeHexColor, normalizeThemeMode, renderDrawerSection, renderSectionButton, resolveAppliedThemeMode, type AccentPickerState } from '../settings';
 
+const isFirefox = /firefox/i.test(navigator.userAgent);
+
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) {
   throw new Error('App root not found.');
@@ -684,9 +686,10 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
       <main class="empty-app">
         <h1>No bookmark folders available</h1>
         <p>The dashboard needs at least one folder to render.</p>
+        ${!isFirefox ? `
         <div class="empty-state__actions">
           <button class="drawer-secondary-button" data-empty-action="open-manager" type="button">Open Bookmark Manager</button>
-        </div>
+        </div>` : ''}
       </main>
     `;
     rootElement.querySelector<HTMLButtonElement>('[data-empty-action="open-manager"]')?.addEventListener('click', () => {
@@ -704,9 +707,10 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
         <main class="empty-app">
           <h1>No bookmark folders available</h1>
           <p>The dashboard needs at least one folder to render.</p>
+          ${!isFirefox ? `
           <div class="empty-state__actions">
             <button class="drawer-secondary-button" data-empty-action="open-manager" type="button">Open Bookmark Manager</button>
-          </div>
+          </div>` : ''}
         </main>
       `;
       rootElement.querySelector<HTMLButtonElement>('[data-empty-action="open-manager"]')?.addEventListener('click', () => {
@@ -806,7 +810,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
         </div>
       </aside>
       ${state.statusMessage ? renderStatusMessage(state.statusMessage) : ''}
-      ${state.contextMenu ? renderContextMenu(state, state.contextMenu, targetFolderId => canPasteClipboardIntoFolder(state, targetFolderId)) : ''}
+      ${state.contextMenu ? renderContextMenu(state, state.contextMenu, targetFolderId => canPasteClipboardIntoFolder(state, targetFolderId), !isFirefox) : ''}
       ${state.bookmarkDialog.open ? renderBookmarkDialog(state.bookmarkDialog) : ''}
       ${state.onboarding.open ? renderOnboardingWizard(state.onboarding, state.settings, folderOptions) : ''}
     </div>
@@ -866,6 +870,12 @@ const bookmarkDialogTitleInput = rootElement.querySelector<HTMLInputElement>('in
   rootElement.querySelectorAll<HTMLButtonElement>('[data-empty-action="open-manager"]').forEach(button => {
     button.addEventListener('click', () => {
       void openBookmarkManager(rootElement, state);
+    });
+  });
+
+  rootElement.querySelectorAll<HTMLButtonElement>('[data-empty-action="create-bookmark"]').forEach(button => {
+    button.addEventListener('click', () => {
+      void createBookmarkInFolder(rootElement, state, resolvedCurrentFolder.id);
     });
   });
 
@@ -1948,8 +1958,9 @@ function renderGridEmptyState(state: AppState): string {
       <strong>This folder is empty</strong>
       <p>Add a folder, add bookmarks, or open the browser bookmark manager to organize your library.</p>
       <div class="empty-state__actions">
+        <button class="drawer-secondary-button" data-empty-action="create-bookmark" type="button">Add Bookmark</button>
         <button class="drawer-secondary-button" data-empty-action="create-folder" type="button">Add Folder</button>
-        <button class="drawer-secondary-button" data-empty-action="open-manager" type="button">Open Bookmark Manager</button>
+        ${!isFirefox ? '<button class="drawer-secondary-button" data-empty-action="open-manager" type="button">Open Bookmark Manager</button>' : ''}
       </div>
     </div>
   `;
