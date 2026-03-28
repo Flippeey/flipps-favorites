@@ -26,7 +26,7 @@
   border-radius: 14px;
   background: var(--surface-glass);
   border: 1px solid var(--border-subtle);
-  box-shadow: 0 20px 40px rgba(8, 14, 24, 0.18);
+  box-shadow: 0 20px 40px rgba(8, 14, 24, 0.26), 0 2px 8px rgba(8, 14, 24, 0.12);
   backdrop-filter: blur(16px);
   animation: context-menu-enter 120ms ease;
 }
