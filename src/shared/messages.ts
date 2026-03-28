@@ -49,6 +49,7 @@ export interface AppSettings {
   bookmarkTileWidth: number;
   bookmarkIconSize: number;
   showBookmarkIconBackground: boolean;
+  showAccentBackground: boolean;
   layoutPreset: LayoutPresetId;
 }
 

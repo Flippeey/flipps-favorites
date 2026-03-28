@@ -94,6 +94,10 @@ export function renderDrawerSection(section: SettingsSectionId, settings: AppSet
           <h3>Background</h3>
           <p class="field-hint">You can use your own background image if you want.</p>
         </div>
+        <label class="toggle-field toggle-field--card">
+          <input name="showAccentBackground" type="checkbox" ${settings.showAccentBackground ? 'checked' : ''} />
+          <span>Show accent color in background</span>
+        </label>
         <div class="field field--card background-upload-card">
           <div class="background-upload-card__actions">
             <button class="save-button button-with-icon background-upload-button" type="button">${renderUiIcon('upload')}<span>Upload image</span></button>
@@ -154,6 +158,7 @@ export function buildShellStyle(settings: AppSettings): string {
     `--dock-icon-size: ${String(dockIconSize)}px`,
     `--bookmark-row-height: ${String(iconSize + 54)}px`,
     `--custom-background-image: ${settings.customBackgroundImage ? `url("${escapeCssUrl(settings.customBackgroundImage)}")` : 'none'}`,
+    `--accent-bg-color: ${settings.showAccentBackground ? accent : 'transparent'}`,
   ].join('; ');
 }
 

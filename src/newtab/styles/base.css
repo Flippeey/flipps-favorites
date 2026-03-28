@@ -79,8 +79,9 @@ button {
   --custom-background-image: none;
   min-height: 100vh;
   color: var(--text-color);
+  --accent-bg-color: var(--interactive-accent);
   background-image:
-    radial-gradient(140% 90% at 50% -8%, color-mix(in srgb, var(--interactive-accent) 20%, transparent) 0%, transparent 78%),
+    radial-gradient(140% 90% at 50% -8%, color-mix(in srgb, var(--accent-bg-color) 20%, transparent) 0%, transparent 78%),
     linear-gradient(180deg, var(--page-bg) 0%, var(--page-bg-secondary) 100%);
   background-size: auto, auto;
   background-position: center top, center top;

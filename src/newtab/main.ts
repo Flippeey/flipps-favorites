@@ -837,6 +837,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const bookmarkTileWidthInput = rootElement.querySelector<HTMLInputElement>('input[name="bookmarkTileWidth"]');
   const bookmarkIconSizeInput = rootElement.querySelector<HTMLInputElement>('input[name="bookmarkIconSize"]');
   const showBookmarkIconBackgroundInput = rootElement.querySelector<HTMLInputElement>('input[name="showBookmarkIconBackground"]');
+  const showAccentBackgroundInput = rootElement.querySelector<HTMLInputElement>('input[name="showAccentBackground"]');
   const iconToolTargetInput = rootElement.querySelector<HTMLSelectElement>('select[name="iconToolTargetUrl"]');
   const iconFileInput = rootElement.querySelector<HTMLInputElement>('input[name="iconFile"]');
   const bookmarkDialogSearchInput = rootElement.querySelector<HTMLInputElement>('input[name="bookmarkDialogSearchQuery"]');
@@ -1134,6 +1135,10 @@ const bookmarkDialogTitleInput = rootElement.querySelector<HTMLInputElement>('in
 
   showBookmarkIconBackgroundInput?.addEventListener('change', async () => {
     await applySettingsPatch(rootElement, state, { showBookmarkIconBackground: showBookmarkIconBackgroundInput.checked });
+  });
+
+  showAccentBackgroundInput?.addEventListener('change', async () => {
+    await applySettingsPatch(rootElement, state, { showAccentBackground: showAccentBackgroundInput.checked });
   });
 
   [
@@ -1840,6 +1845,7 @@ function normalizeImportedSettings(value: unknown): Partial<AppSettings> {
   if (typeof incoming.bookmarkTileWidth === 'number') normalized.bookmarkTileWidth = incoming.bookmarkTileWidth;
   if (typeof incoming.bookmarkIconSize === 'number') normalized.bookmarkIconSize = incoming.bookmarkIconSize;
   if (typeof incoming.showBookmarkIconBackground === 'boolean') normalized.showBookmarkIconBackground = incoming.showBookmarkIconBackground;
+  if (typeof incoming.showAccentBackground === 'boolean') normalized.showAccentBackground = incoming.showAccentBackground;
   if (typeof incoming.layoutPreset === 'string') normalized.layoutPreset = incoming.layoutPreset;
 
   return normalized;

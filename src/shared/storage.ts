@@ -90,6 +90,7 @@ export const defaultSettings: AppSettings = {
   bookmarkTileWidth: 130,
   bookmarkIconSize: 75,
   showBookmarkIconBackground: false,
+  showAccentBackground: true,
   layoutPreset: 'balanced',
 };
 
@@ -148,6 +149,9 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     showBookmarkIconBackground: typeof settings.showBookmarkIconBackground === 'boolean'
       ? settings.showBookmarkIconBackground
       : defaultSettings.showBookmarkIconBackground,
+    showAccentBackground: typeof settings.showAccentBackground === 'boolean'
+      ? settings.showAccentBackground
+      : defaultSettings.showAccentBackground,
     layoutPreset: settings.layoutPreset === 'balanced' || settings.layoutPreset === 'compact' || settings.layoutPreset === 'spacious' || settings.layoutPreset === 'presentation' || settings.layoutPreset === 'custom'
       ? settings.layoutPreset
       : defaultSettings.layoutPreset,
