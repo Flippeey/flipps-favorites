@@ -56,15 +56,14 @@
   grid-template-columns: 16px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  width: 100%;
+  width: calc(100% - 12px);
+  margin: 0 6px;
   padding: 11px 16px;
   border: 0;
   background: transparent;
   color: var(--text-primary);
   text-align: left;
   border-radius: 10px;
-  margin: 0 6px;
-  width: calc(100% - 12px);
   transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
 }
 
