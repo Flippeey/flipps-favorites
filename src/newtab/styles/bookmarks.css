@@ -411,6 +411,11 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
 }
 
+.bookmark-tile:hover .tile-icon[data-icon-state="pending"],
+.bookmark-tile:hover .tile-icon[data-icon-state="fallback"] {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
 .bookmark-icon-placeholder {
   display: grid;
   place-items: center;
