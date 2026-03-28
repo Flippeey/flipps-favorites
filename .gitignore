@@ -20,3 +20,6 @@ playwright-report/
 
 # Ignore GitHub workflows and actions
 .github/*
+
+# Ignore editor settings
+.vscode
