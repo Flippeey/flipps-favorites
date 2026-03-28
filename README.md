@@ -1,126 +1,100 @@
-# Flipp's Favorites - Bookmarks & more
+# Flipp's Favorites
 
-Flipp's Favorites is a cross-browser new tab extension focused on one thing: helping you get to what matters faster.
+A browser extension that replaces the new tab page with a fast, customizable bookmark dashboard. Works on Chrome and Firefox.
 
-Instead of opening a blank page or a noisy dashboard, each new tab becomes a focused workspace for your bookmarks, folders, and frequently used sites, with flexible visuals and a lightweight settings experience.
+---
 
-## Project Vision
+## Features
 
-This extension is designed around two practical principles:
+- **Bookmark dashboard** — navigate your bookmark folders directly in the new tab page
+- **Visual tiles** — see site icons at a glance; override any icon with a custom image or URL
+- **Search** — filter bookmarks instantly from the hero search bar
+- **Themes** — light and dark modes, accent color picker, and wallpaper support
+- **Drag & drop** — reorder and move bookmarks and folders
+- **Multi-select** — select, cut, paste, and move multiple items at once
+- **Settings drawer** — all appearance and behavior options in one place
+- **Import / export** — back up and restore your settings and icon overrides across devices
+- **Privacy-first** — requests only the permissions it actually needs
 
-1. Productivity first
-- Fast access to bookmarks and folders from every new tab.
-- Visual cues and customizable layout so you can scan and launch quickly.
-- Settings that are easy to reach and easy to understand.
+---
 
-2. Least-privilege by default
-- Keep required permissions to the minimum needed for the feature set.
-- Avoid adding sensitive permissions unless a feature clearly justifies them.
-- Prefer local-first storage and explicit user actions over hidden background behavior.
+## Installation
 
+### Chrome
+Load unpacked from `dist/chrome/` in `chrome://extensions` (Developer mode on).
 
-## What You Can Do
+### Firefox
+Load temporary add-on from `dist/firefox/manifest.json` in `about:debugging`.
 
-- Replace the browser new tab page with a bookmark-focused dashboard.
-- Navigate bookmark folders directly in-page.
-- Use visual bookmark tiles and custom icon overrides.
-- Personalize the experience with themes, wallpaper, and accent color options.
-- Manage behavior and appearance from a settings drawer.
-- Import/export workspace settings and icon overrides to move setups between devices.
+> Store listings coming soon.
 
-## Productivity Benefits
-
-- Reduced context switching: your most-used links are available the moment a tab opens.
-- Faster launch patterns: visual tiles and folder navigation reduce click depth.
-- Stable personal workflow: appearance and layout settings help keep navigation predictable.
-- Better continuity across devices: import/export gives you controlled portability without requiring aggressive sync.
-
-## Permission Strategy
-
-The extension follows a "minimum necessary" permission model.
-
-Current baseline permissions:
-- `bookmarks`: required to read and organize bookmark content in the dashboard.
-- `storage`: required to persist settings, UI preferences, and local icon overrides.
-
-Current host permissions:
-- `https://*/*` by default.
-- Optional `http://*/*` when explicitly enabled at build time.
-
-Host permission scope is intentionally constrained to support web icon and related URL-backed visual workflows. Additional permissions are evaluated feature-by-feature and are not added preemptively.
-
-## Privacy and Data Handling
-
-- No required account or sign-in flow.
-- Settings and icon overrides are stored in extension storage.
-- Custom icon overrides are intentionally local-first to avoid sync quota issues.
-- Transfer between devices is handled with explicit import/export actions.
-
-## Clean-Room Rewrite Boundaries
-
-This project is intentionally rebuilt from scratch to reduce maintenance risk and support long-term evolution.
-
-- Legacy codebases are used for behavior reference only.
-- Protected implementation details and bundled assets are not reused.
-- New architecture, UI structure, and content are authored for this rewrite.
-
-## Tech Stack
-
-- TypeScript
-- Vite
-- Manifest V3 extension architecture
-- Shared message contracts between UI and background
+---
 
 ## Development
 
-Install dependencies:
+**Requirements:** Node.js 18+
 
 ```bash
 npm install
 ```
 
-Run in development mode:
+| Command | What it does |
+|---------|-------------|
+| `npm run dev` | Vite dev server |
+| `npm run build` | Build for Chrome and Firefox |
+| `npm run build:chrome` | Chrome only → `dist/chrome/` |
+| `npm run build:firefox` | Firefox only → `dist/firefox/` |
+| `npm run typecheck` | Type-check without emitting |
+| `npm test` | Run Playwright E2E tests |
 
-```bash
-npm run dev
-```
+### How it's built
 
-Create production builds for both Chrome and Firefox:
+- **TypeScript** (strict, ES2022) — no framework, vanilla DOM
+- **Vite** — single source tree, dual output
+- **Manifest V3** — same spec for both Chrome and Firefox
+- **No runtime dependencies** — devDependencies only
 
-```bash
-npm run build
-```
+The manifest is generated post-build by `scripts/write-manifest.mjs` and supports environment variable overrides:
 
-Individual targets:
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `EXTENSION_VERSION` | from `package.json` | Version string |
+| `FIREFOX_EXTENSION_ID` | `com.flipps-favorites@flippflix.com` | Firefox add-on ID |
+| `FIREFOX_UPDATE_URL` | _(none)_ | Self-hosted update manifest URL |
+| `INCLUDE_HTTP_HOSTS` | `0` | Set to `1` to add `http://*/*` host permission |
 
-```bash
-npm run build:chrome
-npm run build:firefox
-```
+---
 
-Type-check only:
+## Architecture
 
-```bash
-npm run typecheck
-```
+The extension has two entry points:
 
-## Configuration Notes
+- **`src/background/service-worker.ts`** — handles install/update lifecycle, all browser API calls, and icon resolution
+- **`src/newtab/main.ts`** — the full new tab UI; communicates with the background exclusively via typed messages
 
-`scripts/write-manifest.mjs` supports environment overrides for build-time metadata (for example version, Firefox ID/update URL, and host permission behavior).
+All cross-boundary message types are defined in `src/shared/messages.ts`.
 
-Example: include `http://*/*` host permissions in a build:
+---
 
-```bash
-INCLUDE_HTTP_HOSTS=1 npm run build:chrome
-```
+## Privacy
 
-## Roadmap Direction
+- No accounts, no sign-in, no external servers
+- All data (settings, icon overrides) is stored in local browser extension storage
+- Icon fetching uses Google S2 and DuckDuckGo as fallbacks — only the hostname of each bookmark is sent
+- No telemetry or analytics
 
-Near-term work continues to prioritize:
+---
 
-- Faster interaction loops in the new tab UI.
-- Strong modular boundaries between background and page code.
-- Permission reductions wherever features allow.
-- Better long-term maintainability for Chrome and Firefox parity.
+## Contributing
 
-For architecture details and phased implementation planning, see `docs/rewrite-plan.md`.
+Bug reports and feature requests are welcome — please [open an issue](https://github.com/Flippeey/flipps-favorites/issues).
+
+Pull requests are not being accepted at this time.
+
+---
+
+## License
+
+Copyright (c) 2026 Jason Leeraert. All rights reserved.
+
+The source code is publicly visible for reference and transparency. No permission is granted to use, copy, modify, or distribute this software without explicit written consent from the author.
