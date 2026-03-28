@@ -347,7 +347,7 @@
 
 .bookmark-tile:hover {
   transform: translateY(-2px);
-  background: var(--interactive-accent-soft);
+  background: color-mix(in srgb, var(--accent-color) 22%, var(--field-bg));
   box-shadow: var(--elevation-low);
 }
 

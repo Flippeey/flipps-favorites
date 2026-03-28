@@ -80,7 +80,7 @@ button {
   min-height: 100vh;
   color: var(--text-color);
   background-image:
-    radial-gradient(120% 62% at 50% -12%, color-mix(in srgb, var(--interactive-accent) 18%, transparent) 0%, transparent 72%),
+    radial-gradient(140% 90% at 50% -8%, color-mix(in srgb, var(--interactive-accent) 20%, transparent) 0%, transparent 78%),
     linear-gradient(180deg, var(--page-bg) 0%, var(--page-bg-secondary) 100%);
   background-size: auto, auto;
   background-position: center top, center top;
