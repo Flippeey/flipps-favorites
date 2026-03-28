@@ -243,8 +243,49 @@
   gap: 0;
 }
 
-.sort-controls--nav .sort-controls__field span {
+/* Nav sort: label is the pill wrapper, select is transparent inside it */
+.sort-controls__field--nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 10px 0 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 72%, transparent);
+  background-color: color-mix(in srgb, var(--surface-layer-1) 80%, var(--page-bg-secondary));
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236e7781' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 16px 16px;
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+  cursor: pointer;
+}
+
+.sort-controls__field--nav:hover {
+  border-color: color-mix(in srgb, var(--interactive-accent) 28%, var(--border-strong));
+}
+
+.sort-controls__field--nav:focus-within {
+  outline: none;
+  border-color: color-mix(in srgb, var(--interactive-accent) 68%, var(--border-strong));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 20%, transparent);
+}
+
+.sort-controls--nav .sort-controls__field span,
+.sort-controls__field--nav > span:not(.sort-controls__icon) {
   display: none;
+}
+
+.sort-controls__icon {
+  display: none;
+}
+
+.sort-controls__field--nav .sort-controls__icon {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  opacity: 0.65;
 }
 
 .sort-controls__field select {
@@ -252,9 +293,9 @@
   min-height: 40px;
   border-radius: 12px;
   border: 1px solid var(--border-strong);
-  background: var(--surface-layer-1);
+  background-color: var(--surface-layer-1);
   color: var(--text-primary);
-  padding: 0 12px;
+  padding: 0 28px 0 12px;
   transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
 }
 
@@ -268,11 +309,18 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 20%, transparent);
 }
 
-.sort-controls--nav .sort-controls__field select {
-  min-width: 212px;
-  min-height: 38px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-layer-1) 84%, var(--page-bg-secondary));
+/* Nav select: transparent — label provides all visual chrome */
+.sort-controls--nav .sort-controls__field select,
+.shell .sort-controls__field--nav select {
+  flex: 1;
+  min-width: 120px;
+  min-height: 36px;
+  border: none;
+  border-radius: 0;
+  padding: 0 20px 0 0;
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
 }
 
 .drawer-secondary-button:disabled {

@@ -179,8 +179,8 @@
   width: 100%;
   border-radius: 10px;
   border: 1px solid var(--border-strong);
-  padding: 10px 12px;
-  background: var(--surface-layer-1);
+  padding: 10px 28px 10px 12px;
+  background-color: var(--surface-layer-1);
   color: var(--text-primary);
   transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
 }

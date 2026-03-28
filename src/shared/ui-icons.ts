@@ -1,4 +1,4 @@
-export type UiIconName = 'home' | 'settings' | 'close' | 'grid' | 'palette' | 'image' | 'external' | 'window' | 'edit' | 'trash' | 'sliders' | 'search' | 'upload' | 'refresh' | 'link' | 'save' | 'plus' | 'folderPlus' | 'copy' | 'scissors' | 'clipboard';
+export type UiIconName = 'home' | 'settings' | 'close' | 'grid' | 'palette' | 'image' | 'external' | 'window' | 'edit' | 'trash' | 'sliders' | 'search' | 'upload' | 'refresh' | 'link' | 'save' | 'plus' | 'folderPlus' | 'copy' | 'scissors' | 'clipboard' | 'sort';
 
 export function renderUiIcon(name: UiIconName): string {
   const paths: Record<UiIconName, string> = {
@@ -23,6 +23,7 @@ export function renderUiIcon(name: UiIconName): string {
     copy: '<rect x="8" y="8" width="10" height="12" rx="2"/><path d="M6 16H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"/>',
     scissors: '<circle cx="6.5" cy="17.5" r="2.5"/><circle cx="6.5" cy="6.5" r="2.5"/><path d="M20 4 8.5 15.5"/><path d="m13 13 7 7"/>',
     clipboard: '<rect x="6" y="5" width="12" height="16" rx="2"/><path d="M9 5.5h6"/><path d="M9.5 3.5h5a1.5 1.5 0 0 1 1.5 1.5v1h-8v-1a1.5 1.5 0 0 1 1.5-1.5Z"/>',
+    sort: '<path d="M4 6h16"/><path d="M4 11.5h10"/><path d="M4 17h5"/>',
   };
 
   return `<span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[name]}</svg></span>`;

@@ -741,8 +741,9 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
         </div>
         <div class="nav-side nav-side--right nav-side--controls">
           <label class="sort-controls__field sort-controls__field--nav">
+            <span class="sort-controls__icon" aria-hidden="true">${renderUiIcon('sort')}</span>
             <select name="bookmarkSortOption" aria-label="Sort bookmarks">
-              <option value="manual" ${getBookmarkSortOptionValue(state.settings) === 'manual' ? 'selected' : ''}>Manual order</option>
+              <option value="manual" ${getBookmarkSortOptionValue(state.settings) === 'manual' ? 'selected' : ''}>Manual</option>
               <option value="name:asc" ${getBookmarkSortOptionValue(state.settings) === 'name:asc' ? 'selected' : ''}>Name (A-Z)</option>
               <option value="name:desc" ${getBookmarkSortOptionValue(state.settings) === 'name:desc' ? 'selected' : ''}>Name (Z-A)</option>
               <option value="lastUsed:desc" ${getBookmarkSortOptionValue(state.settings) === 'lastUsed:desc' ? 'selected' : ''}>Last used (newest first)</option>
