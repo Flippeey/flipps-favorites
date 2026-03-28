@@ -93,11 +93,20 @@ export async function setRootFolderId(page: Page, folderId: string): Promise<voi
 
 /**
  * Reload the newtab page and wait for the app shell to be ready.
- * Navigates to the base URL (without hash) so resolveInitialFolderId uses
+ * Clears any hash-based navigation so resolveInitialFolderId uses
  * rootFolderId from settings instead of the previously-set URL hash.
+ *
+ * Uses page.reload() instead of page.goto() so that moz-extension:// pages
+ * in Firefox work correctly (page.goto('moz-extension://...') is blocked by
+ * Playwright's juggler protocol; reloading an already-loaded page is not).
  */
 export async function reloadNewtab(page: Page): Promise<void> {
-  const baseUrl = page.url().split('#')[0];
-  await page.goto(baseUrl);
+  // Strip any hash so the app boots at the root folder, not a cached subfolder.
+  await page.evaluate(() => {
+    if (window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.shell', { timeout: 15_000 });
 }
