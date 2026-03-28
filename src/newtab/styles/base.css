@@ -1,5 +1,4 @@
 :root {
-  color-scheme: light;
   font-family: "Segoe UI", Helvetica, Arial, sans-serif;
   background: #eef1f5;
   color: #2f3338;
@@ -38,7 +37,7 @@ button {
   --accent-color-strong: #335caf;
   --accent-surface: #e8eefc;
   --accent-surface-strong: #d8e2fa;
-  --accent-shadow: rgba(63, 114, 220, 0.28);
+  --accent-shadow: color-mix(in srgb, var(--accent-color) 28%, transparent);
   --text-primary: var(--text-color);
   --text-secondary: var(--muted-text);
   --surface-layer-1: color-mix(in srgb, var(--field-bg) 94%, transparent);
@@ -96,7 +95,8 @@ button {
   --dock-height: 36px;
 }
 
-.shell[data-theme-mode="light"] {
+.shell[data-theme-mode="light"],
+.shell[data-theme-mode="system"] {
   --page-bg: #e7ebf1;
   --page-bg-secondary: #eef1f5;
   --text-color: #2f3338;
@@ -132,21 +132,6 @@ button {
   --elevation-high: 0 24px 44px rgba(5, 9, 15, 0.34);
 }
 
-.shell[data-theme-mode="system"] {
-  --page-bg: #e7ebf1;
-  --page-bg-secondary: #eef1f5;
-  --text-color: #2f3338;
-  --muted-text: #6e7781;
-  --nav-bg: rgba(255, 255, 255, 0.08);
-  --panel-bg: rgba(250, 251, 252, 0.92);
-  --panel-bg-strong: rgba(255, 255, 255, 0.72);
-  --panel-border: rgba(0, 0, 0, 0.08);
-  --field-bg: #ffffff;
-  --field-border: #d8dee6;
-  --drawer-bg: rgba(248, 249, 250, 0.97);
-  --empty-bg: rgba(255, 255, 255, 0.72);
-}
-
 @media (prefers-color-scheme: dark) {
   .shell[data-theme-mode="system"] {
     --page-bg: #1a212b;
@@ -175,11 +160,30 @@ button {
 .save-button,
 .section-button {
   border: 0;
-  border-radius: 4px;
+  border-radius: 10px;
   background: var(--interactive-accent);
   color: var(--interactive-on-accent);
   padding: 9px 15px;
   font-size: 13px;
+  transition: background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.save-button:hover,
+.section-button:hover {
+  background: var(--interactive-accent-strong);
+  box-shadow: 0 6px 18px var(--accent-shadow);
+}
+
+.save-button:active,
+.section-button:active {
+  transform: scale(0.98);
+  box-shadow: 0 4px 12px var(--accent-shadow);
+}
+
+.save-button:focus-visible,
+.section-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .icon-button {
