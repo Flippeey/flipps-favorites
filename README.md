@@ -67,14 +67,6 @@ The manifest is generated post-build by `scripts/write-manifest.mjs` and support
 
 ---
 
-## 🏗️ Architecture
-
-The extension has two entry points:
-
-- **`src/background/service-worker.ts`** — handles install/update lifecycle, all browser API calls, and icon resolution
-- **`src/newtab/main.ts`** — the full new tab UI; communicates with the background exclusively via typed messages
-
-All cross-boundary message types are defined in `src/shared/messages.ts`.
 
 ---
 
