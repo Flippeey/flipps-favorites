@@ -407,8 +407,13 @@
 
 .tile-icon[data-icon-state="fallback"],
 .dock-item__icon[data-icon-state="fallback"] {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-color) 78%, white), var(--accent-color-strong));
+  background: transparent;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+}
+
+.bookmark-tile:hover .tile-icon[data-icon-state="pending"],
+.bookmark-tile:hover .tile-icon[data-icon-state="fallback"] {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
 }
 
 .bookmark-icon-placeholder {
