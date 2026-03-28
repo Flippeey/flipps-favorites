@@ -38,7 +38,7 @@ button {
   --accent-color-strong: #335caf;
   --accent-surface: #e8eefc;
   --accent-surface-strong: #d8e2fa;
-  --accent-shadow: rgba(63, 114, 220, 0.28);
+  --accent-shadow: color-mix(in srgb, var(--accent-color) 28%, transparent);
   --text-primary: var(--text-color);
   --text-secondary: var(--muted-text);
   --surface-layer-1: color-mix(in srgb, var(--field-bg) 94%, transparent);
