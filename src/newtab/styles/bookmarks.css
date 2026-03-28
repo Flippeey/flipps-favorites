@@ -347,7 +347,7 @@
 
 .bookmark-tile:hover {
   transform: translateY(-2px);
-  background: var(--interactive-accent-soft);
+  background: color-mix(in srgb, var(--accent-color) 22%, var(--field-bg));
   box-shadow: var(--elevation-low);
 }
 
@@ -402,11 +402,13 @@
 .tile-icon[data-icon-state="pending"],
 .dock-item__icon[data-icon-state="pending"] {
   background: linear-gradient(180deg, var(--accent-color), var(--accent-color-strong));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
 }
 
 .tile-icon[data-icon-state="fallback"],
 .dock-item__icon[data-icon-state="fallback"] {
   background: linear-gradient(180deg, color-mix(in srgb, var(--accent-color) 78%, white), var(--accent-color-strong));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
 }
 
 .bookmark-icon-placeholder {

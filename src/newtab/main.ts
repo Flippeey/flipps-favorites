@@ -1894,7 +1894,7 @@ function renderNavTrail(libraryFolders: BookmarkNode[], breadcrumbs: BookmarkNod
   if (breadcrumbs.length <= 1) {
     return libraryFolders.map(node => renderLibraryPill(node, breadcrumbs)).join('');
   }
-  return breadcrumbs.map(renderBreadcrumb).join('<span class="nav-separator">/</span>');
+  return breadcrumbs.map(renderBreadcrumb).join('<span class="nav-separator" aria-hidden="true">›</span>');
 }
 
 function renderLibraryPill(node: BookmarkNode, breadcrumbs: BookmarkNode[]): string {
