@@ -246,8 +246,11 @@ function setupSurfaceInteractions(
     const rect = hoveredButton.getBoundingClientRect();
 
     if (hoveredKind === 'folder' && canMoveItemsIntoFolder(state, interaction.dragIds, hoveredId, scope)) {
-      const relY = clientY - rect.top;
-      if (relY >= rect.height * 0.3 && relY <= rect.height * 0.7) {
+      const inSideZone = surface === 'dock'
+        ? (clientY < rect.top + rect.height * 0.3 || clientY > rect.top + rect.height * 0.7)
+        : (clientX < rect.left + rect.width * 0.25 || clientX > rect.left + rect.width * 0.75);
+
+      if (!inSideZone) {
         hoveredButton.dataset.dropPosition = 'inside';
         interaction.dropTarget = { kind: 'folder', folderId: hoveredId };
         return;
