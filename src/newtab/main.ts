@@ -41,17 +41,19 @@ const WORKSPACE_EXPORT_SCHEMA_VERSION = 1;
 void bootstrap(root);
 
 async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
-  const [ping, settingsResponse, bookmarkResponse, onboardingState] = await Promise.all([
-    sendRuntimeMessage<{ type: typeof messageTypes.ping }, PingResponse>({ type: messageTypes.ping }),
+  // Ping with retry before the main fetch — MV3 service workers start lazily
+  // and sendMessage resolves undefined if the worker isn't active yet.
+  const ping = await waitForBackground();
+  if (!ping) {
+    throw new Error('Background service is unavailable.');
+  }
+
+  const [settingsResponse, bookmarkResponse, onboardingState] = await Promise.all([
     sendRuntimeMessage<{ type: typeof messageTypes.getSettings }, GetSettingsResponse>({ type: messageTypes.getSettings }),
     sendRuntimeMessage<{ type: typeof messageTypes.getBookmarkTree }, GetBookmarkTreeResponse>({ type: messageTypes.getBookmarkTree }),
     readOnboardingState(),
   ]);
   const bookmarkUsage = await readBookmarkUsageRecords();
-
-  if (!ping.ok) {
-    throw new Error('Background service is unavailable.');
-  }
 
   const state: AppState = createInitialAppState({
     settings: settingsResponse.settings,
@@ -2505,6 +2507,21 @@ function syncSliderValueLabel(rootElement: HTMLDivElement, input: HTMLInputEleme
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+async function waitForBackground(attempts = 5, delayMs = 150): Promise<PingResponse | null> {
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) {
+      await new Promise<void>(resolve => { setTimeout(resolve, delayMs); });
+    }
+    const response = await sendRuntimeMessage<{ type: typeof messageTypes.ping }, PingResponse>(
+      { type: messageTypes.ping },
+    ).catch(() => undefined);
+    if (response?.ok) {
+      return response;
+    }
+  }
+  return null;
 }
 
 function shouldForceOnboardingForDebug(): boolean {

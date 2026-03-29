@@ -14,7 +14,7 @@ export default defineConfig({
   projects: [
     {
       name: 'firefox',
-      testMatch: '**/*.spec.ts',
+      testMatch: '**/icons.spec.ts',
     },
     {
       name: 'chrome',

@@ -237,11 +237,6 @@ function setupSurfaceInteractions(
 
     const hoveredId = hoveredButton.dataset[idDatasetKey] || '';
     const hoveredKind = hoveredButton.dataset[kindDatasetKey] as BookmarkItemKind | undefined;
-    if (!dragIdSet.has(hoveredId) && hoveredKind === 'folder' && canMoveItemsIntoFolder(state, interaction.dragIds, hoveredId, scope)) {
-      hoveredButton.dataset.dropPosition = 'inside';
-      interaction.dropTarget = { kind: 'folder', folderId: hoveredId };
-      return;
-    }
 
     if (dragIdSet.has(hoveredId)) {
       interaction.dropTarget = null;
@@ -249,6 +244,16 @@ function setupSurfaceInteractions(
     }
 
     const rect = hoveredButton.getBoundingClientRect();
+
+    if (hoveredKind === 'folder' && canMoveItemsIntoFolder(state, interaction.dragIds, hoveredId, scope)) {
+      const relY = clientY - rect.top;
+      if (relY >= rect.height * 0.3 && relY <= rect.height * 0.7) {
+        hoveredButton.dataset.dropPosition = 'inside';
+        interaction.dropTarget = { kind: 'folder', folderId: hoveredId };
+        return;
+      }
+    }
+
     const placeAfter = surface === 'dock'
       ? clientX > rect.left + rect.width / 2
       : (clientY > rect.top + rect.height * 0.7 || (clientY >= rect.top + rect.height * 0.3 && clientX > rect.left + rect.width / 2));

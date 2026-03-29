@@ -15,8 +15,9 @@ extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }
   console.info('Flipp\'s Favorites - Bookmarks & more installed');
 });
 
-extensionApi.runtime.onMessage.addListener((message: AppRequest) => {
-  return handleMessage(message);
+extensionApi.runtime.onMessage.addListener((message: AppRequest, _sender: unknown, sendResponse: (response: AppResponse | undefined) => void) => {
+  handleMessage(message).then(sendResponse).catch(() => { sendResponse(undefined); });
+  return true; // Keep the message channel open for the async response
 });
 
 async function handleMessage(message: AppRequest): Promise<AppResponse> {
