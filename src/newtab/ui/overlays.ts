@@ -1,4 +1,4 @@
-import type { AppState, AppStatus, ContextMenuState } from '../state/app-state';
+import type { AppState, AppStatus, ContextMenuState, SortDropdownState } from '../state/app-state';
 import { escapeHtml } from '../../shared/html-escape';
 import { renderUiIcon } from '../../shared/ui-icons';
 import { t, tp } from '../../shared/i18n';
@@ -99,6 +99,32 @@ export function renderContextMenu(state: AppState, contextMenu: ContextMenuState
         ${renderMenuItem('paste', 'clipboard', t('context.menu.paste'), t('context.menu.shortcut.ctrl-v'), !canPaste)}
         <div class="bookmark-context-menu__divider"></div>
         ${renderMenuItem('open-settings', 'settings', t('context.menu.open-settings'))}
+      </div>
+    </div>
+  `;
+}
+
+export function renderSortDropdown(sortDropdown: SortDropdownState, currentSortValue: string): string {
+  const options: Array<{ value: string; labelKey: Parameters<typeof t>[0] }> = [
+    { value: 'manual', labelKey: 'nav.sort.manual' },
+    { value: 'name:asc', labelKey: 'nav.sort.name-asc' },
+    { value: 'name:desc', labelKey: 'nav.sort.name-desc' },
+    { value: 'lastUsed:desc', labelKey: 'nav.sort.last-used-desc' },
+    { value: 'lastUsed:asc', labelKey: 'nav.sort.last-used-asc' },
+    { value: 'created:desc', labelKey: 'nav.sort.created-desc' },
+    { value: 'created:asc', labelKey: 'nav.sort.created-asc' },
+  ];
+  const panelStyle = sortDropdown.openUpward
+    ? `left:${sortDropdown.x}px; bottom:${window.innerHeight - sortDropdown.y}px; min-width:${sortDropdown.width}px;`
+    : `left:${sortDropdown.x}px; top:${sortDropdown.y + 4}px; min-width:${sortDropdown.width}px;`;
+  const items = options.map(opt => {
+    const selected = opt.value === currentSortValue;
+    return `<button class="sort-dropdown__option${selected ? ' sort-dropdown__option--selected' : ''}" data-sort-option="${opt.value}" role="option" aria-selected="${selected}" type="button">${selected ? renderUiIcon('check') : '<span class="sort-dropdown__option-spacer" aria-hidden="true"></span>'}<span>${escapeHtml(t(opt.labelKey))}</span></button>`;
+  }).join('');
+  return `
+    <div class="sort-dropdown-layer">
+      <div class="sort-dropdown" style="${panelStyle}" role="listbox" aria-label="${t('nav.sort.aria-label')}">
+        ${items}
       </div>
     </div>
   `;

@@ -11,7 +11,7 @@ import { escapeAttribute, escapeHtml } from '../shared/html-escape';
 import { applyBookmarkDialogCandidate, openBookmarkDialog, refreshBookmarkDialogIcon, removeBookmarkDialogOverride, renderBookmarkDialog, saveBookmarkDialogBookmark, searchBookmarkDialog, uploadBookmarkDialogImage } from './bookmarks/bookmark-dialog';
 import { hydrateBookmarkIcons, queueVisibleIconPreload } from './icons/icon-runtime';
 import { renderBookmarkVisualIcon } from './icons/icon-render';
-import { renderContextMenu, renderStatusMessage } from './ui/overlays';
+import { renderContextMenu, renderSortDropdown, renderStatusMessage } from './ui/overlays';
 import { openBookmark } from './helpers/bookmark-operations';
 import { isValidBookmarkUrl } from './helpers/bookmark-validation';
 import { getLastFolder, persistLastFolder, removeLastFolder } from './helpers/folder-state';
@@ -93,6 +93,11 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
 
     if (state.contextMenu && !target.closest('.bookmark-context-menu')) {
       state.contextMenu = null;
+      renderApp(rootElement, state);
+    }
+
+    if (state.sortDropdown && !target.closest('.sort-dropdown') && !target.closest('.sort-dropdown-trigger')) {
+      state.sortDropdown = null;
       renderApp(rootElement, state);
     }
 
@@ -291,6 +296,20 @@ function getBookmarkSortOptionValue(settings: AppSettings): string {
   return `${settings.bookmarkSortMode}:${settings.bookmarkSortDirection}`;
 }
 
+function getSortOptionLabel(settings: AppSettings): string {
+  const value = getBookmarkSortOptionValue(settings);
+  const labels: Record<string, string> = {
+    manual: t('nav.sort.manual'),
+    'name:asc': t('nav.sort.name-asc'),
+    'name:desc': t('nav.sort.name-desc'),
+    'lastUsed:desc': t('nav.sort.last-used-desc'),
+    'lastUsed:asc': t('nav.sort.last-used-asc'),
+    'created:desc': t('nav.sort.created-desc'),
+    'created:asc': t('nav.sort.created-asc'),
+  };
+  return labels[value] ?? value;
+}
+
 function parseBookmarkSortOptionValue(value: string): { bookmarkSortMode: AppSettings['bookmarkSortMode']; bookmarkSortDirection: AppSettings['bookmarkSortDirection'] } | null {
   if (value === 'manual') {
     return {
@@ -360,6 +379,38 @@ async function handleDelegatedClick(rootElement: HTMLDivElement, state: AppState
     const targetId = state.settings.rootFolderId || state.derivedTree.defaultFolder?.id;
     if (targetId) {
       navigateToFolderAndRender(rootElement, state, targetId, renderApp);
+    }
+    return;
+  }
+
+  const sortOption = target.closest<HTMLButtonElement>('[data-sort-option]');
+  if (sortOption) {
+    const nextSortSettings = parseBookmarkSortOptionValue(sortOption.dataset.sortOption ?? '');
+    state.sortDropdown = null;
+    if (nextSortSettings) {
+      await applySettingsPatch(rootElement, state, nextSortSettings, { silent: true });
+    }
+    return;
+  }
+
+  if (target.closest('[data-action="toggle-sort-dropdown"]')) {
+    if (state.sortDropdown) {
+      state.sortDropdown = null;
+      renderApp(rootElement, state);
+    } else {
+      const triggerButton = target.closest<HTMLButtonElement>('.sort-dropdown-trigger');
+      if (triggerButton) {
+        const rect = triggerButton.getBoundingClientRect();
+        const estimatedPanelHeight = 260;
+        const openUpward = rect.bottom + estimatedPanelHeight > window.innerHeight - 12;
+        state.sortDropdown = {
+          x: rect.left,
+          y: openUpward ? rect.top : rect.bottom,
+          width: rect.width,
+          openUpward,
+        };
+        renderApp(rootElement, state);
+      }
     }
     return;
   }
@@ -747,18 +798,11 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
           ${renderNavTrail(libraryFolders, breadcrumbs)}
         </div>
         <div class="nav-side nav-side--right nav-side--controls">
-          <label class="sort-controls__field sort-controls__field--nav">
+          <button class="sort-controls__field sort-controls__field--nav sort-dropdown-trigger" type="button" data-action="toggle-sort-dropdown" aria-haspopup="listbox" aria-expanded="${state.sortDropdown !== null}" aria-label="${t('nav.sort.aria-label')}">
             <span class="sort-controls__icon" aria-hidden="true">${renderUiIcon('sort')}</span>
-            <select name="bookmarkSortOption" aria-label="${t('nav.sort.aria-label')}">
-              <option value="manual" ${getBookmarkSortOptionValue(state.settings) === 'manual' ? 'selected' : ''}>${t('nav.sort.manual')}</option>
-              <option value="name:asc" ${getBookmarkSortOptionValue(state.settings) === 'name:asc' ? 'selected' : ''}>${t('nav.sort.name-asc')}</option>
-              <option value="name:desc" ${getBookmarkSortOptionValue(state.settings) === 'name:desc' ? 'selected' : ''}>${t('nav.sort.name-desc')}</option>
-              <option value="lastUsed:desc" ${getBookmarkSortOptionValue(state.settings) === 'lastUsed:desc' ? 'selected' : ''}>${t('nav.sort.last-used-desc')}</option>
-              <option value="lastUsed:asc" ${getBookmarkSortOptionValue(state.settings) === 'lastUsed:asc' ? 'selected' : ''}>${t('nav.sort.last-used-asc')}</option>
-              <option value="created:desc" ${getBookmarkSortOptionValue(state.settings) === 'created:desc' ? 'selected' : ''}>${t('nav.sort.created-desc')}</option>
-              <option value="created:asc" ${getBookmarkSortOptionValue(state.settings) === 'created:asc' ? 'selected' : ''}>${t('nav.sort.created-asc')}</option>
-            </select>
-          </label>
+            <span class="sort-dropdown-trigger__label">${escapeHtml(getSortOptionLabel(state.settings))}</span>
+            ${renderUiIcon('chevronDown')}
+          </button>
           <button class="drawer-toggle nav-icon library-home button-with-icon" type="button" aria-label="${t('nav.settings-button.aria-label')}">${renderUiIcon('settings')}<span>${t('nav.settings-button')}</span></button>
         </div>
       </nav>
@@ -814,6 +858,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
       </aside>
       ${state.statusMessage ? renderStatusMessage(state.statusMessage) : ''}
       ${state.contextMenu ? renderContextMenu(state, state.contextMenu, targetFolderId => canPasteClipboardIntoFolder(state, targetFolderId), !isFirefox) : ''}
+      ${state.sortDropdown ? renderSortDropdown(state.sortDropdown, getBookmarkSortOptionValue(state.settings)) : ''}
       ${state.bookmarkDialog.open ? renderBookmarkDialog(state.bookmarkDialog) : ''}
       ${state.onboarding.open ? renderOnboardingWizard(state.onboarding, state.settings, folderOptions) : ''}
     </div>
@@ -827,7 +872,6 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   const customBackgroundImageFileInput = rootElement.querySelector<HTMLInputElement>('input[name="customBackgroundImageFile"]');
   const currentFolderSearchInput = rootElement.querySelector<HTMLInputElement>('input[name="currentFolderSearch"]');
   const currentFolderSearchClearButton = rootElement.querySelector<HTMLButtonElement>('.surface-search__clear');
-  const bookmarkSortOptionInput = rootElement.querySelector<HTMLSelectElement>('select[name="bookmarkSortOption"]');
   const backgroundOpacityInput = rootElement.querySelector<HTMLInputElement>('input[name="backgroundOpacity"]');
   const backgroundFitModeInput = rootElement.querySelector<HTMLSelectElement>('select[name="backgroundFitMode"]');
   const backgroundPositionModeInput = rootElement.querySelector<HTMLSelectElement>('select[name="backgroundPositionMode"]');
@@ -951,13 +995,6 @@ const bookmarkDialogTitleInput = rootElement.querySelector<HTMLInputElement>('in
     });
   });
 
-  bookmarkSortOptionInput?.addEventListener('change', async () => {
-    const nextSortSettings = parseBookmarkSortOptionValue(bookmarkSortOptionInput.value);
-    if (!nextSortSettings) {
-      return;
-    }
-    await applySettingsPatch(rootElement, state, nextSortSettings, { silent: true });
-  });
 
   const applyBookmarkCanvasBackgroundStyle = () => {
     if (!bookmarkCanvas) {
@@ -1376,6 +1413,12 @@ function dismissTransientUi(rootElement: HTMLDivElement, state: AppState): boole
 
   if (state.contextMenu) {
     state.contextMenu = null;
+    renderApp(rootElement, state);
+    return true;
+  }
+
+  if (state.sortDropdown) {
+    state.sortDropdown = null;
     renderApp(rootElement, state);
     return true;
   }

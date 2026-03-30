@@ -4,6 +4,13 @@ import { createAccentPickerState, type AccentPickerState, type GeneralSettingsSu
 import { deriveTreeState, type DerivedTreeState } from './derived-tree';
 import { resolveInitialFolderId, resolveInitialIconToolTarget, type BookmarkActionTarget } from '../bookmarks/bookmark-navigation';
 
+export interface SortDropdownState {
+  x: number;
+  y: number;
+  width: number;
+  openUpward: boolean;
+}
+
 export interface AppState {
   settings: AppSettings;
   tree: BookmarkNode[];
@@ -19,6 +26,7 @@ export interface AppState {
   bookmarkUsage: Record<string, BookmarkUsageRecord>;
   clipboard: BookmarkClipboardState | null;
   contextMenu: ContextMenuState | null;
+  sortDropdown: SortDropdownState | null;
   bookmarkDialog: BookmarkDialogState;
   resolvedIcons: Record<string, ResolvedIcon>;
   selectedIds: string[];
@@ -178,6 +186,7 @@ export function createInitialAppState(args: {
     bookmarkUsage,
     clipboard: null,
     contextMenu: null,
+    sortDropdown: null,
     bookmarkDialog: createClosedBookmarkDialogState(),
     resolvedIcons: {},
     selectedIds: [],
