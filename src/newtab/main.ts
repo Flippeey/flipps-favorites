@@ -23,6 +23,7 @@ import { cloneBookmarkNode, navigateToFolder, navigateToFolderAndRender, refresh
 import { renderOnboardingWizard } from './onboarding/onboarding-wizard';
 import { renderUiIcon } from '../shared/ui-icons';
 import { buildShellStyle, createAccentPickerState, getLayoutPresetPatch, hslToHex, normalizeGeneralSubpage, normalizeHexColor, normalizeThemeMode, renderDrawerSection, renderSectionButton, resolveAppliedThemeMode, type AccentPickerState } from '../settings';
+import { t, tp } from '../shared/i18n';
 
 const isFirefox = /firefox/i.test(navigator.userAgent);
 
@@ -134,7 +135,7 @@ async function applySettingsPatch(rootElement: HTMLDivElement, state: AppState, 
     }
 
     if (!options.silent) {
-      setSettingsFeedback(state, 'saving', 'Saving changes...');
+      setSettingsFeedback(state, 'saving', t('status.settings.saving'));
       renderApp(rootElement, state);
       restoreDrawerUiState(rootElement, drawerUiState);
     }
@@ -146,7 +147,7 @@ async function applySettingsPatch(rootElement: HTMLDivElement, state: AppState, 
 
     applySettingsResponse(state, response.settings);
     if (!options.silent) {
-      setSettingsFeedback(state, 'saved', 'Your settings have been saved.');
+      setSettingsFeedback(state, 'saved', t('status.settings.saved'));
     }
     renderStateAndWarmIcons(rootElement, state, renderApp);
     restoreDrawerUiState(rootElement, drawerUiState);
@@ -156,7 +157,7 @@ async function applySettingsPatch(rootElement: HTMLDivElement, state: AppState, 
     }
 
     if (!options.silent) {
-      setSettingsFeedback(state, 'error', error instanceof Error ? error.message : 'Failed to save settings.');
+      setSettingsFeedback(state, 'error', error instanceof Error ? error.message : t('status.settings.failed'));
     }
     renderApp(rootElement, state);
     restoreDrawerUiState(rootElement, drawerUiState);
@@ -536,7 +537,7 @@ async function handleDelegatedClick(rootElement: HTMLDivElement, state: AppState
       bookmarkTitle,
     });
 
-    state.iconToolStatus = `Custom icon removed for ${bookmarkTitle || getHostname(bookmarkUrl)}.`;
+    state.iconToolStatus = t('bookmark.dialog.status.icon-removed', { name: bookmarkTitle || getHostname(bookmarkUrl) });
     renderApp(rootElement, state);
     return;
   }
@@ -556,7 +557,7 @@ async function handleDelegatedClick(rootElement: HTMLDivElement, state: AppState
       bookmarkUrl,
     });
 
-    state.iconToolStatus = `Icon cache refreshed for ${bookmarkTitle || getHostname(bookmarkUrl)}.`;
+    state.iconToolStatus = t('bookmark.dialog.status.icon-refreshed', { name: bookmarkTitle || getHostname(bookmarkUrl) });
     renderApp(rootElement, state);
     return;
   }
@@ -686,11 +687,11 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
   if (!currentFolder) {
     rootElement.innerHTML = `
       <main class="empty-app">
-        <h1>No bookmark folders available</h1>
-        <p>The dashboard needs at least one folder to render.</p>
+        <h1>${t('app.empty.heading')}</h1>
+        <p>${t('app.empty.hint')}</p>
         ${!isFirefox ? `
         <div class="empty-state__actions">
-          <button class="drawer-secondary-button" data-empty-action="open-manager" type="button">Open Bookmark Manager</button>
+          <button class="drawer-secondary-button" data-empty-action="open-manager" type="button">${t('app.empty.open-manager')}</button>
         </div>` : ''}
       </main>
     `;
@@ -707,11 +708,11 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
     if (!currentFolder) {
       rootElement.innerHTML = `
         <main class="empty-app">
-          <h1>No bookmark folders available</h1>
-          <p>The dashboard needs at least one folder to render.</p>
+          <h1>${t('app.empty.heading')}</h1>
+          <p>${t('app.empty.hint')}</p>
           ${!isFirefox ? `
           <div class="empty-state__actions">
-            <button class="drawer-secondary-button" data-empty-action="open-manager" type="button">Open Bookmark Manager</button>
+            <button class="drawer-secondary-button" data-empty-action="open-manager" type="button">${t('app.empty.open-manager')}</button>
           </div>` : ''}
         </main>
       `;
@@ -738,9 +739,9 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
 
   rootElement.innerHTML = `
     <div class="shell" data-theme-mode="${themeMode}" data-bookmark-icon-surface="${String(state.settings.showBookmarkIconBackground)}" data-dock-visible="${String(state.settings.showDock)}" data-dock-autohide="${String(state.settings.autoHideDock)}" style="${buildShellStyle(state.settings)}">
-      <nav class="bookmarks-navbar" aria-label="Folder path">
+      <nav class="bookmarks-navbar" aria-label="${t('nav.folder-path.aria-label')}">
         <div class="nav-side nav-side--left">
-          <button class="nav-icon library-home button-with-icon" type="button">${renderUiIcon('home')}<span>Home</span></button>
+          <button class="nav-icon library-home button-with-icon" type="button">${renderUiIcon('home')}<span>${t('nav.home-button')}</span></button>
         </div>
         <div class="nav-scroll">
           ${renderNavTrail(libraryFolders, breadcrumbs)}
@@ -748,39 +749,39 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
         <div class="nav-side nav-side--right nav-side--controls">
           <label class="sort-controls__field sort-controls__field--nav">
             <span class="sort-controls__icon" aria-hidden="true">${renderUiIcon('sort')}</span>
-            <select name="bookmarkSortOption" aria-label="Sort bookmarks">
-              <option value="manual" ${getBookmarkSortOptionValue(state.settings) === 'manual' ? 'selected' : ''}>Manual</option>
-              <option value="name:asc" ${getBookmarkSortOptionValue(state.settings) === 'name:asc' ? 'selected' : ''}>Name (A-Z)</option>
-              <option value="name:desc" ${getBookmarkSortOptionValue(state.settings) === 'name:desc' ? 'selected' : ''}>Name (Z-A)</option>
-              <option value="lastUsed:desc" ${getBookmarkSortOptionValue(state.settings) === 'lastUsed:desc' ? 'selected' : ''}>Last used (newest first)</option>
-              <option value="lastUsed:asc" ${getBookmarkSortOptionValue(state.settings) === 'lastUsed:asc' ? 'selected' : ''}>Last used (oldest first)</option>
-              <option value="created:desc" ${getBookmarkSortOptionValue(state.settings) === 'created:desc' ? 'selected' : ''}>Created (newest first)</option>
-              <option value="created:asc" ${getBookmarkSortOptionValue(state.settings) === 'created:asc' ? 'selected' : ''}>Created (oldest first)</option>
+            <select name="bookmarkSortOption" aria-label="${t('nav.sort.aria-label')}">
+              <option value="manual" ${getBookmarkSortOptionValue(state.settings) === 'manual' ? 'selected' : ''}>${t('nav.sort.manual')}</option>
+              <option value="name:asc" ${getBookmarkSortOptionValue(state.settings) === 'name:asc' ? 'selected' : ''}>${t('nav.sort.name-asc')}</option>
+              <option value="name:desc" ${getBookmarkSortOptionValue(state.settings) === 'name:desc' ? 'selected' : ''}>${t('nav.sort.name-desc')}</option>
+              <option value="lastUsed:desc" ${getBookmarkSortOptionValue(state.settings) === 'lastUsed:desc' ? 'selected' : ''}>${t('nav.sort.last-used-desc')}</option>
+              <option value="lastUsed:asc" ${getBookmarkSortOptionValue(state.settings) === 'lastUsed:asc' ? 'selected' : ''}>${t('nav.sort.last-used-asc')}</option>
+              <option value="created:desc" ${getBookmarkSortOptionValue(state.settings) === 'created:desc' ? 'selected' : ''}>${t('nav.sort.created-desc')}</option>
+              <option value="created:asc" ${getBookmarkSortOptionValue(state.settings) === 'created:asc' ? 'selected' : ''}>${t('nav.sort.created-asc')}</option>
             </select>
           </label>
-          <button class="drawer-toggle nav-icon library-home button-with-icon" type="button" aria-label="Open settings">${renderUiIcon('settings')}<span>Settings</span></button>
+          <button class="drawer-toggle nav-icon library-home button-with-icon" type="button" aria-label="${t('nav.settings-button.aria-label')}">${renderUiIcon('settings')}<span>${t('nav.settings-button')}</span></button>
         </div>
       </nav>
       <div class="search-band">
-        <label class="surface-search surface-search--hero" aria-label="Search bookmarks">
+        <label class="surface-search surface-search--hero" aria-label="${t('nav.search.aria-label')}">
           <span class="surface-search__icon">${renderUiIcon('search')}</span>
-          <input name="currentFolderSearch" type="search" value="${escapeAttribute(state.searchDraft)}" placeholder="Search bookmarks..." aria-label="Search bookmarks" />
+          <input name="currentFolderSearch" type="search" value="${escapeAttribute(state.searchDraft)}" placeholder="${t('nav.search.placeholder')}" aria-label="${t('nav.search.aria-label')}" />
           ${state.searchDraft
-      ? `<button class="surface-search__clear" type="button" aria-label="Clear search">${renderUiIcon('close')}</button>`
+      ? `<button class="surface-search__clear" type="button" aria-label="${t('nav.search.clear.aria-label')}">${renderUiIcon('close')}</button>`
       : ''}
         </label>
       </div>
       <main class="workspace">
-        <section class="bookmark-canvas" aria-label="Bookmarks grid">
+        <section class="bookmark-canvas" aria-label="${t('nav.grid.aria-label')}">
           <div class="bookmark-grid" data-limit-rows="${String(state.settings.favoritesRows > 0)}">
             ${canvasItems.map((item, index) => renderBookmarkTile(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'grid', resolvedCurrentFolder.id), isClipboardCutItem(state, item.id))).join('') || renderGridEmptyState(state)}
           </div>
           <div class="selection-marquee" hidden aria-hidden="true"></div>
         </section>
         ${state.settings.showDock ? `
-          <aside class="bookmark-dock" aria-label="Dock">
+          <aside class="bookmark-dock" aria-label="${t('nav.dock.aria-label')}">
             <div class="dock-inner">
-              ${state.settings.autoHideDock ? '<button class="dock-reveal-handle" type="button" aria-label="Reveal dock"><span class="dock-reveal-handle__line"></span></button>' : ''}
+              ${state.settings.autoHideDock ? `<button class="dock-reveal-handle" type="button" aria-label="${t('nav.dock.reveal.aria-label')}"><span class="dock-reveal-handle__line"></span></button>` : ''}
               <div class="dock-strip">
                 ${dockItems.map((item, index) => renderDockItem(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'dock', dockFolder?.id ?? ''), isClipboardCutItem(state, item.id))).join('') || renderDockEmptyState()}
               </div>
@@ -789,22 +790,22 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
           </aside>
         ` : ''}
       </main>
-      ${state.drawerOpen ? '<button class="drawer-scrim" type="button" aria-label="Close settings"></button>' : ''}
+      ${state.drawerOpen ? `<button class="drawer-scrim" type="button" aria-label="${t('settings.drawer.scrim.aria-label')}"></button>` : ''}
       <aside class="settings-drawer" data-open="${String(state.drawerOpen)}">
         <div class="drawer-header">
           <div>
-            <p class="eyebrow">Settings</p>
-            <h2>Workspace controls</h2>
+            <p class="eyebrow">${t('settings.drawer.eyebrow')}</p>
+            <h2>${t('settings.drawer.heading')}</h2>
           </div>
-          <button class="drawer-close icon-button" type="button" aria-label="Close settings">${renderUiIcon('close')}</button>
+          <button class="drawer-close icon-button" type="button" aria-label="${t('settings.drawer.close.aria-label')}">${renderUiIcon('close')}</button>
         </div>
         <div class="drawer-body">
           <nav class="drawer-nav">
-            ${renderSectionButton('general', activeSection, 'General', 'grid')}
-            ${renderSectionButton('appearance', activeSection, 'Theme', 'palette')}
-            ${renderSectionButton('backup', activeSection, 'Backup', 'save')}
+            ${renderSectionButton('general', activeSection, t('settings.nav.general'), 'grid')}
+            ${renderSectionButton('appearance', activeSection, t('settings.nav.appearance'), 'palette')}
+            ${renderSectionButton('backup', activeSection, t('settings.nav.backup'), 'save')}
             <div class="drawer-nav-divider" aria-hidden="true"></div>
-            ${renderSectionButton('help', activeSection, 'Help', 'link')}
+            ${renderSectionButton('help', activeSection, t('settings.nav.help'), 'link')}
           </nav>
           <section class="drawer-section">
             ${drawerSectionMarkup}
@@ -1195,7 +1196,7 @@ const bookmarkDialogTitleInput = rootElement.querySelector<HTMLInputElement>('in
       y: event.clientY,
       target: {
         id: resolvedCurrentFolder.id,
-        title: resolvedCurrentFolder.title || 'Untitled',
+        title: resolvedCurrentFolder.title || t('node.untitled'),
         surface: 'grid',
       },
     };
@@ -1222,7 +1223,7 @@ const bookmarkDialogTitleInput = rootElement.querySelector<HTMLInputElement>('in
       y: event.clientY,
       target: {
         id: dockFolder.id,
-        title: dockFolder.title || 'Untitled',
+        title: dockFolder.title || t('node.untitled'),
         surface: 'dock',
       },
     };
@@ -1259,7 +1260,7 @@ const bookmarkDialogTitleInput = rootElement.querySelector<HTMLInputElement>('in
       mimeType: 'image/png',
     });
 
-    state.iconToolStatus = `Custom icon saved for ${bookmarkTitle || getHostname(bookmarkUrl)}.`;
+    state.iconToolStatus = t('bookmark.dialog.status.icon-saved', { name: bookmarkTitle || getHostname(bookmarkUrl) });
     iconFileInput.value = '';
     renderApp(rootElement, state);
   });
@@ -1291,7 +1292,7 @@ const bookmarkDialogTitleInput = rootElement.querySelector<HTMLInputElement>('in
 
   bookmarkDialogTitleInput?.addEventListener('blur', () => {
     if (!bookmarkDialogTitleInput.value.trim()) {
-      state.bookmarkDialog.status = 'Name is required.';
+      state.bookmarkDialog.status = t('bookmark.dialog.status.name-required');
       state.bookmarkDialog.statusKind = 'error';
       renderApp(rootElement, state);
     }
@@ -1305,7 +1306,7 @@ const bookmarkDialogTitleInput = rootElement.querySelector<HTMLInputElement>('in
   bookmarkDialogUrlInput?.addEventListener('blur', () => {
     const val = bookmarkDialogUrlInput.value.trim();
     if (val && !isValidBookmarkUrl(val)) {
-      state.bookmarkDialog.status = 'Enter a valid URL (for example https://example.com).';
+      state.bookmarkDialog.status = t('bookmark.dialog.status.url-invalid');
       state.bookmarkDialog.statusKind = 'error';
       renderApp(rootElement, state);
     }
@@ -1452,7 +1453,7 @@ async function finishOnboarding(rootElement: HTMLDivElement, state: AppState): P
   await markOnboardingCompleted();
   state.onboarding.status = 'completed';
   state.onboarding.open = false;
-  showStatusMessage(state, 'success', 'Onboarding complete. You can change these settings anytime.', 2600);
+  showStatusMessage(state, 'success', t('status.onboarding.complete'), 2600);
   renderApp(rootElement, state);
 }
 
@@ -1485,7 +1486,7 @@ async function undoLastAction(rootElement: HTMLDivElement, state: AppState): Pro
   if (entry.kind === 'move') {
     await applyHistorySnapshots(state, entry, 'before');
     state.redoStack.unshift(entry);
-    showStatusMessage(state, 'success', `${entry.label} undone.`);
+    showStatusMessage(state, 'success', t('status.undo.done', { label: entry.label }));
     await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
     return;
   }
@@ -1511,7 +1512,7 @@ async function redoLastAction(rootElement: HTMLDivElement, state: AppState): Pro
   if (entry.kind === 'move') {
     await applyHistorySnapshots(state, entry, 'after');
     state.undoStack.unshift(entry);
-    showStatusMessage(state, 'success', `${entry.label} restored.`);
+    showStatusMessage(state, 'success', t('status.redo.done', { label: entry.label }));
     await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
     return;
   }
@@ -1633,17 +1634,18 @@ async function deleteSelectedItems(rootElement: HTMLDivElement, state: AppState,
 
   const bookmarkCount = selectedNodes.filter(node => Boolean(node.url)).length;
   const folderCount = selectedNodes.length - bookmarkCount;
-  const labelParts = [];
+  const labelParts: string[] = [];
   if (bookmarkCount) {
-    labelParts.push(`${String(bookmarkCount)} bookmark${bookmarkCount === 1 ? '' : 's'}`);
+    labelParts.push(tp('context.menu.selection.bookmark-count', bookmarkCount, { count: bookmarkCount }));
   }
   if (folderCount) {
-    labelParts.push(`${String(folderCount)} folder${folderCount === 1 ? '' : 's'}`);
+    labelParts.push(tp('context.menu.selection.folder-count', folderCount, { count: folderCount }));
   }
+  const label = labelParts.join(' and ');
 
   const requiresConfirmation = folderCount > 0;
   if (requiresConfirmation) {
-    const confirmed = window.confirm(`Delete ${labelParts.join(' and ')}?`);
+    const confirmed = window.confirm(t('confirm.delete-selection', { label }));
     if (!confirmed) {
       renderApp(rootElement, state);
       return;
@@ -1667,11 +1669,11 @@ async function deleteSelectedItems(rootElement: HTMLDivElement, state: AppState,
   clearSelection(state);
   pushUndoEntry(state, {
     kind: 'delete',
-    label: `Deleted ${labelParts.join(' and ')}`,
+    label: t('history.label.delete.items', { label }),
     items: historyItems,
     activeRootIds: [],
   });
-  showStatusMessage(state, 'success', `${labelParts.join(' and ')} deleted.`);
+  showStatusMessage(state, 'success', t('status.delete.selection', { label }));
   await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
 }
 
@@ -1725,14 +1727,14 @@ async function exportWorkspaceData(state: AppState): Promise<void> {
     showStatusMessage(
       state,
       'success',
-      `Exported workspace settings and ${String(iconOverrides.length)} custom icon override${iconOverrides.length === 1 ? '' : 's'}.`,
+      tp('status.export.done', iconOverrides.length, { count: iconOverrides.length }),
       3200,
     );
     if (root) {
       renderApp(root, state);
     }
   } catch (error) {
-    showStatusMessage(state, 'error', error instanceof Error ? error.message : 'Failed to export workspace data.', 3200);
+    showStatusMessage(state, 'error', error instanceof Error ? error.message : t('status.export.failed'), 3200);
     if (root) {
       renderApp(root, state);
     }
@@ -1787,12 +1789,12 @@ async function importWorkspaceData(file: File, mode: WorkspaceImportMode, rootEl
     showStatusMessage(
       state,
       'success',
-      `Imported workspace settings and ${String(deduped.size)} custom icon override${deduped.size === 1 ? '' : 's'} (${mode} mode).`,
+      tp('status.import.done', deduped.size, { count: deduped.size, mode }),
       3600,
     );
     renderStateAndWarmIcons(rootElement, state, renderApp);
   } catch (error) {
-    showStatusMessage(state, 'error', error instanceof Error ? error.message : 'Failed to import workspace data.', 3600);
+    showStatusMessage(state, 'error', error instanceof Error ? error.message : t('status.import.failed'), 3600);
     renderApp(rootElement, state);
   }
 }
@@ -1803,16 +1805,16 @@ async function parseWorkspacePayload(file: File): Promise<WorkspaceExportPayload
   try {
     parsed = JSON.parse(text) as unknown;
   } catch {
-    throw new Error('Import file is not valid JSON.');
+    throw new Error(t('import.error.invalid-json'));
   }
 
   if (!parsed || typeof parsed !== 'object') {
-    throw new Error('Import file has an invalid structure.');
+    throw new Error(t('import.error.invalid-structure'));
   }
 
   const payload = parsed as Partial<WorkspaceExportPayload>;
   if (payload.schema !== 'flipps-workspace-transfer' || !Array.isArray(payload.iconOverrides)) {
-    throw new Error('Import file does not match the workspace export format.');
+    throw new Error(t('import.error.wrong-format'));
   }
 
   const iconOverrides = payload.iconOverrides
@@ -1920,26 +1922,31 @@ function renderNavTrail(libraryFolders: BookmarkNode[], breadcrumbs: BookmarkNod
 
 function renderLibraryPill(node: BookmarkNode, breadcrumbs: BookmarkNode[]): string {
   const isActive = breadcrumbs.some(crumb => crumb.id === node.id);
-  return `<button class="library-pill" data-folder-id="${node.id}" data-active="${String(isActive)}" type="button">${escapeHtml(node.title || 'Untitled')}</button>`;
+  return `<button class="library-pill" data-folder-id="${node.id}" data-active="${String(isActive)}" type="button">${escapeHtml(node.title || t('node.untitled'))}</button>`;
 }
 
 function renderBreadcrumb(node: BookmarkNode, index: number, items: BookmarkNode[]): string {
   const isLast = index === items.length - 1;
-  return `<button class="breadcrumb" data-folder-id="${node.id}" data-last="${String(isLast)}" type="button">${escapeHtml(node.title || 'Untitled')}</button>`;
+  return `<button class="breadcrumb" data-folder-id="${node.id}" data-last="${String(isLast)}" type="button">${escapeHtml(node.title || t('node.untitled'))}</button>`;
 }
 
 function renderSurfaceSummary(state: AppState, visibleCount: number, totalCount: number): string {
-  const parts = [`${String(visibleCount)} of ${String(totalCount)} items`];
+  const parts = [t('surface.summary.count', { visible: visibleCount, total: totalCount })];
   if (state.selectedIds.length) {
-    parts.push(`${String(state.selectedIds.length)} selected`);
+    parts.push(t('surface.summary.selected', { count: state.selectedIds.length }));
   }
 
   if (state.clipboard) {
-    parts.push(`${state.clipboard.mode === 'cut' ? 'Cut' : 'Copied'} ${String(state.clipboard.items.length)} item${state.clipboard.items.length === 1 ? '' : 's'}`);
+    const clipCount = state.clipboard.items.length;
+    parts.push(tp(
+      state.clipboard.mode === 'cut' ? 'surface.summary.cut' : 'surface.summary.copied',
+      clipCount,
+      { count: clipCount },
+    ));
   }
 
   if (state.searchQuery.trim()) {
-    parts.push(`Search results for "${escapeHtml(state.searchQuery.trim())}"`);
+    parts.push(t('surface.summary.search-results', { query: escapeHtml(state.searchQuery.trim()) }));
   }
 
   return parts.map(part => `<span class="workspace-pill">${part}</span>`).join('');
@@ -1949,20 +1956,20 @@ function renderGridEmptyState(state: AppState): string {
   if (state.searchQuery.trim()) {
     return `
       <div class="empty-state empty-state--rich">
-        <strong>No bookmarks matched your search</strong>
-        <p>Try a different term or clear the search to return to the current folder.</p>
+        <strong>${t('grid.empty.no-match.heading')}</strong>
+        <p>${t('grid.empty.no-match.hint')}</p>
       </div>
     `;
   }
 
   return `
     <div class="empty-state empty-state--rich">
-      <strong>This folder is empty</strong>
-      <p>Add a folder, add bookmarks, or open the browser bookmark manager to organize your library.</p>
+      <strong>${t('grid.empty.folder.heading')}</strong>
+      <p>${t('grid.empty.folder.hint')}</p>
       <div class="empty-state__actions">
-        <button class="drawer-secondary-button" data-empty-action="create-bookmark" type="button">Add Bookmark</button>
-        <button class="drawer-secondary-button" data-empty-action="create-folder" type="button">Add Folder</button>
-        ${!isFirefox ? '<button class="drawer-secondary-button" data-empty-action="open-manager" type="button">Open Bookmark Manager</button>' : ''}
+        <button class="drawer-secondary-button" data-empty-action="create-bookmark" type="button">${t('grid.empty.folder.add-bookmark')}</button>
+        <button class="drawer-secondary-button" data-empty-action="create-folder" type="button">${t('grid.empty.folder.add-folder')}</button>
+        ${!isFirefox ? `<button class="drawer-secondary-button" data-empty-action="open-manager" type="button">${t('grid.empty.folder.open-manager')}</button>` : ''}
       </div>
     </div>
   `;
@@ -1971,10 +1978,10 @@ function renderGridEmptyState(state: AppState): string {
 function renderDockEmptyState(): string {
   return `
     <div class="dock-empty">
-      <strong>Dock is ready for a folder</strong>
-      <span>Pick a bookmark folder to keep your most-used links within reach.</span>
+      <strong>${t('dock.empty.heading')}</strong>
+      <span>${t('dock.empty.hint')}</span>
       <div class="empty-state__actions">
-        <button class="drawer-secondary-button" data-empty-action="open-dock-settings" type="button">Choose Dock Folder</button>
+        <button class="drawer-secondary-button" data-empty-action="open-dock-settings" type="button">${t('dock.empty.choose-folder')}</button>
       </div>
     </div>
   `;
@@ -2029,17 +2036,17 @@ function renderFolderCard(node: BookmarkNode, resolvedIcons: Record<string, Reso
     ? 'bookmark-tile folder-card folder-card--tile'
     : 'dock-item folder-card folder-card--dock';
   const metaMarkup = variant === 'dock'
-    ? `<span class="folder-card__meta">${itemCount === 1 ? '1 item' : `${String(itemCount)} items`}</span>`
+    ? `<span class="folder-card__meta">${tp('node.item-count', itemCount, { count: itemCount })}</span>`
     : '';
 
   return `
-    <button class="${classes}" data-folder-id="${node.id}" data-folder-title="${escapeAttribute(node.title || 'Untitled')}" data-parent-id="${escapeAttribute(node.parentId ?? '')}" ${variant === 'tile' ? `data-grid-item-id="${node.id}" data-grid-item-index="${String(index ?? 0)}" data-grid-item-kind="folder" data-selected="${String(selected)}" data-clipboard-cut="${String(clipboardCut)}"` : `data-dock-item-id="${node.id}" data-dock-item-index="${String(index ?? 0)}" data-dock-item-kind="folder" data-selected="${String(selected)}" data-clipboard-cut="${String(clipboardCut)}"`} type="button">
+    <button class="${classes}" data-folder-id="${node.id}" data-folder-title="${escapeAttribute(node.title || t('node.untitled'))}" data-parent-id="${escapeAttribute(node.parentId ?? '')}" ${variant === 'tile' ? `data-grid-item-id="${node.id}" data-grid-item-index="${String(index ?? 0)}" data-grid-item-kind="folder" data-selected="${String(selected)}" data-clipboard-cut="${String(clipboardCut)}"` : `data-dock-item-id="${node.id}" data-dock-item-index="${String(index ?? 0)}" data-dock-item-kind="folder" data-selected="${String(selected)}" data-clipboard-cut="${String(clipboardCut)}"`} type="button">
       <span class="folder-card__preview">
         <span class="folder-card__grid" data-folder-preview-variant="${variant}">
-          ${previewItems.map(child => renderFolderPreviewCell(child, resolvedIcons)).join('') || `<span class="folder-card__cell folder-card__cell--empty">${escapeHtml(getInitial(node.title || 'Folder'))}</span>`}
+          ${previewItems.map(child => renderFolderPreviewCell(child, resolvedIcons)).join('') || `<span class="folder-card__cell folder-card__cell--empty">${escapeHtml(getInitial(node.title || t('node.folder-initial')))}</span>`}
         </span>
       </span>
-      <span class="folder-card__label">${escapeHtml(node.title || 'Untitled')}</span>
+      <span class="folder-card__label">${escapeHtml(node.title || t('node.untitled'))}</span>
       ${metaMarkup}
     </button>
   `;
@@ -2058,7 +2065,7 @@ function renderFolderPreviewCell(node: BookmarkNode, resolvedIcons: Record<strin
   }
 
   const itemCount = node.children?.length ?? 0;
-  return `<span class="folder-card__cell folder-card__cell--folder" title="${escapeAttribute(node.title || 'Folder')}">${itemCount > 0 ? String(itemCount) : escapeHtml(getInitial(node.title || 'Folder'))}</span>`;
+  return `<span class="folder-card__cell folder-card__cell--folder" title="${escapeAttribute(node.title || t('node.folder-initial'))}">${itemCount > 0 ? String(itemCount) : escapeHtml(getInitial(node.title || t('node.folder-initial')))}</span>`;
 }
 
 async function deleteBookmarkFromContext(rootElement: HTMLDivElement, state: AppState, target: BookmarkActionTarget): Promise<void> {
@@ -2079,13 +2086,14 @@ async function deleteBookmarkFromContext(rootElement: HTMLDivElement, state: App
   }
 
   if (historyItems.length) {
+    const deletedName = target.title || getHostname(target.url);
     pushUndoEntry(state, {
       kind: 'delete',
-      label: `Deleted ${target.title || getHostname(target.url)}`,
+      label: t('history.label.delete.single', { name: deletedName }),
       items: historyItems,
       activeRootIds: [],
     });
-    showStatusMessage(state, 'success', `${target.title || getHostname(target.url)} deleted.`);
+    showStatusMessage(state, 'success', t('status.delete.single', { name: deletedName }));
   }
 
   await refreshTreeAndRender(rootElement, state, renderApp);
@@ -2219,7 +2227,7 @@ function setClipboardFromItemIds(state: AppState, mode: BookmarkClipboardState['
     items,
   };
 
-  showStatusMessage(state, 'info', `${mode === 'cut' ? 'Cut' : 'Copied'} ${String(items.length)} item${items.length === 1 ? '' : 's'}.`);
+  showStatusMessage(state, 'info', tp(mode === 'cut' ? 'status.clipboard.cut' : 'status.clipboard.copied', items.length, { count: items.length }));
 }
 
 function canPasteClipboardIntoFolder(state: AppState, targetFolderId: string): boolean {
@@ -2278,7 +2286,7 @@ async function createBookmarkInFolder(rootElement: HTMLDivElement, state: AppSta
 }
 
 async function createFolderInFolder(rootElement: HTMLDivElement, state: AppState, parentId: string): Promise<void> {
-  const nextTitle = window.prompt('Folder name', 'New Folder')?.trim();
+  const nextTitle = window.prompt(t('prompt.folder-name'), t('prompt.folder-name.default'))?.trim();
   if (!nextTitle) {
     renderApp(rootElement, state);
     return;
@@ -2300,7 +2308,7 @@ async function createFolderInFolder(rootElement: HTMLDivElement, state: AppState
 }
 
 async function renameFolder(rootElement: HTMLDivElement, state: AppState, target: FolderActionTarget): Promise<void> {
-  const nextTitle = window.prompt('Folder name', target.title)?.trim();
+  const nextTitle = window.prompt(t('prompt.folder-name'), target.title)?.trim();
   if (!nextTitle || nextTitle === target.title) {
     renderApp(rootElement, state);
     return;
@@ -2322,7 +2330,7 @@ async function renameFolder(rootElement: HTMLDivElement, state: AppState, target
 async function deleteFolderFromContext(rootElement: HTMLDivElement, state: AppState, target: FolderActionTarget): Promise<void> {
   const folder = getFolderNode(state.tree, target.id);
   const itemCount = folder?.children?.length ?? 0;
-  const confirmed = window.confirm(`Delete folder ${target.title || 'Untitled'} and its ${String(itemCount)} item${itemCount === 1 ? '' : 's'}?`);
+  const confirmed = window.confirm(tp('confirm.delete-folder', itemCount, { name: target.title || t('node.untitled'), count: itemCount }));
   if (!confirmed) {
     renderApp(rootElement, state);
     return;
@@ -2345,13 +2353,14 @@ async function deleteFolderFromContext(rootElement: HTMLDivElement, state: AppSt
   }
 
   if (historyItems.length) {
+    const folderName = target.title || t('node.untitled');
     pushUndoEntry(state, {
       kind: 'delete',
-      label: `Deleted folder ${target.title || 'Untitled'}`,
+      label: t('history.label.delete.folder', { name: folderName }),
       items: historyItems,
       activeRootIds: [],
     });
-    showStatusMessage(state, 'success', `Folder ${target.title || 'Untitled'} deleted.`);
+    showStatusMessage(state, 'success', t('status.delete.folder', { name: folderName }));
   }
 
   await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
@@ -2393,14 +2402,14 @@ async function pasteClipboardIntoFolder(rootElement: HTMLDivElement, state: AppS
     await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
     pushUndoEntry(state, {
       kind: 'move',
-      label: clipboardCount === 1 ? 'Moved 1 item' : `Moved ${String(clipboardCount)} items`,
+      label: tp('history.label.move.done', clipboardCount, { count: clipboardCount }),
       snapshots: beforeSnapshots.map(snapshot => ({
         folderId: snapshot.folderId,
         before: snapshot.before,
         after: getFolderChildIds(state.tree, snapshot.folderId),
       })),
     });
-    showStatusMessage(state, 'success', `${clipboardCount === 1 ? 'Item moved' : `${String(clipboardCount)} items moved`}. Undo with Ctrl/Cmd+Z.`);
+    showStatusMessage(state, 'success', tp('status.move.done', clipboardCount, { count: clipboardCount }));
     return;
   } else {
     const targetFolder = getFolderNode(state.tree, targetFolderId);
@@ -2413,7 +2422,7 @@ async function pasteClipboardIntoFolder(rootElement: HTMLDivElement, state: AppS
   }
 
   await refreshTreeAndRender(rootElement, state, renderApp, { warmIcons: true });
-  showStatusMessage(state, 'success', `Pasted ${String(clipboardCount)} item${clipboardCount === 1 ? '' : 's'}.`);
+  showStatusMessage(state, 'success', tp('status.paste.done', clipboardCount, { count: clipboardCount }));
 }
 
 async function openBookmarkManager(rootElement: HTMLDivElement, state: AppState): Promise<void> {
@@ -2422,7 +2431,7 @@ async function openBookmarkManager(rootElement: HTMLDivElement, state: AppState)
   });
 
   if (!response.opened) {
-    showStatusMessage(state, 'error', response.message || 'The browser blocked the native bookmark manager page.');
+    showStatusMessage(state, 'error', response.message || t('status.manager.blocked'));
     renderApp(rootElement, state);
     return;
   }

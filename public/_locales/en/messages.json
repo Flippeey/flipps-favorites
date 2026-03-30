@@ -1,0 +1,14 @@
+{
+  "extensionName": {
+    "message": "Flipp's Favorites - Bookmarks & more"
+  },
+  "extensionShortName": {
+    "message": "Flipp's Favorites"
+  },
+  "extensionDescription": {
+    "message": "Flipp's Favorites turns your new tab into a fast, visual bookmark workspace — with folder navigation, search, custom icons, themes, and a persistent dock."
+  },
+  "actionTitle": {
+    "message": "Flipp's Favorites - Bookmarks & more"
+  }
+}

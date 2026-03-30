@@ -1,4 +1,5 @@
 import type { AppSettings, LayoutPresetId, ThemeMode } from '../../shared/messages';
+import { t } from '../../shared/i18n';
 
 export const defaultAccentColor = '#3F72DC';
 
@@ -18,8 +19,8 @@ export const accentPresets = [
 ] as const;
 
 export const themeModeOptions: Array<{ id: Exclude<ThemeMode, 'system'>; label: string; description: string; preview: 'light' | 'dark' }> = [
-  { id: 'light', label: 'Light', description: 'Bright workspace', preview: 'light' },
-  { id: 'dark', label: 'Dark', description: 'Low-glare workspace', preview: 'dark' },
+  { id: 'light', label: t('options.theme.light.label'), description: t('options.theme.light.description'), preview: 'light' },
+  { id: 'dark', label: t('options.theme.dark.label'), description: t('options.theme.dark.description'), preview: 'dark' },
 ];
 
 export type GeneralSettingsSubpage = 'general' | 'layout' | 'dock';
@@ -32,8 +33,8 @@ export const layoutPresetOptions: Array<{
 }> = [
   {
     id: 'balanced',
-    label: 'Balanced',
-    description: 'A comfortable all-purpose grid.',
+    label: t('options.layout.balanced.label'),
+    description: t('options.layout.balanced.description'),
     settings: {
       favoritesColumns: 10,
       favoritesRows: 0,
@@ -45,8 +46,8 @@ export const layoutPresetOptions: Array<{
   },
   {
     id: 'compact',
-    label: 'Compact',
-    description: 'Fit more bookmarks on screen at once.',
+    label: t('options.layout.compact.label'),
+    description: t('options.layout.compact.description'),
     settings: {
       favoritesColumns: 12,
       favoritesRows: 0,
@@ -58,8 +59,8 @@ export const layoutPresetOptions: Array<{
   },
   {
     id: 'spacious',
-    label: 'Spacious',
-    description: 'Larger tiles with more breathing room.',
+    label: t('options.layout.spacious.label'),
+    description: t('options.layout.spacious.description'),
     settings: {
       favoritesColumns: 8,
       favoritesRows: 0,
@@ -71,8 +72,8 @@ export const layoutPresetOptions: Array<{
   },
   {
     id: 'presentation',
-    label: 'Presentation',
-    description: 'Big visuals for wall displays and touch use.',
+    label: t('options.layout.presentation.label'),
+    description: t('options.layout.presentation.description'),
     settings: {
       favoritesColumns: 6,
       favoritesRows: 0,
@@ -84,37 +85,39 @@ export const layoutPresetOptions: Array<{
   },
 ];
 
-export const shortcutGroups = [
-  {
-    label: 'Selection',
-    items: [
-      { keys: 'Ctrl/Cmd+Click', description: 'Add or remove a single item from the selection.' },
-      { keys: 'Drag on empty space', description: 'Create a marquee selection in the current surface.' },
-      { keys: 'Escape', description: 'Clear the selection or dismiss the current overlay.' },
-    ],
-  },
-  {
-    label: 'Clipboard',
-    items: [
-      { keys: 'Ctrl/Cmd+C', description: 'Copy the current selection.' },
-      { keys: 'Ctrl/Cmd+X', description: 'Cut the current selection.' },
-      { keys: 'Ctrl/Cmd+V', description: 'Paste into the current folder.' },
-    ],
-  },
-  {
-    label: 'History',
-    items: [
-      { keys: 'Ctrl/Cmd+Z', description: 'Undo the last delete or move.' },
-      { keys: 'Ctrl/Cmd+Shift+Z', description: 'Redo the last undone action.' },
-      { keys: 'Ctrl/Cmd+Y', description: 'Redo on keyboards that use the alternate shortcut.' },
-    ],
-  },
-  {
-    label: 'Actions',
-    items: [
-      { keys: 'Delete / Backspace', description: 'Delete the current selection.' },
-      { keys: 'Ctrl/Cmd+Click', description: 'Open a bookmark or folder in a new tab.' },
-      { keys: 'Ctrl/Cmd+K or Ctrl/Cmd+S', description: 'Focus and select the bookmark search field.' },
-    ],
-  },
-] as const;
+export function getShortcutGroups(): Array<{ label: string; items: Array<{ keys: string; description: string }> }> {
+  return [
+    {
+      label: t('options.shortcuts.group.selection'),
+      items: [
+        { keys: 'Ctrl/Cmd+Click', description: t('options.shortcuts.selection.ctrl-click') },
+        { keys: 'Drag on empty space', description: t('options.shortcuts.selection.marquee') },
+        { keys: 'Escape', description: t('options.shortcuts.selection.escape') },
+      ],
+    },
+    {
+      label: t('options.shortcuts.group.clipboard'),
+      items: [
+        { keys: 'Ctrl/Cmd+C', description: t('options.shortcuts.clipboard.copy') },
+        { keys: 'Ctrl/Cmd+X', description: t('options.shortcuts.clipboard.cut') },
+        { keys: 'Ctrl/Cmd+V', description: t('options.shortcuts.clipboard.paste') },
+      ],
+    },
+    {
+      label: t('options.shortcuts.group.history'),
+      items: [
+        { keys: 'Ctrl/Cmd+Z', description: t('options.shortcuts.history.undo') },
+        { keys: 'Ctrl/Cmd+Shift+Z', description: t('options.shortcuts.history.redo') },
+        { keys: 'Ctrl/Cmd+Y', description: t('options.shortcuts.history.redo-alt') },
+      ],
+    },
+    {
+      label: t('options.shortcuts.group.actions'),
+      items: [
+        { keys: 'Delete / Backspace', description: t('options.shortcuts.actions.delete') },
+        { keys: 'Ctrl/Cmd+Click', description: t('options.shortcuts.actions.open-tab') },
+        { keys: 'Ctrl/Cmd+K or Ctrl/Cmd+S', description: t('options.shortcuts.actions.search') },
+      ],
+    },
+  ];
+}

@@ -9,8 +9,6 @@ if (!target || !outDir) {
 }
 
 const extensionVersion = process.env.EXTENSION_VERSION ?? '1.0.1';
-const extensionDescription = process.env.EXTENSION_DESCRIPTION
-  ?? "Flipp's Favorites replaces your new tab page with a fast, customizable bookmark dashboard featuring folder navigation, bookmark search, visual tiles, shortcuts. Use the theme controls to customize the look and feel of your new tab page and make it your own.";
 const firefoxExtensionId = process.env.FIREFOX_EXTENSION_ID ?? 'com.flipps-favorites@flippflix.com';
 const firefoxStrictMinVersion = process.env.FIREFOX_STRICT_MIN_VERSION ?? '140.0';
 const firefoxAndroidStrictMinVersion = process.env.FIREFOX_ANDROID_STRICT_MIN_VERSION ?? '142.0';
@@ -41,10 +39,11 @@ const actionIcons = {
 
 const baseManifest = {
   manifest_version: 3,
-  name: "Flipp's Favorites - Bookmarks & more",
-  short_name: "Flipp's Favorites",
+  name: '__MSG_extensionName__',
+  short_name: '__MSG_extensionShortName__',
+  default_locale: 'en',
   version: extensionVersion,
-  description: extensionDescription,
+  description: '__MSG_extensionDescription__',
   permissions: ['bookmarks', 'storage', 'declarativeNetRequest'],
   host_permissions: hostPermissions,
   icons: extensionIcons,
@@ -52,7 +51,7 @@ const baseManifest = {
     newtab: 'newtab.html',
   },
   action: {
-    default_title: "Flipp's Favorites - Bookmarks & more",
+    default_title: '__MSG_actionTitle__',
     default_icon: actionIcons,
   },
 };

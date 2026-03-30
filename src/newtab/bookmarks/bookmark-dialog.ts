@@ -8,6 +8,7 @@ import { getSearchName, isValidBookmarkUrl } from '../helpers/bookmark-validatio
 import { normalizeUploadedImage } from '../helpers/image-normalization';
 import { type RenderAppFn, refreshBookmarkTree } from '../state/state-transitions';
 import { renderUiIcon } from '../../shared/ui-icons';
+import { t } from '../../shared/i18n';
 
 export function renderBookmarkDialog(bookmarkDialog: BookmarkDialogState): string {
   const title = bookmarkDialog.target?.title || 'Bookmark';
@@ -22,48 +23,48 @@ export function renderBookmarkDialog(bookmarkDialog: BookmarkDialogState): strin
 
   return `
     <div class="bookmark-dialog-layer">
-      <button class="bookmark-dialog-scrim" type="button" aria-label="Close bookmark dialog"></button>
-      <section class="bookmark-dialog" role="dialog" aria-modal="true" aria-label="Edit bookmark">
+      <button class="bookmark-dialog-scrim" type="button" aria-label="${t('bookmark.dialog.scrim.aria-label')}"></button>
+      <section class="bookmark-dialog" role="dialog" aria-modal="true" aria-label="${t('bookmark.dialog.aria-label')}">
         <header class="bookmark-dialog__header">
           <div class="bookmark-dialog__header-copy">
-            <p class="eyebrow">Edit bookmark</p>
+            <p class="eyebrow">${t('bookmark.dialog.eyebrow')}</p>
             <h3>${escapeHtml(title)}</h3>
           </div>
-          <button class="bookmark-dialog-close icon-button" type="button" aria-label="Close bookmark dialog">${renderUiIcon('close')}</button>
+          <button class="bookmark-dialog-close icon-button" type="button" aria-label="${t('bookmark.dialog.close.aria-label')}">${renderUiIcon('close')}</button>
         </header>
         <div class="bookmark-dialog__body">
           <aside class="bookmark-dialog__preview-panel">
             <div class="bookmark-dialog__edit-fields">
               <label class="field bookmark-dialog__field">
-                <span>Name</span>
-                <input name="bookmarkDialogTitle" type="text" value="${escapeAttribute(bookmarkDialog.draftTitle)}" placeholder="Bookmark name" required />
+                <span>${t('bookmark.dialog.name-label')}</span>
+                <input name="bookmarkDialogTitle" type="text" value="${escapeAttribute(bookmarkDialog.draftTitle)}" placeholder="${t('bookmark.dialog.name-placeholder')}" required />
               </label>
               <label class="field bookmark-dialog__field">
-                <span>URL</span>
-                <input name="bookmarkDialogUrl" type="url" value="${escapeAttribute(bookmarkDialog.draftUrl)}" placeholder="https://example.com" required />
+                <span>${t('bookmark.dialog.url-label')}</span>
+                <input name="bookmarkDialogUrl" type="url" value="${escapeAttribute(bookmarkDialog.draftUrl)}" placeholder="${t('bookmark.dialog.url-placeholder')}" required />
               </label>
-              <button class="save-button button-with-icon bookmark-dialog-save-button" type="button" ${canSaveBookmark ? '' : 'disabled'}>${renderUiIcon('save')}<span>Save bookmark</span></button>
+              <button class="save-button button-with-icon bookmark-dialog-save-button" type="button" ${canSaveBookmark ? '' : 'disabled'}>${renderUiIcon('save')}<span>${t('bookmark.dialog.save')}</span></button>
             </div>
             <div class="bookmark-dialog__preview">
               ${previewMarkup}
               <div class="bookmark-dialog__preview-actions">
-                <button class="bookmark-dialog__preview-action bookmark-dialog__preview-action--refresh bookmark-dialog-refresh-button" type="button" aria-label="Refresh icon" title="Refresh icon">${renderUiIcon('refresh')}</button>
-                <button class="bookmark-dialog__preview-action bookmark-dialog__preview-action--remove bookmark-dialog-remove-button" type="button" aria-label="Remove custom icon" title="Remove custom icon">${renderUiIcon('trash')}</button>
-                <button class="bookmark-dialog__preview-action bookmark-dialog__preview-action--upload bookmark-dialog-upload-button" type="button" aria-label="Upload icon" title="Upload icon">${renderUiIcon('upload')}<span>Upload image</span></button>
+                <button class="bookmark-dialog__preview-action bookmark-dialog__preview-action--refresh bookmark-dialog-refresh-button" type="button" aria-label="${t('bookmark.dialog.icon.refresh.aria-label')}" title="${t('bookmark.dialog.icon.refresh.title')}">${renderUiIcon('refresh')}</button>
+                <button class="bookmark-dialog__preview-action bookmark-dialog__preview-action--remove bookmark-dialog-remove-button" type="button" aria-label="${t('bookmark.dialog.icon.remove.aria-label')}" title="${t('bookmark.dialog.icon.remove.title')}">${renderUiIcon('trash')}</button>
+                <button class="bookmark-dialog__preview-action bookmark-dialog__preview-action--upload bookmark-dialog-upload-button" type="button" aria-label="${t('bookmark.dialog.icon.upload.aria-label')}" title="${t('bookmark.dialog.icon.upload.title')}">${renderUiIcon('upload')}<span>${t('bookmark.dialog.icon.upload-button')}</span></button>
               </div>
             </div>
-            <p class="field-hint">Hover the preview for quick icon actions, or choose one of the search results.</p>
+            <p class="field-hint">${t('bookmark.dialog.preview-hint')}</p>
             <input class="icon-file-input" name="bookmarkDialogFile" type="file" accept="image/*" />
             ${bookmarkDialog.status ? `<div class="bookmark-dialog-toast" data-kind="${bookmarkDialog.statusKind || 'info'}" role="status">${escapeHtml(bookmarkDialog.status)}</div>` : ''}
           </aside>
           <div class="bookmark-dialog__search-panel">
             <div class="visual-section__header">
-              <h3>Search</h3>
-              <p class="field-hint">Search for an icon or favicon and click a result to apply it immediately.</p>
+              <h3>${t('bookmark.dialog.search.heading')}</h3>
+              <p class="field-hint">${t('bookmark.dialog.search.hint')}</p>
             </div>
             <div class="bookmark-dialog__search-row">
-              <input name="bookmarkDialogSearchQuery" type="search" value="${escapeAttribute(bookmarkDialog.query)}" placeholder="Search for an icon" />
-              <button class="save-button button-with-icon bookmark-dialog-search-button" type="button">${renderUiIcon('search')}<span>Search</span></button>
+              <input name="bookmarkDialogSearchQuery" type="search" value="${escapeAttribute(bookmarkDialog.query)}" placeholder="${t('bookmark.dialog.search.placeholder')}" />
+              <button class="save-button button-with-icon bookmark-dialog-search-button" type="button">${renderUiIcon('search')}<span>${t('bookmark.dialog.search.button')}</span></button>
             </div>
             <div class="bookmark-dialog__results" data-loading="${String(bookmarkDialog.loading)}">
               ${renderBookmarkDialogResults(bookmarkDialog)}
@@ -124,7 +125,7 @@ export async function searchBookmarkDialog(rootElement: HTMLDivElement, state: A
   }
 
   state.bookmarkDialog.loading = true;
-  state.bookmarkDialog.status = `Searching icons for ${target.title || getHostname(target.url)}...`;
+  state.bookmarkDialog.status = t('bookmark.dialog.status.searching', { name: target.title || getHostname(target.url) });
   state.bookmarkDialog.statusKind = 'info';
   renderApp(rootElement, state);
 
@@ -147,8 +148,8 @@ export async function searchBookmarkDialog(rootElement: HTMLDivElement, state: A
     state.bookmarkDialog.loading = false;
     state.bookmarkDialog.results = response.candidates;
     state.bookmarkDialog.status = response.candidates.length
-      ? `Found ${String(response.candidates.length)} icon candidates.`
-      : 'No icon candidates found for that search.';
+      ? t('bookmark.dialog.status.found-candidates', { count: response.candidates.length })
+      : t('bookmark.dialog.status.no-candidates');
     state.bookmarkDialog.statusKind = response.candidates.length ? 'info' : 'error';
     renderApp(rootElement, state);
   } catch {
@@ -158,7 +159,7 @@ export async function searchBookmarkDialog(rootElement: HTMLDivElement, state: A
 
     state.bookmarkDialog.loading = false;
     state.bookmarkDialog.results = [];
-    state.bookmarkDialog.status = 'Icon search failed. Try a different search or use upload.';
+    state.bookmarkDialog.status = t('bookmark.dialog.status.search-failed');
     state.bookmarkDialog.statusKind = 'error';
     renderApp(rootElement, state);
   }
@@ -173,21 +174,21 @@ export async function saveBookmarkDialogBookmark(rootElement: HTMLDivElement, st
   const nextTitle = state.bookmarkDialog.draftTitle.trim();
   const nextUrl = state.bookmarkDialog.draftUrl.trim();
   if (!nextTitle) {
-    state.bookmarkDialog.status = 'Name is required.';
+    state.bookmarkDialog.status = t('bookmark.dialog.status.name-required');
     state.bookmarkDialog.statusKind = 'error';
     renderApp(rootElement, state);
     return;
   }
 
   if (!nextUrl) {
-    state.bookmarkDialog.status = 'URL is required.';
+    state.bookmarkDialog.status = t('bookmark.dialog.status.url-required');
     state.bookmarkDialog.statusKind = 'error';
     renderApp(rootElement, state);
     return;
   }
 
   if (!isValidBookmarkUrl(nextUrl)) {
-    state.bookmarkDialog.status = 'Enter a valid URL (for example https://example.com).';
+    state.bookmarkDialog.status = t('bookmark.dialog.status.url-invalid');
     state.bookmarkDialog.statusKind = 'error';
     renderApp(rootElement, state);
     return;
@@ -212,7 +213,7 @@ export async function saveBookmarkDialogBookmark(rootElement: HTMLDivElement, st
   if (updatedTarget) {
     state.bookmarkDialog.draftTitle = updatedTarget.title || nextTitle;
     state.bookmarkDialog.draftUrl = updatedTarget.url;
-    state.bookmarkDialog.status = `Saved bookmark ${updatedTarget.title || getHostname(updatedTarget.url)}.`;
+    state.bookmarkDialog.status = t('bookmark.dialog.status.saved', { name: updatedTarget.title || getHostname(updatedTarget.url) });
     state.bookmarkDialog.statusKind = 'success';
     state.bookmarkDialog.query = `${updatedTarget.title || getSearchName(updatedTarget.url)} logo`;
     await loadBookmarkDialogPreview(state, updatedTarget);
@@ -245,7 +246,7 @@ export async function uploadBookmarkDialogImage(rootElement: HTMLDivElement, sta
       mimeType: 'image/png',
     });
 
-    state.bookmarkDialog.status = `Custom icon saved for ${target.title || getHostname(target.url)}.`;
+    state.bookmarkDialog.status = t('bookmark.dialog.status.icon-saved', { name: target.title || getHostname(target.url) });
     state.bookmarkDialog.statusKind = 'success';
     state.bookmarkDialog.previewIcon = {
       cacheKey: `override:${target.url}`,
@@ -277,7 +278,7 @@ export async function refreshBookmarkDialogIcon(rootElement: HTMLDivElement, sta
     bookmarkUrl: dialogTarget.url,
   });
 
-  state.bookmarkDialog.status = `Refreshed icon cache for ${dialogTarget.title || getHostname(dialogTarget.url)}.`;
+  state.bookmarkDialog.status = t('bookmark.dialog.status.icon-refreshed', { name: dialogTarget.title || getHostname(dialogTarget.url) });
   state.bookmarkDialog.statusKind = 'info';
   await loadBookmarkDialogPreview(state, dialogTarget, rootElement, renderApp);
   renderApp(rootElement, state);
@@ -299,7 +300,7 @@ export async function removeBookmarkDialogOverride(rootElement: HTMLDivElement, 
     bookmarkTitle: dialogTarget.title,
   });
 
-  state.bookmarkDialog.status = `Removed custom icon for ${dialogTarget.title || getHostname(dialogTarget.url)}.`;
+  state.bookmarkDialog.status = t('bookmark.dialog.status.icon-removed', { name: dialogTarget.title || getHostname(dialogTarget.url) });
   state.bookmarkDialog.statusKind = 'info';
   await loadBookmarkDialogPreview(state, dialogTarget, rootElement, renderApp);
   renderApp(rootElement, state);
@@ -325,7 +326,7 @@ export async function applyBookmarkDialogCandidate(rootElement: HTMLDivElement, 
       imageUrl,
     });
 
-    state.bookmarkDialog.status = `Applied searched icon for ${dialogTarget.title || getHostname(dialogTarget.url)}.`;
+    state.bookmarkDialog.status = t('bookmark.dialog.status.icon-applied', { name: dialogTarget.title || getHostname(dialogTarget.url) });
     state.bookmarkDialog.statusKind = 'success';
     state.bookmarkDialog.previewIcon = response.icon;
     state.resolvedIcons[dialogTarget.url] = response.icon;
@@ -339,11 +340,11 @@ export async function applyBookmarkDialogCandidate(rootElement: HTMLDivElement, 
 
 function renderBookmarkDialogResults(bookmarkDialog: BookmarkDialogState): string {
   if (bookmarkDialog.loading) {
-    return '<p class="field-hint">Searching icons...</p>';
+    return `<p class="field-hint">${t('bookmark.dialog.results.loading')}</p>`;
   }
 
   if (!bookmarkDialog.results.length) {
-    return '<p class="field-hint">No icon candidates yet. Try a different search term.</p>';
+    return `<p class="field-hint">${t('bookmark.dialog.results.empty')}</p>`;
   }
 
   return bookmarkDialog.results.map(candidate => `
@@ -357,12 +358,12 @@ function renderBookmarkDialogResults(bookmarkDialog: BookmarkDialogState): strin
 function getIconPersistenceErrorMessage(error: unknown, source: 'upload' | 'search'): string {
   const message = String(error instanceof Error ? error.message : error).toLowerCase();
   if (message.includes('quota')) {
-    return 'Could not save that icon because extension storage is full.';
+    return t('bookmark.dialog.error.storage-full');
   }
 
   if (source === 'search' && (message.includes('fetch') || message.includes('network'))) {
-    return 'Could not download that search result. Try another result or upload a local image.';
+    return t('bookmark.dialog.error.download-failed');
   }
 
-  return 'Could not save that icon. Try another image.';
+  return t('bookmark.dialog.error.save-failed');
 }

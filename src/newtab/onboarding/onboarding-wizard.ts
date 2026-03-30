@@ -3,6 +3,8 @@ import { escapeHtml } from '../../shared/html-escape';
 import { renderUiIcon } from '../../shared/ui-icons';
 import { accentPresets, layoutPresetOptions, renderLayoutPresetCard, renderThemeModeCard, themeModeOptions } from '../../settings';
 import type { OnboardingState, OnboardingStepId } from '../state/app-state';
+import { t } from '../../shared/i18n';
+import type { TranslationKey } from '../../locales/en';
 
 interface OnboardingStepMeta {
     id: OnboardingStepId;
@@ -10,55 +12,38 @@ interface OnboardingStepMeta {
     description: string;
 }
 
-const onboardingStepMeta: OnboardingStepMeta[] = [
-    {
-        id: 'welcome',
-        title: 'Welcome',
-        description: 'Set up your workspace in a few quick steps.',
-    },
-    {
-        id: 'theme',
-        title: 'Theme',
-        description: 'Pick the visual mode and accent that fits your style.',
-    },
-    {
-        id: 'root-folder',
-        title: 'Starting Folder',
-        description: 'Choose which bookmark folder opens first.',
-    },
-    {
-        id: 'dock',
-        title: 'Dock',
-        description: 'Configure the bottom dock for fast access.',
-    },
-    {
-        id: 'layout',
-        title: 'Layout',
-        description: 'Choose the grid preset or customize spacing.',
-    },
-];
+function getOnboardingStepMeta(): OnboardingStepMeta[] {
+    return [
+        { id: 'welcome', title: t('onboarding.step.welcome.title'), description: t('onboarding.step.welcome.description') },
+        { id: 'theme', title: t('onboarding.step.theme.title'), description: t('onboarding.step.theme.description') },
+        { id: 'root-folder', title: t('onboarding.step.root-folder.title'), description: t('onboarding.step.root-folder.description') },
+        { id: 'dock', title: t('onboarding.step.dock.title'), description: t('onboarding.step.dock.description') },
+        { id: 'layout', title: t('onboarding.step.layout.title'), description: t('onboarding.step.layout.description') },
+    ];
+}
 
 export function renderOnboardingWizard(
     onboarding: OnboardingState,
     settings: AppSettings,
     folderOptions: Array<{ id: string; label: string }>,
 ): string {
+    const onboardingStepMeta = getOnboardingStepMeta();
     const activeStep = onboardingStepMeta[onboarding.stepIndex] ?? onboardingStepMeta[0];
     const isLastStep = onboarding.stepIndex >= onboardingStepMeta.length - 1;
 
     return `
     <div class="onboarding-wizard-layer">
-      <button class="onboarding-wizard-scrim" type="button" aria-label="Close onboarding"></button>
+      <button class="onboarding-wizard-scrim" type="button" aria-label="${t('onboarding.wizard.scrim.aria-label')}"></button>
       <section class="onboarding-wizard" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
         <header class="onboarding-wizard__header">
           <div class="onboarding-wizard__header-copy">
-            <p class="eyebrow">New workspace setup</p>
+            <p class="eyebrow">${t('onboarding.wizard.eyebrow')}</p>
             <h2 id="onboarding-title">${escapeHtml(activeStep.title)}</h2>
           </div>
-          <button class="onboarding-wizard-close icon-button" type="button" aria-label="Skip onboarding and close">${renderUiIcon('close')}</button>
+          <button class="onboarding-wizard-close icon-button" type="button" aria-label="${t('onboarding.wizard.close.aria-label')}">${renderUiIcon('close')}</button>
         </header>
         <div class="onboarding-wizard__body">
-          <aside class="onboarding-wizard__steps" aria-label="Onboarding steps">
+          <aside class="onboarding-wizard__steps" aria-label="${t('onboarding.wizard.steps.aria-label')}">
             ${onboardingStepMeta.map((step, index) => renderStepPill(step, index, onboarding.stepIndex)).join('')}
           </aside>
           <section class="onboarding-wizard__content">
@@ -66,10 +51,10 @@ export function renderOnboardingWizard(
           </section>
         </div>
         <footer class="onboarding-wizard__footer">
-          <button class="drawer-secondary-button" data-onboarding-action="skip" type="button">Skip setup</button>
+          <button class="drawer-secondary-button" data-onboarding-action="skip" type="button">${t('onboarding.wizard.skip')}</button>
           <div class="onboarding-wizard__footer-actions">
-            <button class="drawer-secondary-button" data-onboarding-action="back" type="button" ${onboarding.stepIndex === 0 ? 'disabled' : ''}>Back</button>
-            <button class="save-button" data-onboarding-action="${isLastStep ? 'finish' : 'next'}" type="button"><span>${isLastStep ? 'Finish setup' : 'Next'}</span></button>
+            <button class="drawer-secondary-button" data-onboarding-action="back" type="button" ${onboarding.stepIndex === 0 ? 'disabled' : ''}>${t('onboarding.wizard.back')}</button>
+            <button class="save-button" data-onboarding-action="${isLastStep ? 'finish' : 'next'}" type="button"><span>${isLastStep ? t('onboarding.wizard.finish') : t('onboarding.wizard.next')}</span></button>
           </div>
         </footer>
       </section>
@@ -93,14 +78,14 @@ function renderOnboardingStep(stepId: OnboardingStepId, settings: AppSettings, f
       <div class="onboarding-step onboarding-step--welcome">
         <div class="visual-section">
           <div class="visual-section__header">
-            <h3>Thank you for trying Flipp's Favorites!</h3>
-            <p class="field-hint">This short wizard will guide you through the initial setup of your workspace.</p>
+            <h3>${t('onboarding.step.welcome.heading')}</h3>
+            <p class="field-hint">${t('onboarding.step.welcome.body')}</p>
           </div>
           <div class="onboarding-callout">
-            <p><strong>Set up:</strong> theme, starting folder, dock behavior, and layout.</p>
-            <p><strong>Time:</strong> about one minute.</p>
+            <p><strong>${t('onboarding.step.welcome.callout.setup-label')}</strong> ${t('onboarding.step.welcome.callout.setup-items')}</p>
+            <p><strong>${t('onboarding.step.welcome.callout.time-label')}</strong> ${t('onboarding.step.welcome.callout.time-value')}</p>
           </div>
-            <p class="field-hint">You can skip this setup at any time and configure your preferences later in the Settings.</p>
+            <p class="field-hint">${t('onboarding.step.welcome.skip-hint')}</p>
         </div>
         ${renderIllustrationSlot('welcome')}
       </div>
@@ -113,21 +98,24 @@ function renderOnboardingStep(stepId: OnboardingStepId, settings: AppSettings, f
       <div class="onboarding-step">
         <div class="visual-section">
           <div class="visual-section__header">
-            <h3>Choose your theme mode</h3>
-            <p class="field-hint">Use the same visual cards from settings so your choices stay consistent everywhere.</p>
+            <h3>${t('onboarding.step.theme.heading')}</h3>
+            <p class="field-hint">${t('onboarding.step.theme.hint')}</p>
           </div>
-          <div class="theme-mode-grid" role="group" aria-label="Theme mode">
+          <div class="theme-mode-grid" role="group" aria-label="${t('onboarding.step.theme.mode-group.aria-label')}">
             ${themeModeOptions.map(option => renderThemeModeCard(option, settings.themeMode)).join('')}
           </div>
-          <div class="accent-gallery" role="group" aria-label="Accent presets">
-            ${accentPresets.map(preset => `
-              <button class="accent-swatch" data-accent-option="${preset.value}" data-active="${String(preset.value === customAccentActive)}" type="button" aria-label="${preset.label}" title="${preset.label}">
+          <div class="accent-gallery" role="group" aria-label="${t('onboarding.step.theme.accent-group.aria-label')}">
+            ${accentPresets.map(preset => {
+              const label = t(`options.accent.${preset.id}` as TranslationKey);
+              return `
+              <button class="accent-swatch" data-accent-option="${preset.value}" data-active="${String(preset.value === customAccentActive)}" type="button" aria-label="${label}" title="${label}">
                 <span class="accent-swatch__band" style="background:linear-gradient(135deg, ${preset.value}, color-mix(in srgb, ${preset.value} 58%, #FFFFFF))"></span>
-                <span class="accent-swatch__label">${preset.label}</span>
+                <span class="accent-swatch__label">${label}</span>
               </button>
-            `).join('')}
+            `;
+            }).join('')}
           </div>
-          <p class="field-hint">Prefer a custom accent color? You can set it later in Settings under Theme.</p>
+          <p class="field-hint">${t('onboarding.step.theme.custom-hint')}</p>
         </div>
         ${renderIllustrationSlot('theme')}
       </div>
@@ -139,19 +127,19 @@ function renderOnboardingStep(stepId: OnboardingStepId, settings: AppSettings, f
       <div class="onboarding-step">
         <div class="visual-section">
           <div class="visual-section__header">
-            <h3>Pick your starting folder</h3>
-            <p class="field-hint">Choose which folder will be shown each time when a new tab opens.</p>
+            <h3>${t('onboarding.step.root-folder.heading')}</h3>
+            <p class="field-hint">${t('onboarding.step.root-folder.hint')}</p>
           </div>
           <label class="field field--card">
-            <span>Starting folder</span>
+            <span>${t('onboarding.step.root-folder.label')}</span>
             <select name="rootFolderId">
-              <option value="">Default library root</option>
+              <option value="">${t('onboarding.step.root-folder.default-option')}</option>
               ${folderOptions.map(option => `<option value="${option.id}" ${option.id === settings.rootFolderId ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
             </select>
           </label>
           <label class="toggle-field toggle-field--card">
             <input name="rememberLastFolder" type="checkbox" ${settings.rememberLastFolder ? 'checked' : ''} />
-            <span>Remember the last folder you visited</span>
+            <span>${t('onboarding.step.root-folder.remember-label')}</span>
           </label>
         </div>
         ${renderIllustrationSlot('root-folder')}
@@ -166,20 +154,20 @@ function renderOnboardingStep(stepId: OnboardingStepId, settings: AppSettings, f
       <div class="onboarding-step">
         <div class="visual-section">
           <div class="visual-section__header">
-            <h3>Configure your dock</h3>
-            <p class="field-hint">Keep important folders pinned at the bottom of the page.</p>
+            <h3>${t('onboarding.step.dock.heading')}</h3>
+            <p class="field-hint">${t('onboarding.step.dock.hint')}</p>
           </div>
           <label class="field field--card">
-            <span>Dock folder</span>
+            <span>${t('onboarding.step.dock.folder-label')}</span>
             <select name="dockFolderId">
               ${folderOptions.map(option => `<option value="${option.id}" ${option.id === selectedDockFolderId ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
             </select>
           </label>
           <div class="field field--card">
-            <span>Visibility</span>
-            <div class="settings-subnav" role="group" aria-label="Dock visibility">
-              <button class="settings-subnav__button" data-dock-visibility-option="always" data-active="${String(dockVisibilityMode === 'always')}" type="button">Always</button>
-              <button class="settings-subnav__button" data-dock-visibility-option="hover" data-active="${String(dockVisibilityMode === 'hover')}" type="button">Hover</button>
+            <span>${t('onboarding.step.dock.visibility-label')}</span>
+            <div class="settings-subnav" role="group" aria-label="${t('onboarding.step.dock.visibility.aria-label')}">
+              <button class="settings-subnav__button" data-dock-visibility-option="always" data-active="${String(dockVisibilityMode === 'always')}" type="button">${t('onboarding.step.dock.visibility.always')}</button>
+              <button class="settings-subnav__button" data-dock-visibility-option="hover" data-active="${String(dockVisibilityMode === 'hover')}" type="button">${t('onboarding.step.dock.visibility.hover')}</button>
             </div>
           </div>
         </div>
@@ -193,13 +181,13 @@ function renderOnboardingStep(stepId: OnboardingStepId, settings: AppSettings, f
     <div class="onboarding-step">
       <div class="visual-section">
         <div class="visual-section__header">
-          <h3>Choose a layout</h3>
-          <p class="field-hint">Preset cards match the settings drawer and can be refined with custom controls.</p>
+          <h3>${t('onboarding.step.layout.heading')}</h3>
+          <p class="field-hint">${t('onboarding.step.layout.hint')}</p>
         </div>
-        <div class="layout-preset-grid" role="group" aria-label="Layout presets">
+        <div class="layout-preset-grid" role="group" aria-label="${t('onboarding.step.layout.presets.aria-label')}">
           ${layoutPresetOptions.map(option => renderLayoutPresetCard(option, activePreset)).join('')}
         </div>
-        <p class="field-hint">Custom layout options are available in the Settings later.</p>
+        <p class="field-hint">${t('onboarding.step.layout.custom-hint')}</p>
       </div>
       ${renderIllustrationSlot('layout')}
     </div>

@@ -1,12 +1,13 @@
 import type { AppState, AppStatus, ContextMenuState } from '../state/app-state';
 import { escapeHtml } from '../../shared/html-escape';
 import { renderUiIcon } from '../../shared/ui-icons';
+import { t, tp } from '../../shared/i18n';
 
 export function renderStatusMessage(statusMessage: AppStatus): string {
   return `
     <div class="app-status" data-kind="${statusMessage.kind}" role="status" aria-live="polite">
       <span>${escapeHtml(statusMessage.message)}</span>
-      <button class="app-status__dismiss icon-button" type="button" aria-label="Dismiss message">${renderUiIcon('close')}</button>
+      <button class="app-status__dismiss icon-button" type="button" aria-label="${t('status.dismiss.aria-label')}">${renderUiIcon('close')}</button>
     </div>
   `;
 }
@@ -30,16 +31,16 @@ export function renderContextMenu(state: AppState, contextMenu: ContextMenuState
     const canPaste = Boolean(contextMenu.target.parentId) && canPasteIntoFolder(contextMenu.target.parentId);
     return `
       <div class="context-menu-layer">
-        <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="Bookmark actions">
-          ${renderMenuItem('open-tab', 'external', 'Open in new tab', 'Ctrl/Cmd+Click')}
-          ${renderMenuItem('open-window', 'window', 'Open in new window')}
+        <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="${t('context.menu.bookmark.aria-label')}">
+          ${renderMenuItem('open-tab', 'external', t('context.menu.open-tab'), t('context.menu.shortcut.ctrl-click'))}
+          ${renderMenuItem('open-window', 'window', t('context.menu.open-window'))}
           <div class="bookmark-context-menu__divider"></div>
-          ${renderMenuItem('cut', 'scissors', 'Cut', 'Ctrl/Cmd+X')}
-          ${renderMenuItem('copy', 'copy', 'Copy', 'Ctrl/Cmd+C')}
-          ${renderMenuItem('paste', 'clipboard', 'Paste', 'Ctrl/Cmd+V', !canPaste)}
+          ${renderMenuItem('cut', 'scissors', t('context.menu.cut'), t('context.menu.shortcut.ctrl-x'))}
+          ${renderMenuItem('copy', 'copy', t('context.menu.copy'), t('context.menu.shortcut.ctrl-c'))}
+          ${renderMenuItem('paste', 'clipboard', t('context.menu.paste'), t('context.menu.shortcut.ctrl-v'), !canPaste)}
           <div class="bookmark-context-menu__divider"></div>
-          ${renderMenuItem('edit', 'edit', 'Edit...')}
-          ${renderMenuItem('delete', 'trash', 'Delete...', 'Delete')}
+          ${renderMenuItem('edit', 'edit', t('context.menu.edit'))}
+          ${renderMenuItem('delete', 'trash', t('context.menu.delete'), t('context.menu.shortcut.delete'))}
         </div>
       </div>
     `;
@@ -49,39 +50,39 @@ export function renderContextMenu(state: AppState, contextMenu: ContextMenuState
     const canPaste = canPasteIntoFolder(contextMenu.target.id);
     return `
       <div class="context-menu-layer">
-        <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="Folder actions">
-          ${renderMenuItem('open-tab', 'external', 'Open in new tab', 'Ctrl/Cmd+Click')}
-          ${renderMenuItem('open-window', 'window', 'Open in new window')}
+        <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="${t('context.menu.folder.aria-label')}">
+          ${renderMenuItem('open-tab', 'external', t('context.menu.open-tab'), t('context.menu.shortcut.ctrl-click'))}
+          ${renderMenuItem('open-window', 'window', t('context.menu.open-window'))}
           <div class="bookmark-context-menu__divider"></div>
-          ${renderMenuItem('cut', 'scissors', 'Cut', 'Ctrl/Cmd+X')}
-          ${renderMenuItem('copy', 'copy', 'Copy', 'Ctrl/Cmd+C')}
-          ${renderMenuItem('paste', 'clipboard', 'Paste', 'Ctrl/Cmd+V', !canPaste)}
+          ${renderMenuItem('cut', 'scissors', t('context.menu.cut'), t('context.menu.shortcut.ctrl-x'))}
+          ${renderMenuItem('copy', 'copy', t('context.menu.copy'), t('context.menu.shortcut.ctrl-c'))}
+          ${renderMenuItem('paste', 'clipboard', t('context.menu.paste'), t('context.menu.shortcut.ctrl-v'), !canPaste)}
           <div class="bookmark-context-menu__divider"></div>
-          ${renderMenuItem('edit-folder', 'edit', 'Edit')}
-          ${renderMenuItem('delete-folder', 'trash', 'Delete', 'Delete')}
+          ${renderMenuItem('edit-folder', 'edit', t('context.menu.edit'))}
+          ${renderMenuItem('delete-folder', 'trash', t('context.menu.delete'), t('context.menu.shortcut.delete'))}
         </div>
       </div>
     `;
   }
 
   if (contextMenu.kind === 'selection') {
-    const summary = [];
+    const summaryParts = [];
     if (contextMenu.target.bookmarkCount) {
-      summary.push(`${String(contextMenu.target.bookmarkCount)} bookmark${contextMenu.target.bookmarkCount === 1 ? '' : 's'}`);
+      summaryParts.push(tp('context.menu.selection.bookmark-count', contextMenu.target.bookmarkCount, { count: contextMenu.target.bookmarkCount }));
     }
     if (contextMenu.target.folderCount) {
-      summary.push(`${String(contextMenu.target.folderCount)} folder${contextMenu.target.folderCount === 1 ? '' : 's'}`);
+      summaryParts.push(tp('context.menu.selection.folder-count', contextMenu.target.folderCount, { count: contextMenu.target.folderCount }));
     }
 
     return `
       <div class="context-menu-layer">
-        <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="Selection actions">
-          <p class="bookmark-context-menu__label">${escapeHtml(summary.join(' · ') || 'Selection')}</p>
-          ${renderMenuItem('open-tabs', 'external', 'Open all links in new tabs')}
+        <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="${t('context.menu.selection.aria-label')}">
+          <p class="bookmark-context-menu__label">${escapeHtml(summaryParts.join(' · ') || t('context.menu.selection.empty-label'))}</p>
+          ${renderMenuItem('open-tabs', 'external', t('context.menu.open-tabs'))}
           <div class="bookmark-context-menu__divider"></div>
-          ${renderMenuItem('cut-selection', 'scissors', 'Cut', 'Ctrl/Cmd+X')}
-          ${renderMenuItem('copy-selection', 'copy', 'Copy', 'Ctrl/Cmd+C')}
-          ${renderMenuItem('delete-selection', 'trash', 'Delete', 'Delete')}
+          ${renderMenuItem('cut-selection', 'scissors', t('context.menu.cut'), t('context.menu.shortcut.ctrl-x'))}
+          ${renderMenuItem('copy-selection', 'copy', t('context.menu.copy'), t('context.menu.shortcut.ctrl-c'))}
+          ${renderMenuItem('delete-selection', 'trash', t('context.menu.delete'), t('context.menu.shortcut.delete'))}
         </div>
       </div>
     `;
@@ -90,14 +91,14 @@ export function renderContextMenu(state: AppState, contextMenu: ContextMenuState
   const canPaste = canPasteIntoFolder(contextMenu.target.id);
   return `
     <div class="context-menu-layer">
-      <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="${contextMenu.target.surface === 'dock' ? 'Dock actions' : 'Grid actions'}">
-        ${renderMenuItem('add-bookmark', 'plus', 'Add Bookmark')}
-        ${renderMenuItem('add-folder', 'folderPlus', 'Add Folder')}
-        ${showBookmarkManager ? renderMenuItem('open-manager', 'grid', 'Open Bookmark Manager') : ''}
+      <div class="bookmark-context-menu" style="${menuStyle}" role="menu" aria-label="${contextMenu.target.surface === 'dock' ? t('context.menu.dock.aria-label') : t('context.menu.grid.aria-label')}">
+        ${renderMenuItem('add-bookmark', 'plus', t('context.menu.add-bookmark'))}
+        ${renderMenuItem('add-folder', 'folderPlus', t('context.menu.add-folder'))}
+        ${showBookmarkManager ? renderMenuItem('open-manager', 'grid', t('context.menu.open-manager')) : ''}
         <div class="bookmark-context-menu__divider"></div>
-        ${renderMenuItem('paste', 'clipboard', 'Paste', 'Ctrl/Cmd+V', !canPaste)}
+        ${renderMenuItem('paste', 'clipboard', t('context.menu.paste'), t('context.menu.shortcut.ctrl-v'), !canPaste)}
         <div class="bookmark-context-menu__divider"></div>
-        ${renderMenuItem('open-settings', 'settings', 'Open Settings')}
+        ${renderMenuItem('open-settings', 'settings', t('context.menu.open-settings'))}
       </div>
     </div>
   `;

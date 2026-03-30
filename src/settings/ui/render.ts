@@ -4,11 +4,13 @@ import { renderUiIcon, type UiIconName } from '../../shared/ui-icons';
 import {
   accentPresets,
   defaultAccentColor,
+  getShortcutGroups,
   layoutPresetOptions,
-  shortcutGroups,
   themeModeOptions,
   type GeneralSettingsSubpage,
 } from '../config/options';
+import { t } from '../../shared/i18n';
+import type { TranslationKey } from '../../locales/en';
 
 export { accentPresets, defaultAccentColor, layoutPresetOptions, themeModeOptions };
 export type { GeneralSettingsSubpage };
@@ -29,10 +31,10 @@ export function renderDrawerSection(section: SettingsSectionId, settings: AppSet
   if (section === 'general') {
     return `
       <div class="drawer-panel">
-        <div class="settings-subnav" role="tablist" aria-label="General settings subpages">
-          ${renderGeneralSubpageButton('general', generalSubpage, 'General')}
-          ${renderGeneralSubpageButton('layout', generalSubpage, 'Layout')}
-          ${renderGeneralSubpageButton('dock', generalSubpage, 'Dock')}
+        <div class="settings-subnav" role="tablist" aria-label="${t('settings.general.tabs.aria-label')}">
+          ${renderGeneralSubpageButton('general', generalSubpage, t('settings.general.tab.general'))}
+          ${renderGeneralSubpageButton('layout', generalSubpage, t('settings.general.tab.layout'))}
+          ${renderGeneralSubpageButton('dock', generalSubpage, t('settings.general.tab.dock'))}
         </div>
         ${renderGeneralSubpageSection(settings, folderOptions, generalSubpage)}
       </div>
@@ -54,76 +56,76 @@ export function renderDrawerSection(section: SettingsSectionId, settings: AppSet
     <div class="drawer-panel">
       <div class="visual-section">
         <div class="visual-section__header">
-          <h3>Theme</h3>
-          <p class="field-hint">Choose light or dark directly, or let the page follow the browser preference automatically.</p>
+          <h3>${t('settings.theme.heading')}</h3>
+          <p class="field-hint">${t('settings.theme.hint')}</p>
         </div>
         <label class="system-theme-card" data-active="${String(settings.themeMode === 'system')}">
           <input name="useSystemTheme" type="checkbox" ${settings.themeMode === 'system' ? 'checked' : ''} />
           <span class="system-theme-card__copy">
-            <strong>Use system preference</strong>
-            <span>Default behavior. Light and dark cards below update to show which mode is currently active.</span>
+            <strong>${t('settings.theme.system-label')}</strong>
+            <span>${t('settings.theme.system-description')}</span>
           </span>
         </label>
-        <div class="theme-mode-grid" role="group" aria-label="Theme mode">
+        <div class="theme-mode-grid" role="group" aria-label="${t('settings.theme.mode-group.aria-label')}">
           ${themeModeOptions.map(option => renderThemeModeCard(option, settings.themeMode)).join('')}
         </div>
       </div>
       <div class="settings-section-divider" aria-hidden="true"></div>
       <div class="visual-section">
         <div class="visual-section__header">
-          <h3>Accent</h3>
-          <p class="field-hint">Choose from a palette that already works well, or open the custom picker.</p>
+          <h3>${t('settings.theme.accent-heading')}</h3>
+          <p class="field-hint">${t('settings.theme.accent-hint')}</p>
         </div>
-        <div class="accent-gallery" role="group" aria-label="Accent presets">
+        <div class="accent-gallery" role="group" aria-label="${t('settings.theme.accent-group.aria-label')}">
           ${accentPresets.map(preset => renderAccentSwatch(preset, accentColor)).join('')}
           <button class="accent-swatch accent-swatch--custom" data-accent-option="custom" data-active="${String(customAccentActive || accentPicker.open)}" type="button">
             <span class="accent-swatch__custom-preview"></span>
-            <span class="accent-swatch__label">Custom</span>
+            <span class="accent-swatch__label">${t('settings.theme.accent-custom-label')}</span>
           </button>
         </div>
         <input name="accentColor" type="hidden" value="${accentColor}" />
         ${renderAccentPickerPopover(accentPicker)}
         <label class="toggle-field toggle-field--card">
           <input name="showBookmarkIconBackground" type="checkbox" ${settings.showBookmarkIconBackground ? 'checked' : ''} />
-          <span>Show accent background behind bookmark icons</span>
+          <span>${t('settings.theme.icon-background')}</span>
         </label>
       </div>
       <div class="settings-section-divider" aria-hidden="true"></div>
       <div class="visual-section">
         <div class="visual-section__header">
-          <h3>Background</h3>
-          <p class="field-hint">You can use your own background image if you want.</p>
+          <h3>${t('settings.theme.background-heading')}</h3>
+          <p class="field-hint">${t('settings.theme.background-hint')}</p>
         </div>
         <label class="toggle-field toggle-field--card">
           <input name="showAccentBackground" type="checkbox" ${settings.showAccentBackground ? 'checked' : ''} />
-          <span>Show accent color in background</span>
+          <span>${t('settings.theme.background-accent')}</span>
         </label>
         <div class="field field--card background-upload-card">
           <div class="background-upload-card__actions">
-            <button class="save-button button-with-icon background-upload-button" type="button">${renderUiIcon('upload')}<span>Upload image</span></button>
+            <button class="save-button button-with-icon background-upload-button" type="button">${renderUiIcon('upload')}<span>${t('settings.theme.background-upload')}</span></button>
             ${hasCustomBackground
       ? `<div class="background-upload-card__preview" data-has-image="true">
               <img class="background-upload-card__preview-image" src="${escapeAttribute(settings.customBackgroundImage)}" alt="" />
-              <button class="icon-button background-remove-button" type="button" aria-label="Remove custom background" title="Remove custom background">${renderUiIcon('trash')}</button>
+              <button class="icon-button background-remove-button" type="button" aria-label="${t('settings.theme.background-remove.aria-label')}" title="${t('settings.theme.background-remove.title')}">${renderUiIcon('trash')}</button>
             </div>`
       : ''}
           </div>
           ${hasCustomBackground
-      ? `${renderSettingsSlider('backgroundOpacity', 'Background opacity', settings.backgroundOpacity, 0, 100, '%')}
+      ? `${renderSettingsSlider('backgroundOpacity', t('settings.theme.background-opacity.label'), settings.backgroundOpacity, 0, 100, '%')}
           <label class="field background-upload-card__field">
-            <span>Fit</span>
+            <span>${t('settings.theme.background-fit.label')}</span>
             <select name="backgroundFitMode">
-              <option value="cover" ${settings.backgroundFitMode === 'cover' ? 'selected' : ''}>Cover (crop to fill)</option>
-              <option value="contain" ${settings.backgroundFitMode === 'contain' ? 'selected' : ''}>Contain (fit inside)</option>
-              <option value="fill" ${settings.backgroundFitMode === 'fill' ? 'selected' : ''}>Fill (stretch)</option>
+              <option value="cover" ${settings.backgroundFitMode === 'cover' ? 'selected' : ''}>${t('settings.theme.background-fit.cover')}</option>
+              <option value="contain" ${settings.backgroundFitMode === 'contain' ? 'selected' : ''}>${t('settings.theme.background-fit.contain')}</option>
+              <option value="fill" ${settings.backgroundFitMode === 'fill' ? 'selected' : ''}>${t('settings.theme.background-fit.fill')}</option>
             </select>
           </label>
           <label class="field background-upload-card__field">
-            <span>Position</span>
+            <span>${t('settings.theme.background-position.label')}</span>
             <select name="backgroundPositionMode">
-              <option value="center" ${settings.backgroundPositionMode === 'center' ? 'selected' : ''}>Center</option>
-              <option value="top" ${settings.backgroundPositionMode === 'top' ? 'selected' : ''}>Top</option>
-              <option value="bottom" ${settings.backgroundPositionMode === 'bottom' ? 'selected' : ''}>Bottom</option>
+              <option value="center" ${settings.backgroundPositionMode === 'center' ? 'selected' : ''}>${t('settings.theme.background-position.center')}</option>
+              <option value="top" ${settings.backgroundPositionMode === 'top' ? 'selected' : ''}>${t('settings.theme.background-position.top')}</option>
+              <option value="bottom" ${settings.backgroundPositionMode === 'bottom' ? 'selected' : ''}>${t('settings.theme.background-position.bottom')}</option>
             </select>
           </label>`
       : ''}
@@ -220,26 +222,26 @@ export function normalizeHexColor(value: string | undefined, fallback: string): 
 
 function renderAccentPickerPopover(picker: AccentPickerState): string {
   return `
-    <section class="accent-picker-popover" data-open="${String(picker.open)}" aria-label="Custom accent color">
+    <section class="accent-picker-popover" data-open="${String(picker.open)}" aria-label="${t('settings.accent-picker.aria-label')}">
       <div class="accent-picker-popover__header">
         <div>
-          <strong>Custom accent</strong>
-          <span>Set hue, saturation, and lightness without leaving the drawer.</span>
+          <strong>${t('settings.accent-picker.heading')}</strong>
+          <span>${t('settings.accent-picker.description')}</span>
         </div>
-        <button class="accent-picker-popover__close icon-button" type="button" aria-label="Close custom accent picker">${renderUiIcon('close')}</button>
+        <button class="accent-picker-popover__close icon-button" type="button" aria-label="${t('settings.accent-picker.close.aria-label')}">${renderUiIcon('close')}</button>
       </div>
       <div class="accent-picker-popover__body">
         <div class="accent-picker-popover__preview-column">
           <div class="accent-picker-popover__preview" style="background: ${picker.draftColor}"></div>
           <label class="accent-hex-field accent-hex-field--popover">
-            <span>Hex</span>
+            <span>${t('settings.accent-picker.hex-label')}</span>
             <input name="accentHex" type="text" value="${picker.draftColor}" spellcheck="false" />
           </label>
         </div>
         <div class="accent-picker-popover__sliders">
-          ${renderAccentControlSlider('accentPickerHue', 'Hue', Math.round(picker.hue), 0, 360, 'deg')}
-          ${renderAccentControlSlider('accentPickerSaturation', 'Saturation', Math.round(picker.saturation), 0, 100, '%')}
-          ${renderAccentControlSlider('accentPickerLightness', 'Lightness', Math.round(picker.lightness), 0, 100, '%')}
+          ${renderAccentControlSlider('accentPickerHue', t('settings.accent-picker.hue'), Math.round(picker.hue), 0, 360, 'deg')}
+          ${renderAccentControlSlider('accentPickerSaturation', t('settings.accent-picker.saturation'), Math.round(picker.saturation), 0, 100, '%')}
+          ${renderAccentControlSlider('accentPickerLightness', t('settings.accent-picker.lightness'), Math.round(picker.lightness), 0, 100, '%')}
         </div>
       </div>
     </section>
@@ -268,10 +270,10 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
     return `
       <div class="visual-section">
         <div class="visual-section__header">
-          <h3>Layout</h3>
-          <p class="field-hint">Choose a layout preset first, or switch to custom controls for exact spacing and sizing.</p>
+          <h3>${t('settings.layout.heading')}</h3>
+          <p class="field-hint">${t('settings.layout.hint')}</p>
         </div>
-        <div class="layout-preset-grid" role="group" aria-label="Layout presets">
+        <div class="layout-preset-grid" role="group" aria-label="${t('settings.layout.presets.aria-label')}">
           ${layoutPresetOptions.map(option => renderLayoutPresetCard(option, activePreset)).join('')}
           <button class="layout-preset-card layout-preset-card--custom" data-layout-preset-option="custom" data-active="${String(activePreset === 'custom')}" type="button">
             <span class="layout-preset-card__preview layout-preset-card__preview--custom">
@@ -281,19 +283,19 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
               <span class="layout-preset-card__tile layout-preset-card__tile--custom d"></span>
             </span>
             <span class="layout-preset-card__copy">
-              <strong>Custom</strong>
-              <span>Tune columns, gaps, tile width, and icon size manually.</span>
+              <strong>${t('settings.layout.custom.label')}</strong>
+              <span>${t('settings.layout.custom.description')}</span>
             </span>
           </button>
         </div>
         ${activePreset === 'custom'
           ? `<div class="settings-slider-grid">
-              ${renderSettingsSlider('favoritesColumns', 'Columns', settings.favoritesColumns, 3, 12)}
-              ${renderSettingsSlider('favoritesRows', 'Rows', settings.favoritesRows, 0, 8)}
-              ${renderSettingsSlider('favoritesColumnGap', 'Column gap', settings.favoritesColumnGap, 0, 48, 'px')}
-              ${renderSettingsSlider('favoritesRowGap', 'Row gap', settings.favoritesRowGap, 0, 48, 'px')}
-              ${renderSettingsSlider('bookmarkTileWidth', 'Tile width', settings.bookmarkTileWidth, 88, 180, 'px')}
-              ${renderSettingsSlider('bookmarkIconSize', 'Icon size', settings.bookmarkIconSize, 40, 112, 'px')}
+              ${renderSettingsSlider('favoritesColumns', t('settings.layout.slider.columns'), settings.favoritesColumns, 3, 12)}
+              ${renderSettingsSlider('favoritesRows', t('settings.layout.slider.rows'), settings.favoritesRows, 0, 8)}
+              ${renderSettingsSlider('favoritesColumnGap', t('settings.layout.slider.column-gap'), settings.favoritesColumnGap, 0, 48, 'px')}
+              ${renderSettingsSlider('favoritesRowGap', t('settings.layout.slider.row-gap'), settings.favoritesRowGap, 0, 48, 'px')}
+              ${renderSettingsSlider('bookmarkTileWidth', t('settings.layout.slider.tile-width'), settings.bookmarkTileWidth, 88, 180, 'px')}
+              ${renderSettingsSlider('bookmarkIconSize', t('settings.layout.slider.icon-size'), settings.bookmarkIconSize, 40, 112, 'px')}
             </div>`
           : ``}
       </div>
@@ -306,22 +308,22 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
     return `
       <div class="visual-section">
         <div class="visual-section__header">
-          <h3>Dock</h3>
-          <p class="field-hint">Pin a folder to the bottom dock to keep visual previews of favorite folders and links centered on the page.</p>
+          <h3>${t('settings.dock.heading')}</h3>
+          <p class="field-hint">${t('settings.dock.hint')}</p>
         </div>
          <label class="field field--card">
-          <span>Dock folder</span>
+          <span>${t('settings.dock.folder-label')}</span>
           <select name="dockFolderId">
             ${folderOptions.map(option => `<option value="${option.id}" ${option.id === selectedDockFolderId ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
           </select>
         </label>
         <div class="field field--card">
-          <span>Visibility</span>
-          <div class="settings-subnav" role="group" aria-label="Dock visibility">
-            <button class="settings-subnav__button" data-dock-visibility-option="always" data-active="${String(dockVisibilityMode === 'always')}" type="button">Always</button>
-            <button class="settings-subnav__button" data-dock-visibility-option="hover" data-active="${String(dockVisibilityMode === 'hover')}" type="button">Hover</button>
+          <span>${t('settings.dock.visibility-label')}</span>
+          <div class="settings-subnav" role="group" aria-label="${t('settings.dock.visibility.aria-label')}">
+            <button class="settings-subnav__button" data-dock-visibility-option="always" data-active="${String(dockVisibilityMode === 'always')}" type="button">${t('settings.dock.visibility.always')}</button>
+            <button class="settings-subnav__button" data-dock-visibility-option="hover" data-active="${String(dockVisibilityMode === 'hover')}" type="button">${t('settings.dock.visibility.hover')}</button>
           </div>
-          <p class="field-hint">Always keeps the dock visible. Hover hides it until the bottom edge is hovered or focused.</p>
+          <p class="field-hint">${t('settings.dock.visibility.hint')}</p>
         </div>
       </div>
     `;
@@ -330,23 +332,23 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
   return `
     <div class="visual-section">
       <div class="visual-section__header">
-        <h3>General</h3>
-        <p class="field-hint">These settings apply immediately and persist automatically.</p>
+        <h3>${t('settings.general.heading')}</h3>
+        <p class="field-hint">${t('settings.general.hint')}</p>
       </div>
       <label class="field field--card">
-        <span>Starting folder</span>
+        <span>${t('settings.general.starting-folder')}</span>
         <select name="rootFolderId">
-          <option value="">Default library root</option>
+          <option value="">${t('settings.general.default-library-root')}</option>
           ${folderOptions.map(option => `<option value="${option.id}" ${option.id === settings.rootFolderId ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
         </select>
       </label>
       <label class="toggle-field toggle-field--card">
         <input name="rememberLastFolder" type="checkbox" ${settings.rememberLastFolder ? 'checked' : ''} />
-        <span>Reopen the last visited folder when possible</span>
+        <span>${t('settings.general.remember-folder')}</span>
       </label>
       <label class="toggle-field toggle-field--card">
         <input name="openLinksInNewTab" type="checkbox" ${settings.openLinksInNewTab ? 'checked' : ''} />
-        <span>Open links in a new tab instead of replacing the new tab page</span>
+        <span>${t('settings.general.open-in-new-tab')}</span>
       </label>
     </div>
   `;
@@ -370,35 +372,35 @@ function renderBackupSection(): string {
     <div class="drawer-panel">
       <div class="visual-section">
         <div class="visual-section__header">
-          <h3>Export data</h3>
-          <p class="field-hint">Download a backup of your current workspace settings and custom bookmark icon overrides. Bookmarks and folders are synced automatically.</p>
+          <h3>${t('settings.backup.export.heading')}</h3>
+          <p class="field-hint">${t('settings.backup.export.hint')}</p>
         </div>
         <div class="field field--card">
-          <span>Export workspace backup</span>
-          <p class="field-hint">Creates a JSON file you can keep for safekeeping or move to another browser profile.</p>
+          <span>${t('settings.backup.export.card-label')}</span>
+          <p class="field-hint">${t('settings.backup.export.card-hint')}</p>
           <div class="empty-state__actions">
-            <button class="drawer-secondary-button workspace-export-button" type="button">Export workspace data</button>
+            <button class="drawer-secondary-button workspace-export-button" type="button">${t('settings.backup.export.button')}</button>
           </div>
         </div>
       </div>
       <div class="settings-section-divider" aria-hidden="true"></div>
       <div class="visual-section">
         <div class="visual-section__header">
-          <h3>Import data</h3>
-          <p class="field-hint">Restore settings and icon overrides from a previous workspace backup.</p>
+          <h3>${t('settings.backup.import.heading')}</h3>
+          <p class="field-hint">${t('settings.backup.import.hint')}</p>
         </div>
         <div class="field field--card">
-          <span>Import workspace backup</span>
-          <p class="field-hint">Choose whether to merge with your current setup or replace existing settings and icon overrides.</p>
+          <span>${t('settings.backup.import.card-label')}</span>
+          <p class="field-hint">${t('settings.backup.import.card-hint')}</p>
           <label class="field background-upload-card__field">
-            <span>Import mode</span>
+            <span>${t('settings.backup.import.mode-label')}</span>
             <select name="workspaceImportMode">
-              <option value="merge">Merge with current workspace</option>
-              <option value="replace">Replace current settings and custom icons</option>
+              <option value="merge">${t('settings.backup.import.mode.merge')}</option>
+              <option value="replace">${t('settings.backup.import.mode.replace')}</option>
             </select>
           </label>
           <div class="empty-state__actions">
-            <button class="drawer-secondary-button workspace-import-button" type="button">Import workspace data</button>
+            <button class="drawer-secondary-button workspace-import-button" type="button">${t('settings.backup.import.button')}</button>
           </div>
           <input class="icon-file-input" name="workspaceImportFile" type="file" accept="application/json,.json" />
         </div>
@@ -412,22 +414,22 @@ function renderHelpSection(): string {
     <div class="drawer-panel drawer-panel--help">
       <div class="visual-section">
         <div class="visual-section__header">
-          <h3>About</h3>
-          <p class="field-hint">A personal bookmark workspace shaped around everyday use, with enough flexibility for other people to make it their own.</p>
+          <h3>${t('settings.help.about.heading')}</h3>
+          <p class="field-hint">${t('settings.help.about.hint')}</p>
         </div>
         <div class="shortcut-card">
-          <p class="help-about-copy">Flipp's Favorites is a project by Flippeey, originally built to make personal bookmark navigation feel faster, calmer, and more visual than the default browser experience. Over time it grew into a polished new-tab workspace that is still driven by those personal needs, but is shared so other people can enjoy it too.</p>
-          <p class="help-about-copy">The extension was developed with partial AI assistance during implementation and iteration. That support helped speed up experimentation and reduce repetitive work, while the product direction, feature decisions, and overall UX were still shaped intentionally by hand.</p>
+          <p class="help-about-copy">${t('settings.help.about.body1')}</p>
+          <p class="help-about-copy">${t('settings.help.about.body2')}</p>
         </div>
         <div class="shortcut-card">
           <div class="shortcut-list">
             <div class="shortcut-row">
-              <span class="shortcut-keys">Workspace</span>
-              <span class="shortcut-description">Use the new tab page as a bookmark workspace: browse through folders, search across the full library, reorganize items, edit entries in place, and keep a dock of frequently used folders visible at the bottom.</span>
+              <span class="shortcut-keys">${t('settings.help.features.workspace.label')}</span>
+              <span class="shortcut-description">${t('settings.help.features.workspace.description')}</span>
             </div>
             <div class="shortcut-row">
-              <span class="shortcut-keys">Customization</span>
-              <span class="shortcut-description">Adjust the look and feel from the right-side drawer with theme modes, accent colors, background images, layout presets, custom spacing controls, and dock behavior settings.</span>
+              <span class="shortcut-keys">${t('settings.help.features.customization.label')}</span>
+              <span class="shortcut-description">${t('settings.help.features.customization.description')}</span>
             </div>
           </div>
         </div>
@@ -435,11 +437,11 @@ function renderHelpSection(): string {
       <div class="settings-section-divider" aria-hidden="true"></div>
       <div class="visual-section">
         <div class="visual-section__header">
-          <h3>Shortcuts</h3>
-          <p class="field-hint">These shortcuts work on the main new-tab surface when a text field or settings control is not focused.</p>
+          <h3>${t('settings.help.shortcuts.heading')}</h3>
+          <p class="field-hint">${t('settings.help.shortcuts.hint')}</p>
         </div>
         <div class="shortcut-groups">
-          ${shortcutGroups.map(group => `
+          ${getShortcutGroups().map(group => `
             <section class="shortcut-card">
               <h4>${group.label}</h4>
               <div class="shortcut-list">
@@ -509,10 +511,11 @@ export function renderThemeModeCard(option: { id: Exclude<ThemeMode, 'system'>; 
 }
 
 function renderAccentSwatch(preset: { id: string; label: string; value: string }, currentAccent: string): string {
+  const label = t(`options.accent.${preset.id}` as TranslationKey);
   return `
-    <button class="accent-swatch" data-accent-option="${preset.value}" data-active="${String(preset.value === currentAccent)}" type="button" aria-label="${preset.label}" title="${preset.label}">
+    <button class="accent-swatch" data-accent-option="${preset.value}" data-active="${String(preset.value === currentAccent)}" type="button" aria-label="${label}" title="${label}">
       <span class="accent-swatch__band" style="background:linear-gradient(135deg, ${mixHex(preset.value, '#FFFFFF', 0.18)}, ${preset.value})"></span>
-      <span class="accent-swatch__label">${preset.label}</span>
+      <span class="accent-swatch__label">${label}</span>
     </button>
   `;
 }
