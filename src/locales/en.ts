@@ -37,6 +37,7 @@ export const en = {
   'settings.general.tab.general': 'General',
   'settings.general.tab.layout': 'Layout',
   'settings.general.tab.dock': 'Dock',
+  'settings.general.tab.clock': 'Clock',
 
   // ── Settings — General subpage ──────────────────────────────────────────────
   'settings.general.heading': 'General',
@@ -45,6 +46,20 @@ export const en = {
   'settings.general.default-library-root': 'Default library root',
   'settings.general.remember-folder': 'Reopen the last visited folder when possible',
   'settings.general.open-in-new-tab': 'Open links in a new tab instead of replacing the new tab page',
+  'settings.general.search-scope-folder': 'Limit search to current folder',
+
+  // ── Settings — Clock subpage ────────────────────────────────────────────────
+  'settings.clock.heading': 'Clock',
+  'settings.clock.hint': 'Add a clock overlay to any corner of the workspace.',
+  'settings.clock.show-label': 'Show clock overlay',
+  'settings.clock.hour-format.label': 'Hour format',
+  'settings.clock.hour-format.24': '24h',
+  'settings.clock.hour-format.12': '12h',
+  'settings.clock.size.label': 'Size',
+  'settings.clock.size.small': 'Small',
+  'settings.clock.size.medium': 'Medium',
+  'settings.clock.size.large': 'Large',
+  'settings.clock.position.label': 'Position',
 
   // ── Settings — Theme section ────────────────────────────────────────────────
   'settings.theme.heading': 'Theme',
@@ -138,6 +153,16 @@ export const en = {
   'options.theme.light.description': 'Bright workspace',
   'options.theme.dark.label': 'Dark',
   'options.theme.dark.description': 'Low-glare workspace',
+
+  // ── Options — Clock styles ──────────────────────────────────────────────────
+  'options.clock.style.minimal.label': 'Minimal',
+  'options.clock.style.minimal.description': 'Time only, single line.',
+  'options.clock.style.compact.label': 'Compact',
+  'options.clock.style.compact.description': 'Time with short date, single line.',
+  'options.clock.style.standard.label': 'Standard',
+  'options.clock.style.standard.description': 'Time and date stacked.',
+  'options.clock.style.full.label': 'Full',
+  'options.clock.style.full.description': 'Time with seconds and full date.',
 
   // ── Options — Layout presets ────────────────────────────────────────────────
   'options.layout.balanced.label': 'Balanced',

@@ -1,4 +1,4 @@
-import type { AppSettings, BookmarkNode, BookmarkUsageRecord } from '../../shared/messages';
+import type { AppSettings, BookmarkNode, BookmarkSearchResult, BookmarkUsageRecord } from '../../shared/messages';
 import { collectFolderOptions, collectLinkOptions, collectVisibleBookmarks, getBreadcrumbs, getDefaultFolder, getDockFolder, getHostname, getLibraryFolders, type BookmarkActionTarget } from '../bookmarks/bookmark-navigation';
 import type { AppState } from './app-state';
 
@@ -7,7 +7,7 @@ export interface DerivedTreeState {
   currentFolder: BookmarkNode | null;
   allCurrentFolderChildren: BookmarkNode[];
   currentFolderChildren: BookmarkNode[];
-  searchResults: BookmarkNode[];
+  searchResults: BookmarkSearchResult[];
   dockFolder: BookmarkNode | null;
   dockItems: BookmarkNode[];
   libraryFolders: BookmarkNode[];
@@ -33,15 +33,15 @@ export function deriveTreeState(
   const dockFolder = getDockFolder(tree, settings);
   const visibleIconTargets = collectUniqueVisibleIconTargets(tree, settings, currentFolder?.id ?? defaultFolder?.id ?? '');
   const allCurrentFolderChildren = currentFolder?.children ?? [];
-  const searchResults = searchQuery.trim()
-    ? applySearchView(tree, settings, searchQuery, bookmarkUsage)
+  const searchResults: BookmarkSearchResult[] = searchQuery.trim()
+    ? applySearchView(tree, settings, searchQuery, bookmarkUsage, currentFolder)
     : [];
   const derived: DerivedTreeState = {
     defaultFolder,
     currentFolder,
     allCurrentFolderChildren,
     currentFolderChildren: searchQuery.trim()
-      ? searchResults
+      ? searchResults.map(r => r.node)
       : applyCurrentFolderView(allCurrentFolderChildren, settings, bookmarkUsage),
     searchResults,
     dockFolder,
@@ -73,38 +73,46 @@ function applySearchView(
   settings: AppSettings,
   searchQuery: string,
   bookmarkUsage: Record<string, BookmarkUsageRecord>,
-): BookmarkNode[] {
+  currentFolder: BookmarkNode | null,
+): BookmarkSearchResult[] {
   const query = searchQuery.trim().toLowerCase();
   if (!query) {
     return [];
   }
 
-  const results = collectSearchMatches(tree, query);
+  const results = settings.searchScope === 'library'
+    ? collectLibrarySearchMatches(tree, query)
+    : collectFolderSearchMatches(currentFolder?.children ?? [], query);
+
   if (settings.bookmarkSortMode === 'manual') {
     return results;
   }
 
-  return results.sort((left, right) => compareNodes(left, right, settings, bookmarkUsage));
+  return results.sort((a, b) => compareNodes(a.node, b.node, settings, bookmarkUsage));
 }
 
-function collectSearchMatches(tree: BookmarkNode[], query: string): BookmarkNode[] {
-  const queue = [...tree];
-  const results: BookmarkNode[] = [];
+function collectLibrarySearchMatches(tree: BookmarkNode[], query: string): BookmarkSearchResult[] {
+  const results: BookmarkSearchResult[] = [];
 
-  while (queue.length) {
-    const node = queue.shift();
-    if (!node) {
-      continue;
+  function walk(nodes: BookmarkNode[], path: BookmarkNode[]): void {
+    for (const node of nodes) {
+      if (matchesSearchQuery(node, query)) {
+        results.push({ node, folderPath: path });
+      }
+      if (node.children?.length) {
+        walk(node.children, node.url ? path : [...path, node]);
+      }
     }
-
-    if (matchesSearchQuery(node, query)) {
-      results.push(node);
-    }
-
-    queue.push(...(node.children ?? []));
   }
 
+  walk(tree, []);
   return results;
+}
+
+function collectFolderSearchMatches(children: BookmarkNode[], query: string): BookmarkSearchResult[] {
+  return children
+    .filter(node => matchesSearchQuery(node, query))
+    .map(node => ({ node, folderPath: [] }));
 }
 
 function matchesSearchQuery(node: BookmarkNode, query: string): boolean {

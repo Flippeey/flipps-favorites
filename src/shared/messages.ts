@@ -25,6 +25,11 @@ export type BackgroundPositionMode = 'center' | 'top' | 'bottom';
 export type BookmarkSortMode = 'manual' | 'name' | 'lastUsed' | 'created';
 export type SortDirection = 'asc' | 'desc';
 export type LayoutPresetId = 'balanced' | 'compact' | 'spacious' | 'presentation' | 'custom';
+export type SearchScope = 'folder' | 'library';
+export type ClockStyle = 'minimal' | 'standard' | 'full' | 'compact';
+export type ClockPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+export type ClockSize = 'small' | 'medium' | 'large';
+export type ClockHourFormat = '12' | '24';
 
 export interface AppSettings {
   themeMode: ThemeMode;
@@ -42,6 +47,7 @@ export interface AppSettings {
   dockFolderId: string;
   bookmarkSortMode: BookmarkSortMode;
   bookmarkSortDirection: SortDirection;
+  searchScope: SearchScope;
   favoritesColumns: number;
   favoritesRows: number;
   favoritesColumnGap: number;
@@ -51,6 +57,16 @@ export interface AppSettings {
   showBookmarkIconBackground: boolean;
   showAccentBackground: boolean;
   layoutPreset: LayoutPresetId;
+  showClock: boolean;
+  clockStyle: ClockStyle;
+  clockPosition: ClockPosition;
+  clockSize: ClockSize;
+  clockHourFormat: ClockHourFormat;
+}
+
+export interface BookmarkSearchResult {
+  node: BookmarkNode;
+  folderPath: BookmarkNode[];
 }
 
 export interface BookmarkNode {
