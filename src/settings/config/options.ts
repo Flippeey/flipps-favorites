@@ -1,4 +1,4 @@
-import type { AppSettings, LayoutPresetId, ThemeMode } from '../../shared/messages';
+import type { AppSettings, ClockStyle, LayoutPresetId, ThemeMode } from '../../shared/messages';
 import { t } from '../../shared/i18n';
 
 export const defaultAccentColor = '#3F72DC';
@@ -23,7 +23,41 @@ export const themeModeOptions: Array<{ id: Exclude<ThemeMode, 'system'>; label: 
   { id: 'dark', label: t('options.theme.dark.label'), description: t('options.theme.dark.description'), preview: 'dark' },
 ];
 
-export type GeneralSettingsSubpage = 'general' | 'layout' | 'dock';
+export type GeneralSettingsSubpage = 'general' | 'layout' | 'dock' | 'clock';
+
+export type ClockStyleOption = {
+  id: ClockStyle;
+  label: string;
+  description: string;
+  previewText: string;
+};
+
+export const clockStyleOptions: ClockStyleOption[] = [
+  {
+    id: 'minimal',
+    label: t('options.clock.style.minimal.label'),
+    description: t('options.clock.style.minimal.description'),
+    previewText: '14:32',
+  },
+  {
+    id: 'compact',
+    label: t('options.clock.style.compact.label'),
+    description: t('options.clock.style.compact.description'),
+    previewText: '14:32 · Sat',
+  },
+  {
+    id: 'standard',
+    label: t('options.clock.style.standard.label'),
+    description: t('options.clock.style.standard.description'),
+    previewText: '14:32\nSat 5 Apr',
+  },
+  {
+    id: 'full',
+    label: t('options.clock.style.full.label'),
+    description: t('options.clock.style.full.description'),
+    previewText: '14:32:08\nSaturday, 5 April 2026',
+  },
+];
 
 export const layoutPresetOptions: Array<{
   id: Exclude<LayoutPresetId, 'custom'>;

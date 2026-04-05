@@ -3,6 +3,7 @@ import { escapeAttribute, escapeHtml } from '../../shared/html-escape';
 import { renderUiIcon, type UiIconName } from '../../shared/ui-icons';
 import {
   accentPresets,
+  clockStyleOptions,
   defaultAccentColor,
   getShortcutGroups,
   layoutPresetOptions,
@@ -35,6 +36,7 @@ export function renderDrawerSection(section: SettingsSectionId, settings: AppSet
           ${renderGeneralSubpageButton('general', generalSubpage, t('settings.general.tab.general'))}
           ${renderGeneralSubpageButton('layout', generalSubpage, t('settings.general.tab.layout'))}
           ${renderGeneralSubpageButton('dock', generalSubpage, t('settings.general.tab.dock'))}
+          ${renderGeneralSubpageButton('clock', generalSubpage, t('settings.general.tab.clock'))}
         </div>
         ${renderGeneralSubpageSection(settings, folderOptions, generalSubpage)}
       </div>
@@ -183,7 +185,7 @@ export function resolveAppliedThemeMode(themeMode: ThemeMode): Exclude<ThemeMode
 }
 
 export function normalizeGeneralSubpage(value: string | undefined): GeneralSettingsSubpage {
-  if (value === 'layout' || value === 'dock' || value === 'general') {
+  if (value === 'layout' || value === 'dock' || value === 'general' || value === 'clock') {
     return value;
   }
   return 'general';
@@ -302,6 +304,10 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
     `;
   }
 
+  if (subpage === 'clock') {
+    return renderClockSubpage(settings);
+  }
+
   if (subpage === 'dock') {
     const dockVisibilityMode = settings.showDock && settings.autoHideDock ? 'hover' : 'always';
     const selectedDockFolderId = resolveDockFolderSelection(folderOptions, settings.dockFolderId);
@@ -350,6 +356,62 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
         <input name="openLinksInNewTab" type="checkbox" ${settings.openLinksInNewTab ? 'checked' : ''} />
         <span>${t('settings.general.open-in-new-tab')}</span>
       </label>
+      <label class="toggle-field toggle-field--card">
+        <input name="searchScope" type="checkbox" ${settings.searchScope === 'folder' ? 'checked' : ''} />
+        <span>${t('settings.general.search-scope-folder')}</span>
+      </label>
+    </div>
+  `;
+}
+
+function renderClockSubpage(settings: AppSettings): string {
+  return `
+    <div class="visual-section">
+      <div class="visual-section__header">
+        <h3>${t('settings.clock.heading')}</h3>
+        <p class="field-hint">${t('settings.clock.hint')}</p>
+      </div>
+      <label class="toggle-field toggle-field--card">
+        <input name="showClock" type="checkbox" ${settings.showClock ? 'checked' : ''} />
+        <span>${t('settings.clock.show-label')}</span>
+      </label>
+      ${settings.showClock ? `
+        <div class="clock-style-grid" role="group" aria-label="Clock style">
+          ${clockStyleOptions.map(option => `
+            <button class="clock-style-card" data-clock-style-option="${option.id}" data-active="${String(settings.clockStyle === option.id)}" type="button">
+              <span class="clock-style-card__preview">${escapeHtml(option.previewText)}</span>
+              <span class="clock-style-card__copy">
+                <strong>${escapeHtml(option.label)}</strong>
+                <span>${escapeHtml(option.description)}</span>
+              </span>
+            </button>
+          `).join('')}
+        </div>
+        <div class="field field--card">
+          <span>${t('settings.clock.hour-format.label')}</span>
+          <div class="settings-subnav" role="group">
+            <button class="settings-subnav__button" data-clock-hour-format="24" data-active="${String(settings.clockHourFormat === '24')}" type="button">${t('settings.clock.hour-format.24')}</button>
+            <button class="settings-subnav__button" data-clock-hour-format="12" data-active="${String(settings.clockHourFormat === '12')}" type="button">${t('settings.clock.hour-format.12')}</button>
+          </div>
+        </div>
+        <div class="field field--card">
+          <span>${t('settings.clock.size.label')}</span>
+          <div class="settings-subnav" role="group">
+            <button class="settings-subnav__button" data-clock-size-option="small" data-active="${String(settings.clockSize === 'small')}" type="button">${t('settings.clock.size.small')}</button>
+            <button class="settings-subnav__button" data-clock-size-option="medium" data-active="${String(settings.clockSize === 'medium')}" type="button">${t('settings.clock.size.medium')}</button>
+            <button class="settings-subnav__button" data-clock-size-option="large" data-active="${String(settings.clockSize === 'large')}" type="button">${t('settings.clock.size.large')}</button>
+          </div>
+        </div>
+        <div class="field field--card">
+          <span>${t('settings.clock.position.label')}</span>
+          <div class="clock-position-picker" role="group" aria-label="Clock position">
+            <button class="clock-position-option" data-clock-position="top-left" data-active="${String(settings.clockPosition === 'top-left')}" type="button">↖</button>
+            <button class="clock-position-option" data-clock-position="top-right" data-active="${String(settings.clockPosition === 'top-right')}" type="button">↗</button>
+            <button class="clock-position-option" data-clock-position="bottom-left" data-active="${String(settings.clockPosition === 'bottom-left')}" type="button">↙</button>
+            <button class="clock-position-option" data-clock-position="bottom-right" data-active="${String(settings.clockPosition === 'bottom-right')}" type="button">↘</button>
+          </div>
+        </div>
+      ` : ''}
     </div>
   `;
 }

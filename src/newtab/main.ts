@@ -1,6 +1,6 @@
 ﻿import './styles/index.css';
 import { sendRuntimeMessage } from '../shared/browser';
-import { messageTypes, type AppSettings, type BookmarkNode, type CreateBookmarkResponse, type GetBookmarkTreeResponse, type GetSettingsResponse, type InvalidateIconResponse, type MoveBookmarkResponse, type OpenBookmarkManagerResponse, type PatchSettingsResponse, type PingResponse, type RemoveBookmarkResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SettingsSectionId, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../shared/messages';
+import { messageTypes, type AppSettings, type BookmarkNode, type BookmarkSearchResult, type ClockHourFormat, type ClockPosition, type ClockSize, type ClockStyle, type CreateBookmarkResponse, type GetBookmarkTreeResponse, type GetSettingsResponse, type InvalidateIconResponse, type MoveBookmarkResponse, type OpenBookmarkManagerResponse, type PatchSettingsResponse, type PingResponse, type RemoveBookmarkResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SettingsSectionId, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../shared/messages';
 import { defaultSettings, deleteIconOverrideRecord, markOnboardingCompleted, markOnboardingSkipped, readBookmarkUsageRecords, readIconOverrideRecords, readOnboardingState, writeIconOverrideRecord } from '../shared/storage';
 import { createClosedBookmarkDialogState, createInitialAppState, pushUndoEntry, type AppState, type AppStatus, type BookmarkClipboardState, type DeleteHistoryEntry, type FolderActionTarget, type SelectionContextMenuTarget, type SelectionScope, type SurfaceContextMenuTarget, type UndoHistoryEntry } from './state/app-state';
 import { syncDerivedTree } from './state/derived-tree';
@@ -35,6 +35,7 @@ if (!root) {
 let settingsFeedbackTimer: number | null = null;
 let statusMessageTimer: number | null = null;
 let searchDebounceTimer: number | null = null;
+let clockTickInterval: number | null = null;
 
 const SEARCH_DEBOUNCE_MS = 180;
 const WORKSPACE_EXPORT_SCHEMA_VERSION = 1;
@@ -74,6 +75,13 @@ async function bootstrap(rootElement: HTMLDivElement): Promise<void> {
   syncFolderHash(state.currentFolderId, 'replace');
   persistLastFolder(state.settings, state.currentFolderId);
   renderApp(rootElement, state);
+
+  if (clockTickInterval !== null) {
+    window.clearInterval(clockTickInterval);
+  }
+  clockTickInterval = window.setInterval(() => {
+    updateClockDisplay(state.settings);
+  }, 1000);
 
   window.addEventListener('keydown', event => {
     if (event.defaultPrevented || event.isComposing) {
@@ -498,6 +506,42 @@ async function handleDelegatedClick(rootElement: HTMLDivElement, state: AppState
     return;
   }
 
+  const clockStyleButton = target.closest<HTMLButtonElement>('[data-clock-style-option]');
+  if (clockStyleButton) {
+    const style = clockStyleButton.dataset.clockStyleOption as ClockStyle | undefined;
+    if (style === 'minimal' || style === 'standard' || style === 'full' || style === 'compact') {
+      await applySettingsPatch(rootElement, state, { clockStyle: style });
+    }
+    return;
+  }
+
+  const clockHourFormatButton = target.closest<HTMLButtonElement>('[data-clock-hour-format]');
+  if (clockHourFormatButton) {
+    const format = clockHourFormatButton.dataset.clockHourFormat as ClockHourFormat | undefined;
+    if (format === '12' || format === '24') {
+      await applySettingsPatch(rootElement, state, { clockHourFormat: format });
+    }
+    return;
+  }
+
+  const clockSizeButton = target.closest<HTMLButtonElement>('[data-clock-size-option]');
+  if (clockSizeButton) {
+    const size = clockSizeButton.dataset.clockSizeOption as ClockSize | undefined;
+    if (size === 'small' || size === 'medium' || size === 'large') {
+      await applySettingsPatch(rootElement, state, { clockSize: size });
+    }
+    return;
+  }
+
+  const clockPositionButton = target.closest<HTMLButtonElement>('[data-clock-position]');
+  if (clockPositionButton) {
+    const position = clockPositionButton.dataset.clockPosition as ClockPosition | undefined;
+    if (position === 'top-left' || position === 'top-right' || position === 'bottom-left' || position === 'bottom-right') {
+      await applySettingsPatch(rootElement, state, { clockPosition: position });
+    }
+    return;
+  }
+
   const folderButton = target.closest<HTMLButtonElement>('[data-folder-id]');
   if (folderButton && !folderButton.dataset.gridItemId && !folderButton.dataset.dockItemId) {
     if (folderButton.dataset.suppressClick === 'true') {
@@ -818,9 +862,10 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
       <main class="workspace">
         <section class="bookmark-canvas" aria-label="${t('nav.grid.aria-label')}">
           <div class="bookmark-grid" data-limit-rows="${String(state.settings.favoritesRows > 0)}">
-            ${canvasItems.map((item, index) => renderBookmarkTile(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'grid', resolvedCurrentFolder.id), isClipboardCutItem(state, item.id))).join('') || renderGridEmptyState(state)}
+            ${(() => { const searchPathMap = buildSearchPathMap(state); return canvasItems.map((item, index) => renderBookmarkTile(item, state.resolvedIcons, index, isItemSelected(state, item.id, 'grid', resolvedCurrentFolder.id), isClipboardCutItem(state, item.id), searchPathMap)).join('') || renderGridEmptyState(state); })()}
           </div>
           <div class="selection-marquee" hidden aria-hidden="true"></div>
+          <div id="clock-overlay" class="clock-overlay" data-position="${escapeAttribute(state.settings.clockPosition)}" data-style="${escapeAttribute(state.settings.clockStyle)}" data-size="${escapeAttribute(state.settings.clockSize)}"${state.settings.showClock ? '' : ' hidden'}></div>
         </section>
         ${state.settings.showDock ? `
           <aside class="bookmark-dock" aria-label="${t('nav.dock.aria-label')}">
@@ -1389,9 +1434,20 @@ const bookmarkDialogTitleInput = rootElement.querySelector<HTMLInputElement>('in
     bookmarkDialogFileInput.value = '';
   });
 
+  const searchScopeInput = rootElement.querySelector<HTMLInputElement>('input[name="searchScope"]');
+  searchScopeInput?.addEventListener('change', async () => {
+    await applySettingsPatch(rootElement, state, { searchScope: searchScopeInput.checked ? 'folder' : 'library' });
+  });
+
+  const showClockInput = rootElement.querySelector<HTMLInputElement>('input[name="showClock"]');
+  showClockInput?.addEventListener('change', async () => {
+    await applySettingsPatch(rootElement, state, { showClock: showClockInput.checked });
+  });
+
   setupGridInteractions(rootElement, state, bookmarkCanvas, bookmarkGrid, resolvedCurrentFolder, renderApp);
   setupDockInteractions(rootElement, state, bookmarkDock, dockStrip, dockFolder, renderApp);
 
+  updateClockDisplay(state.settings);
   hydrateBookmarkIcons(rootElement, state);
 }
 
@@ -2030,7 +2086,58 @@ function renderDockEmptyState(): string {
   `;
 }
 
-function renderBookmarkTile(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>, index: number, selected: boolean, clipboardCut: boolean): string {
+function buildSearchPathMap(state: AppState): Map<string, BookmarkNode[]> | null {
+  if (!state.searchQuery.trim() || state.settings.searchScope !== 'library') {
+    return null;
+  }
+  return new Map(state.derivedTree.searchResults.map((r: BookmarkSearchResult) => [r.node.id, r.folderPath]));
+}
+
+function updateClockDisplay(settings: AppSettings): void {
+  const el = document.getElementById('clock-overlay');
+  if (!el || !settings.showClock) {
+    return;
+  }
+  el.innerHTML = formatClock(new Date(), settings);
+}
+
+function formatClock(now: Date, settings: AppSettings): string {
+  const hours24 = now.getHours();
+  const minutes = now.getMinutes();
+  const seconds = now.getSeconds();
+  const is12h = settings.clockHourFormat === '12';
+  const displayHours = is12h ? (hours24 % 12 || 12) : hours24;
+  const ampm = is12h ? (hours24 >= 12 ? ' PM' : ' AM') : '';
+  const hStr = String(displayHours).padStart(2, '0');
+  const mStr = String(minutes).padStart(2, '0');
+  const sStr = String(seconds).padStart(2, '0');
+  const timeStr = `${hStr}:${mStr}${ampm}`;
+  const timeStrWithSecs = `${hStr}:${mStr}:${sStr}${ampm}`;
+
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const fullDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const fullMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  const dayShort = days[now.getDay()];
+  const date = now.getDate();
+  const monthShort = months[now.getMonth()];
+
+  switch (settings.clockStyle) {
+    case 'minimal':
+      return `<span class="clock-time">${timeStr}</span>`;
+    case 'compact':
+      return `<span class="clock-time">${timeStr}</span><span class="clock-date-short">${dayShort}</span>`;
+    case 'standard':
+      return `<span class="clock-time">${timeStr}</span><span class="clock-date">${dayShort} ${String(date)} ${monthShort}</span>`;
+    case 'full':
+      return `<span class="clock-time">${timeStrWithSecs}</span><span class="clock-date-full">${fullDays[now.getDay()]}, ${String(date)} ${fullMonths[now.getMonth()]} ${String(now.getFullYear())}</span>`;
+    default:
+      return `<span class="clock-time">${timeStr}</span>`;
+  }
+}
+
+function renderBookmarkTile(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>, index: number, selected: boolean, clipboardCut: boolean, searchPathMap?: Map<string, BookmarkNode[]> | null): string {
   if (node.url) {
     const label = node.title || getHostname(node.url);
     const resolvedIcon = resolvedIcons[node.url];
@@ -2038,10 +2145,15 @@ function renderBookmarkTile(node: BookmarkNode, resolvedIcons: Record<string, Re
     const visualState = resolvedIcon && resolvedIcon.sourceKind !== 'generated'
       ? (resolvedIcon.isFallback ? 'fallback' : 'resolved')
       : 'favicon';
+    const folderPath = searchPathMap?.get(node.id);
+    const searchPathMarkup = folderPath && folderPath.length > 0
+      ? `<span class="tile-search-path">${escapeHtml(folderPath.slice(-2).map(n => n.title || t('node.untitled')).join(' › '))}</span>`
+      : '';
     return `
       <button class="bookmark-tile link-tile" data-link-url="${escapeAttribute(node.url)}" data-bookmark-id="${node.id}" data-bookmark-title="${escapeAttribute(label)}" data-parent-id="${escapeAttribute(node.parentId ?? '')}" data-grid-item-id="${node.id}" data-grid-item-index="${String(index)}" data-grid-item-kind="bookmark" data-selected="${String(selected)}" data-clipboard-cut="${String(clipboardCut)}" type="button">
         <div class="tile-icon tile-icon--link" data-bookmark-icon data-icon-url="${escapeAttribute(node.url)}" data-icon-title="${escapeAttribute(label)}" data-icon-placeholder="${escapeAttribute(getInitial(label))}" data-icon-state="${visualState}">${visualIconMarkup}</div>
         <span class="tile-label">${escapeHtml(label)}</span>
+        ${searchPathMarkup}
       </button>
     `;
   }

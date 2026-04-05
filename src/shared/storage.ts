@@ -1,5 +1,5 @@
 import { extensionApi } from './browser';
-import type { AppSettings, BookmarkUsageRecord, IconCacheRecord, IconOverrideRecord } from './messages';
+import type { AppSettings, BookmarkUsageRecord, ClockHourFormat, ClockPosition, ClockSize, ClockStyle, IconCacheRecord, IconOverrideRecord, SearchScope } from './messages';
 import { createCachedRecordStore, createCachedValueStore } from './storage-buckets';
 
 const storageKey = 'app-settings';
@@ -83,6 +83,7 @@ export const defaultSettings: AppSettings = {
   dockFolderId: '',
   bookmarkSortMode: 'manual',
   bookmarkSortDirection: 'asc',
+  searchScope: 'library',
   favoritesColumns: 10,
   favoritesRows: 0,
   favoritesColumnGap: 24,
@@ -92,6 +93,11 @@ export const defaultSettings: AppSettings = {
   showBookmarkIconBackground: false,
   showAccentBackground: true,
   layoutPreset: 'balanced',
+  showClock: false,
+  clockStyle: 'standard',
+  clockPosition: 'bottom-right',
+  clockSize: 'medium',
+  clockHourFormat: '24',
 };
 
 export async function readSettings(): Promise<AppSettings> {
@@ -140,6 +146,9 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     bookmarkSortDirection: settings.bookmarkSortDirection === 'asc' || settings.bookmarkSortDirection === 'desc'
       ? settings.bookmarkSortDirection
       : defaultSettings.bookmarkSortDirection,
+    searchScope: settings.searchScope === 'folder' || settings.searchScope === 'library'
+      ? settings.searchScope
+      : defaultSettings.searchScope,
     favoritesColumns: normalizeNumber(settings.favoritesColumns, defaultSettings.favoritesColumns, 3, 12),
     favoritesRows: normalizeNumber(settings.favoritesRows, defaultSettings.favoritesRows, 0, 8),
     favoritesColumnGap: normalizeNumber(settings.favoritesColumnGap, defaultSettings.favoritesColumnGap, 0, 48),
@@ -155,6 +164,19 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     layoutPreset: settings.layoutPreset === 'balanced' || settings.layoutPreset === 'compact' || settings.layoutPreset === 'spacious' || settings.layoutPreset === 'presentation' || settings.layoutPreset === 'custom'
       ? settings.layoutPreset
       : defaultSettings.layoutPreset,
+    showClock: typeof settings.showClock === 'boolean' ? settings.showClock : defaultSettings.showClock,
+    clockStyle: (['minimal', 'standard', 'full', 'compact'] as const).includes(settings.clockStyle as ClockStyle)
+      ? (settings.clockStyle as ClockStyle)
+      : defaultSettings.clockStyle,
+    clockPosition: (['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const).includes(settings.clockPosition as ClockPosition)
+      ? (settings.clockPosition as ClockPosition)
+      : defaultSettings.clockPosition,
+    clockSize: (['small', 'medium', 'large'] as const).includes(settings.clockSize as ClockSize)
+      ? (settings.clockSize as ClockSize)
+      : defaultSettings.clockSize,
+    clockHourFormat: settings.clockHourFormat === '12' || settings.clockHourFormat === '24'
+      ? settings.clockHourFormat
+      : defaultSettings.clockHourFormat,
   };
 }
 
