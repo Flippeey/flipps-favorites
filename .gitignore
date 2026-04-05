@@ -13,6 +13,9 @@ CLAUDE.md
 # Runtime / generated data
 .swarm/
 
+# Visual inspection screenshots (local reference only)
+screenshots/
+
 # Playwright
 tests/.firefox-profile/
 test-results/
