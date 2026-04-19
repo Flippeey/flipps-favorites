@@ -1,4 +1,4 @@
-import type { AppSettings, LayoutPresetId, SettingsSectionId, ThemeMode } from '../../shared/messages';
+import type { AppSettings, LayoutPresetId, SearchBarPosition, SettingsSectionId, ThemeMode } from '../../shared/messages';
 import { escapeAttribute, escapeHtml } from '../../shared/html-escape';
 import { renderUiIcon, type UiIconName } from '../../shared/ui-icons';
 import {
@@ -37,6 +37,7 @@ export function renderDrawerSection(section: SettingsSectionId, settings: AppSet
           ${renderGeneralSubpageButton('layout', generalSubpage, t('settings.general.tab.layout'))}
           ${renderGeneralSubpageButton('dock', generalSubpage, t('settings.general.tab.dock'))}
           ${renderGeneralSubpageButton('clock', generalSubpage, t('settings.general.tab.clock'))}
+          ${renderGeneralSubpageButton('search', generalSubpage, t('settings.general.tab.search'))}
         </div>
         ${renderGeneralSubpageSection(settings, folderOptions, generalSubpage)}
       </div>
@@ -185,7 +186,7 @@ export function resolveAppliedThemeMode(themeMode: ThemeMode): Exclude<ThemeMode
 }
 
 export function normalizeGeneralSubpage(value: string | undefined): GeneralSettingsSubpage {
-  if (value === 'layout' || value === 'dock' || value === 'general' || value === 'clock') {
+  if (value === 'layout' || value === 'dock' || value === 'general' || value === 'clock' || value === 'search') {
     return value;
   }
   return 'general';
@@ -308,6 +309,10 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
     return renderClockSubpage(settings);
   }
 
+  if (subpage === 'search') {
+    return renderSearchSubpage(settings);
+  }
+
   if (subpage === 'dock') {
     const dockVisibilityMode = settings.showDock && settings.autoHideDock ? 'hover' : 'always';
     const selectedDockFolderId = resolveDockFolderSelection(folderOptions, settings.dockFolderId);
@@ -356,10 +361,6 @@ function renderGeneralSubpageSection(settings: AppSettings, folderOptions: Array
         <input name="openLinksInNewTab" type="checkbox" ${settings.openLinksInNewTab ? 'checked' : ''} />
         <span>${t('settings.general.open-in-new-tab')}</span>
       </label>
-      <label class="toggle-field toggle-field--card">
-        <input name="searchScope" type="checkbox" ${settings.searchScope === 'folder' ? 'checked' : ''} />
-        <span>${t('settings.general.search-scope-folder')}</span>
-      </label>
     </div>
   `;
 }
@@ -400,19 +401,62 @@ function renderClockSubpage(settings: AppSettings): string {
             <button class="settings-subnav__button" data-clock-size-option="small" data-active="${String(settings.clockSize === 'small')}" type="button">${t('settings.clock.size.small')}</button>
             <button class="settings-subnav__button" data-clock-size-option="medium" data-active="${String(settings.clockSize === 'medium')}" type="button">${t('settings.clock.size.medium')}</button>
             <button class="settings-subnav__button" data-clock-size-option="large" data-active="${String(settings.clockSize === 'large')}" type="button">${t('settings.clock.size.large')}</button>
+            <button class="settings-subnav__button" data-clock-size-option="x-large" data-active="${String(settings.clockSize === 'x-large')}" type="button">${t('settings.clock.size.x-large')}</button>
           </div>
         </div>
         <div class="field field--card">
           <span>${t('settings.clock.position.label')}</span>
           <div class="clock-position-picker" role="group" aria-label="Clock position">
-            <button class="clock-position-option" data-clock-position="top-left" data-active="${String(settings.clockPosition === 'top-left')}" type="button">↖</button>
-            <button class="clock-position-option" data-clock-position="top-right" data-active="${String(settings.clockPosition === 'top-right')}" type="button">↗</button>
-            <button class="clock-position-option" data-clock-position="bottom-left" data-active="${String(settings.clockPosition === 'bottom-left')}" type="button">↙</button>
-            <button class="clock-position-option" data-clock-position="bottom-right" data-active="${String(settings.clockPosition === 'bottom-right')}" type="button">↘</button>
+            <button class="clock-position-option" data-clock-position="top-left" data-active="${String(settings.clockPosition === 'top-left')}" type="button"><span class="clock-pos-preview"><span class="clock-pos-preview__dot"></span></span><span class="clock-pos-copy">Top left</span></button>
+            <button class="clock-position-option" data-clock-position="top-center" data-active="${String(settings.clockPosition === 'top-center')}" type="button"><span class="clock-pos-preview"><span class="clock-pos-preview__dot"></span></span><span class="clock-pos-copy">Top center</span></button>
+            <button class="clock-position-option" data-clock-position="top-right" data-active="${String(settings.clockPosition === 'top-right')}" type="button"><span class="clock-pos-preview"><span class="clock-pos-preview__dot"></span></span><span class="clock-pos-copy">Top right</span></button>
+            <button class="clock-position-option" data-clock-position="bottom-left" data-active="${String(settings.clockPosition === 'bottom-left')}" type="button"><span class="clock-pos-preview"><span class="clock-pos-preview__dot"></span></span><span class="clock-pos-copy">Bottom left</span></button>
+            <button class="clock-position-option" data-clock-position="bottom-center" data-active="${String(settings.clockPosition === 'bottom-center')}" type="button"><span class="clock-pos-preview"><span class="clock-pos-preview__dot"></span></span><span class="clock-pos-copy">Bottom center</span></button>
+            <button class="clock-position-option" data-clock-position="bottom-right" data-active="${String(settings.clockPosition === 'bottom-right')}" type="button"><span class="clock-pos-preview"><span class="clock-pos-preview__dot"></span></span><span class="clock-pos-copy">Bottom right</span></button>
           </div>
         </div>
       ` : ''}
     </div>
+  `;
+}
+
+function renderSearchSubpage(settings: AppSettings): string {
+  return `
+    <div class="visual-section">
+      <div class="visual-section__header">
+        <h3>${t('settings.search.heading')}</h3>
+        <p class="field-hint">${t('settings.search.hint')}</p>
+      </div>
+      <label class="toggle-field toggle-field--card">
+        <input name="showSearchBar" type="checkbox" ${settings.showSearchBar ? 'checked' : ''} />
+        <span>${t('settings.search.show-label')}</span>
+      </label>
+      ${settings.showSearchBar ? `
+        <div class="field field--card">
+          <span>${t('settings.search.position.label')}</span>
+          <div class="search-position-picker" role="group" aria-label="Search bar position">
+            ${renderSearchPositionOption('left', settings.searchBarPosition, 'Left')}
+            ${renderSearchPositionOption('center', settings.searchBarPosition, 'Center')}
+            ${renderSearchPositionOption('right', settings.searchBarPosition, 'Right')}
+          </div>
+        </div>
+        <label class="toggle-field toggle-field--card">
+          <input name="searchScope" type="checkbox" ${settings.searchScope === 'folder' ? 'checked' : ''} />
+          <span>${t('settings.search.scope-folder')}</span>
+        </label>
+      ` : ''}
+    </div>
+  `;
+}
+
+function renderSearchPositionOption(position: SearchBarPosition, current: SearchBarPosition, label: string): string {
+  return `
+    <button class="search-position-option" data-search-bar-position="${position}" data-active="${String(position === current)}" type="button">
+      <span class="search-pos-preview">
+        <span class="search-pos-preview__bar search-pos-preview__bar--${position}"></span>
+      </span>
+      <span class="clock-pos-copy">${label}</span>
+    </button>
   `;
 }
 
@@ -555,7 +599,7 @@ export function renderSettingsSlider(name: string, label: string, value: number,
   `;
 }
 
-export function renderThemeModeCard(option: { id: Exclude<ThemeMode, 'system'>; label: string; description: string; preview: 'light' | 'dark' }, currentMode: ThemeMode): string {
+export function renderThemeModeCard(option: { id: Exclude<ThemeMode, 'system'>; label: string; preview: 'light' | 'dark' }, currentMode: ThemeMode): string {
   const activeMode = resolveAppliedThemeMode(currentMode);
   return `
     <button class="theme-mode-card" data-theme-mode-option="${option.id}" data-active="${String(activeMode === option.id)}" type="button">
@@ -566,7 +610,6 @@ export function renderThemeModeCard(option: { id: Exclude<ThemeMode, 'system'>; 
       </span>
       <span class="theme-mode-card__copy">
         <strong>${option.label}</strong>
-        <span>${option.description}</span>
       </span>
     </button>
   `;

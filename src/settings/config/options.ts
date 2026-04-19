@@ -18,12 +18,12 @@ export const accentPresets = [
   { id: 'graphite', label: 'Graphite', value: '#4B5360' },
 ] as const;
 
-export const themeModeOptions: Array<{ id: Exclude<ThemeMode, 'system'>; label: string; description: string; preview: 'light' | 'dark' }> = [
-  { id: 'light', label: t('options.theme.light.label'), description: t('options.theme.light.description'), preview: 'light' },
-  { id: 'dark', label: t('options.theme.dark.label'), description: t('options.theme.dark.description'), preview: 'dark' },
+export const themeModeOptions: Array<{ id: Exclude<ThemeMode, 'system'>; label: string; preview: 'light' | 'dark' }> = [
+  { id: 'light', label: t('options.theme.light.label'), preview: 'light' },
+  { id: 'dark', label: t('options.theme.dark.label'), preview: 'dark' },
 ];
 
-export type GeneralSettingsSubpage = 'general' | 'layout' | 'dock' | 'clock';
+export type GeneralSettingsSubpage = 'general' | 'layout' | 'dock' | 'clock' | 'search';
 
 export type ClockStyleOption = {
   id: ClockStyle;

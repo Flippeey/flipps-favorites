@@ -38,6 +38,7 @@ export const en = {
   'settings.general.tab.layout': 'Layout',
   'settings.general.tab.dock': 'Dock',
   'settings.general.tab.clock': 'Clock',
+  'settings.general.tab.search': 'Search',
 
   // ── Settings — General subpage ──────────────────────────────────────────────
   'settings.general.heading': 'General',
@@ -59,7 +60,15 @@ export const en = {
   'settings.clock.size.small': 'Small',
   'settings.clock.size.medium': 'Medium',
   'settings.clock.size.large': 'Large',
+  'settings.clock.size.x-large': 'X-Large',
   'settings.clock.position.label': 'Position',
+
+  // ── Settings — Search subpage ───────────────────────────────────────────────
+  'settings.search.heading': 'Search',
+  'settings.search.hint': 'Configure the search bar position and behavior.',
+  'settings.search.show-label': 'Show search bar',
+  'settings.search.position.label': 'Position',
+  'settings.search.scope-folder': 'Limit search to current folder',
 
   // ── Settings — Theme section ────────────────────────────────────────────────
   'settings.theme.heading': 'Theme',
@@ -139,7 +148,7 @@ export const en = {
   // ── Settings — Help section ─────────────────────────────────────────────────
   'settings.help.about.heading': 'About',
   'settings.help.about.hint': 'A personal bookmark workspace shaped around everyday use, with enough flexibility for other people to make it their own.',
-  'settings.help.about.body1': "Flipp's Favorites is a project by Flippeey, originally built to make personal bookmark navigation feel faster, calmer, and more visual than the default browser experience. Over time it grew into a polished new-tab workspace that is still driven by those personal needs, but is shared so other people can enjoy it too.",
+  'settings.help.about.body1': "Flipp's Favorites was originally built to make personal bookmark navigation feel faster, calmer, and more visual than the default browser experience. Over time it grew into a polished new-tab workspace that enhances productivity for everyone.",
   'settings.help.about.body2': 'The extension was developed with partial AI assistance during implementation and iteration. That support helped speed up experimentation and reduce repetitive work, while the product direction, feature decisions, and overall UX were still shaped intentionally by hand.',
   'settings.help.features.workspace.label': 'Workspace',
   'settings.help.features.workspace.description': 'Use the new tab page as a bookmark workspace: browse through folders, search across the full library, reorganize items, edit entries in place, and keep a dock of frequently used folders visible at the bottom.',
@@ -148,11 +157,9 @@ export const en = {
   'settings.help.shortcuts.heading': 'Shortcuts',
   'settings.help.shortcuts.hint': 'These shortcuts work on the main new-tab surface when a text field or settings control is not focused.',
 
-  // ── Options — Theme modes ───────────────────────────────────────────────────
-  'options.theme.light.label': 'Light',
-  'options.theme.light.description': 'Bright workspace',
+  // ── Options — Theme modes ──────────────────────────────ö─────────────────────
+  'options.theme.light.label': 'Light',  
   'options.theme.dark.label': 'Dark',
-  'options.theme.dark.description': 'Low-glare workspace',
 
   // ── Options — Clock styles ──────────────────────────────────────────────────
   'options.clock.style.minimal.label': 'Minimal',

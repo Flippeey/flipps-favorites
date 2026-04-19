@@ -1,6 +1,6 @@
 ﻿import './styles/index.css';
 import { sendRuntimeMessage } from '../shared/browser';
-import { messageTypes, type AppSettings, type BookmarkNode, type BookmarkSearchResult, type ClockHourFormat, type ClockPosition, type ClockSize, type ClockStyle, type CreateBookmarkResponse, type GetBookmarkTreeResponse, type GetSettingsResponse, type InvalidateIconResponse, type MoveBookmarkResponse, type OpenBookmarkManagerResponse, type PatchSettingsResponse, type PingResponse, type RemoveBookmarkResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SettingsSectionId, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../shared/messages';
+import { messageTypes, type AppSettings, type BookmarkNode, type BookmarkSearchResult, type ClockHourFormat, type ClockPosition, type ClockSize, type ClockStyle, type CreateBookmarkResponse, type GetBookmarkTreeResponse, type GetSettingsResponse, type InvalidateIconResponse, type MoveBookmarkResponse, type OpenBookmarkManagerResponse, type PatchSettingsResponse, type PingResponse, type RemoveBookmarkResponse, type RemoveIconOverrideResponse, type ResolvedIcon, type SearchBarPosition, type SettingsSectionId, type SetIconOverrideResponse, type UpdateBookmarkResponse } from '../shared/messages';
 import { defaultSettings, deleteIconOverrideRecord, markOnboardingCompleted, markOnboardingSkipped, readBookmarkUsageRecords, readIconOverrideRecords, readOnboardingState, writeIconOverrideRecord } from '../shared/storage';
 import { createClosedBookmarkDialogState, createInitialAppState, pushUndoEntry, type AppState, type AppStatus, type BookmarkClipboardState, type DeleteHistoryEntry, type FolderActionTarget, type SelectionContextMenuTarget, type SelectionScope, type SurfaceContextMenuTarget, type UndoHistoryEntry } from './state/app-state';
 import { syncDerivedTree } from './state/derived-tree';
@@ -230,6 +230,7 @@ function restoreDrawerUiState(rootElement: HTMLDivElement, snapshot: { scrollTop
 }
 
 function applySettingsResponse(state: AppState, settings: AppSettings): void {
+  const previousRootFolderId = state.settings.rootFolderId;
   state.settings = settings;
   syncDerivedTree(state);
   state.iconToolTargetUrl = state.derivedTree.linkOptions.some(option => option.url === state.iconToolTargetUrl)
@@ -246,7 +247,7 @@ function applySettingsResponse(state: AppState, settings: AppSettings): void {
     persistLastFolder(state.settings, state.currentFolderId);
   }
 
-  if (settings.rootFolderId && !isFolderDescendantOf(state.tree, state.currentFolderId, settings.rootFolderId)) {
+  if (settings.rootFolderId && settings.rootFolderId !== previousRootFolderId && !isFolderDescendantOf(state.tree, state.currentFolderId, settings.rootFolderId)) {
     navigateToFolder(state, settings.rootFolderId, 'replace');
   }
 }
@@ -527,7 +528,7 @@ async function handleDelegatedClick(rootElement: HTMLDivElement, state: AppState
   const clockSizeButton = target.closest<HTMLButtonElement>('[data-clock-size-option]');
   if (clockSizeButton) {
     const size = clockSizeButton.dataset.clockSizeOption as ClockSize | undefined;
-    if (size === 'small' || size === 'medium' || size === 'large') {
+    if (size === 'small' || size === 'medium' || size === 'large' || size === 'x-large') {
       await applySettingsPatch(rootElement, state, { clockSize: size });
     }
     return;
@@ -536,8 +537,17 @@ async function handleDelegatedClick(rootElement: HTMLDivElement, state: AppState
   const clockPositionButton = target.closest<HTMLButtonElement>('[data-clock-position]');
   if (clockPositionButton) {
     const position = clockPositionButton.dataset.clockPosition as ClockPosition | undefined;
-    if (position === 'top-left' || position === 'top-right' || position === 'bottom-left' || position === 'bottom-right') {
+    if (position === 'top-left' || position === 'top-center' || position === 'top-right' || position === 'bottom-left' || position === 'bottom-center' || position === 'bottom-right') {
       await applySettingsPatch(rootElement, state, { clockPosition: position });
+    }
+    return;
+  }
+
+  const searchBarPositionButton = target.closest<HTMLButtonElement>('[data-search-bar-position]');
+  if (searchBarPositionButton) {
+    const position = searchBarPositionButton.dataset.searchBarPosition as SearchBarPosition | undefined;
+    if (position === 'left' || position === 'center' || position === 'right') {
+      await applySettingsPatch(rootElement, state, { searchBarPosition: position });
     }
     return;
   }
@@ -850,7 +860,7 @@ function renderApp(rootElement: HTMLDivElement, state: AppState): void {
           <button class="drawer-toggle nav-icon library-home button-with-icon" type="button" aria-label="${t('nav.settings-button.aria-label')}">${renderUiIcon('settings')}<span>${t('nav.settings-button')}</span></button>
         </div>
       </nav>
-      <div class="search-band">
+      <div class="search-band" data-position="${escapeAttribute(state.settings.searchBarPosition)}"${state.settings.showSearchBar ? '' : ' hidden'}>
         <label class="surface-search surface-search--hero" aria-label="${t('nav.search.aria-label')}">
           <span class="surface-search__icon">${renderUiIcon('search')}</span>
           <input name="currentFolderSearch" type="search" value="${escapeAttribute(state.searchDraft)}" placeholder="${t('nav.search.placeholder')}" aria-label="${t('nav.search.aria-label')}" />
@@ -1442,6 +1452,11 @@ const bookmarkDialogTitleInput = rootElement.querySelector<HTMLInputElement>('in
   const showClockInput = rootElement.querySelector<HTMLInputElement>('input[name="showClock"]');
   showClockInput?.addEventListener('change', async () => {
     await applySettingsPatch(rootElement, state, { showClock: showClockInput.checked });
+  });
+
+  const showSearchBarInput = rootElement.querySelector<HTMLInputElement>('input[name="showSearchBar"]');
+  showSearchBarInput?.addEventListener('change', async () => {
+    await applySettingsPatch(rootElement, state, { showSearchBar: showSearchBarInput.checked });
   });
 
   setupGridInteractions(rootElement, state, bookmarkCanvas, bookmarkGrid, resolvedCurrentFolder, renderApp);

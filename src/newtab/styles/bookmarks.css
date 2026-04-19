@@ -143,6 +143,18 @@
   pointer-events: none;
 }
 
+.search-band[hidden] {
+  display: none;
+}
+
+.search-band[data-position="left"] {
+  justify-content: flex-start;
+}
+
+.search-band[data-position="right"] {
+  justify-content: flex-end;
+}
+
 .surface-search--hero {
   display: flex;
   align-items: center;

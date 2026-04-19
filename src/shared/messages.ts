@@ -27,8 +27,9 @@ export type SortDirection = 'asc' | 'desc';
 export type LayoutPresetId = 'balanced' | 'compact' | 'spacious' | 'presentation' | 'custom';
 export type SearchScope = 'folder' | 'library';
 export type ClockStyle = 'minimal' | 'standard' | 'full' | 'compact';
-export type ClockPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
-export type ClockSize = 'small' | 'medium' | 'large';
+export type ClockPosition = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
+export type ClockSize = 'small' | 'medium' | 'large' | 'x-large';
+export type SearchBarPosition = 'left' | 'center' | 'right';
 export type ClockHourFormat = '12' | '24';
 
 export interface AppSettings {
@@ -62,6 +63,8 @@ export interface AppSettings {
   clockPosition: ClockPosition;
   clockSize: ClockSize;
   clockHourFormat: ClockHourFormat;
+  showSearchBar: boolean;
+  searchBarPosition: SearchBarPosition;
 }
 
 export interface BookmarkSearchResult {

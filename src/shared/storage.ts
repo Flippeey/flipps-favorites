@@ -1,5 +1,5 @@
 import { extensionApi } from './browser';
-import type { AppSettings, BookmarkUsageRecord, ClockHourFormat, ClockPosition, ClockSize, ClockStyle, IconCacheRecord, IconOverrideRecord, SearchScope } from './messages';
+import type { AppSettings, BookmarkUsageRecord, ClockHourFormat, ClockPosition, ClockSize, ClockStyle, IconCacheRecord, IconOverrideRecord, SearchBarPosition, SearchScope } from './messages';
 import { createCachedRecordStore, createCachedValueStore } from './storage-buckets';
 
 const storageKey = 'app-settings';
@@ -98,6 +98,8 @@ export const defaultSettings: AppSettings = {
   clockPosition: 'bottom-right',
   clockSize: 'medium',
   clockHourFormat: '24',
+  showSearchBar: true,
+  searchBarPosition: 'center',
 };
 
 export async function readSettings(): Promise<AppSettings> {
@@ -168,15 +170,19 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     clockStyle: (['minimal', 'standard', 'full', 'compact'] as const).includes(settings.clockStyle as ClockStyle)
       ? (settings.clockStyle as ClockStyle)
       : defaultSettings.clockStyle,
-    clockPosition: (['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const).includes(settings.clockPosition as ClockPosition)
+    clockPosition: (['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'] as const).includes(settings.clockPosition as ClockPosition)
       ? (settings.clockPosition as ClockPosition)
       : defaultSettings.clockPosition,
-    clockSize: (['small', 'medium', 'large'] as const).includes(settings.clockSize as ClockSize)
+    clockSize: (['small', 'medium', 'large', 'x-large'] as const).includes(settings.clockSize as ClockSize)
       ? (settings.clockSize as ClockSize)
       : defaultSettings.clockSize,
     clockHourFormat: settings.clockHourFormat === '12' || settings.clockHourFormat === '24'
       ? settings.clockHourFormat
       : defaultSettings.clockHourFormat,
+    showSearchBar: typeof settings.showSearchBar === 'boolean' ? settings.showSearchBar : defaultSettings.showSearchBar,
+    searchBarPosition: settings.searchBarPosition === 'left' || settings.searchBarPosition === 'center' || settings.searchBarPosition === 'right'
+      ? (settings.searchBarPosition as SearchBarPosition)
+      : defaultSettings.searchBarPosition,
   };
 }
 
