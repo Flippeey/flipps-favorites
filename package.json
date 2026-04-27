@@ -13,7 +13,9 @@
     "test:firefox": "playwright test --project=firefox",
     "test:chrome": "playwright test --project=chrome",
     "test:ui": "playwright test --ui",
-    "test:build": "npm run build && npm test"
+    "test:build": "npm run build && npm test",
+    "screenshots": "node scripts/take-promo-screenshots.mjs",
+    "videos": "node scripts/record-promo-videos.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

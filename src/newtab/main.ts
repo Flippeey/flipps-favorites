@@ -2179,7 +2179,6 @@ function renderBookmarkTile(node: BookmarkNode, resolvedIcons: Record<string, Re
 function renderDockItem(node: BookmarkNode, resolvedIcons: Record<string, ResolvedIcon>, index: number, selected: boolean, clipboardCut: boolean): string {
   if (node.url) {
     const label = node.title || getHostname(node.url);
-    const meta = getHostname(node.url);
     const resolvedIcon = resolvedIcons[node.url];
     const visualIconMarkup = renderBookmarkVisualIcon(node.url, label, resolvedIcon, 'dock');
     const visualState = resolvedIcon && resolvedIcon.sourceKind !== 'generated'
@@ -2191,7 +2190,6 @@ function renderDockItem(node: BookmarkNode, resolvedIcons: Record<string, Resolv
           <span class="dock-item__icon dock-item__icon--link" data-bookmark-icon data-icon-url="${escapeAttribute(node.url)}" data-icon-title="${escapeAttribute(label)}" data-icon-placeholder="${escapeAttribute(getInitial(label))}" data-icon-state="${visualState}">${visualIconMarkup}</span>
         </span>
         <span class="dock-item__label">${escapeHtml(label)}</span>
-        <span class="dock-item__meta">${escapeHtml(meta)}</span>
       </button>
     `;
   }
