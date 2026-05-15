@@ -89,6 +89,6 @@ Pull requests are not being accepted at this time.
 
 ## 📄 License
 
-Copyright (c) 2026 Jason Leeraert. All rights reserved.
+Copyright (c) 2026 Flippey. All rights reserved.
 
 The source code is publicly visible for reference and transparency. No permission is granted to use, copy, modify, or distribute this software without explicit written consent from the author.
