@@ -10,62 +10,18 @@
 
 ## ✨ Features
 
-- 📁 **Bookmark dashboard** — navigate your bookmark folders directly in the new tab page
-- 🖼️ **Visual tiles** — see site icons at a glance; override any icon with a custom image or URL
-- 🔍 **Search** — filter bookmarks instantly from the hero search bar
-- 🎨 **Themes** — light and dark modes, accent color picker, and wallpaper support
-- 🖱️ **Drag & drop** — reorder and move bookmarks and folders
-- ☑️ **Multi-select** — select, cut, paste, and move multiple items at once
+- 📁 **New-tab bookmark dashboard** — replaces the browser's new-tab page with a visual grid of your bookmark folders; reads your existing bookmarks the moment you install, no import step needed
+- 🖼️ **Visual tiles with icon control** — automatic favicon detection for every site; override any icon with a custom image, URL, or pick one from the built-in icon search
+- 🔍 **Live fuzzy search** — filters across all bookmarks instantly from the hero search bar; understands your folder structure as you type
+- 🗂️ **Multiple workspaces** — create isolated workspaces for different contexts (work, research, side projects) and switch between them in one click
+- 🎨 **Flexible theming** — light, dark, and system-auto modes; 10 hand-crafted accent colors plus a custom color picker; wallpaper support
+- 🖱️ **Drag & drop layout control** — reorder bookmarks and folders, or drag to resize workspace sections; all changes apply live without a page reload
+- ✏️ **Inline editing** — rename, retag, and reorganize bookmarks without leaving the page or opening a dialog
+- ☑️ **Multi-select** — select, cut, copy, paste, and bulk-move multiple bookmarks or folders at once
 - ⚙️ **Settings drawer** — all appearance and behavior options in one place
-- 🧙 **Onboarding wizard** — guided first-time setup to get your workspace ready in under a minute
-- 💾 **Import / export** — back up and restore your settings and icon overrides across devices
-- 🔒 **Privacy-first** — requests only the permissions it actually needs
-
----
-
-## 🛠️ Development
-
-**Requirements:** Node.js 18+
-
-```bash
-npm install
-```
-
-| Command | What it does |
-|---------|-------------|
-| `npm run dev` | Vite dev server |
-| `npm run build` | Build for Chrome and Firefox |
-| `npm run build:chrome` | Chrome only → `dist/chrome/` |
-| `npm run build:firefox` | Firefox only → `dist/firefox/` |
-| `npm run typecheck` | Type-check without emitting |
-| `npm test` | Run Playwright E2E tests |
-
-### Load in browser
-
-After running `npm run build`:
-
-- **Chrome** — go to `chrome://extensions`, enable Developer mode, load unpacked from `dist/chrome/`
-- **Firefox** — go to `about:debugging`, load temporary add-on from `dist/firefox/manifest.json`
-
-> Store listings coming soon.
-
-### How it's built
-
-- **TypeScript** (strict, ES2022) — no framework, vanilla DOM
-- **Vite** — single source tree, dual output
-- **Manifest V3** — same spec for both Chrome and Firefox
-- **No runtime dependencies** — devDependencies only
-
-The manifest is generated post-build by `scripts/write-manifest.mjs` and supports environment variable overrides:
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `EXTENSION_VERSION` | from `package.json` | Version string |
-| `FIREFOX_EXTENSION_ID` | `com.flipps-favorites@flippflix.com` | Firefox add-on ID |
-| `FIREFOX_UPDATE_URL` | _(none)_ | Self-hosted update manifest URL |
-| `INCLUDE_HTTP_HOSTS` | `0` | Set to `1` to add `http://*/*` host permission |
-
----
+- 🧙 **Onboarding wizard** — guided first-time setup; gets your workspace ready in under a minute
+- 💾 **Import / export** — back up and restore your full settings and icon overrides as a single JSON file; works across devices and browsers
+- 🔒 **Privacy-first** — everything stored locally in your browser; no cloud sync, no accounts, no tracking, no ads; requests only the permissions it actually needs
 
 
 ---
@@ -81,9 +37,7 @@ The manifest is generated post-build by `scripts/write-manifest.mjs` and support
 
 ## 🤝 Contributing
 
-Bug reports and feature requests are welcome — please [open an issue](https://github.com/Flippeey/flipps-favorites/issues).
-
-Pull requests are not being accepted at this time.
+Bug reports and feature requests are welcome — [open an issue](https://github.com/Flippeey/flipps-favorites/issues). Pull requests are not accepted.
 
 ---
 
