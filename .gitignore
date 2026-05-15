@@ -15,6 +15,7 @@ CLAUDE.md
 
 # Visual inspection screenshots (local reference only)
 screenshots/
+promo-videos/
 
 # Playwright
 tests/.firefox-profile/
