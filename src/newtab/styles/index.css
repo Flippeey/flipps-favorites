@@ -1,10 +1,2 @@
-@import './base.css';
-@import './shell.css';
-@import './navigation.css';
-@import './bookmarks.css';
-@import './dock.css';
-@import './dialogs.css';
-@import './settings.css';
-@import './theme-picker.css';
-@import './onboarding.css';
-@import './clock.css';
+@import url('./tokens.css');
+@import url('./styles.css');

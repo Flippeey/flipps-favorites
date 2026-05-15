@@ -31,6 +31,11 @@ export type ClockPosition = 'top-left' | 'top-center' | 'top-right' | 'bottom-le
 export type ClockSize = 'small' | 'medium' | 'large' | 'x-large';
 export type SearchBarPosition = 'left' | 'center' | 'right';
 export type ClockHourFormat = '12' | '24';
+export type FolderMode = 'tiles' | 'sections';
+export type FolderOpenMode = 'overlay' | 'page';
+export type TileShape = 'squircle' | 'rounded' | 'circle';
+export type BackgroundMode = 'solid' | 'gradient' | 'wallpaper';
+export type GradientStyle = 'top' | 'top-bottom' | 'aurora';
 
 export interface AppSettings {
   themeMode: ThemeMode;
@@ -65,6 +70,12 @@ export interface AppSettings {
   clockHourFormat: ClockHourFormat;
   showSearchBar: boolean;
   searchBarPosition: SearchBarPosition;
+  folderMode: FolderMode;
+  folderOpenMode: FolderOpenMode;
+  tileShape: TileShape;
+  showTileLabels: boolean;
+  backgroundMode: BackgroundMode;
+  gradientStyle: GradientStyle;
 }
 
 export interface BookmarkSearchResult {

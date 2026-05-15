@@ -100,6 +100,12 @@ export const defaultSettings: AppSettings = {
   clockHourFormat: '24',
   showSearchBar: true,
   searchBarPosition: 'center',
+  folderMode: 'tiles',
+  folderOpenMode: 'overlay',
+  tileShape: 'squircle',
+  showTileLabels: true,
+  backgroundMode: 'solid',
+  gradientStyle: 'top',
 };
 
 export async function readSettings(): Promise<AppSettings> {
@@ -183,6 +189,22 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     searchBarPosition: settings.searchBarPosition === 'left' || settings.searchBarPosition === 'center' || settings.searchBarPosition === 'right'
       ? (settings.searchBarPosition as SearchBarPosition)
       : defaultSettings.searchBarPosition,
+    folderMode: settings.folderMode === 'tiles' || settings.folderMode === 'sections'
+      ? settings.folderMode
+      : defaultSettings.folderMode,
+    folderOpenMode: settings.folderOpenMode === 'overlay' || settings.folderOpenMode === 'page'
+      ? settings.folderOpenMode
+      : defaultSettings.folderOpenMode,
+    tileShape: settings.tileShape === 'squircle' || settings.tileShape === 'rounded' || settings.tileShape === 'circle'
+      ? settings.tileShape
+      : defaultSettings.tileShape,
+    showTileLabels: typeof settings.showTileLabels === 'boolean' ? settings.showTileLabels : defaultSettings.showTileLabels,
+    backgroundMode: settings.backgroundMode === 'solid' || settings.backgroundMode === 'gradient' || settings.backgroundMode === 'wallpaper'
+      ? settings.backgroundMode
+      : defaultSettings.backgroundMode,
+    gradientStyle: settings.gradientStyle === 'top' || settings.gradientStyle === 'top-bottom' || settings.gradientStyle === 'aurora'
+      ? settings.gradientStyle
+      : defaultSettings.gradientStyle,
   };
 }
 
