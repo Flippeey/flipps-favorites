@@ -135,3 +135,10 @@
   }
 }
 
+@media (max-width: 480px) {
+  .bookmarks-navbar {
+    padding: 0 12px;
+    gap: 8px;
+  }
+}
+

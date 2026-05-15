@@ -72,6 +72,18 @@
   --clock-date-size: 1.2rem;
 }
 
+@media (max-width: 480px) {
+  .clock-overlay[data-size="large"] {
+    --clock-time-size: 2rem;
+    --clock-date-size: 0.8rem;
+  }
+
+  .clock-overlay[data-size="x-large"] {
+    --clock-time-size: 2.75rem;
+    --clock-date-size: 0.9rem;
+  }
+}
+
 .clock-time {
   font-size: var(--clock-time-size, 2rem);
   font-weight: 500;

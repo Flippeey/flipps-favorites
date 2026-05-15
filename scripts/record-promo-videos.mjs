@@ -39,19 +39,20 @@ const DOCK_BOOKMARKS = [
 ];
 
 const ROOT_BOOKMARKS = [
-  { title: 'Gmail',           url: 'https://mail.google.com' },
+  // Streaming trio at positions 0-2 so they form a contiguous group for the drag demo
+  { title: 'Netflix',         url: 'https://www.netflix.com' },
   { title: 'YouTube',         url: 'https://www.youtube.com' },
+  { title: 'Twitch',          url: 'https://www.twitch.tv' },
+  { title: 'Gmail',           url: 'https://mail.google.com' },
   { title: 'GitHub',          url: 'https://github.com' },
   { title: 'Notion',          url: 'https://www.notion.so' },
   { title: 'Spotify',         url: 'https://open.spotify.com' },
-  { title: 'Netflix',         url: 'https://www.netflix.com' },
   { title: 'Reddit',          url: 'https://www.reddit.com' },
   { title: 'Discord',         url: 'https://discord.com' },
   { title: 'Figma',           url: 'https://www.figma.com' },
   { title: 'Vercel',          url: 'https://vercel.com' },
   { title: 'Linear',          url: 'https://linear.app' },
   { title: 'Slack',           url: 'https://slack.com' },
-  { title: 'Twitch',          url: 'https://www.twitch.tv' },
   { title: 'Google Drive',    url: 'https://drive.google.com' },
   { title: 'Wikipedia',       url: 'https://www.wikipedia.org' },
   { title: 'Claude',          url: 'https://claude.ai' },
@@ -142,6 +143,83 @@ const FOLDERS = [
   },
 ];
 
+// Workspace demo data — two-level nested structure (Work + Personal, each with subfolders)
+const WORKSPACE_FOLDERS = [
+  {
+    title: '🏢 Work',
+    subfolders: [
+      {
+        title: '⚡ Acme Corp',
+        bookmarks: [
+          { title: 'Slack',         url: 'https://slack.com' },
+          { title: 'Jira',          url: 'https://www.atlassian.com/software/jira' },
+          { title: 'Confluence',    url: 'https://www.atlassian.com/software/confluence' },
+          { title: 'Figma',         url: 'https://www.figma.com' },
+          { title: 'Google Drive',  url: 'https://drive.google.com' },
+          { title: 'Gmail',         url: 'https://mail.google.com' },
+        ],
+      },
+      {
+        title: '🚀 Project Apollo',
+        bookmarks: [
+          { title: 'GitHub',    url: 'https://github.com' },
+          { title: 'Linear',    url: 'https://linear.app' },
+          { title: 'Vercel',    url: 'https://vercel.com' },
+          { title: 'Notion',    url: 'https://www.notion.so' },
+          { title: 'Sentry',    url: 'https://sentry.io' },
+          { title: 'Datadog',   url: 'https://www.datadoghq.com' },
+        ],
+      },
+      {
+        title: '🔬 Project Nexus',
+        bookmarks: [
+          { title: 'GitLab',      url: 'https://gitlab.com' },
+          { title: 'Trello',      url: 'https://trello.com' },
+          { title: 'Postman',     url: 'https://www.postman.com' },
+          { title: 'Heroku',      url: 'https://www.heroku.com' },
+          { title: 'Swagger UI',  url: 'https://swagger.io' },
+        ],
+      },
+    ],
+  },
+  {
+    title: '🏠 Personal',
+    subfolders: [
+      {
+        title: '💊 Health',
+        bookmarks: [
+          { title: 'MyFitnessPal', url: 'https://www.myfitnesspal.com' },
+          { title: 'Headspace',    url: 'https://www.headspace.com' },
+          { title: 'Strava',       url: 'https://www.strava.com' },
+          { title: 'WebMD',        url: 'https://www.webmd.com' },
+          { title: 'Calm',         url: 'https://www.calm.com' },
+        ],
+      },
+      {
+        title: '🏦 Banking',
+        bookmarks: [
+          { title: 'Chase',       url: 'https://www.chase.com' },
+          { title: 'PayPal',      url: 'https://www.paypal.com' },
+          { title: 'Wise',        url: 'https://wise.com' },
+          { title: 'Robinhood',   url: 'https://robinhood.com' },
+          { title: 'Mint',        url: 'https://mint.intuit.com' },
+        ],
+      },
+      {
+        title: '🎮 Hobbies',
+        bookmarks: [
+          { title: 'Steam',       url: 'https://store.steampowered.com' },
+          { title: 'Reddit',      url: 'https://www.reddit.com' },
+          { title: 'Twitch',      url: 'https://www.twitch.tv' },
+          { title: 'Goodreads',   url: 'https://www.goodreads.com' },
+          { title: 'YouTube',     url: 'https://www.youtube.com' },
+          { title: 'Duolingo',    url: 'https://www.duolingo.com' },
+        ],
+      },
+    ],
+  },
+];
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function skipOnboarding(page) {
@@ -178,17 +256,6 @@ async function applySettings(page, patch) {
 }
 
 async function seedBookmarks(page, extFolderId) {
-  const dockFolderId = await page.evaluate(async ({ parentId }) => {
-    const f = await browser.bookmarks.create({ parentId, title: '📌 Dock' });
-    return f.id;
-  }, { parentId: extFolderId });
-
-  for (const bm of DOCK_BOOKMARKS) {
-    await page.evaluate(async ({ parentId, title, url }) => {
-      await browser.bookmarks.create({ parentId, title, url });
-    }, { parentId: dockFolderId, title: bm.title, url: bm.url });
-  }
-
   for (const bm of ROOT_BOOKMARKS) {
     await page.evaluate(async ({ parentId, title, url }) => {
       await browser.bookmarks.create({ parentId, title, url });
@@ -211,7 +278,29 @@ async function seedBookmarks(page, extFolderId) {
     }
   }
 
-  return { dockFolderId, folderIds };
+  return { folderIds };
+}
+
+async function seedWorkspaceBookmarks(page, extFolderId) {
+  for (const workspace of WORKSPACE_FOLDERS) {
+    const workspaceFolderId = await page.evaluate(async ({ parentId, title }) => {
+      const f = await browser.bookmarks.create({ parentId, title });
+      return f.id;
+    }, { parentId: extFolderId, title: workspace.title });
+
+    for (const subfolder of workspace.subfolders) {
+      const subfolderId = await page.evaluate(async ({ parentId, title }) => {
+        const f = await browser.bookmarks.create({ parentId, title });
+        return f.id;
+      }, { parentId: workspaceFolderId, title: subfolder.title });
+
+      for (const bm of subfolder.bookmarks) {
+        await page.evaluate(async ({ parentId, title, url }) => {
+          await browser.bookmarks.create({ parentId, title, url });
+        }, { parentId: subfolderId, title: bm.title, url: bm.url });
+      }
+    }
+  }
 }
 
 async function loadPage(context, origin, settings) {
@@ -220,7 +309,8 @@ async function loadPage(context, origin, settings) {
   await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
   if (settings) {
     await applySettings(page, settings);
-    await page.reload({ waitUntil: 'domcontentloaded' });
+    // Use goto instead of reload so the extension's hash from the first load doesn't persist
+    await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
   }
   await page.waitForSelector('.shell', { timeout: 15_000 });
   await page.waitForTimeout(2000); // Let icons load
@@ -360,149 +450,250 @@ async function recordEditIcon(context, origin, baseSettings) {
   await saveVideo(page, '02-edit-icon.webm');
 }
 
-async function recordFolderAndDrag(context, origin, baseSettings) {
-  console.log('\n▶ Recording video 3: create folder + marquee + drag…');
+/** Find a folder card by its text content and return its center coordinates */
+async function findFolderCenter(page, text) {
+  return page.evaluate((searchText) => {
+    const folders = Array.from(document.querySelectorAll('.bookmark-grid .folder-card[data-grid-item-id]'));
+    const folder = folders.find(el => (el.textContent ?? '').includes(searchText));
+    if (!folder) return null;
+    const rect = folder.getBoundingClientRect();
+    return { cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 };
+  }, text);
+}
+
+/** Click a breadcrumb by its text content and return its center */
+async function clickBreadcrumb(page, text) {
+  return page.evaluate((searchText) => {
+    const crumbs = Array.from(document.querySelectorAll('.breadcrumb, .library-pill, .library-home'));
+    const crumb = crumbs.find(el => (el.textContent ?? '').includes(searchText));
+    if (!crumb) return null;
+    const rect = crumb.getBoundingClientRect();
+    crumb.click();
+    return { cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 };
+  }, text);
+}
+
+async function recordWorkspaces(context, origin, baseSettings, workspaceRootId) {
+  console.log('\n▶ Recording video 3: workspaces…');
+
+  // Use workspace root — only Work and Personal live here
   const page = await loadPage(context, origin, {
     ...baseSettings,
+    rootFolderId: workspaceRootId,
     themeMode: 'dark',
-    accentColor: '#F57C00',
+    accentColor: '#3F72DC',
+    showDock: false,
     showSearchBar: true,
     searchBarPosition: 'center',
   });
 
+  // Force-navigate to workspace root via hash — reliable regardless of settings reload timing
+  await page.evaluate((id) => {
+    location.hash = `#folder=${encodeURIComponent(id)}`;
+  }, workspaceRootId);
   await page.waitForTimeout(2000);
 
-  // ── Step 1: Right-click empty canvas background and create a folder ─────────
+  // Root has only Work and Personal — both should be immediately visible
+  let workCenter = await findFolderCenter(page, 'Work');
+  if (!workCenter) {
+    const debug = await page.evaluate(() => {
+      const cards = Array.from(document.querySelectorAll('[data-grid-item-id]'));
+      return cards.map(el => el.textContent?.trim().slice(0, 40));
+    });
+    console.warn('  ⚠ Work folder not found. Grid items:', debug);
+    await saveVideo(page, '03-workspaces.webm');
+    return;
+  }
+  await page.waitForTimeout(1500); // Let viewer see the two workspace folders
 
-  // Scroll so the last grid row is visible — row 4 is below the fold with 30 items
-  await page.evaluate(() => {
-    const items = Array.from(document.querySelectorAll('.bookmark-grid [data-grid-item-id]'));
-    if (!items.length) return;
-    items[items.length - 1].scrollIntoView({ behavior: 'instant', block: 'center' });
-  });
-  await page.waitForTimeout(500);
-
-  // Find empty space to the right of the last item in the last row.
-  // Grid has 8 columns; 30 items = 6 in final row, so columns 7–8 are empty.
-  const emptyPoint = await page.evaluate(() => {
-    const items = Array.from(document.querySelectorAll('.bookmark-grid [data-grid-item-id]'));
-    const canvas = document.querySelector('.bookmark-canvas');
-    if (!canvas) return { x: 900, y: 400 };
-    const canvasRect = canvas.getBoundingClientRect();
-    if (!items.length) return { x: canvasRect.left + canvasRect.width / 2, y: Math.max(canvasRect.top + 100, 100) };
-    const last = items[items.length - 1];
-    const lastRect = last.getBoundingClientRect();
-    // Right of last item in same row — definitely no bookmark here
-    const x = Math.min(lastRect.right + 100, canvasRect.right - 30);
-    // Clamp y to visible viewport (above dock area)
-    const y = Math.min(Math.max(lastRect.top + lastRect.height / 2, 80), window.innerHeight - 220);
-    return { x, y };
-  });
-
-  const emptyX = emptyPoint.x;
-  const emptyY = emptyPoint.y;
-
-  await smoothMove(page, 960, 540, emptyX, emptyY, 700);
+  // ── Navigate into Work ────────────────────────────────────────────────────
+  await smoothMove(page, 960, 540, workCenter.cx, workCenter.cy, 700);
   await page.waitForTimeout(400);
+  await page.mouse.click(workCenter.cx, workCenter.cy);
+  await page.waitForTimeout(2000); // Show Acme Corp, Project Apollo, Project Nexus
 
-  // Register dialog handler before triggering the prompt
-  page.once('dialog', async dialog => {
-    await dialog.accept('Dev Tools');
+  // ── Navigate into Project Apollo ─────────────────────────────────────────
+  let apolloCenter = await findFolderCenter(page, 'Apollo');
+  if (!apolloCenter) {
+    console.warn('  ⚠ Apollo folder not found');
+    await saveVideo(page, '03-workspaces.webm');
+    return;
+  }
+  await smoothMove(page, workCenter.cx, workCenter.cy, apolloCenter.cx, apolloCenter.cy, 600);
+  await page.waitForTimeout(400);
+  await page.mouse.click(apolloCenter.cx, apolloCenter.cy);
+  await page.waitForTimeout(2000); // Show GitHub, Linear, Vercel, Notion, Sentry, Datadog
+
+  // ── Navigate back to Work via breadcrumb ─────────────────────────────────
+  let bcCenter = await clickBreadcrumb(page, 'Work');
+  if (!bcCenter) {
+    console.warn('  ⚠ Work breadcrumb not found');
+    await saveVideo(page, '03-workspaces.webm');
+    return;
+  }
+  await page.waitForTimeout(1500); // Show Work subfolders again
+
+  // ── Back to workspace root (switcher view) via home button ───────────────
+  const homeBtn = page.locator('.nav-side--left .library-home').first();
+  const homeBtnBox = await homeBtn.boundingBox();
+  await homeBtn.click();
+  await page.waitForTimeout(1500); // Work and Personal visible again at root
+
+  // ── Navigate into Personal ────────────────────────────────────────────────
+  let personalCenter = await findFolderCenter(page, 'Personal');
+  if (!personalCenter) {
+    console.warn('  ⚠ Personal folder not found');
+    await saveVideo(page, '03-workspaces.webm');
+    return;
+  }
+  const homeCx = homeBtnBox ? homeBtnBox.x + homeBtnBox.width / 2 : 960;
+  const homeCy = homeBtnBox ? homeBtnBox.y + homeBtnBox.height / 2 : 540;
+  await smoothMove(page, homeCx, homeCy, personalCenter.cx, personalCenter.cy, 600);
+  await page.waitForTimeout(400);
+  await page.mouse.click(personalCenter.cx, personalCenter.cy);
+  await page.waitForTimeout(1500); // Show Health, Banking, Hobbies
+
+  // ── Navigate into Health ──────────────────────────────────────────────────
+  let healthCenter = await findFolderCenter(page, 'Health');
+  if (!healthCenter) {
+    console.warn('  ⚠ Health folder not found');
+    await saveVideo(page, '03-workspaces.webm');
+    return;
+  }
+  await smoothMove(page, personalCenter.cx, personalCenter.cy, healthCenter.cx, healthCenter.cy, 600);
+  await page.waitForTimeout(400);
+  await page.mouse.click(healthCenter.cx, healthCenter.cy);
+  await page.waitForTimeout(2000); // Show MyFitnessPal, Headspace, Strava, WebMD, Calm
+
+  await saveVideo(page, '03-workspaces.webm');
+}
+
+async function recordDragReorder(context, origin, baseSettings) {
+  console.log('\n▶ Recording video 4: drag to reorder…');
+  const page = await loadPage(context, origin, {
+    ...baseSettings,
+    themeMode: 'dark',
+    accentColor: '#F57C00',
+    showSearchBar: false,
   });
 
-  await page.mouse.click(emptyX, emptyY, { button: 'right' });
-  await page.waitForSelector('[data-context-action="add-folder"]', { timeout: 5000 });
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(2000);
 
-  // Click Add Folder
-  const addFolderBtn = page.locator('[data-context-action="add-folder"]');
-  const addFolderBox = await addFolderBtn.boundingBox();
-  await smoothMove(page, emptyX, emptyY, addFolderBox.x + addFolderBox.width / 2, addFolderBox.y + addFolderBox.height / 2, 400);
-  await page.waitForTimeout(300);
-  await addFolderBtn.click();
-
-  // Wait for the new folder to appear in the grid
-  await page.waitForTimeout(1500);
-
-  // ── Step 2: Marquee-select several bookmarks ──────────────────────────────
-
-  // Get positions of first several bookmark tiles (not folders)
+  // ── Phase 1: Single bookmark drag ─────────────────────────────────────────
+  // Drag Notion (position 5) up to position 3 — shows single-item reorder.
+  // Positions 0-2 (Netflix/YouTube/Twitch) are intentionally untouched.
   const itemPositions = await page.evaluate(() => {
     const items = Array.from(document.querySelectorAll('.bookmark-grid [data-grid-item-id][data-link-url]'));
-    return items.slice(0, 6).map(el => {
+    return items.slice(0, 8).map(el => {
       const rect = el.getBoundingClientRect();
-      return {
-        cx: rect.left + rect.width / 2,
-        cy: rect.top + rect.height / 2,
-        left: rect.left,
-        top: rect.top,
-        right: rect.right,
-        bottom: rect.bottom,
-      };
+      return { cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 };
     });
   });
 
-  if (itemPositions.length < 3) {
-    console.warn('  ⚠ Not enough bookmark items for marquee demo');
-  } else {
-    // Start marquee slightly above+left of first item, end below+right of 4th item
-    const target = itemPositions[Math.min(3, itemPositions.length - 1)];
-    const marqueeStartX = itemPositions[0].left - 20;
-    const marqueeStartY = itemPositions[0].top - 20;
-    const marqueeEndX = target.right + 20;
-    const marqueeEndY = target.bottom + 20;
-
-    // Move cursor to start position
-    await smoothMove(page, emptyX, emptyY, marqueeStartX, marqueeStartY, 700);
-    await page.waitForTimeout(400);
-
-    // Begin marquee drag
-    await page.mouse.down();
-    await page.waitForTimeout(100);
-    await smoothMove(page, marqueeStartX, marqueeStartY, marqueeEndX, marqueeEndY, 1000);
-    await page.waitForTimeout(400);
-    await page.mouse.up();
-    await page.waitForTimeout(1200);
-
-    // ── Step 3: Drag selected items into the new folder ─────────────────────
-
-    // Find the "Dev Tools" folder we just created
-    const newFolderBox = await page.evaluate(() => {
-      const folders = Array.from(document.querySelectorAll('.bookmark-grid .folder-card[data-grid-item-id]'));
-      const newFolder = folders.find(el => el.textContent?.includes('Dev Tools'));
-      if (!newFolder) return null;
-      const rect = newFolder.getBoundingClientRect();
-      return { cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 };
-    });
-
-    if (!newFolderBox) {
-      console.warn('  ⚠ Could not find "Dev Tools" folder — skipping drag step');
-    } else {
-      // Start drag from first selected item (center of selection)
-      const dragStartX = itemPositions[1].cx;
-      const dragStartY = itemPositions[1].cy;
-
-      await smoothMove(page, marqueeEndX, marqueeEndY, dragStartX, dragStartY, 600);
-      await page.waitForTimeout(400);
-
-      await page.mouse.down();
-      await page.waitForTimeout(200);
-      // Move slightly to activate drag mode (needs > 6px)
-      await page.mouse.move(dragStartX + 8, dragStartY + 4);
-      await page.waitForTimeout(100);
-      // Smooth move to the folder
-      await smoothMove(page, dragStartX + 8, dragStartY + 4, newFolderBox.cx, newFolderBox.cy, 900);
-      await page.waitForTimeout(600);
-      await page.mouse.up();
-      await page.waitForTimeout(1800);
-    }
+  if (itemPositions.length < 6) {
+    console.warn('  ⚠ Not enough items for drag demo');
+    await saveVideo(page, '04-drag-reorder.webm');
+    return;
   }
 
-  await saveVideo(page, '03-folder-and-drag.webm');
+  const from = itemPositions[5];
+  const to   = itemPositions[3];
+
+  await smoothMove(page, 960, 540, from.cx, from.cy, 700);
+  await page.waitForTimeout(400);
+  await page.mouse.down();
+  await page.waitForTimeout(200);
+  await page.mouse.move(from.cx + 8, from.cy + 4);
+  await page.waitForTimeout(100);
+  await smoothMove(page, from.cx + 8, from.cy + 4, to.cx, to.cy, 1000);
+  await page.waitForTimeout(600);
+  await page.mouse.up();
+  await page.waitForTimeout(1800);
+
+  // ── Phase 2: Marquee-select Netflix + YouTube + Twitch → drag to Entertainment ──
+  // Netflix, YouTube, Twitch are at positions 0, 1, 2 — always the first three tiles.
+  // The .bookmark-canvas surface has 24px top padding before any tile, giving a guaranteed
+  // empty area to start the marquee. Marquee does NOT call renderApp mid-drag, so
+  // selection is stable and includes all three items exactly.
+  const marqueeInfo = await page.evaluate(() => {
+    const canvas = document.querySelector('.bookmark-canvas');
+    const netflix = document.querySelector('[data-bookmark-title="Netflix"]');
+    const youtube = document.querySelector('[data-bookmark-title="YouTube"]');
+    const twitch  = document.querySelector('[data-bookmark-title="Twitch"]');
+    if (!canvas || !netflix || !youtube || !twitch) return null;
+
+    const cr = canvas.getBoundingClientRect();
+    const nr = netflix.getBoundingClientRect();
+    const yr = youtube.getBoundingClientRect();
+    const tr = twitch.getBoundingClientRect();
+
+    return {
+      // Top-left of canvas padding — guaranteed empty (no tile starts in the 24px top pad)
+      startX: cr.left + 5,
+      startY: cr.top + 12,
+      // Just past Twitch's right edge and below all three tiles
+      endX: tr.right + 5,
+      endY: Math.max(nr.bottom, yr.bottom, tr.bottom) + 5,
+      netflix: { cx: nr.left + nr.width / 2, cy: nr.top + nr.height / 2 },
+    };
+  });
+
+  if (!marqueeInfo) {
+    console.warn('  ⚠ Could not locate streaming tiles or canvas for marquee');
+    await saveVideo(page, '04-drag-reorder.webm');
+    return;
+  }
+
+  // Move cursor to marquee start (canvas top-left padding)
+  await smoothMove(page, to.cx, to.cy, marqueeInfo.startX, marqueeInfo.startY, 700);
+  await page.waitForTimeout(300);
+
+  // Draw marquee over Netflix → YouTube → Twitch
+  await page.mouse.down();
+  await page.waitForTimeout(100);
+  await smoothMove(page, marqueeInfo.startX, marqueeInfo.startY, marqueeInfo.endX, marqueeInfo.endY, 1000);
+  await page.waitForTimeout(300);
+  await page.mouse.up();
+  // renderApp fires once here after marquee ends — selection [Netflix, YouTube, Twitch] committed
+  await page.waitForTimeout(1200);
+
+  // Find Entertainment folder
+  let entertainCenter = await findFolderCenter(page, 'Entertainment');
+  for (let i = 0; i < 3 && !entertainCenter; i++) {
+    await page.evaluate(() => window.scrollBy(0, 200));
+    await page.waitForTimeout(300);
+    entertainCenter = await findFolderCenter(page, 'Entertainment');
+  }
+
+  if (!entertainCenter) {
+    const debug = await page.evaluate(() => ({
+      url: location.href,
+      cards: Array.from(document.querySelectorAll('[data-grid-item-id]')).map(el => el.textContent?.trim().slice(0, 30)),
+    }));
+    console.warn('  ⚠ Entertainment folder not found. Debug:', JSON.stringify(debug));
+    await saveVideo(page, '04-drag-reorder.webm');
+    return;
+  }
+
+  // Drag from Netflix into Entertainment — all three selected items move together
+  const ncx = marqueeInfo.netflix.cx;
+  const ncy = marqueeInfo.netflix.cy;
+  await smoothMove(page, marqueeInfo.endX, marqueeInfo.endY, ncx, ncy, 500);
+  await page.waitForTimeout(200);
+  await page.mouse.down();
+  await page.waitForTimeout(200);
+  await page.mouse.move(ncx + 8, ncy + 4);
+  await page.waitForTimeout(100);
+  await smoothMove(page, ncx + 8, ncy + 4, entertainCenter.cx, entertainCenter.cy, 1200);
+  await page.waitForTimeout(600);
+  await page.mouse.up();
+  await page.waitForTimeout(2500);
+
+  await saveVideo(page, '04-drag-reorder.webm');
 }
 
 async function recordColorThemes(context, origin, baseSettings) {
-  console.log('\n▶ Recording video 4: color themes…');
+  console.log('\n▶ Recording video 5: color themes…');
   const page = await loadPage(context, origin, {
     ...baseSettings,
     themeMode: 'dark',
@@ -562,12 +753,12 @@ async function recordColorThemes(context, origin, baseSettings) {
     prevBox = swatchBox;
   }
 
-  await saveVideo(page, '04-color-themes.webm');
+  await saveVideo(page, '05-color-themes.webm');
 }
 
 
 async function recordLayoutSettings(context, origin, baseSettings) {
-  console.log('\n▶ Recording video 5: layout settings…');
+  console.log('\n▶ Recording video 6: layout settings…');
   const page = await loadPage(context, origin, {
     ...baseSettings,
     themeMode: 'dark',
@@ -623,7 +814,7 @@ async function recordLayoutSettings(context, origin, baseSettings) {
   await closeBtn.click();
   await page.waitForTimeout(2000);
 
-  await saveVideo(page, '05-layout-settings.webm');
+  await saveVideo(page, '06-layout-settings.webm');
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -672,8 +863,27 @@ async function main() {
     return f.id;
   });
 
-  const { dockFolderId } = await seedBookmarks(setupPage, rootFolderId);
+  // Dock lives as a sibling of rootFolderId — not visible in the bookmark grid
+  const dockFolderId = await setupPage.evaluate(async () => {
+    const f = await browser.bookmarks.create({ parentId: '2', title: '📌 Dock' });
+    return f.id;
+  });
+  for (const bm of DOCK_BOOKMARKS) {
+    await setupPage.evaluate(async ({ parentId, title, url }) => {
+      await browser.bookmarks.create({ parentId, title, url });
+    }, { parentId: dockFolderId, title: bm.title, url: bm.url });
+  }
+
+  await seedBookmarks(setupPage, rootFolderId);
   console.log('Bookmarks seeded. rootFolderId:', rootFolderId);
+
+  // Workspace root — separate folder containing only Work and Personal
+  const workspaceRootId = await setupPage.evaluate(async () => {
+    const f = await browser.bookmarks.create({ parentId: '2', title: 'Workspaces' });
+    return f.id;
+  });
+  await seedWorkspaceBookmarks(setupPage, workspaceRootId);
+  console.log('Workspace folders seeded. workspaceRootId:', workspaceRootId);
 
   const baseSettings = {
     rootFolderId,
@@ -692,7 +902,8 @@ async function main() {
   // Record each video flow
   await recordSearch(context, origin, baseSettings);
   await recordEditIcon(context, origin, baseSettings);
-  await recordFolderAndDrag(context, origin, baseSettings);
+  await recordWorkspaces(context, origin, baseSettings, workspaceRootId);
+  await recordDragReorder(context, origin, baseSettings);
   await recordColorThemes(context, origin, baseSettings);
   await recordLayoutSettings(context, origin, baseSettings);
 
@@ -702,7 +913,7 @@ async function main() {
   const { readdir, unlink } = await import('node:fs/promises');
   const remaining = await readdir(outDir);
   for (const f of remaining) {
-    if (f.endsWith('.webm') && !['01-search.webm', '02-edit-icon.webm', '03-folder-and-drag.webm', '04-color-themes.webm', '05-layout-settings.webm'].includes(f)) {
+    if (f.endsWith('.webm') && !['01-search.webm', '02-edit-icon.webm', '03-workspaces.webm', '04-drag-reorder.webm', '05-color-themes.webm', '06-layout-settings.webm'].includes(f)) {
       await unlink(join(outDir, f)).catch(() => undefined);
     }
   }
@@ -712,6 +923,8 @@ async function main() {
   console.log('\n✅ All videos saved to:', outDir);
   console.log('\nConvert to GIF with ffmpeg:');
   console.log('  ffmpeg -i promo-videos/01-search.webm -vf "fps=24,scale=1280:-1:flags=lanczos" promo-videos/01-search.gif');
+  console.log('  ffmpeg -i promo-videos/03-workspaces.webm -vf "fps=24,scale=1280:-1:flags=lanczos" promo-videos/03-workspaces.gif');
+  console.log('  ffmpeg -i promo-videos/04-drag-reorder.webm -vf "fps=24,scale=1280:-1:flags=lanczos" promo-videos/04-drag-reorder.gif');
 }
 
 main().catch((err) => {

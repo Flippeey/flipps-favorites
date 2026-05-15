@@ -460,6 +460,49 @@
   }
 }
 
+@media (max-width: 480px) {
+  .bookmark-canvas {
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-top: 16px;
+  }
+
+  .search-band {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .bookmark-dialog {
+    width: calc(100vw - 16px);
+    margin: 8px auto;
+    border-radius: 16px;
+  }
+
+  .bookmark-dialog__header {
+    padding: 14px 16px;
+  }
+
+  .bookmark-dialog__preview-panel {
+    padding: 16px;
+  }
+
+  .bookmark-dialog__search-panel {
+    padding: 16px;
+  }
+
+  .bookmark-dialog__search-row {
+    flex-direction: column;
+  }
+
+  .bookmark-dialog__search-row input {
+    min-width: 0;
+  }
+
+  .bookmark-dialog__results {
+    max-height: 240px;
+  }
+}
+
 .visual-section__header {
   display: grid;
   gap: 2px;
