@@ -1,16 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppSettings, BookmarkNode, BookmarkSortMode, SortDirection } from '../shared/messages';
 import { ContextMenu, type ContextMenuItem } from './components/ContextMenu';
 import { Dock } from './components/Dock';
 import { EditDialog, type EditTarget } from './components/EditDialog';
 import { FolderOverlay } from './components/FolderOverlay';
+import { QuickAddDialog } from './components/QuickAddDialog';
 import { buildSearchIndex, ClockGreeting, HeroSearch, type FlatSearchResult } from './components/HeroSearch';
 import { Ico } from './components/Ico';
 import { Onboarding } from './components/Onboarding';
 import { SettingsDrawer } from './components/settings';
 import { SectionsView, TilesView, FolderPageView } from './components/views';
+import { useMarquee, type MarqueeSelection } from './interaction/useMarquee';
+import { useDrag } from './interaction/useDrag';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
-import { getBookmarkTree, getSettings, patchSettings, removeBookmark } from './lib/messaging';
+import { getBookmarkTree, getSettings, moveBookmark, patchSettings, removeBookmark } from './lib/messaging';
 import { findFolder, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 
 interface AppProps {
@@ -35,10 +38,17 @@ export function App({ initialSettings, initialTree }: AppProps) {
 
   const [openFolder, setOpenFolder] = useState<BookmarkNode | null>(null);
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
+  const [quickAddTarget, setQuickAddTarget] = useState<{ parentId: string; parentTitle?: string } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [onboardOpen, setOnboardOpen] = useState(false);
   const [folderPath, setFolderPath] = useState<BookmarkNode[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+
+  const [selection, setSelection] = useState<MarqueeSelection>({ ids: new Set(), scopeFolderId: '' });
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
+
+  const canvasRef = useRef<HTMLElement | null>(null);
 
   const rootFolder = useMemo(() => resolveRootFolder(tree, settings.rootFolderId), [tree, settings.rootFolderId]);
 
@@ -116,19 +126,25 @@ export function App({ initialSettings, initialTree }: AppProps) {
     handlePatch({ bookmarkSortMode: parsed.mode, bookmarkSortDirection: parsed.direction });
   }, [handlePatch]);
 
-  const handleNewBookmark = useCallback(() => {
-    const parentId = isAtRoot ? (rootFolder?.id ?? '') : folderPath[folderPath.length - 1].id;
-    setEditTarget({ parentId, title: 'New bookmark', url: 'https://' });
-  }, [isAtRoot, rootFolder, folderPath]);
+  const defaultParentId = useCallback((): string => {
+    if (!isAtRoot && folderPath.length > 0) return folderPath[folderPath.length - 1].id;
+    return rootFolder?.id ?? '';
+  }, [isAtRoot, folderPath, rootFolder]);
+
+  const handleNewBookmark = useCallback((parentId?: string, parentTitle?: string) => {
+    setQuickAddTarget({ parentId: parentId ?? defaultParentId(), parentTitle });
+  }, [defaultParentId]);
 
   const handleEditBookmark = useCallback((item: BookmarkNode) => {
     setEditTarget({ id: item.id, parentId: item.parentId, title: item.title, url: item.url ?? '' });
   }, []);
 
-  const buildContextMenuItems = useCallback((target: BookmarkNode | null): ContextMenuItem[] => {
+  const buildContextMenuItems = useCallback((target: BookmarkNode | null, sectionFolder: BookmarkNode | null = null): ContextMenuItem[] => {
     if (target == null) {
+      const parentId = sectionFolder?.id ?? defaultParentId();
+      const labelSuffix = sectionFolder ? ` in ${sectionFolder.title}` : '';
       return [
-        { kind: 'item', icon: 'plus',       label: 'New bookmark', onClick: handleNewBookmark },
+        { kind: 'item', icon: 'plus',       label: `New bookmark${labelSuffix}`, onClick: () => handleNewBookmark(parentId, sectionFolder?.title) },
         { kind: 'item', icon: 'folderPlus', label: 'New folder',   disabled: true, onClick: () => {} },
         { kind: 'separator' },
         { kind: 'item', icon: 'refresh',    label: 'Refresh icons', onClick: () => refreshTree() },
@@ -140,7 +156,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
         { kind: 'item', icon: 'pencil',     label: 'Rename',      disabled: true, onClick: () => {} },
         { kind: 'separator' },
         { kind: 'item', icon: 'plus',       label: 'New bookmark inside',
-          onClick: () => setEditTarget({ parentId: target.id, title: 'New bookmark', url: 'https://' }) },
+          onClick: () => handleNewBookmark(target.id, target.title) },
         { kind: 'item', icon: 'folderPlus', label: 'New folder inside', disabled: true, onClick: () => {} },
         { kind: 'separator' },
         { kind: 'item', icon: 'trash', label: 'Delete folder', kbd: '⌫', destructive: true,
@@ -157,13 +173,14 @@ export function App({ initialSettings, initialTree }: AppProps) {
       { kind: 'item', icon: 'trash',      label: 'Delete',          kbd: '⌫', destructive: true,
         onClick: async () => { await removeBookmark(target.id); refreshTree(); } },
     ];
-  }, [handleEditBookmark, handleNewBookmark, handlePickBookmark, handlePickFolder, refreshTree]);
+  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handlePickBookmark, handlePickFolder, refreshTree]);
 
   const handleCanvasContextMenu = useCallback((event: React.MouseEvent) => {
     event.preventDefault();
     const target = event.target as HTMLElement;
     const tileEl = target.closest('.ff-tile') as HTMLElement | null;
     let menuTarget: BookmarkNode | null = null;
+    let sectionFolder: BookmarkNode | null = null;
     if (tileEl?.dataset.itemId) {
       const id = tileEl.dataset.itemId;
       const walk = (nodes: BookmarkNode[]): BookmarkNode | null => {
@@ -177,8 +194,12 @@ export function App({ initialSettings, initialTree }: AppProps) {
         return null;
       };
       menuTarget = walk(tree);
+    } else {
+      const scopeEl = target.closest('[data-scope-folder-id]') as HTMLElement | null;
+      const scopeId = scopeEl?.dataset.scopeFolderId;
+      if (scopeId && scopeId !== rootFolder?.id) sectionFolder = findFolder(tree, scopeId);
     }
-    setContextMenu({ x: event.clientX, y: event.clientY, items: buildContextMenuItems(menuTarget) });
+    setContextMenu({ x: event.clientX, y: event.clientY, items: buildContextMenuItems(menuTarget, sectionFolder) });
   }, [tree, buildContextMenuItems]);
 
   const searchIndex = useMemo(() => buildSearchIndex(rootFolder?.children ?? []), [rootFolder]);
@@ -192,6 +213,93 @@ export function App({ initialSettings, initialTree }: AppProps) {
     const folder = findFolder(tree, r.id);
     if (folder) handlePickFolder(folder);
   }, [tree, handlePickFolder]);
+
+  // ESC clears selection
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectionRef.current.ids.size > 0) {
+        setSelection({ ids: new Set(), scopeFolderId: '' });
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const getOrderedChildren = useCallback((folderId: string): Array<{ id: string }> => {
+    const folder = findFolder(tree, folderId);
+    return sortedChildren(folder?.children).map(c => ({ id: c.id }));
+  }, [tree, sortedChildren]);
+
+  const handleDragCommit = useCallback(async (dragIds: string[], target: import('./interaction/useDrag').DropTarget) => {
+    try {
+      if (target.kind === 'folder') {
+        for (const id of dragIds) {
+          await moveBookmark(id, target.folderId);
+        }
+      } else if (target.kind === 'dock') {
+        const dockFolderId = settings.dockFolderId || rootFolder?.id || '';
+        if (!dockFolderId) return;
+        for (const id of dragIds) {
+          await moveBookmark(id, dockFolderId);
+        }
+      } else {
+        // reorder — preserve drag-source order, increment index as we go for items moving forward in same parent
+        let idx = target.index;
+        for (const id of dragIds) {
+          await moveBookmark(id, target.parentId, idx);
+          idx += 1;
+        }
+      }
+      // Drop selection scope if target moved away
+      const moveTargetScope = target.kind === 'folder' ? target.folderId : target.kind === 'dock' ? (settings.dockFolderId || rootFolder?.id || '') : target.parentId;
+      setSelection({ ids: new Set(dragIds), scopeFolderId: moveTargetScope });
+    } finally {
+      await refreshTree();
+    }
+  }, [refreshTree, rootFolder, settings.dockFolderId]);
+
+  const dragEnabled = settings.bookmarkSortMode === 'manual';
+
+  const marqueeRect = useMarquee({
+    canvasRef,
+    rootFolderId: rootFolder?.id ?? '',
+    enabled: true,
+    selectionRef,
+    onSelect: setSelection,
+  });
+
+  const dragPreview = useDrag({
+    canvasRef,
+    rootFolderId: rootFolder?.id ?? '',
+    enabled: dragEnabled,
+    selectionRef,
+    getOrderedChildren,
+    onCommit: handleDragCommit,
+  });
+
+  const handleTileClick = useCallback((item: BookmarkNode, event: React.MouseEvent) => {
+    if (event.shiftKey || event.metaKey || event.ctrlKey) {
+      const scope = (event.currentTarget as HTMLElement | null)?.closest<HTMLElement>('[data-scope-folder-id]')?.dataset.scopeFolderId ?? rootFolder?.id ?? '';
+      setSelection(prev => {
+        const sameScope = prev.scopeFolderId === scope;
+        const baseIds = sameScope ? new Set(prev.ids) : new Set<string>();
+        if (event.metaKey || event.ctrlKey) {
+          if (baseIds.has(item.id)) baseIds.delete(item.id);
+          else baseIds.add(item.id);
+        } else {
+          baseIds.add(item.id);
+        }
+        return { ids: baseIds, scopeFolderId: scope };
+      });
+      return;
+    }
+    // Plain click — clear selection. Folder/bookmark open behavior handled by caller.
+    if (selectionRef.current.ids.size > 0) {
+      setSelection({ ids: new Set(), scopeFolderId: '' });
+    }
+    if (isFolder(item)) handlePickFolder(item);
+    else handleEditBookmark(item);
+  }, [handleEditBookmark, handlePickFolder, rootFolder]);
 
   return (
     <div
@@ -237,7 +345,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
               value={sortChoice}
               onChange={handleSortChange}
             />
-            <button className="ff-iconbtn ff-iconbtn--icon" aria-label="Add bookmark" onClick={handleNewBookmark}>
+            <button className="ff-iconbtn ff-iconbtn--icon" aria-label="Add bookmark" onClick={() => handleNewBookmark()}>
               <Ico name="plus" size={16} />
             </button>
             <button className="ff-iconbtn" onClick={() => setSettingsOpen(true)} aria-label="Settings">
@@ -260,31 +368,56 @@ export function App({ initialSettings, initialTree }: AppProps) {
         )}
       </section>
 
-      <main className="ff-canvas" onContextMenu={handleCanvasContextMenu}>
+      <main className="ff-canvas" ref={(el) => { canvasRef.current = el; }} onContextMenu={handleCanvasContextMenu}>
         {!isAtRoot && sortedCurrentFolder ? (
           <FolderPageView
             folder={sortedCurrentFolder}
             shape={settings.tileShape}
-            onPickFolder={handlePickFolder}
-            onPickItem={handleEditBookmark}
+            onPickFolder={handleTileClick}
+            onPickItem={handleTileClick}
+            selectedIds={selection.ids}
+            selectionScopeFolderId={selection.scopeFolderId}
           />
         ) : settings.folderMode === 'sections' ? (
           <SectionsView
             tree={sortedRootChildren.filter(isFolder)}
+            scopeFolderId={rootFolder?.id ?? ''}
             shape={settings.tileShape}
-            onPickFolder={handlePickFolder}
-            onPickItem={handleEditBookmark}
-            onAdd={(folder) => setEditTarget({ parentId: folder.id, title: 'New bookmark', url: 'https://' })}
+            onPickFolder={handleTileClick}
+            onPickItem={handleTileClick}
+            onAdd={(folder) => handleNewBookmark(folder.id, folder.title)}
+            selectedIds={selection.ids}
+            selectionScopeFolderId={selection.scopeFolderId}
           />
         ) : (
           <TilesView
             tree={sortedRootChildren.filter(isFolder)}
+            scopeFolderId={rootFolder?.id ?? ''}
             shape={settings.tileShape}
-            onPickFolder={handlePickFolder}
-            onPickItem={handleEditBookmark}
+            onPickFolder={handleTileClick}
+            onPickItem={handleTileClick}
+            selectedIds={selection.ids}
+            selectionScopeFolderId={selection.scopeFolderId}
+          />
+        )}
+        {marqueeRect && (
+          <div
+            className="ff-marquee"
+            style={{
+              left: marqueeRect.left,
+              top: marqueeRect.top,
+              width: marqueeRect.width,
+              height: marqueeRect.height,
+            }}
           />
         )}
       </main>
+      {dragPreview && (
+        <div className="ff-drag-preview" style={{ left: dragPreview.x, top: dragPreview.y }}>
+          <span className="ff-drag-preview__count">{dragPreview.ids.length}</span>
+          <span>Move {dragPreview.ids.length === 1 ? 'item' : 'items'}</span>
+        </div>
+      )}
 
       <Dock items={dockItems} mode={dockMode} shape={settings.tileShape} onItemClick={handlePickBookmark} />
 
@@ -303,6 +436,15 @@ export function App({ initialSettings, initialTree }: AppProps) {
           shape={settings.tileShape}
           onClose={() => setEditTarget(null)}
           onSaved={() => { setEditTarget(null); refreshTree(); }}
+        />
+      )}
+
+      {quickAddTarget && (
+        <QuickAddDialog
+          parentId={quickAddTarget.parentId}
+          parentTitle={quickAddTarget.parentTitle}
+          onClose={() => setQuickAddTarget(null)}
+          onSaved={() => { setQuickAddTarget(null); refreshTree(); }}
         />
       )}
 

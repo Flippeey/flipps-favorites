@@ -21,6 +21,7 @@ export function BookmarkTile({ item, shape, selected = false, onClick, onContext
       className="ff-tile"
       data-selected={selected}
       data-item-id={item.id}
+      data-item-kind="bookmark"
       onClick={(e) => onClick?.(item, e)}
       onContextMenu={(e) => onContextMenu?.(item, e)}
       title={item.title}
@@ -36,17 +37,20 @@ export function BookmarkTile({ item, shape, selected = false, onClick, onContext
 interface FolderTileProps {
   folder: BookmarkNode;
   shape: TileShape;
+  selected?: boolean;
   onClick?: (folder: BookmarkNode, event: MouseEvent) => void;
   onContextMenu?: (folder: BookmarkNode, event: MouseEvent) => void;
 }
 
-export function FolderTile({ folder, shape, onClick, onContextMenu }: FolderTileProps) {
+export function FolderTile({ folder, shape, selected = false, onClick, onContextMenu }: FolderTileProps) {
   const items: (BookmarkNode | null)[] = (folder.children ?? []).slice(0, 4);
   while (items.length < 4) items.push(null);
   return (
     <button
       className="ff-tile"
+      data-selected={selected}
       data-item-id={folder.id}
+      data-item-kind="folder"
       onClick={(e) => onClick?.(folder, e)}
       onContextMenu={(e) => onContextMenu?.(folder, e)}
       title={folder.title}

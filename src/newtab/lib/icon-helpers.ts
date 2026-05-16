@@ -1,0 +1,126 @@
+export function isValidBookmarkUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+const REGISTRY_SLDS = new Set(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac', 'ne', 'or']);
+const GENERIC_SUBDOMAIN_RE = /^(?:www2?|m|mobile|app|apps|secure|login|account|accounts|signin|auth|my|portal|dashboard|web)\./i;
+const PERSONAL_INFRA_TLDS = new Set(['local', 'lan', 'home', 'internal', 'intranet']);
+const PERSONAL_INFRA_MARKERS = new Set(['local', 'lan', 'home', 'homelab', 'internal', 'intranet', 'lab']);
+
+export function getSearchName(url: string): string {
+  try {
+    let hostname = new URL(url).hostname.toLowerCase();
+    hostname = hostname.replace(GENERIC_SUBDOMAIN_RE, '');
+    const parts = hostname.split('.').filter(Boolean);
+    let name = '';
+
+    if (parts.length === 0) {
+      return '';
+    }
+
+    // Rule: personal-infra TLD (e.g. service.local, jellyfin.homelab.lan)
+    if (parts.length >= 2 && PERSONAL_INFRA_TLDS.has(parts[parts.length - 1])) {
+      name = parts[0];
+    }
+    // Rule: personal-infra marker mid-hostname (e.g. jellyfin.local.flippflix.com)
+    else if (
+      parts.length >= 3 &&
+      parts.slice(1, -1).some(seg => PERSONAL_INFRA_MARKERS.has(seg))
+    ) {
+      name = parts[0];
+    }
+    // Rule: ccTLD registry SLD (e.g. pogdesign.co.uk)
+    else if (parts.length >= 3 && REGISTRY_SLDS.has(parts[parts.length - 2])) {
+      name = parts[parts.length - 3] ?? '';
+    }
+    // Default: second-to-last segment (e.g. google.com → google, mail.google.com → google)
+    else if (parts.length >= 2) {
+      name = parts[parts.length - 2] ?? '';
+    } else {
+      name = parts[0] ?? '';
+    }
+
+    return name.length >= 3 ? name : '';
+  } catch {
+    return '';
+  }
+}
+
+export function getHostname(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
+
+export async function normalizeUploadedImage(file: File): Promise<string> {
+  const sourceDataUrl = await readFileAsDataUrl(file);
+  const image = await loadImageElement(sourceDataUrl);
+  const canvas = document.createElement('canvas');
+  const size = 96;
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Canvas is unavailable for icon normalization.');
+  }
+
+  context.clearRect(0, 0, size, size);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
+
+  const scale = Math.min(size / image.naturalWidth, size / image.naturalHeight);
+  const drawWidth = image.naturalWidth * scale;
+  const drawHeight = image.naturalHeight * scale;
+  const drawX = (size - drawWidth) / 2;
+  const drawY = (size - drawHeight) / 2;
+
+  context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+  const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
+  if (!blob) {
+    throw new Error('Failed to export the uploaded icon.');
+  }
+
+  return readFileAsDataUrl(blob);
+}
+
+export function iconPersistenceErrorMessage(error: unknown, source: 'upload' | 'search'): string {
+  const message = String(error instanceof Error ? error.message : error).toLowerCase();
+  if (message.includes('quota')) {
+    return 'Storage is full. Remove some icons or clear cache.';
+  }
+  if (source === 'search' && (message.includes('fetch') || message.includes('network'))) {
+    return 'Could not download that icon.';
+  }
+  return 'Could not save the icon.';
+}
+
+function readFileAsDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error('Failed to read icon data.'));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read icon data.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Failed to decode the uploaded image.'));
+    image.src = src;
+  });
+}

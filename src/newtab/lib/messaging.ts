@@ -7,8 +7,14 @@ import type {
   GetBookmarkTreeResponse,
   GetIconResponse,
   GetSettingsResponse,
+  IconSearchCandidate,
+  InvalidateIconResponse,
   PatchSettingsResponse,
+  RemoveIconOverrideResponse,
   ResolvedIcon,
+  SearchIconsResponse,
+  SetIconOverrideFromUrlResponse,
+  SetIconOverrideResponse,
   UpdateBookmarkResponse,
   CreateBookmarkResponse,
   RemoveBookmarkResponse,
@@ -57,4 +63,39 @@ export async function removeBookmark(bookmarkId: string, recursive?: boolean): P
 export async function moveBookmark(bookmarkId: string, parentId: string, index?: number): Promise<BookmarkNode> {
   const res = await send<MoveBookmarkResponse>({ type: messageTypes.moveBookmark, bookmarkId, parentId, index });
   return res.bookmark;
+}
+
+export async function searchIcons(query: string, bookmarkUrl?: string): Promise<IconSearchCandidate[]> {
+  const res = await send<SearchIconsResponse>({ type: messageTypes.searchIcons, query, bookmarkUrl });
+  return res.candidates;
+}
+
+export async function setIconOverride(args: {
+  bookmarkUrl: string;
+  bookmarkTitle?: string;
+  dataUrl: string;
+  fileName: string;
+  mimeType: string;
+}): Promise<ResolvedIcon> {
+  const res = await send<SetIconOverrideResponse>({ type: messageTypes.setIconOverride, ...args });
+  return res.icon;
+}
+
+export async function setIconOverrideFromUrl(args: {
+  bookmarkUrl: string;
+  bookmarkTitle?: string;
+  imageUrl: string;
+  fileName?: string;
+}): Promise<ResolvedIcon> {
+  const res = await send<SetIconOverrideFromUrlResponse>({ type: messageTypes.setIconOverrideFromUrl, ...args });
+  return res.icon;
+}
+
+export async function removeIconOverride(bookmarkUrl: string, bookmarkTitle?: string): Promise<ResolvedIcon> {
+  const res = await send<RemoveIconOverrideResponse>({ type: messageTypes.removeIconOverride, bookmarkUrl, bookmarkTitle });
+  return res.icon;
+}
+
+export async function invalidateIcon(bookmarkUrl?: string): Promise<void> {
+  await send<InvalidateIconResponse>({ type: messageTypes.invalidateIcon, bookmarkUrl });
 }
