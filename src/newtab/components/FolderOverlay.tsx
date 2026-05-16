@@ -108,7 +108,7 @@ export function FolderOverlay({ folder, rootFolderId, shape, onClose, onPickBook
           </div>
           <nav className="ff-folder-overlay__crumbs" aria-label="Folder path">
             {stack.map((f, i) => (
-              <span key={f.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span key={f.id} className="ff-crumb-segment">
                 {i > 0 && <Ico name="chevronRight" size={11} className="ff-crumb__sep" />}
                 <button
                   className="ff-folder-overlay__crumb"

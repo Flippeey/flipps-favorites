@@ -354,7 +354,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
                 <>
                   <button className="ff-crumb__btn" onClick={() => handleGoToCrumb(0)}>{rootFolder?.title ?? 'My bookmarks'}</button>
                   {folderPath.map((f, i) => (
-                    <span key={f.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span key={f.id} className="ff-crumb-segment">
                       <Ico name="chevronRight" size={11} className="ff-crumb__sep" />
                       {i === folderPath.length - 1 ? (
                         <span className="ff-crumb__here">{f.title}</span>
@@ -518,17 +518,11 @@ export function App({ initialSettings, initialTree }: AppProps) {
       )}
 
       <button
+        type="button"
+        className="ff-onboarding-replay"
         onClick={() => setOnboardOpen(true)}
         title="Replay onboarding"
         aria-label="Replay onboarding"
-        style={{
-          position: 'fixed', left: 16, bottom: 16, zIndex: 40,
-          width: 38, height: 38, borderRadius: 12,
-          background: 'var(--ink-2)', border: '1px solid var(--line-1)',
-          color: 'var(--fg-3)', cursor: 'pointer',
-          display: 'grid', placeItems: 'center',
-          boxShadow: 'var(--shadow-md)',
-        }}
       >
         <Ico name="zap" size={16} />
       </button>

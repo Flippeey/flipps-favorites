@@ -1140,6 +1140,96 @@ button { font-family: inherit; }
   padding: 0 5px;
 }
 
+/* UTILITY / SHARED COMPONENT CLASSES */
+.ff-status {
+  font-size: 12px;
+  color: var(--fg-3);
+}
+.ff-status[data-kind="error"]   { color: var(--danger); }
+.ff-status[data-kind="success"] { color: var(--accent); }
+
+.ff-crumb-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ff-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ff-toggle {
+  width: 40px; height: 22px;
+  border-radius: 11px;
+  background: var(--ink-3);
+  border: 1px solid var(--line-1);
+  position: relative;
+  cursor: pointer;
+  padding: 0;
+  transition: background 140ms ease-out;
+}
+.ff-toggle[data-on="true"] {
+  background: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 70%, #000);
+}
+.ff-toggle__thumb {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left 140ms ease-out;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.ff-toggle[data-on="true"] .ff-toggle__thumb { left: 20px; }
+
+.ff-segmented {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--ink-3);
+  border: 1px solid var(--line-1);
+  border-radius: 8px;
+}
+.ff-segmented__option {
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--fg-2);
+  border: 0;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 140ms ease-out, color 140ms ease-out;
+}
+.ff-segmented__option[data-active="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+
+.ff-onboarding-replay {
+  position: fixed;
+  left: 16px; bottom: 16px;
+  z-index: 40;
+  width: 38px; height: 38px;
+  border-radius: 12px;
+  background: var(--ink-2);
+  border: 1px solid var(--line-1);
+  color: var(--fg-3);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  box-shadow: var(--shadow-md);
+}
+
+.ff-iconpreview__fallback {
+  color: var(--fg-3);
+  font-size: 28px;
+  font-weight: 700;
+}
+
 /* RESPONSIVE */
 @media (max-width: 720px) {
   :root {

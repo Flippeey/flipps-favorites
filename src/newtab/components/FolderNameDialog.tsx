@@ -80,8 +80,8 @@ export function FolderNameDialog({ target, onClose, onSaved }: FolderNameDialogP
           placeholder="Folder name"
         />
       </div>
-      {error && <div style={{ color: 'var(--danger)', fontSize: 12 }} role="alert">{error}</div>}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+      {error && <div className="ff-status" data-kind="error" role="alert">{error}</div>}
+      <div className="ff-dialog__actions">
         <button type="button" className="ff-btn ff-btn--ghost" onClick={onClose}>Cancel</button>
         <button type="submit" className="ff-btn" disabled={saving}>
           <Ico name="check" size={14} /> {submitLabel}

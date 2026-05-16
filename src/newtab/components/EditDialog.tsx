@@ -214,7 +214,6 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
 
   const canManageIcon = Boolean(target.id);
   const previewSrc = previewIcon?.dataUrl ?? null;
-  const statusColor = status?.kind === 'error' ? 'var(--danger)' : status?.kind === 'success' ? 'var(--accent)' : 'var(--fg-3)';
 
   return (
     <ModalDialog
@@ -242,7 +241,7 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
                   style={{ width: '70%', height: '70%', objectFit: 'contain' }}
                 />
               ) : (
-                <span style={{ color: 'var(--fg-3)', fontSize: 28, fontWeight: 700 }}>
+                <span className="ff-iconpreview__fallback">
                   {(title?.[0] ?? '?').toUpperCase()}
                 </span>
               )}
@@ -272,7 +271,7 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
             />
 
             {status && (
-              <div style={{ color: statusColor, fontSize: 12 }} role="status">
+              <div className="ff-status" data-kind={status.kind} role="status">
                 {status.message}
               </div>
             )}

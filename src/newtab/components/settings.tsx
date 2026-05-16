@@ -38,27 +38,14 @@ export const LAYOUT_PRESETS: { id: LayoutPresetId; label: string; desc: string; 
 export function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
+      type="button"
       role="switch"
       aria-checked={on}
+      className="ff-toggle"
+      data-on={on}
       onClick={() => onChange(!on)}
-      style={{
-        width: 40, height: 22,
-        borderRadius: 11,
-        background: on ? 'var(--accent)' : 'var(--ink-3)',
-        border: '1px solid ' + (on ? 'color-mix(in oklab, var(--accent) 70%, #000)' : 'var(--line-1)'),
-        position: 'relative',
-        cursor: 'pointer',
-        padding: 0,
-        transition: 'background 140ms ease-out',
-      }}
     >
-      <span style={{
-        position: 'absolute', top: 2, left: on ? 20 : 2,
-        width: 16, height: 16, borderRadius: '50%',
-        background: '#fff',
-        transition: 'left 140ms ease-out',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
-      }} />
+      <span className="ff-toggle__thumb" />
     </button>
   );
 }
@@ -74,30 +61,14 @@ export function Segmented<T extends string>({ options, value, onChange }: {
   onChange: (v: T) => void;
 }) {
   return (
-    <div style={{
-      display: 'inline-flex',
-      padding: 2,
-      background: 'var(--ink-3)',
-      border: '1px solid var(--line-1)',
-      borderRadius: 8,
-      gap: 0,
-    }}>
+    <div className="ff-segmented">
       {options.map(o => (
         <button
           key={o.id}
+          type="button"
+          className="ff-segmented__option"
+          data-active={value === o.id}
           onClick={() => onChange(o.id)}
-          style={{
-            padding: '6px 10px',
-            background: value === o.id ? 'var(--accent)' : 'transparent',
-            color: value === o.id ? '#fff' : 'var(--fg-2)',
-            border: 0,
-            borderRadius: 6,
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-            transition: 'background 140ms ease-out, color 140ms ease-out',
-          }}
         >
           {o.label}
         </button>
