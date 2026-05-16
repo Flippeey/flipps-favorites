@@ -14,7 +14,7 @@ import { SectionsView, TilesView, FolderPageView } from './components/views';
 import { useMarquee, type MarqueeSelection } from './interaction/useMarquee';
 import { useDrag } from './interaction/useDrag';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
-import { getBookmarkTree, getSettings, moveBookmark, patchSettings, removeBookmark } from './lib/messaging';
+import { getBookmarkTree, getBookmarkUsage, getSettings, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
 import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 
 interface AppProps {
@@ -36,6 +36,7 @@ function parseSortValue(value: string): { mode: BookmarkSortMode; direction: Sor
 export function App({ initialSettings, initialTree }: AppProps) {
   const [settings, setSettings] = useState(initialSettings);
   const [tree, setTree] = useState(initialTree);
+  const [usage, setUsage] = useState<Record<string, number>>({});
 
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const openFolder = useMemo(
@@ -67,6 +68,12 @@ export function App({ initialSettings, initialTree }: AppProps) {
     document.documentElement.dataset.theme = resolveThemeAttr(settings.themeMode);
   }, [settings.themeMode]);
 
+  useEffect(() => {
+    let cancelled = false;
+    getBookmarkUsage().then(u => { if (!cancelled) setUsage(u); }).catch(() => { /* ignore */ });
+    return () => { cancelled = true; };
+  }, []);
+
   const handlePatch = useCallback(async (patch: Partial<AppSettings>) => {
     setSettings(prev => ({ ...prev, ...patch }));
     try {
@@ -88,8 +95,8 @@ export function App({ initialSettings, initialTree }: AppProps) {
 
   const sortedChildren = useCallback((children?: BookmarkNode[]) => {
     if (!children) return [];
-    return sortChildren(children, settings.bookmarkSortMode, settings.bookmarkSortDirection);
-  }, [settings.bookmarkSortMode, settings.bookmarkSortDirection]);
+    return sortChildren(children, settings.bookmarkSortMode, settings.bookmarkSortDirection, usage);
+  }, [settings.bookmarkSortMode, settings.bookmarkSortDirection, usage]);
 
   const sortedRootChildren = useMemo(() => sortedChildren(rootFolder?.children), [rootFolder, sortedChildren]);
   const sortedCurrentFolder: BookmarkNode | null = folderPath.length > 0
@@ -119,6 +126,9 @@ export function App({ initialSettings, initialTree }: AppProps) {
 
   const handlePickBookmark = useCallback((item: BookmarkNode, event?: { metaKey?: boolean; ctrlKey?: boolean }) => {
     if (!item.url) return;
+    const usedAt = Date.now();
+    setUsage(prev => ({ ...prev, [item.id]: usedAt }));
+    recordBookmarkUse(item.id).catch(() => { /* ignore */ });
     const url = item.url.startsWith('http') ? item.url : `https://${item.url}`;
     const newTab = settings.openLinksInNewTab !== Boolean(event?.metaKey || event?.ctrlKey);
     if (newTab) window.open(url, '_blank', 'noopener');

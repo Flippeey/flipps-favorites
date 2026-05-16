@@ -46,6 +46,7 @@ export function sortChildren(
   children: BookmarkNode[],
   mode: 'manual' | 'name' | 'lastUsed' | 'created',
   direction: 'asc' | 'desc',
+  usage: Record<string, number> = {},
 ): BookmarkNode[] {
   if (mode === 'manual') return children;
   const arr = children.slice();
@@ -55,6 +56,8 @@ export function sortChildren(
       cmp = a.title.localeCompare(b.title);
     } else if (mode === 'created') {
       cmp = (a.dateAdded ?? 0) - (b.dateAdded ?? 0);
+    } else if (mode === 'lastUsed') {
+      cmp = (usage[a.id] ?? 0) - (usage[b.id] ?? 0);
     }
     return direction === 'desc' ? -cmp : cmp;
   });

@@ -1,6 +1,6 @@
 import { extensionApi } from '../shared/browser';
 import { messageTypes, type AppRequest, type AppResponse, type BookmarkNode } from '../shared/messages';
-import { markOnboardingPending, readSettings, writeSettings } from '../shared/storage';
+import { markOnboardingPending, readBookmarkUsageRecords, readSettings, writeBookmarkUsageRecord, writeSettings } from '../shared/storage';
 import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl } from './icons/icon-service';
 
 extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }) => {
@@ -89,6 +89,17 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
     case messageTypes.invalidateIcon:
       await invalidateIcon(message.bookmarkUrl);
       return { ok: true };
+    case messageTypes.getBookmarkUsage: {
+      const records = await readBookmarkUsageRecords();
+      const usage: Record<string, number> = {};
+      for (const r of Object.values(records)) usage[r.bookmarkId] = r.usedAt;
+      return { usage };
+    }
+    case messageTypes.recordBookmarkUse: {
+      const usedAt = Date.now();
+      await writeBookmarkUsageRecord({ bookmarkId: message.bookmarkId, usedAt });
+      return { ok: true, usedAt };
+    }
     default:
       throw new Error(`Unhandled message type: ${(message as AppRequest).type}`);
   }

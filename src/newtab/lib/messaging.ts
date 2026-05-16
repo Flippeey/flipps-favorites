@@ -19,6 +19,8 @@ import type {
   CreateBookmarkResponse,
   RemoveBookmarkResponse,
   MoveBookmarkResponse,
+  GetBookmarkUsageResponse,
+  RecordBookmarkUseResponse,
 } from '../../shared/messages';
 import { messageTypes } from '../../shared/messages';
 
@@ -98,4 +100,14 @@ export async function removeIconOverride(bookmarkUrl: string, bookmarkTitle?: st
 
 export async function invalidateIcon(bookmarkUrl?: string): Promise<void> {
   await send<InvalidateIconResponse>({ type: messageTypes.invalidateIcon, bookmarkUrl });
+}
+
+export async function getBookmarkUsage(): Promise<Record<string, number>> {
+  const res = await send<GetBookmarkUsageResponse>({ type: messageTypes.getBookmarkUsage });
+  return res.usage;
+}
+
+export async function recordBookmarkUse(bookmarkId: string): Promise<number> {
+  const res = await send<RecordBookmarkUseResponse>({ type: messageTypes.recordBookmarkUse, bookmarkId });
+  return res.usedAt;
 }

@@ -14,6 +14,8 @@ export const messageTypes = {
   setIconOverrideFromUrl: 'icons/set-override-from-url',
   removeIconOverride: 'icons/remove-override',
   invalidateIcon: 'icons/invalidate',
+  getBookmarkUsage: 'bookmarks/get-usage',
+  recordBookmarkUse: 'bookmarks/record-use',
 } as const;
 
 export type MessageType = (typeof messageTypes)[keyof typeof messageTypes];
@@ -288,6 +290,24 @@ export interface InvalidateIconResponse {
   ok: true;
 }
 
+export interface GetBookmarkUsageRequest {
+  type: typeof messageTypes.getBookmarkUsage;
+}
+
+export interface GetBookmarkUsageResponse {
+  usage: Record<string, number>;
+}
+
+export interface RecordBookmarkUseRequest {
+  type: typeof messageTypes.recordBookmarkUse;
+  bookmarkId: string;
+}
+
+export interface RecordBookmarkUseResponse {
+  ok: true;
+  usedAt: number;
+}
+
 export type AppRequest =
   | PingRequest
   | GetSettingsRequest
@@ -303,7 +323,9 @@ export type AppRequest =
   | SetIconOverrideRequest
   | SetIconOverrideFromUrlRequest
   | RemoveIconOverrideRequest
-  | InvalidateIconRequest;
+  | InvalidateIconRequest
+  | GetBookmarkUsageRequest
+  | RecordBookmarkUseRequest;
 
 export type AppResponse =
   | PingResponse
@@ -320,4 +342,6 @@ export type AppResponse =
   | SetIconOverrideResponse
   | SetIconOverrideFromUrlResponse
   | RemoveIconOverrideResponse
-  | InvalidateIconResponse;
+  | InvalidateIconResponse
+  | GetBookmarkUsageResponse
+  | RecordBookmarkUseResponse;
