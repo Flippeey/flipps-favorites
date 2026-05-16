@@ -37,7 +37,11 @@ export function App({ initialSettings, initialTree }: AppProps) {
   const [settings, setSettings] = useState(initialSettings);
   const [tree, setTree] = useState(initialTree);
 
-  const [openFolder, setOpenFolder] = useState<BookmarkNode | null>(null);
+  const [openFolderId, setOpenFolderId] = useState<string | null>(null);
+  const openFolder = useMemo(
+    () => (openFolderId ? findFolder(tree, openFolderId) ?? null : null),
+    [tree, openFolderId],
+  );
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [quickAddTarget, setQuickAddTarget] = useState<{ parentId: string; parentTitle?: string } | null>(null);
   const [folderNameTarget, setFolderNameTarget] = useState<FolderNameDialogTarget | null>(null);
@@ -51,6 +55,8 @@ export function App({ initialSettings, initialTree }: AppProps) {
   selectionRef.current = selection;
 
   const canvasRef = useRef<HTMLElement | null>(null);
+  const [canvasEl, setCanvasEl] = useState<HTMLElement | null>(null);
+  const [overlayBodyEl, setOverlayBodyEl] = useState<HTMLElement | null>(null);
 
   const rootFolder = useMemo(() => resolveRootFolder(tree, settings.rootFolderId), [tree, settings.rootFolderId]);
 
@@ -107,7 +113,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
     if (settings.folderOpenMode === 'page') {
       setFolderPath(p => [...p, folder]);
     } else {
-      setOpenFolder(folder);
+      setOpenFolderId(folder.id);
     }
   }, [settings.folderOpenMode]);
 
@@ -281,14 +287,23 @@ export function App({ initialSettings, initialTree }: AppProps) {
     onSelect: setSelection,
   });
 
-  const dragPreview = useDrag({
-    canvasRef,
+  const canvasDragPreview = useDrag({
+    surface: canvasEl,
     rootFolderId: rootFolder?.id ?? '',
     enabled: dragEnabled,
     selectionRef,
     getOrderedChildren,
     onCommit: handleDragCommit,
   });
+  const overlayDragPreview = useDrag({
+    surface: overlayBodyEl,
+    rootFolderId: rootFolder?.id ?? '',
+    enabled: dragEnabled,
+    selectionRef,
+    getOrderedChildren,
+    onCommit: handleDragCommit,
+  });
+  const dragPreview = canvasDragPreview ?? overlayDragPreview;
 
   const handleTileClick = useCallback((item: BookmarkNode, event: React.MouseEvent) => {
     if (event.shiftKey || event.metaKey || event.ctrlKey) {
@@ -381,7 +396,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
         )}
       </section>
 
-      <main className="ff-canvas" ref={(el) => { canvasRef.current = el; }} onContextMenu={handleCanvasContextMenu}>
+      <main className="ff-canvas" ref={(el) => { canvasRef.current = el; setCanvasEl(el); }} onContextMenu={handleCanvasContextMenu}>
         {!isAtRoot && sortedCurrentFolder ? (
           <FolderPageView
             folder={sortedCurrentFolder}
@@ -439,7 +454,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
         <FolderOverlay
           folder={openFolder}
           shape={settings.tileShape}
-          onClose={() => setOpenFolder(null)}
+          onClose={() => setOpenFolderId(null)}
           onPickBookmark={handlePickBookmark}
           onContextMenu={(target, e) => {
             e.preventDefault();
@@ -447,6 +462,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
           }}
           onNewBookmark={(parentId, parentTitle) => handleNewBookmark(parentId, parentTitle)}
           onNewFolder={(parentId, parentTitle) => handleNewFolder(parentId, parentTitle)}
+          bodyRef={setOverlayBodyEl}
         />
       )}
 

@@ -67,11 +67,10 @@ export function QuickAddDialog({ parentId, parentTitle, onClose, onSaved }: Quic
   };
 
   return (
-    <div className="ff-modal-scrim" onClick={onClose}>
+    <div className="ff-modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <form
         className="ff-dialog"
         style={{ width: 'min(520px, 100%)' }}
-        onClick={(e) => e.stopPropagation()}
         onSubmit={handleSubmit}
       >
         <div className="ff-dialog__head">

@@ -63,11 +63,10 @@ export function FolderNameDialog({ target, onClose, onSaved }: FolderNameDialogP
   const submitLabel = saving ? 'Saving…' : (isRename ? 'Rename' : 'Create folder');
 
   return (
-    <div className="ff-modal-scrim" onClick={onClose}>
+    <div className="ff-modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <form
         className="ff-dialog"
         style={{ width: 'min(480px, 100%)' }}
-        onClick={(e) => e.stopPropagation()}
         onSubmit={handleSubmit}
       >
         <div className="ff-dialog__head">

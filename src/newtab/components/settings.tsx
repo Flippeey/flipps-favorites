@@ -237,7 +237,7 @@ export function SettingsDrawer({ settings, tree, onPatch, onClose }: SettingsDra
 
   return (
     <>
-      <div className="ff-modal-scrim" onClick={onClose} style={{ background: 'rgba(0,0,0,0.35)' }} />
+      <div className="ff-modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ background: 'rgba(0,0,0,0.35)' }} />
       <aside className="ff-drawer" role="dialog" aria-label="Settings">
         <header className="ff-drawer__head">
           <div>

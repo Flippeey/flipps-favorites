@@ -4,6 +4,15 @@ import type { BookmarkNode, TileShape } from '../../shared/messages';
 import { BookmarkTile, FolderTile, isFolder } from './Tile';
 import { Ico } from './Ico';
 
+function findNodeById(node: BookmarkNode, id: string): BookmarkNode | undefined {
+  if (node.id === id) return node;
+  for (const child of node.children ?? []) {
+    const found = findNodeById(child, id);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 interface FolderOverlayProps {
   folder: BookmarkNode;
   shape: TileShape;
@@ -12,17 +21,29 @@ interface FolderOverlayProps {
   onContextMenu?: (target: BookmarkNode, event: ReactMouseEvent) => void;
   onNewBookmark?: (parentId: string, parentTitle?: string) => void;
   onNewFolder?: (parentId: string, parentTitle?: string) => void;
+  bodyRef?: (el: HTMLElement | null) => void;
 }
 
-export function FolderOverlay({ folder, shape, onClose, onPickBookmark, onContextMenu, onNewBookmark, onNewFolder }: FolderOverlayProps) {
+export function FolderOverlay({ folder, shape, onClose, onPickBookmark, onContextMenu, onNewBookmark, onNewFolder, bodyRef }: FolderOverlayProps) {
   const [stack, setStack] = useState<BookmarkNode[]>([folder]);
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
   const current = stack[stack.length - 1];
 
   useEffect(() => {
-    setStack([folder]);
-    setDirection('forward');
-  }, [folder.id]);
+    setStack(prev => {
+      if (prev[0]?.id !== folder.id) {
+        setDirection('forward');
+        return [folder];
+      }
+      const next: BookmarkNode[] = [folder];
+      for (let i = 1; i < prev.length; i++) {
+        const refreshed = findNodeById(folder, prev[i].id);
+        if (!refreshed) break;
+        next.push(refreshed);
+      }
+      return next;
+    });
+  }, [folder]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -118,6 +139,7 @@ export function FolderOverlay({ folder, shape, onClose, onPickBookmark, onContex
         </div>
         <div
           className="ff-folder-overlay__body"
+          ref={(el) => bodyRef?.(el)}
           key={current.id}
           data-dir={direction}
           data-scope-folder-id={current.id}

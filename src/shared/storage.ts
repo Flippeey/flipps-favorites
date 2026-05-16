@@ -78,7 +78,7 @@ export const defaultSettings: AppSettings = {
   rootFolderId: '',
   rememberLastFolder: true,
   openLinksInNewTab: false,
-  showDock: true,
+  showDock: false,
   autoHideDock: true,
   dockFolderId: '',
   bookmarkSortMode: 'manual',

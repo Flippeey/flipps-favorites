@@ -6,7 +6,7 @@ export type DropTarget =
   | { kind: 'dock' };
 
 interface UseDragArgs {
-  canvasRef: RefObject<HTMLElement | null>;
+  surface: HTMLElement | null;
   rootFolderId: string;
   enabled: boolean;
   selectionRef: RefObject<{ ids: Set<string>; scopeFolderId: string }>;
@@ -42,7 +42,7 @@ export interface DragPreviewState {
 }
 
 export function useDrag({
-  canvasRef,
+  surface,
   rootFolderId,
   enabled,
   selectionRef,
@@ -72,7 +72,7 @@ export function useDrag({
 
   useEffect(() => {
     if (!enabled) return;
-    const canvas = canvasRef.current;
+    const canvas = surface;
     if (!canvas) return;
 
     const cancel = () => {
@@ -207,7 +207,7 @@ export function useDrag({
       window.removeEventListener('pointercancel', cancel);
       window.removeEventListener('keydown', onKey);
     };
-  }, [canvasRef, enabled, selectionRef]);
+  }, [surface, enabled, selectionRef]);
 
   return preview;
 }

@@ -220,8 +220,8 @@ export function EditDialog({ target, shape: _shape, onClose, onSaved }: EditDial
   const statusColor = status?.kind === 'error' ? 'var(--danger)' : status?.kind === 'success' ? 'var(--accent)' : 'var(--fg-3)';
 
   return (
-    <div className="ff-modal-scrim" onClick={onClose}>
-      <div className="ff-dialog" onClick={(e) => e.stopPropagation()}>
+    <div className="ff-modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="ff-dialog">
         <div className="ff-dialog__head">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
             <div className="ff-section__icon-folder" style={{ width: 36, height: 36 }}>
