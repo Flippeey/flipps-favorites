@@ -342,6 +342,23 @@ button { font-family: inherit; }
 }
 .ff-search:focus-within .ff-kbd { opacity: 1; }
 
+.ff-search__clear {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--r-full);
+  color: var(--fg-3);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.ff-search__clear:hover {
+  background: var(--ink-3);
+  color: var(--fg-1);
+}
+
 /* CANVAS + GRID */
 .ff-canvas {
   position: relative; z-index: 4;

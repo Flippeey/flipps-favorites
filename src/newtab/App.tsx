@@ -3,6 +3,7 @@ import type { AppSettings, BookmarkNode, BookmarkSortMode, SortDirection } from 
 import { ContextMenu, type ContextMenuItem } from './components/ContextMenu';
 import { Dock } from './components/Dock';
 import { EditDialog, type EditTarget } from './components/EditDialog';
+import { FolderNameDialog, type FolderNameDialogTarget } from './components/FolderNameDialog';
 import { FolderOverlay } from './components/FolderOverlay';
 import { QuickAddDialog } from './components/QuickAddDialog';
 import { buildSearchIndex, ClockGreeting, HeroSearch, type FlatSearchResult } from './components/HeroSearch';
@@ -39,6 +40,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
   const [openFolder, setOpenFolder] = useState<BookmarkNode | null>(null);
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [quickAddTarget, setQuickAddTarget] = useState<{ parentId: string; parentTitle?: string } | null>(null);
+  const [folderNameTarget, setFolderNameTarget] = useState<FolderNameDialogTarget | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [onboardOpen, setOnboardOpen] = useState(false);
   const [folderPath, setFolderPath] = useState<BookmarkNode[]>([]);
@@ -135,6 +137,14 @@ export function App({ initialSettings, initialTree }: AppProps) {
     setQuickAddTarget({ parentId: parentId ?? defaultParentId(), parentTitle });
   }, [defaultParentId]);
 
+  const handleNewFolder = useCallback((parentId?: string, parentTitle?: string) => {
+    setFolderNameTarget({ mode: 'create', parentId: parentId ?? defaultParentId(), parentTitle });
+  }, [defaultParentId]);
+
+  const handleRenameFolder = useCallback((folder: BookmarkNode) => {
+    setFolderNameTarget({ mode: 'rename', id: folder.id, title: folder.title });
+  }, []);
+
   const handleEditBookmark = useCallback((item: BookmarkNode) => {
     setEditTarget({ id: item.id, parentId: item.parentId, title: item.title, url: item.url ?? '' });
   }, []);
@@ -145,7 +155,8 @@ export function App({ initialSettings, initialTree }: AppProps) {
       const labelSuffix = sectionFolder ? ` in ${sectionFolder.title}` : '';
       return [
         { kind: 'item', icon: 'plus',       label: `New bookmark${labelSuffix}`, onClick: () => handleNewBookmark(parentId, sectionFolder?.title) },
-        { kind: 'item', icon: 'folderPlus', label: 'New folder',   disabled: true, onClick: () => {} },
+        { kind: 'item', icon: 'folderPlus', label: `New folder${labelSuffix}`,
+          onClick: () => handleNewFolder(parentId, sectionFolder?.title) },
         { kind: 'separator' },
         { kind: 'item', icon: 'refresh',    label: 'Refresh icons', onClick: () => refreshTree() },
       ];
@@ -153,11 +164,13 @@ export function App({ initialSettings, initialTree }: AppProps) {
     if (isFolder(target)) {
       return [
         { kind: 'item', icon: 'folder',     label: 'Open folder', kbd: '↵', onClick: () => handlePickFolder(target) },
-        { kind: 'item', icon: 'pencil',     label: 'Rename',      disabled: true, onClick: () => {} },
+        { kind: 'item', icon: 'pencil',     label: 'Rename',
+          onClick: () => handleRenameFolder(target) },
         { kind: 'separator' },
         { kind: 'item', icon: 'plus',       label: 'New bookmark inside',
           onClick: () => handleNewBookmark(target.id, target.title) },
-        { kind: 'item', icon: 'folderPlus', label: 'New folder inside', disabled: true, onClick: () => {} },
+        { kind: 'item', icon: 'folderPlus', label: 'New folder inside',
+          onClick: () => handleNewFolder(target.id, target.title) },
         { kind: 'separator' },
         { kind: 'item', icon: 'trash', label: 'Delete folder', kbd: '⌫', destructive: true,
           onClick: async () => { await removeBookmark(target.id, true); refreshTree(); } },
@@ -173,7 +186,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
       { kind: 'item', icon: 'trash',      label: 'Delete',          kbd: '⌫', destructive: true,
         onClick: async () => { await removeBookmark(target.id); refreshTree(); } },
     ];
-  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handlePickBookmark, handlePickFolder, refreshTree]);
+  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, refreshTree]);
 
   const handleCanvasContextMenu = useCallback((event: React.MouseEvent) => {
     event.preventDefault();
@@ -298,8 +311,8 @@ export function App({ initialSettings, initialTree }: AppProps) {
       setSelection({ ids: new Set(), scopeFolderId: '' });
     }
     if (isFolder(item)) handlePickFolder(item);
-    else handleEditBookmark(item);
-  }, [handleEditBookmark, handlePickFolder, rootFolder]);
+    else handlePickBookmark(item, event);
+  }, [handlePickBookmark, handlePickFolder, rootFolder]);
 
   return (
     <div
@@ -392,6 +405,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
         ) : (
           <TilesView
             tree={sortedRootChildren.filter(isFolder)}
+            rootBookmarks={sortedRootChildren.filter(c => !isFolder(c))}
             scopeFolderId={rootFolder?.id ?? ''}
             shape={settings.tileShape}
             onPickFolder={handleTileClick}
@@ -426,7 +440,13 @@ export function App({ initialSettings, initialTree }: AppProps) {
           folder={openFolder}
           shape={settings.tileShape}
           onClose={() => setOpenFolder(null)}
-          onEdit={(item) => { setOpenFolder(null); handleEditBookmark(item); }}
+          onPickBookmark={handlePickBookmark}
+          onContextMenu={(target, e) => {
+            e.preventDefault();
+            setContextMenu({ x: e.clientX, y: e.clientY, items: buildContextMenuItems(target) });
+          }}
+          onNewBookmark={(parentId, parentTitle) => handleNewBookmark(parentId, parentTitle)}
+          onNewFolder={(parentId, parentTitle) => handleNewFolder(parentId, parentTitle)}
         />
       )}
 
@@ -445,6 +465,14 @@ export function App({ initialSettings, initialTree }: AppProps) {
           parentTitle={quickAddTarget.parentTitle}
           onClose={() => setQuickAddTarget(null)}
           onSaved={() => { setQuickAddTarget(null); refreshTree(); }}
+        />
+      )}
+
+      {folderNameTarget && (
+        <FolderNameDialog
+          target={folderNameTarget}
+          onClose={() => setFolderNameTarget(null)}
+          onSaved={() => { setFolderNameTarget(null); refreshTree(); }}
         />
       )}
 

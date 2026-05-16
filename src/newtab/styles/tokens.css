@@ -3,12 +3,12 @@
    and meets MV3 content policies. */
 
 :root {
-  /* Base palette — near-black with warm shadows */
-  --ink-0: #0A0908;
-  --ink-1: #121110;
-  --ink-2: #1A1817;
-  --ink-3: #22201E;
-  --ink-4: #2B2926;
+  /* Base palette — very-dark neutral grey */
+  --ink-0: #141414;
+  --ink-1: #1C1C1C;
+  --ink-2: #232323;
+  --ink-3: #2B2B2B;
+  --ink-4: #353535;
 
   /* Foreground neutrals */
   --fg-1: #F5F3F0;

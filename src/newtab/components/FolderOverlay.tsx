@@ -1,3 +1,4 @@
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useEffect, useState } from 'react';
 import type { BookmarkNode, TileShape } from '../../shared/messages';
 import { BookmarkTile, FolderTile, isFolder } from './Tile';
@@ -7,10 +8,13 @@ interface FolderOverlayProps {
   folder: BookmarkNode;
   shape: TileShape;
   onClose: () => void;
-  onEdit: (item: BookmarkNode) => void;
+  onPickBookmark: (item: BookmarkNode, event?: { metaKey?: boolean; ctrlKey?: boolean }) => void;
+  onContextMenu?: (target: BookmarkNode, event: ReactMouseEvent) => void;
+  onNewBookmark?: (parentId: string, parentTitle?: string) => void;
+  onNewFolder?: (parentId: string, parentTitle?: string) => void;
 }
 
-export function FolderOverlay({ folder, shape, onClose, onEdit }: FolderOverlayProps) {
+export function FolderOverlay({ folder, shape, onClose, onPickBookmark, onContextMenu, onNewBookmark, onNewFolder }: FolderOverlayProps) {
   const [stack, setStack] = useState<BookmarkNode[]>([folder]);
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
   const current = stack[stack.length - 1];
@@ -36,12 +40,13 @@ export function FolderOverlay({ folder, shape, onClose, onEdit }: FolderOverlayP
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose, stack.length]);
 
-  const handleItemClick = (item: BookmarkNode) => {
+  const handleItemClick = (item: BookmarkNode, event: ReactMouseEvent) => {
     if (isFolder(item)) {
       setDirection('forward');
       setStack(s => [...s, item]);
     } else {
-      onEdit(item);
+      onClose();
+      onPickBookmark(item, event);
     }
   };
   const handleBreadcrumbClick = (idx: number) => {
@@ -87,16 +92,41 @@ export function FolderOverlay({ folder, shape, onClose, onEdit }: FolderOverlayP
             ))}
           </nav>
           <span className="ff-folder-overlay__meta">{current.children?.length ?? 0} items</span>
+          {onNewBookmark && (
+            <button
+              className="ff-iconbtn ff-iconbtn--icon"
+              onClick={() => onNewBookmark(current.id, current.title)}
+              aria-label="Add bookmark to this folder"
+              title="Add bookmark"
+            >
+              <Ico name="plus" size={16} />
+            </button>
+          )}
+          {onNewFolder && (
+            <button
+              className="ff-iconbtn ff-iconbtn--icon"
+              onClick={() => onNewFolder(current.id, current.title)}
+              aria-label="Add folder inside"
+              title="Add folder"
+            >
+              <Ico name="folderPlus" size={16} />
+            </button>
+          )}
           <button className="ff-iconbtn ff-iconbtn--icon" onClick={onClose} aria-label="Close overlay">
             <Ico name="close" size={16} />
           </button>
         </div>
-        <div className="ff-folder-overlay__body" key={current.id} data-dir={direction}>
+        <div
+          className="ff-folder-overlay__body"
+          key={current.id}
+          data-dir={direction}
+          data-scope-folder-id={current.id}
+        >
           <div className="ff-grid">
             {(current.children ?? []).map(item => (
               isFolder(item)
-                ? <FolderTile key={item.id} folder={item} shape={shape} onClick={handleItemClick} />
-                : <BookmarkTile key={item.id} item={item} shape={shape} onClick={handleItemClick} />
+                ? <FolderTile key={item.id} folder={item} shape={shape} onClick={handleItemClick} onContextMenu={onContextMenu} />
+                : <BookmarkTile key={item.id} item={item} shape={shape} onClick={handleItemClick} onContextMenu={onContextMenu} />
             ))}
           </div>
         </div>

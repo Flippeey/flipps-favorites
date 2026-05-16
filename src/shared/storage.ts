@@ -104,8 +104,8 @@ export const defaultSettings: AppSettings = {
   folderOpenMode: 'overlay',
   tileShape: 'squircle',
   showTileLabels: true,
-  backgroundMode: 'solid',
-  gradientStyle: 'top',
+  backgroundMode: 'gradient',
+  gradientStyle: 'top-bottom',
 };
 
 export async function readSettings(): Promise<AppSettings> {

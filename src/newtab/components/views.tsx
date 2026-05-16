@@ -18,14 +18,17 @@ interface TreeViewProps extends BaseViewProps {
   onAdd?: (folder: BookmarkNode) => void;
 }
 
+interface TilesViewProps extends TreeViewProps {
+  rootBookmarks?: BookmarkNode[];
+}
+
 function isSelectedIn(scope: string, containerScope: string, ids: ReadonlySet<string> | undefined, itemId: string): boolean {
   if (!ids || ids.size === 0) return false;
   if (scope !== containerScope) return false;
   return ids.has(itemId);
 }
 
-export function TilesView({ tree, shape, scopeFolderId, onPickFolder, onPickItem, onContextMenu, selectedIds, selectionScopeFolderId }: TreeViewProps) {
-  const looseBookmarks = tree.flatMap(f => (f.children ?? []).filter(c => !isFolder(c)).slice(0, 2));
+export function TilesView({ tree, rootBookmarks, shape, scopeFolderId, onPickFolder, onPickItem, onContextMenu, selectedIds, selectionScopeFolderId }: TilesViewProps) {
   return (
     <div className="ff-grid" data-scope-folder-id={scopeFolderId}>
       {tree.map(folder => (
@@ -38,9 +41,9 @@ export function TilesView({ tree, shape, scopeFolderId, onPickFolder, onPickItem
           onContextMenu={onContextMenu}
         />
       ))}
-      {looseBookmarks.map(item => (
+      {(rootBookmarks ?? []).map(item => (
         <BookmarkTile
-          key={`loose-${item.id}`}
+          key={item.id}
           item={item}
           shape={shape}
           selected={isSelectedIn(scopeFolderId, selectionScopeFolderId ?? '', selectedIds, item.id)}

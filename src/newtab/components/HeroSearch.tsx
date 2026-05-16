@@ -41,6 +41,16 @@ interface HeroSearchProps {
   onPickFolder: (item: FlatSearchResult) => void;
 }
 
+function isTypingTarget(el: EventTarget | null): boolean {
+  if (!(el instanceof HTMLElement)) return false;
+  const tag = el.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (el.isContentEditable) return true;
+  return false;
+}
+
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+
 export function HeroSearch({ shape, index, onPickBookmark, onPickFolder }: HeroSearchProps) {
   const [value, setValue] = useState('');
   const [focused, setFocused] = useState(false);
@@ -51,6 +61,13 @@ export function HeroSearch({ shape, index, onPickBookmark, onPickFolder }: HeroS
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         inputRef.current?.focus();
+        return;
+      }
+      // `/` as a fallback shortcut — common pattern (GitHub etc.) and not browser-reserved.
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !isTypingTarget(e.target)) {
+        e.preventDefault();
+        inputRef.current?.focus();
+        return;
       }
       if (e.key === 'Escape' && document.activeElement === inputRef.current) {
         inputRef.current?.blur();
@@ -78,21 +95,37 @@ export function HeroSearch({ shape, index, onPickBookmark, onPickFolder }: HeroS
         <span className="ff-search__icon"><Ico name="search" size={18} /></span>
         <input
           ref={inputRef}
-          type="search"
+          type="text"
           placeholder="Search bookmarks or type a URL"
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setTimeout(() => setFocused(false), 120)}
           aria-label="Search bookmarks"
+          spellCheck={false}
+          autoComplete="off"
         />
-        <span className="ff-kbd">⌘K</span>
+        {value && (
+          <button
+            type="button"
+            className="ff-search__clear"
+            aria-label="Clear search"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setValue('');
+              inputRef.current?.focus();
+            }}
+          >
+            <Ico name="close" size={14} />
+          </button>
+        )}
+        <span className="ff-kbd">{IS_MAC ? '⌘K' : 'Ctrl K'}</span>
       </label>
       {focused && value && (
         <div className="ff-results no-scrollbar" style={{ overflowY: 'auto' }}>
           {bookmarks.length === 0 && folders.length === 0 && (
             <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--fg-3)', fontSize: 13 }}>
-              No matches. Press <span className="ff-kbd" style={{ margin: '0 4px' }}>↵</span> to search the web.
+              No matches.
             </div>
           )}
           {bookmarks.length > 0 && <div className="ff-results__group">Bookmarks</div>}
