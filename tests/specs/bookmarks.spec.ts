@@ -1,140 +1,118 @@
 /**
- * Bookmark CRUD tests — priority 4.
- *
- * Covers creating, editing, and deleting bookmarks via the context menu,
- * plus undo (Ctrl+Z) restoring a deleted bookmark.
+ * Bookmark CRUD via dialogs + context menu.
  */
 import { test, expect } from '../fixtures/extension-context.js';
 import {
-  createTestFolder,
+  clearExtensionStorage,
+  clickMenuItem,
+  createSubFolder,
   createTestBookmark,
+  createTestFolder,
+  openContextMenu,
+  patchSettings,
+  reloadNewtab,
   removeBookmarkTree,
   setRootFolderId,
-  skipOnboarding,
-  reloadNewtab,
+  tileById,
 } from '../fixtures/bookmark-helpers.js';
 
-let testFolderId: string;
+let rootId: string;
 
 test.beforeEach(async ({ newtabPage }) => {
-  await skipOnboarding(newtabPage);
-  testFolderId = await createTestFolder(newtabPage, 'BM Test Folder');
-  await setRootFolderId(newtabPage, testFolderId);
+  await clearExtensionStorage(newtabPage);
+  rootId = await createTestFolder(newtabPage, 'BM Root');
+  await setRootFolderId(newtabPage, rootId);
+  // Use tiles mode so root bookmarks render at the top level.
+  await patchSettings(newtabPage, { folderMode: 'tiles' });
   await reloadNewtab(newtabPage);
 });
 
 test.afterEach(async ({ newtabPage }) => {
-  await removeBookmarkTree(newtabPage, testFolderId);
+  await removeBookmarkTree(newtabPage, rootId);
 });
 
-// ---------------------------------------------------------------------------
-// Create
-// ---------------------------------------------------------------------------
+test('QuickAdd from TopNav saves a new bookmark', async ({ newtabPage }) => {
+  await newtabPage.getByRole('button', { name: 'Add bookmark', exact: true }).click();
+  const dialog = newtabPage.locator('.ff-dialog');
+  await expect(dialog).toBeVisible();
 
-test('right-clicking empty grid area shows context menu with Add bookmark option', async ({
-  newtabPage,
-}) => {
-  const grid = newtabPage.locator('.bookmark-grid');
-  await grid.click({ button: 'right' });
+  const urlInput = dialog.locator('input[type="url"]');
+  await urlInput.fill('https://playwright.dev/docs');
+  await dialog.getByRole('button', { name: /Add bookmark/i }).click();
 
-  const menu = newtabPage.locator('.bookmark-context-menu');
-  await expect(menu).toBeVisible();
-  await expect(menu.locator('[data-context-action="add-bookmark"]')).toBeVisible();
+  await expect(dialog).toBeHidden();
+  // Tile appears: title inferred from URL ("Docs" or hostname).
+  await expect(newtabPage.locator('.ff-tile[data-item-kind="bookmark"]')).toHaveCount(1);
 });
 
-test('creating a bookmark via context menu adds a tile to the grid', async ({ newtabPage }) => {
-  // Open surface context menu.
-  await newtabPage.locator('.bookmark-grid').click({ button: 'right' });
-  await newtabPage.locator('[data-context-action="add-bookmark"]').click();
+test('QuickAdd rejects an empty URL with an error message', async ({ newtabPage }) => {
+  await newtabPage.getByRole('button', { name: 'Add bookmark', exact: true }).click();
+  const dialog = newtabPage.locator('.ff-dialog');
+  const urlInput = dialog.locator('input[type="url"]');
+  await urlInput.fill('');
+  await dialog.getByRole('button', { name: /Add bookmark/i }).click();
 
-  // The bookmark dialog should appear.
-  const dialog = newtabPage.locator('.bookmark-dialog');
-  await expect(dialog).toBeVisible({ timeout: 5_000 });
-
-  // Fill in title and URL using the correct input names.
-  await dialog.locator('input[name="bookmarkDialogTitle"]').fill('My New Bookmark');
-  await dialog.locator('input[name="bookmarkDialogUrl"]').fill('https://playwright.dev');
-
-  // Save.
-  await dialog.locator('button.bookmark-dialog-save-button').click();
-
-  // The new tile should appear in the grid.
-  await expect(
-    newtabPage.locator('.bookmark-grid [data-link-url^="https://playwright.dev"]')
-  ).toBeVisible({ timeout: 8_000 });
+  await expect(dialog.locator('.ff-status[data-kind="error"]')).toContainText(/URL|enter/i);
 });
 
-// ---------------------------------------------------------------------------
-// Edit
-// ---------------------------------------------------------------------------
+test('right-click empty canvas surfaces New bookmark + New folder', async ({ newtabPage }) => {
+  const menu = await openContextMenu(newtabPage, newtabPage.locator('.ff-canvas'));
+  await expect(menu.getByRole('menuitem', { name: /New bookmark/i })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: /New folder/i })).toBeVisible();
+});
 
-test('editing a bookmark title updates its tile label', async ({ newtabPage }) => {
-  // Seed a bookmark directly.
-  await createTestBookmark(newtabPage, testFolderId, 'Original Title', 'https://example.com');
+test('context menu New bookmark adds a tile via QuickAdd', async ({ newtabPage }) => {
+  const menu = await openContextMenu(newtabPage, newtabPage.locator('.ff-canvas'));
+  await clickMenuItem(menu, /New bookmark/i);
+
+  const dialog = newtabPage.locator('.ff-dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.locator('input[type="url"]').fill('https://example.com');
+  await dialog.getByRole('button', { name: /Add bookmark/i }).click();
+
+  await expect(newtabPage.locator('.ff-tile[data-item-kind="bookmark"]')).toHaveCount(1);
+});
+
+test('editing a bookmark updates the tile label', async ({ newtabPage }) => {
+  const bmId = await createTestBookmark(newtabPage, rootId, 'Old Title', 'https://example.com');
   await reloadNewtab(newtabPage);
 
-  // Right-click the tile. Browsers normalise URLs so use prefix match.
-  const tile = newtabPage.locator('[data-link-url^="https://example.com"]').first();
-  await tile.click({ button: 'right' });
-  await newtabPage.locator('[data-context-action="edit"]').click();
+  const tile = tileById(newtabPage, bmId);
+  await tile.waitFor();
+  const menu = await openContextMenu(newtabPage, tile);
+  await clickMenuItem(menu, /Edit/i);
 
-  // The dialog should open with the current title.
-  const dialog = newtabPage.locator('.bookmark-dialog');
-  await expect(dialog).toBeVisible({ timeout: 5_000 });
+  const dialog = newtabPage.locator('.ff-dialog');
+  await expect(dialog).toBeVisible();
+  const nameInput = dialog.locator('input.ff-input').first();
+  await nameInput.fill('New Title');
+  await dialog.getByRole('button', { name: /Save bookmark/i }).click();
 
-  const titleInput = dialog.locator('input[name="bookmarkDialogTitle"]');
-  await titleInput.clear();
-  await titleInput.fill('Updated Title');
-
-  await dialog.locator('button.bookmark-dialog-save-button').click();
-
-  // The tile label should now show the new title.
-  await expect(newtabPage.locator('.bookmark-tile', { hasText: 'Updated Title' })).toBeVisible({
-    timeout: 5_000,
-  });
+  await expect(tile).toHaveAttribute('title', 'New Title', { timeout: 5_000 });
 });
 
-// ---------------------------------------------------------------------------
-// Delete
-// ---------------------------------------------------------------------------
-
-test('deleting a bookmark via context menu removes its tile from the grid', async ({
-  newtabPage,
-}) => {
-  await createTestBookmark(newtabPage, testFolderId, 'To Delete', 'https://to-delete.example.com');
+test('deleting a bookmark removes its tile', async ({ newtabPage }) => {
+  const bmId = await createTestBookmark(newtabPage, rootId, 'Doomed', 'https://doomed.example.com');
   await reloadNewtab(newtabPage);
+  const tile = tileById(newtabPage, bmId);
+  await tile.waitFor();
+  const menu = await openContextMenu(newtabPage, tile);
+  await clickMenuItem(menu, 'Delete');
 
-  const tile = newtabPage.locator('[data-link-url^="https://to-delete.example.com"]').first();
-  await expect(tile).toBeVisible();
-  await tile.click({ button: 'right' });
-
-  await newtabPage.locator('[data-context-action="delete"]').click();
-
-  await expect(tile).not.toBeVisible({ timeout: 5_000 });
+  await expect(tile).toHaveCount(0, { timeout: 5_000 });
 });
 
-// ---------------------------------------------------------------------------
-// Undo
-// ---------------------------------------------------------------------------
-
-test('Ctrl+Z restores a deleted bookmark', async ({ newtabPage }) => {
-  await createTestBookmark(
-    newtabPage,
-    testFolderId,
-    'Undo Me',
-    'https://undo-test.example.com'
-  );
+test('renaming a folder updates its tile title', async ({ newtabPage }) => {
+  const subId = await createSubFolder(newtabPage, rootId, 'Old Folder');
   await reloadNewtab(newtabPage);
+  const tile = tileById(newtabPage, subId);
+  await tile.waitFor();
+  const menu = await openContextMenu(newtabPage, tile);
+  await clickMenuItem(menu, /Rename/i);
 
-  const tile = newtabPage.locator('[data-link-url^="https://undo-test.example.com"]').first();
-  await expect(tile).toBeVisible();
+  const dialog = newtabPage.locator('.ff-dialog');
+  await dialog.locator('input.ff-input').first().fill('Renamed Folder');
+  await dialog.getByRole('button', { name: /Rename/i }).click();
 
-  // Delete via context menu.
-  await tile.click({ button: 'right' });
-  await newtabPage.locator('[data-context-action="delete"]').click();
-  await expect(tile).not.toBeVisible({ timeout: 5_000 });
-
-  // Undo.
-  await newtabPage.keyboard.press('Control+z');
-  await expect(tile).toBeVisible({ timeout: 5_000 });
+  await expect(tile).toHaveAttribute('title', 'Renamed Folder', { timeout: 5_000 });
 });

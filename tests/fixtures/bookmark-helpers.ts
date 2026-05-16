@@ -1,112 +1,118 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { STORAGE_KEYS } from './test-data.js';
 
-/**
- * Mark onboarding as completed so the wizard doesn't block tests.
- * The default onboarding state when storage is absent is already 'completed',
- * but calling this explicitly makes tests resilient to profile reuse.
- */
-export async function skipOnboarding(page: Page): Promise<void> {
-  await page.evaluate((key) => {
-    return browser.storage.local.set({
-      [key]: {
-        version: 1,
-        status: 'completed',
-        updatedAt: Date.now(),
-        completedAt: Date.now(),
-        skippedAt: null,
-      },
-    });
-  }, STORAGE_KEYS.onboardingState);
-}
-
-/**
- * Clear extension-managed storage so each test starts from a clean slate.
- * Does NOT touch the browser bookmark tree (use removeTestFolder for that).
- */
 export async function clearExtensionStorage(page: Page): Promise<void> {
   await page.evaluate(async (keys) => {
-    await browser.storage.local.remove(Object.values(keys));
-    // app-settings lives in sync-preferred: try sync first, then local.
+    const api = (globalThis as any).browser || (globalThis as any).chrome;
+    await api.storage.local.remove(Object.values(keys));
     try {
-      await browser.storage.sync.remove(keys.appSettings);
+      await api.storage.sync.remove(keys.appSettings);
     } catch {
-      await browser.storage.local.remove(keys.appSettings);
+      await api.storage.local.remove(keys.appSettings);
     }
   }, STORAGE_KEYS);
 }
 
-/**
- * Create a test bookmark folder at the root and return its id.
- * Returns the folder id so tests can navigate to it or clean up.
- */
 export async function createTestFolder(page: Page, title = '__test__'): Promise<string> {
   return page.evaluate(async (folderTitle) => {
-    const folder = await browser.bookmarks.create({ title: folderTitle });
-    return folder.id;
+    const api = (globalThis as any).browser || (globalThis as any).chrome;
+    // parentId "1" = Bookmarks bar on Chromium; Firefox accepts it too.
+    const folder = await api.bookmarks.create({ parentId: '1', title: folderTitle });
+    return folder.id as string;
   }, title);
 }
 
-/**
- * Create a bookmark inside an existing folder. Returns the bookmark id.
- */
 export async function createTestBookmark(
   page: Page,
-  folderId: string,
+  parentId: string,
   title: string,
-  url: string
+  url: string,
 ): Promise<string> {
   return page.evaluate(
-    async ({ folderId, title, url }) => {
-      const bm = await browser.bookmarks.create({ parentId: folderId, title, url });
-      return bm.id;
+    async (args) => {
+      const api = (globalThis as any).browser || (globalThis as any).chrome;
+      const bm = await api.bookmarks.create({ parentId: args.parentId, title: args.title, url: args.url });
+      return bm.id as string;
     },
-    { folderId, title, url }
+    { parentId, title, url },
   );
 }
 
-/**
- * Remove a bookmark or folder (and all its children) by id.
- * Silently ignores errors (e.g. if it was already deleted).
- */
+export async function createSubFolder(page: Page, parentId: string, title: string): Promise<string> {
+  return page.evaluate(
+    async (args) => {
+      const api = (globalThis as any).browser || (globalThis as any).chrome;
+      const folder = await api.bookmarks.create({ parentId: args.parentId, title: args.title });
+      return folder.id as string;
+    },
+    { parentId, title },
+  );
+}
+
 export async function removeBookmarkTree(page: Page, id: string): Promise<void> {
   await page.evaluate(async (bookmarkId) => {
-    await browser.bookmarks.removeTree(bookmarkId).catch(() => undefined);
+    const api = (globalThis as any).browser || (globalThis as any).chrome;
+    await api.bookmarks.removeTree(bookmarkId).catch(() => undefined);
   }, id);
 }
 
 /**
- * Set the extension's root folder to a given folder id.
- * Uses the settings/patch message so the background's CachedValueStore is updated.
- * Also disables rememberLastFolder so the last-visited folder (persisted to
- * localStorage from prior loads) does not override rootFolderId on reload.
- * The newtab page must be reloaded after calling this.
+ * Update settings via the runtime message pipeline so the service worker's
+ * CachedValueStore is the source of truth. Caller must reload the newtab page
+ * to see the change.
  */
+export async function patchSettings(
+  page: Page,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  await page.evaluate(async (p) => {
+    const api = (globalThis as any).browser || (globalThis as any).chrome;
+    await api.runtime.sendMessage({ type: 'settings/patch', patch: p });
+  }, patch);
+}
+
 export async function setRootFolderId(page: Page, folderId: string): Promise<void> {
-  await page.evaluate(async (rootFolderId) => {
-    await browser.runtime.sendMessage({
-      type: 'settings/patch',
-      patch: { rootFolderId, rememberLastFolder: false },
-    });
-  }, folderId);
+  await patchSettings(page, { rootFolderId: folderId, rememberLastFolder: false });
+}
+
+export async function reloadNewtab(page: Page): Promise<void> {
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.ff-app', { timeout: 15_000 });
 }
 
 /**
- * Reload the newtab page and wait for the app shell to be ready.
- * Clears any hash-based navigation so resolveInitialFolderId uses
- * rootFolderId from settings instead of the previously-set URL hash.
- *
- * Uses page.reload() instead of page.goto() so that moz-extension:// pages
- * in Firefox work correctly (page.goto('moz-extension://...') is blocked by
- * Playwright's juggler protocol; reloading an already-loaded page is not).
+ * Right-click a target and wait for the React context menu to appear.
  */
-export async function reloadNewtab(page: Page): Promise<void> {
-  // Strip any hash so the app boots at the root folder, not a cached subfolder.
-  await page.evaluate(() => {
-    if (window.location.hash) {
-      window.history.replaceState(null, '', window.location.pathname + window.location.search);
-    }
-  });
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.shell', { timeout: 15_000 });
+export async function openContextMenu(page: Page, target: Locator): Promise<Locator> {
+  await target.click({ button: 'right' });
+  const menu = page.locator('.ff-ctx');
+  await menu.waitFor({ state: 'visible', timeout: 5_000 });
+  return menu;
+}
+
+/**
+ * Click a context menu item by visible label text.
+ */
+export async function clickMenuItem(menu: Locator, label: string | RegExp): Promise<void> {
+  await menu.getByRole('menuitem', { name: label }).click();
+}
+
+/**
+ * Open the Settings drawer and switch to a named section (general, navigation,
+ * appearance, layout, dock, clock, backup, help).
+ */
+export async function openSettingsSection(
+  page: Page,
+  section: 'general' | 'navigation' | 'appearance' | 'layout' | 'dock' | 'clock' | 'backup' | 'help',
+): Promise<void> {
+  if (await page.locator('.ff-drawer').count() === 0) {
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.waitForSelector('.ff-drawer', { timeout: 5_000 });
+  }
+  const label = section.charAt(0).toUpperCase() + section.slice(1);
+  await page.locator('.ff-drawer__navitem').filter({ hasText: label }).click();
+}
+
+export function tileById(page: Page | Locator, id: string): Locator {
+  return page.locator(`.ff-tile[data-item-id="${id}"]`);
 }

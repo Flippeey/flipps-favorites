@@ -1,96 +1,122 @@
 /**
- * Settings persistence tests — priority 5.
- *
- * Verifies that settings changes survive a page reload and that layout
- * preset changes are reflected in the DOM.
+ * Settings drawer: open/close, section navigation, theme + accent persistence,
+ * dock visibility, layout preset.
  */
 import { test, expect } from '../fixtures/extension-context.js';
+import { ACCENT_PRESETS } from '../fixtures/test-data.js';
 import {
   clearExtensionStorage,
-  skipOnboarding,
-  reloadNewtab,
   createTestFolder,
-  createTestBookmark,
+  openSettingsSection,
+  patchSettings,
+  reloadNewtab,
   removeBookmarkTree,
   setRootFolderId,
 } from '../fixtures/bookmark-helpers.js';
 
-let testFolderId: string;
+let rootId: string;
 
 test.beforeEach(async ({ newtabPage }) => {
   await clearExtensionStorage(newtabPage);
-  await skipOnboarding(newtabPage);
-
-  testFolderId = await createTestFolder(newtabPage, 'Settings Test Folder');
-  await createTestBookmark(newtabPage, testFolderId, 'Alpha', 'https://alpha.example.com');
-  await createTestBookmark(newtabPage, testFolderId, 'Zeta', 'https://zeta.example.com');
-  await setRootFolderId(newtabPage, testFolderId);
+  rootId = await createTestFolder(newtabPage, 'Settings Root');
+  await setRootFolderId(newtabPage, rootId);
   await reloadNewtab(newtabPage);
 });
 
 test.afterEach(async ({ newtabPage }) => {
-  await removeBookmarkTree(newtabPage, testFolderId);
+  await removeBookmarkTree(newtabPage, rootId);
 });
 
-test('theme mode setting persists after reload', async ({ newtabPage }) => {
-  await newtabPage.locator('.drawer-toggle').click();
-  await newtabPage.locator('[data-section="appearance"]').click();
-  await newtabPage.locator('[data-theme-mode-option="dark"]').click();
-  await expect(newtabPage.locator('.shell')).toHaveAttribute('data-theme-mode', 'dark');
+test('settings drawer opens, closes via button + ESC + scrim', async ({ newtabPage }) => {
+  await newtabPage.getByRole('button', { name: 'Settings', exact: true }).click();
+  const drawer = newtabPage.locator('.ff-drawer');
+  await expect(drawer).toBeVisible();
 
-  await reloadNewtab(newtabPage);
-  await expect(newtabPage.locator('.shell')).toHaveAttribute('data-theme-mode', 'dark');
+  await drawer.getByRole('button', { name: 'Close' }).click();
+  await expect(drawer).toHaveCount(0);
+
+  // ESC closes
+  await newtabPage.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(drawer).toBeVisible();
+  await newtabPage.keyboard.press('Escape');
+  await expect(drawer).toHaveCount(0);
+
+  // Scrim click closes
+  await newtabPage.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(drawer).toBeVisible();
+  await newtabPage.locator('.ff-modal-scrim').click({ position: { x: 10, y: 10 } });
+  await expect(drawer).toHaveCount(0);
 });
 
-test('sort mode "name" shows bookmarks in alphabetical order', async ({ newtabPage }) => {
-  // Change sort mode to "name" via settings/patch message so sync storage is updated.
-  await newtabPage.evaluate(async () => {
-    await browser.runtime.sendMessage({
-      type: 'settings/patch',
-      patch: { bookmarkSortMode: 'name', bookmarkSortDirection: 'asc' },
-    });
-  });
-  await reloadNewtab(newtabPage);
-
-  const tiles = newtabPage.locator('.bookmark-tile.link-tile');
-  const count = await tiles.count();
-  expect(count).toBe(2);
-
-  // First tile should be "Alpha" (comes before "Zeta" alphabetically).
-  const firstTitle = await tiles.first().getAttribute('data-bookmark-title');
-  expect(firstTitle?.toLowerCase()).toBe('alpha');
+test('drawer Appearance section reveals theme cards', async ({ newtabPage }) => {
+  await openSettingsSection(newtabPage, 'appearance');
+  await expect(newtabPage.locator('.ff-themecard--light')).toBeVisible();
+  await expect(newtabPage.locator('.ff-themecard--dark')).toBeVisible();
 });
 
-test('dock visibility toggle persists after reload', async ({ newtabPage }) => {
-  // Disable dock via settings/patch message so sync storage is updated.
-  await newtabPage.evaluate(async () => {
-    await browser.runtime.sendMessage({ type: 'settings/patch', patch: { showDock: false } });
-  });
-  await reloadNewtab(newtabPage);
+test('switching to Light theme sets documentElement[data-theme]=light', async ({ newtabPage }) => {
+  await openSettingsSection(newtabPage, 'appearance');
+  await newtabPage.locator('.ff-themecard--light').click();
+  await expect.poll(() =>
+    newtabPage.evaluate(() => document.documentElement.dataset.theme),
+  ).toBe('light');
 
-  await expect(newtabPage.locator('.shell')).toHaveAttribute('data-dock-visible', 'false');
-
-  // Re-enable.
-  await newtabPage.evaluate(async () => {
-    await browser.runtime.sendMessage({ type: 'settings/patch', patch: { showDock: true } });
-  });
-  await reloadNewtab(newtabPage);
-  await expect(newtabPage.locator('.shell')).toHaveAttribute('data-dock-visible', 'true');
+  await newtabPage.locator('.ff-themecard--dark').click();
+  await expect.poll(() =>
+    newtabPage.evaluate(() => document.documentElement.dataset.theme),
+  ).toBe('dark');
 });
 
-test('bookmarkIconBackground setting is reflected in the shell attribute', async ({
-  newtabPage,
-}) => {
-  await newtabPage.evaluate(async () => {
-    await browser.runtime.sendMessage({
-      type: 'settings/patch',
-      patch: { showBookmarkIconBackground: true },
-    });
-  });
+test('theme choice persists after reload', async ({ newtabPage }) => {
+  await openSettingsSection(newtabPage, 'appearance');
+  await newtabPage.locator('.ff-themecard--light').click();
   await reloadNewtab(newtabPage);
+  await expect.poll(() =>
+    newtabPage.evaluate(() => document.documentElement.dataset.theme),
+  ).toBe('light');
+});
 
-  await expect(newtabPage.locator('.shell')).toHaveAttribute(
-    'data-bookmark-icon-surface',
-    'true'
+test('accent chip applies --accent CSS variable on documentElement', async ({ newtabPage }) => {
+  await openSettingsSection(newtabPage, 'appearance');
+  // Pick the first accent chip (Blue).
+  await newtabPage.locator('.ff-accentchip').first().click();
+  const accent = await newtabPage.evaluate(() =>
+    document.documentElement.style.getPropertyValue('--accent'),
   );
+  expect(accent.toLowerCase()).toBe(ACCENT_PRESETS.blue.toLowerCase());
+});
+
+test('accent persists after reload', async ({ newtabPage }) => {
+  await openSettingsSection(newtabPage, 'appearance');
+  // Red is the 7th chip (index 6).
+  const chips = newtabPage.locator('.ff-accentchip');
+  await chips.nth(6).click();
+  await reloadNewtab(newtabPage);
+  const accent = await newtabPage.evaluate(() =>
+    document.documentElement.style.getPropertyValue('--accent'),
+  );
+  expect(accent.toLowerCase()).toBe(ACCENT_PRESETS.red.toLowerCase());
+});
+
+test('dock visibility: hidden hides .ff-dock-wrap; hover sets data-mode=hover', async ({ newtabPage }) => {
+  await patchSettings(newtabPage, { showDock: false });
+  await reloadNewtab(newtabPage);
+  await expect(newtabPage.locator('.ff-dock-wrap')).toHaveCount(0);
+
+  await patchSettings(newtabPage, { showDock: true, autoHideDock: true });
+  await reloadNewtab(newtabPage);
+  await expect(newtabPage.locator('.ff-dock-wrap')).toHaveAttribute('data-mode', 'hover');
+
+  await patchSettings(newtabPage, { showDock: true, autoHideDock: false });
+  await reloadNewtab(newtabPage);
+  await expect(newtabPage.locator('.ff-dock-wrap')).toHaveAttribute('data-mode', 'always');
+});
+
+test('layout preset persists after reload', async ({ newtabPage }) => {
+  await patchSettings(newtabPage, { layoutPreset: 'compact' });
+  await reloadNewtab(newtabPage);
+  const tileSize = await newtabPage.evaluate(() =>
+    document.documentElement.style.getPropertyValue('--tile-size'),
+  );
+  expect(tileSize.trim()).toBe('56px');
 });

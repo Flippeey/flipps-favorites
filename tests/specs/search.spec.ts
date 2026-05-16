@@ -1,72 +1,75 @@
 /**
- * Search tests — priority 6.
- *
- * Covers the live search filter, empty-state display, and keyboard shortcut.
+ * Hero search — dropdown filter, keyboard shortcuts, empty state.
  */
 import { test, expect } from '../fixtures/extension-context.js';
 import {
-  createTestFolder,
+  clearExtensionStorage,
+  createSubFolder,
   createTestBookmark,
+  createTestFolder,
+  reloadNewtab,
   removeBookmarkTree,
   setRootFolderId,
-  skipOnboarding,
-  reloadNewtab,
 } from '../fixtures/bookmark-helpers.js';
 
-let testFolderId: string;
+let rootId: string;
 
 test.beforeEach(async ({ newtabPage }) => {
-  await skipOnboarding(newtabPage);
-  testFolderId = await createTestFolder(newtabPage, 'Search Test Folder');
-  await createTestBookmark(newtabPage, testFolderId, 'GitHub', 'https://github.com');
-  await createTestBookmark(newtabPage, testFolderId, 'GitLab', 'https://gitlab.com');
-  await createTestBookmark(newtabPage, testFolderId, 'OpenAI', 'https://openai.com');
-  await setRootFolderId(newtabPage, testFolderId);
+  await clearExtensionStorage(newtabPage);
+  rootId = await createTestFolder(newtabPage, 'Search Root');
+  await createTestBookmark(newtabPage, rootId, 'GitHub', 'https://github.com');
+  await createTestBookmark(newtabPage, rootId, 'GitLab', 'https://gitlab.com');
+  await createTestBookmark(newtabPage, rootId, 'OpenAI', 'https://openai.com');
+  await createSubFolder(newtabPage, rootId, 'Reading');
+  await setRootFolderId(newtabPage, rootId);
   await reloadNewtab(newtabPage);
 });
 
 test.afterEach(async ({ newtabPage }) => {
-  await removeBookmarkTree(newtabPage, testFolderId);
+  await removeBookmarkTree(newtabPage, rootId);
 });
 
-test('typing in search box filters bookmark tiles', async ({ newtabPage }) => {
-  const searchInput = newtabPage.locator('input[name="currentFolderSearch"]');
-  await searchInput.fill('Git');
-
-  // Should show GitHub and GitLab but not OpenAI.
-  await expect(newtabPage.locator('.bookmark-grid [data-link-url^="https://github.com"]')).toBeVisible();
-  await expect(newtabPage.locator('.bookmark-grid [data-link-url^="https://gitlab.com"]')).toBeVisible();
-  await expect(newtabPage.locator('.bookmark-grid [data-link-url^="https://openai.com"]')).not.toBeVisible();
+test('typing in hero search shows matching results in the dropdown', async ({ newtabPage }) => {
+  const input = newtabPage.locator('.ff-search input');
+  await input.fill('git');
+  await expect(newtabPage.locator('#ff-search-results')).toBeVisible();
+  const items = newtabPage.locator('#ff-search-results .ff-results__item');
+  await expect(items).toHaveCount(2);
+  await expect(items.nth(0)).toContainText(/GitHub|GitLab/);
 });
 
-test('clearing search restores all bookmark tiles', async ({ newtabPage }) => {
-  const searchInput = newtabPage.locator('input[name="currentFolderSearch"]');
-  await searchInput.fill('Git');
-
-  // Wait for filter to apply.
-  await expect(newtabPage.locator('.bookmark-grid [data-link-url^="https://openai.com"]')).not.toBeVisible();
-
-  // Clear the search.
-  await searchInput.clear();
-
-  // All tiles should be visible again.
-  await expect(newtabPage.locator('.bookmark-grid [data-link-url^="https://github.com"]')).toBeVisible();
-  await expect(newtabPage.locator('.bookmark-grid [data-link-url^="https://gitlab.com"]')).toBeVisible();
-  await expect(newtabPage.locator('.bookmark-grid [data-link-url^="https://openai.com"]')).toBeVisible();
-});
-
-test('Ctrl+K focuses the search input', async ({ newtabPage }) => {
-  const searchInput = newtabPage.locator('input[name="currentFolderSearch"]');
-  await expect(searchInput).not.toBeFocused();
-
+test('Ctrl+K focuses the hero search input', async ({ newtabPage }) => {
+  const input = newtabPage.locator('.ff-search input');
+  // Hero's auto-focus uses setTimeout up to 200ms; wait it out, then blur.
+  await newtabPage.waitForTimeout(300);
+  await input.evaluate((el) => (el as HTMLInputElement).blur());
+  await expect(input).not.toBeFocused();
   await newtabPage.keyboard.press('Control+k');
-  await expect(searchInput).toBeFocused();
+  await expect(input).toBeFocused();
 });
 
-test('search with no matches shows no tiles', async ({ newtabPage }) => {
-  const searchInput = newtabPage.locator('input[name="currentFolderSearch"]');
-  await searchInput.fill('xyzzy-no-match-12345');
+test('"/" key focuses the hero search input', async ({ newtabPage }) => {
+  const input = newtabPage.locator('.ff-search input');
+  await newtabPage.waitForTimeout(300);
+  await input.evaluate((el) => (el as HTMLInputElement).blur());
+  await expect(input).not.toBeFocused();
+  await newtabPage.keyboard.press('/');
+  await expect(input).toBeFocused();
+});
 
-  // No bookmark tiles should be visible.
-  await expect(newtabPage.locator('.bookmark-tile.link-tile')).toHaveCount(0);
+test('Enter on a folder result navigates into the folder', async ({ newtabPage }) => {
+  const input = newtabPage.locator('.ff-search input');
+  await input.click();
+  await input.fill('Reading');
+  await expect(newtabPage.locator('#ff-search-results .ff-results__item')).toHaveCount(1);
+  await input.press('Enter');
+  // Default folderOpenMode=overlay → overlay opens; or page mode → page view.
+  // Either way, the search dropdown should close (value cleared).
+  await expect(newtabPage.locator('#ff-search-results')).toHaveCount(0);
+});
+
+test('empty match shows "No matches." copy', async ({ newtabPage }) => {
+  const input = newtabPage.locator('.ff-search input');
+  await input.fill('xyzzy-no-such-match-12345');
+  await expect(newtabPage.locator('#ff-search-results')).toContainText(/No matches/i);
 });
