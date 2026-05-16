@@ -10,6 +10,7 @@ import { buildSearchIndex, ClockGreeting, HeroSearch, type FlatSearchResult } fr
 import { Ico } from './components/Ico';
 import { Onboarding } from './components/Onboarding';
 import { SettingsDrawer } from './components/settings';
+import { TopNav, type SortChoice } from './components/TopNav';
 import { SectionsView, TilesView, FolderPageView } from './components/views';
 import { useMarquee, type MarqueeSelection } from './interaction/useMarquee';
 import { useDrag } from './interaction/useDrag';
@@ -25,12 +26,6 @@ interface AppProps {
 function settingsToSortValue(mode: BookmarkSortMode, direction: SortDirection): string {
   if (mode === 'manual') return 'manual';
   return `${mode}:${direction}`;
-}
-
-function parseSortValue(value: string): { mode: BookmarkSortMode; direction: SortDirection } {
-  if (value === 'manual') return { mode: 'manual', direction: 'asc' };
-  const [mode, direction] = value.split(':') as [BookmarkSortMode, SortDirection];
-  return { mode, direction };
 }
 
 export function App({ initialSettings, initialTree }: AppProps) {
@@ -139,9 +134,8 @@ export function App({ initialSettings, initialTree }: AppProps) {
 
   const sortChoice = settingsToSortValue(settings.bookmarkSortMode, settings.bookmarkSortDirection);
 
-  const handleSortChange = useCallback(({ value }: { value: string }) => {
-    const parsed = parseSortValue(value);
-    handlePatch({ bookmarkSortMode: parsed.mode, bookmarkSortDirection: parsed.direction });
+  const handleSortChange = useCallback((choice: SortChoice) => {
+    handlePatch({ bookmarkSortMode: choice.mode, bookmarkSortDirection: choice.direction });
   }, [handlePatch]);
 
   const defaultParentId = useCallback((): string => {
@@ -339,48 +333,15 @@ export function App({ initialSettings, initialTree }: AppProps) {
       style={settings.customBackgroundImage ? { ['--wallpaper-url' as string]: `url(${settings.customBackgroundImage})` } : undefined}
     >
       <header>
-        <nav className="ff-nav" aria-label="Workspace">
-          <div className="ff-nav__left">
-            <button className="ff-iconbtn" aria-label="Home" onClick={() => handleGoToCrumb(0)}>
-              <Ico name="home" size={16} />
-              <span>Home</span>
-            </button>
-          </div>
-          <div className="ff-nav__center">
-            <div className="ff-crumb">
-              {isAtRoot ? (
-                <span className="ff-crumb__here">{rootFolder?.title ?? 'My bookmarks'}</span>
-              ) : (
-                <>
-                  <button className="ff-crumb__btn" onClick={() => handleGoToCrumb(0)}>{rootFolder?.title ?? 'My bookmarks'}</button>
-                  {folderPath.map((f, i) => (
-                    <span key={f.id} className="ff-crumb-segment">
-                      <Ico name="chevronRight" size={11} className="ff-crumb__sep" />
-                      {i === folderPath.length - 1 ? (
-                        <span className="ff-crumb__here">{f.title}</span>
-                      ) : (
-                        <button className="ff-crumb__btn" onClick={() => handleGoToCrumb(i + 1)}>{f.title}</button>
-                      )}
-                    </span>
-                  ))}
-                </>
-              )}
-            </div>
-          </div>
-          <div className="ff-nav__right">
-            <SortPill
-              value={sortChoice}
-              onChange={handleSortChange}
-            />
-            <button className="ff-iconbtn ff-iconbtn--icon" aria-label="Add bookmark" onClick={() => handleNewBookmark()}>
-              <Ico name="plus" size={16} />
-            </button>
-            <button className="ff-iconbtn" onClick={() => setSettingsOpen(true)} aria-label="Settings">
-              <Ico name="settings" size={16} />
-              <span>Settings</span>
-            </button>
-          </div>
-        </nav>
+        <TopNav
+          rootTitle={rootFolder?.title ?? 'My bookmarks'}
+          path={folderPath}
+          onCrumb={handleGoToCrumb}
+          sortValue={sortChoice}
+          onSort={handleSortChange}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onAddBookmark={() => handleNewBookmark()}
+        />
       </header>
 
       <section className="ff-hero">
@@ -526,67 +487,6 @@ export function App({ initialSettings, initialTree }: AppProps) {
       >
         <Ico name="zap" size={16} />
       </button>
-    </div>
-  );
-}
-
-interface SortPillProps {
-  value: string;
-  onChange: (choice: { value: string }) => void;
-}
-
-const SORT_OPTIONS = [
-  { value: 'manual', label: 'Manual' },
-  { value: 'name:asc', label: 'Name (A → Z)' },
-  { value: 'name:desc', label: 'Name (Z → A)' },
-  { value: 'lastUsed:desc', label: 'Last used' },
-  { value: 'created:desc', label: 'Date added (newest)' },
-  { value: 'created:asc', label: 'Date added (oldest)' },
-];
-
-function SortPill({ value, onChange }: SortPillProps) {
-  const [open, setOpen] = useState(false);
-  const current = SORT_OPTIONS.find(o => o.value === value)?.label ?? 'Manual';
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      const t = e.target as HTMLElement;
-      if (!t.closest('.ff-sort')) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  return (
-    <div className="ff-sort">
-      <button className="ff-pill" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(o => !o)}>
-        <Ico name="sort" size={14} />
-        <span>{current}</span>
-        <Ico name="chevronDown" size={12} />
-      </button>
-      {open && (
-        <ul className="ff-sort__panel" role="listbox">
-          {SORT_OPTIONS.map(o => (
-            <li
-              key={o.value}
-              role="option"
-              aria-selected={o.value === value}
-              className="ff-sort__option"
-              data-active={o.value === value}
-              onClick={() => { onChange(o); setOpen(false); }}
-            >
-              <span>{o.label}</span>
-              {o.value === value && <Ico name="check" size={14} />}
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }

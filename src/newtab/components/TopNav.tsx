@@ -19,6 +19,7 @@ export const SORT_OPTIONS: SortChoice[] = [
 ];
 
 interface TopNavProps {
+  rootTitle: string;
   path: BookmarkNode[];
   onCrumb: (index: number) => void;
   sortValue: string;
@@ -27,7 +28,7 @@ interface TopNavProps {
   onAddBookmark: () => void;
 }
 
-export function TopNav({ path, onCrumb, sortValue, onSort, onOpenSettings, onAddBookmark }: TopNavProps) {
+export function TopNav({ rootTitle, path, onCrumb, sortValue, onSort, onOpenSettings, onAddBookmark }: TopNavProps) {
   const [scrolled, setScrolled] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const sortRef = useRef<HTMLDivElement>(null);
@@ -66,12 +67,12 @@ export function TopNav({ path, onCrumb, sortValue, onSort, onOpenSettings, onAdd
       <div className="ff-nav__center">
         <div className="ff-crumb">
           {atRoot ? (
-            <span className="ff-crumb__here">My bookmarks</span>
+            <span className="ff-crumb__here">{rootTitle}</span>
           ) : (
             <>
-              <button className="ff-crumb__btn" onClick={() => onCrumb(0)}>My bookmarks</button>
+              <button className="ff-crumb__btn" onClick={() => onCrumb(0)}>{rootTitle}</button>
               {path.map((f, i) => (
-                <span key={f.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span key={f.id} className="ff-crumb-segment">
                   <Ico name="chevronRight" size={11} className="ff-crumb__sep" />
                   {i === path.length - 1 ? (
                     <span className="ff-crumb__here">{f.title}</span>
