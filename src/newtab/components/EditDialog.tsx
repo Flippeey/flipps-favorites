@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEscapeKey } from '../interaction/useEscapeKey';
 import type { BookmarkNode, IconSearchCandidate, ResolvedIcon } from '../../shared/messages';
 import {
   createBookmark,
@@ -58,11 +59,7 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
   const bookmarkUrl = target.url;
   const bookmarkTitle = target.title;
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscapeKey(onClose);
 
   const runSearch = useCallback(async (q: string) => {
     setSearching(true);

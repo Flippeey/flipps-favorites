@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BookmarkNode } from '../../shared/messages';
+import { useEscapeKey } from '../interaction/useEscapeKey';
 import { createBookmark, updateBookmark } from '../lib/messaging';
 import { Ico } from './Ico';
 
@@ -20,11 +21,7 @@ export function FolderNameDialog({ target, onClose, onSaved }: FolderNameDialogP
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscapeKey(onClose);
 
   useEffect(() => {
     const el = inputRef.current;

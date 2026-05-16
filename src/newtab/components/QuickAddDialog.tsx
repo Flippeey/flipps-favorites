@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BookmarkNode } from '../../shared/messages';
+import { useEscapeKey } from '../interaction/useEscapeKey';
 import { createBookmark } from '../lib/messaging';
 import { getHostname, getSearchName, isValidBookmarkUrl } from '../lib/icon-helpers';
 import { Ico } from './Ico';
@@ -23,11 +24,7 @@ export function QuickAddDialog({ parentId, parentTitle, onClose, onSaved }: Quic
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscapeKey(onClose);
 
   useEffect(() => {
     // Place caret after the default "https://www." so the user can immediately type the domain
