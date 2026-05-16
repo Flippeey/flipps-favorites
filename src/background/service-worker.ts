@@ -1,6 +1,6 @@
 import { extensionApi } from '../shared/browser';
 import { messageTypes, type AppRequest, type AppResponse, type BookmarkNode } from '../shared/messages';
-import { markOnboardingPending, readSettings, writeSettings } from '../shared/storage';
+import { markOnboardingPending, readBookmarkUsageRecords, readSettings, writeBookmarkUsageRecord, writeSettings } from '../shared/storage';
 import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl } from './icons/icon-service';
 
 extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }) => {
@@ -41,13 +41,32 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
           index: message.index,
         })),
       };
-    case messageTypes.moveBookmark:
+    case messageTypes.moveBookmark: {
+      // Compensate for Chrome/WebExtensions same-parent move quirk: when the
+      // target index is greater than the bookmark's current index, the browser
+      // subtracts 1 internally (item shifts on removal). The UI passes a
+      // post-removal index; bump it by 1 in that case so the item lands where
+      // intended.
+      let index = message.index;
+      if (typeof index === 'number') {
+        const existing = await extensionApi.bookmarks.get(message.bookmarkId);
+        const current = Array.isArray(existing) ? existing[0] : existing;
+        if (
+          current &&
+          current.parentId === message.parentId &&
+          typeof current.index === 'number' &&
+          index > current.index
+        ) {
+          index = index + 1;
+        }
+      }
       return {
         bookmark: normalizeBookmarkNode(await extensionApi.bookmarks.move(message.bookmarkId, {
           parentId: message.parentId,
-          index: message.index,
+          index,
         })),
       };
+    }
     case messageTypes.updateBookmark:
       return { bookmark: normalizeBookmarkNode(await extensionApi.bookmarks.update(message.bookmarkId, message.changes)) };
     case messageTypes.removeBookmark:
@@ -70,6 +89,17 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
     case messageTypes.invalidateIcon:
       await invalidateIcon(message.bookmarkUrl);
       return { ok: true };
+    case messageTypes.getBookmarkUsage: {
+      const records = await readBookmarkUsageRecords();
+      const usage: Record<string, number> = {};
+      for (const r of Object.values(records)) usage[r.bookmarkId] = r.usedAt;
+      return { usage };
+    }
+    case messageTypes.recordBookmarkUse: {
+      const usedAt = Date.now();
+      await writeBookmarkUsageRecord({ bookmarkId: message.bookmarkId, usedAt });
+      return { ok: true, usedAt };
+    }
     default:
       throw new Error(`Unhandled message type: ${(message as AppRequest).type}`);
   }
