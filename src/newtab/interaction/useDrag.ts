@@ -23,13 +23,15 @@ function closestScopeId(el: HTMLElement | null, rootFolderId: string): string {
   return scopeEl?.dataset.scopeFolderId || rootFolderId;
 }
 
-function clearDropAttrs(): void {
+function clearDropAttrs({ includeSource }: { includeSource: boolean }): void {
   document.querySelectorAll<HTMLElement>('.ff-tile[data-drop-position]').forEach(el => {
     delete el.dataset.dropPosition;
   });
-  document.querySelectorAll<HTMLElement>('.ff-tile[data-drag-source]').forEach(el => {
-    delete el.dataset.dragSource;
-  });
+  if (includeSource) {
+    document.querySelectorAll<HTMLElement>('.ff-tile[data-drag-source]').forEach(el => {
+      delete el.dataset.dragSource;
+    });
+  }
   document.querySelectorAll<HTMLElement>('.ff-dock[data-drop-target]').forEach(el => {
     delete el.dataset.dropTarget;
   });
@@ -83,7 +85,7 @@ export function useDrag({
     if (!canvas) return;
 
     const cancel = () => {
-      clearDropAttrs();
+      clearDropAttrs({ includeSource: true });
       setPreview(null);
       stateRef.current = null;
       onCancelRef.current?.();
@@ -133,7 +135,7 @@ export function useDrag({
       }
 
       setPreview({ ids: drag.dragIds, x: event.clientX, y: event.clientY });
-      clearDropPositionAttrs();
+      clearDropAttrs({ includeSource: false });
 
       const dragSet = new Set(drag.dragIds);
       const elementUnder = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
@@ -246,7 +248,7 @@ export function useDrag({
       const ids = drag.dragIds;
       const engaged = drag.engaged;
       const dropOnBackdrop = drag.dropOnBackdrop;
-      clearDropAttrs();
+      clearDropAttrs({ includeSource: true });
       setPreview(null);
       stateRef.current = null;
       if (engaged && target) {
@@ -278,19 +280,4 @@ export function useDrag({
   }, [surface, enabled, selectionRef]);
 
   return preview;
-}
-
-function clearDropPositionAttrs(): void {
-  document.querySelectorAll<HTMLElement>('.ff-tile[data-drop-position]').forEach(el => {
-    delete el.dataset.dropPosition;
-  });
-  document.querySelectorAll<HTMLElement>('.ff-dock[data-drop-target]').forEach(el => {
-    delete el.dataset.dropTarget;
-  });
-  document.querySelectorAll<HTMLElement>('[data-overlay-crumb-id][data-drop-position]').forEach(el => {
-    delete el.dataset.dropPosition;
-  });
-  document.querySelectorAll<HTMLElement>('.ff-folder-overlay[data-drop-target]').forEach(el => {
-    delete el.dataset.dropTarget;
-  });
 }
