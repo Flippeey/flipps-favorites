@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { BookmarkNode, ClockHourFormat, TileShape } from '../../shared/messages';
 import { Favicon } from './Favicon';
 import { Ico } from './Ico';
@@ -54,7 +55,27 @@ const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(n
 export function HeroSearch({ shape, index, onPickBookmark, onPickFolder }: HeroSearchProps) {
   const [value, setValue] = useState('');
   const [focused, setFocused] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    const focusInput = () => inputRef.current?.focus({ preventScroll: true });
+    focusInput();
+    const raf = requestAnimationFrame(focusInput);
+    const t1 = window.setTimeout(focusInput, 50);
+    const t2 = window.setTimeout(focusInput, 200);
+    const onVis = () => { if (document.visibilityState === 'visible') focusInput(); };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('focus', focusInput);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('focus', focusInput);
+    };
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -89,6 +110,42 @@ export function HeroSearch({ shape, index, onPickBookmark, onPickFolder }: HeroS
   const bookmarks = results.filter(r => !r.isFolder);
   const folders = results.filter(r => r.isFolder);
 
+  const visible = useMemo(
+    () => [...bookmarks.slice(0, 6), ...folders.slice(0, 3)],
+    [bookmarks, folders],
+  );
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [value]);
+
+  useLayoutEffect(() => {
+    rowRefs.current[activeIndex]?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex]);
+
+  const openAt = (i: number) => {
+    const r = visible[i];
+    if (!r) return;
+    setValue('');
+    if (r.isFolder) onPickFolder(r);
+    else onPickBookmark(r);
+  };
+
+  const onInputKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (visible.length === 0) return;
+    const last = visible.length - 1;
+    if (e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
+      e.preventDefault();
+      setActiveIndex(i => (i >= last ? 0 : i + 1));
+    } else if (e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) {
+      e.preventDefault();
+      setActiveIndex(i => (i <= 0 ? last : i - 1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      openAt(activeIndex);
+    }
+  };
+
   return (
     <>
       <label className="ff-search">
@@ -101,7 +158,11 @@ export function HeroSearch({ shape, index, onPickBookmark, onPickFolder }: HeroS
           onChange={(e) => setValue(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setTimeout(() => setFocused(false), 120)}
+          onKeyDown={onInputKeyDown}
           aria-label="Search bookmarks"
+          aria-autocomplete="list"
+          aria-controls="ff-search-results"
+          aria-activedescendant={visible.length > 0 ? `ff-search-opt-${activeIndex}` : undefined}
           spellCheck={false}
           autoComplete="off"
         />
@@ -122,47 +183,62 @@ export function HeroSearch({ shape, index, onPickBookmark, onPickFolder }: HeroS
         <span className="ff-kbd">{IS_MAC ? '⌘K' : 'Ctrl K'}</span>
       </label>
       {focused && value && (
-        <div className="ff-results no-scrollbar" style={{ overflowY: 'auto' }}>
-          {bookmarks.length === 0 && folders.length === 0 && (
+        <div
+          id="ff-search-results"
+          className="ff-results no-scrollbar"
+          style={{ overflowY: 'auto' }}
+          role="listbox"
+        >
+          {visible.length === 0 && (
             <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--fg-3)', fontSize: 13 }}>
               No matches.
             </div>
           )}
-          {bookmarks.length > 0 && <div className="ff-results__group">Bookmarks</div>}
-          {bookmarks.slice(0, 6).map((r, i) => (
-            <div
-              key={r.id}
-              className="ff-results__item"
-              data-active={i === 0}
-              onMouseDown={() => { setValue(''); onPickBookmark(r); }}
-            >
-              <div style={{ width: 28, height: 28, flex: '0 0 28px' }}>
-                <Favicon url={r.url} title={r.title} shape={shape} />
+          {visible.map((r, i) => {
+            const prev = visible[i - 1];
+            const showBookmarksHeader = i === 0 && !r.isFolder;
+            const showFoldersHeader = r.isFolder && (i === 0 || !prev?.isFolder);
+            return (
+              <div key={r.id}>
+                {showBookmarksHeader && <div className="ff-results__group">Bookmarks</div>}
+                {showFoldersHeader && <div className="ff-results__group">Folders</div>}
+                <div
+                  ref={el => { rowRefs.current[i] = el; }}
+                  id={`ff-search-opt-${i}`}
+                  className="ff-results__item"
+                  data-active={i === activeIndex}
+                  role="option"
+                  aria-selected={i === activeIndex}
+                  onMouseEnter={() => setActiveIndex(i)}
+                  onMouseDown={() => openAt(i)}
+                >
+                  {r.isFolder ? (
+                    <>
+                      <div style={{
+                        width: 28, height: 28, borderRadius: 6,
+                        background: 'color-mix(in oklab, var(--accent) 12%, var(--ink-2))',
+                        display: 'grid', placeItems: 'center', color: 'var(--accent)',
+                      }}>
+                        <Ico name="folder" size={16} />
+                      </div>
+                      <span className="ff-results__title">{r.title}</span>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ width: 28, height: 28, flex: '0 0 28px' }}>
+                        <Favicon url={r.url} title={r.title} shape={shape} />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <span className="ff-results__title">{r.title}</span>
+                        <span className="ff-results__url">{r.url}</span>
+                      </div>
+                      <span className="ff-results__path">{r.folderTitle}</span>
+                    </>
+                  )}
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span className="ff-results__title">{r.title}</span>
-                <span className="ff-results__url">{r.url}</span>
-              </div>
-              <span className="ff-results__path">{r.folderTitle}</span>
-            </div>
-          ))}
-          {folders.length > 0 && <div className="ff-results__group">Folders</div>}
-          {folders.slice(0, 3).map(r => (
-            <div
-              key={r.id}
-              className="ff-results__item"
-              onMouseDown={() => { setValue(''); onPickFolder(r); }}
-            >
-              <div style={{
-                width: 28, height: 28, borderRadius: 6,
-                background: 'color-mix(in oklab, var(--accent) 12%, var(--ink-2))',
-                display: 'grid', placeItems: 'center', color: 'var(--accent)',
-              }}>
-                <Ico name="folder" size={16} />
-              </div>
-              <span className="ff-results__title">{r.title}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </>

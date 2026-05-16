@@ -4,6 +4,7 @@ import type { BookmarkNode, TileShape } from '../../shared/messages';
 import { findNode, isFolder } from '../lib/tree';
 import { TileFor } from './Tile';
 import { Ico } from './Ico';
+import type { MarqueeRect } from '../interaction/useMarquee';
 
 interface FolderOverlayProps {
   folder: BookmarkNode;
@@ -15,9 +16,29 @@ interface FolderOverlayProps {
   onNewBookmark?: (parentId: string, parentTitle?: string) => void;
   onNewFolder?: (parentId: string, parentTitle?: string) => void;
   bodyRef?: (el: HTMLElement | null) => void;
+  selectedIds?: ReadonlySet<string>;
+  selectionScopeFolderId?: string;
+  onTileSelect?: (item: BookmarkNode, event: ReactMouseEvent) => void;
+  onClearSelection?: () => void;
+  marqueeRect?: MarqueeRect | null;
 }
 
-export function FolderOverlay({ folder, rootFolderId, shape, onClose, onPickBookmark, onContextMenu, onNewBookmark, onNewFolder, bodyRef }: FolderOverlayProps) {
+export function FolderOverlay({
+  folder,
+  rootFolderId,
+  shape,
+  onClose,
+  onPickBookmark,
+  onContextMenu,
+  onNewBookmark,
+  onNewFolder,
+  bodyRef,
+  selectedIds,
+  selectionScopeFolderId,
+  onTileSelect,
+  onClearSelection,
+  marqueeRect,
+}: FolderOverlayProps) {
   const [stack, setStack] = useState<BookmarkNode[]>([folder]);
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
   const current = stack[stack.length - 1];
@@ -62,6 +83,11 @@ export function FolderOverlay({ folder, rootFolderId, shape, onClose, onPickBook
   }, [onClose, stack.length]);
 
   const handleItemClick = (item: BookmarkNode, event: ReactMouseEvent) => {
+    if (event.shiftKey || event.metaKey || event.ctrlKey) {
+      onTileSelect?.(item, event);
+      return;
+    }
+    onClearSelection?.();
     if (isFolder(item)) {
       setDirection('forward');
       setStack(s => [...s, item]);
@@ -160,12 +186,25 @@ export function FolderOverlay({ folder, rootFolderId, shape, onClose, onPickBook
                 item={item}
                 shape={shape}
                 scopeFolderId={current.id}
+                selectedIds={selectedIds}
+                selectionScopeFolderId={selectionScopeFolderId}
                 onPickFolder={handleItemClick}
                 onPickItem={handleItemClick}
                 onContextMenu={onContextMenu}
               />
             ))}
           </div>
+          {marqueeRect && (
+            <div
+              className="ff-marquee"
+              style={{
+                left: marqueeRect.left,
+                top: marqueeRect.top,
+                width: marqueeRect.width,
+                height: marqueeRect.height,
+              }}
+            />
+          )}
         </div>
       </div>
     </div>

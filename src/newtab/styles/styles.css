@@ -552,7 +552,7 @@ button { font-family: inherit; }
 @keyframes ffSlideInRight { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes ffSlideInLeft  { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: translateX(0); } }
 .ff-folder-overlay__meta { font-size: 13px; color: var(--fg-3); }
-.ff-folder-overlay__body { padding: var(--s-6); overflow-y: auto; }
+.ff-folder-overlay__body { padding: var(--s-6); overflow-y: auto; position: relative; }
 
 /* SECTIONS VIEW */
 .ff-sections {

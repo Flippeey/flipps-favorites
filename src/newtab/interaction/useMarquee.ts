@@ -13,7 +13,7 @@ export interface MarqueeSelection {
 }
 
 interface UseMarqueeArgs {
-  canvasRef: RefObject<HTMLElement | null>;
+  surface: HTMLElement | null;
   rootFolderId: string;
   enabled: boolean;
   selectionRef: RefObject<MarqueeSelection>;
@@ -29,7 +29,7 @@ function rectsIntersect(a: DOMRect, b: { left: number; right: number; top: numbe
   return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
 }
 
-export function useMarquee({ canvasRef, rootFolderId, enabled, selectionRef, onSelect }: UseMarqueeArgs): MarqueeRect | null {
+export function useMarquee({ surface, rootFolderId, enabled, selectionRef, onSelect }: UseMarqueeArgs): MarqueeRect | null {
   const [rect, setRect] = useState<MarqueeRect | null>(null);
   const stateRef = useRef<{
     active: boolean;
@@ -47,7 +47,7 @@ export function useMarquee({ canvasRef, rootFolderId, enabled, selectionRef, onS
 
   useEffect(() => {
     if (!enabled) return;
-    const canvas = canvasRef.current;
+    const canvas = surface;
     if (!canvas) return;
 
     const onDown = (event: PointerEvent) => {
@@ -124,7 +124,7 @@ export function useMarquee({ canvasRef, rootFolderId, enabled, selectionRef, onS
       window.removeEventListener('pointerup', finish);
       window.removeEventListener('pointercancel', finish);
     };
-  }, [canvasRef, enabled, selectionRef]);
+  }, [surface, enabled, selectionRef]);
 
   return rect;
 }

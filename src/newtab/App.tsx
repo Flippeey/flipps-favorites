@@ -273,7 +273,14 @@ export function App({ initialSettings, initialTree }: AppProps) {
   const dragEnabled = settings.bookmarkSortMode === 'manual';
 
   const marqueeRect = useMarquee({
-    canvasRef,
+    surface: canvasEl,
+    rootFolderId: rootFolder?.id ?? '',
+    enabled: true,
+    selectionRef,
+    onSelect: setSelection,
+  });
+  const overlayMarqueeRect = useMarquee({
+    surface: overlayBodyEl,
     rootFolderId: rootFolder?.id ?? '',
     enabled: true,
     selectionRef,
@@ -424,6 +431,11 @@ export function App({ initialSettings, initialTree }: AppProps) {
           onNewBookmark={(parentId, parentTitle) => handleNewBookmark(parentId, parentTitle)}
           onNewFolder={(parentId, parentTitle) => handleNewFolder(parentId, parentTitle)}
           bodyRef={setOverlayBodyEl}
+          selectedIds={selection.ids}
+          selectionScopeFolderId={selection.scopeFolderId}
+          onTileSelect={handleTileClick}
+          onClearSelection={() => setSelection({ ids: new Set(), scopeFolderId: '' })}
+          marqueeRect={overlayMarqueeRect}
         />
       )}
 
