@@ -1,0 +1,64 @@
+/* Folder overlay — the dialog that opens when folderOpenMode === 'overlay'.
+   Header (back button + breadcrumbs + meta + add buttons + close) and the
+   sliding body that animates in/out on stack push/pop. */
+
+.ff-folder-overlay {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(0, 0, 0, 0.4);
+  display: grid; place-items: center;
+  padding: var(--s-8);
+  animation: ffFadeIn 180ms var(--ease-out);
+}
+@keyframes ffFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.ff-folder-overlay__card {
+  width: min(960px, 100%); max-height: 80vh;
+  background: var(--ink-1);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-xl), var(--shadow-inset-hairline);
+  display: flex; flex-direction: column;
+  animation: ffPop 240ms var(--ease-out);
+  overflow: hidden;
+}
+@keyframes ffPop { from { opacity: 0; transform: scale(0.92) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+
+.ff-folder-overlay__header {
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: var(--s-4) var(--s-5);
+  border-bottom: 1px solid var(--line-1);
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--accent) 12%, var(--ink-2)) 0%,
+    color-mix(in oklab, var(--accent) 3%, var(--ink-1)) 100%);
+  position: relative;
+}
+.ff-folder-overlay__header::after {
+  content: ''; position: absolute;
+  left: 0; right: 0; bottom: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-border), transparent);
+}
+.ff-folder-overlay__crumbs {
+  flex: 1 1 auto; display: flex; align-items: center; gap: 4px;
+  min-width: 0; overflow: hidden;
+}
+.ff-folder-overlay__crumb {
+  background: transparent; border: 0;
+  color: var(--fg-3);
+  font-size: 14px; font-weight: 500; font-family: inherit;
+  padding: 4px 6px; border-radius: var(--r-sm);
+  cursor: pointer; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  max-width: 200px;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.ff-folder-overlay__crumb:hover { background: var(--ink-3); color: var(--fg-1); }
+.ff-folder-overlay__crumb[data-here="true"] {
+  color: var(--fg-1); font-family: var(--font-display);
+  font-size: 17px; font-weight: 600;
+  letter-spacing: var(--tr-snug); pointer-events: none;
+}
+.ff-folder-overlay__body[data-dir="forward"] { animation: ffSlideInRight 220ms var(--ease-out); }
+.ff-folder-overlay__body[data-dir="back"]    { animation: ffSlideInLeft 220ms var(--ease-out); }
+@keyframes ffSlideInRight { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes ffSlideInLeft  { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: translateX(0); } }
+.ff-folder-overlay__meta { font-size: 13px; color: var(--fg-3); }
+.ff-folder-overlay__body { padding: var(--s-6); overflow-y: auto; position: relative; }

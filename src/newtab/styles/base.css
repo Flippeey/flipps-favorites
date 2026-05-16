@@ -1,0 +1,138 @@
+/* Base: design tokens (root vars not in tokens.css), body reset, app shell,
+   background variants (solid / gradient / wallpaper), theme overrides, and
+   responsive media queries. Loaded first so later files can override. */
+
+:root {
+  --accent:        #3F72DC;
+  --accent-300:    #7DA5F0;
+  --accent-500:    #3F72DC;
+  --accent-600:    #2D5BC2;
+  --accent-glow:   rgba(63, 114, 220, 0.32);
+  --accent-soft:   rgba(63, 114, 220, 0.10);
+  --accent-border: rgba(63, 114, 220, 0.28);
+
+  --tile-size: 88px;
+  --tile-radius: 24px;
+
+  --grid-cols: 8;
+  --grid-gap-x: 28px;
+  --grid-gap-y: 28px;
+  --tile-width: 116px;
+  --content-max: clamp(1100px, 88vw, 2000px);
+
+  --nav-h: 56px;
+
+  --frost-strong: rgba(18, 17, 16, 0.78);
+  --frost-light:  rgba(26, 24, 23, 0.62);
+}
+
+html, body, #app, .ff-app { height: 100%; }
+
+body {
+  background: var(--ink-0);
+  color: var(--fg-1);
+  font-family: var(--font-body);
+  font-size: var(--t-body);
+  line-height: var(--lh-normal);
+  margin: 0;
+  overflow-x: hidden;
+  transition: background var(--dur-slow) var(--ease-out);
+}
+
+* { box-sizing: border-box; }
+button { font-family: inherit; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+.ff-app {
+  position: relative;
+  min-height: 100vh;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  background: var(--ink-0);
+  color: var(--fg-1);
+  transition: background var(--dur-slow) var(--ease-out), color var(--dur-slow) var(--ease-out);
+}
+
+.ff-app::before {
+  content: '';
+  position: fixed;
+  inset: -180px -10% auto -10%;
+  height: 600px;
+  background: radial-gradient(ellipse 60% 70% at 50% 0%,
+              var(--accent-glow) 0%,
+              color-mix(in oklab, var(--accent) 22%, transparent) 30%,
+              transparent 70%);
+  filter: blur(40px);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 1;
+  transition: opacity var(--dur-slow) var(--ease-out);
+}
+
+.ff-app[data-bg="gradient"][data-bg-style="top"]::after {
+  content: '';
+  position: fixed; inset: 0;
+  background: radial-gradient(ellipse 80% 50% at 50% 0%, color-mix(in oklab, var(--accent) 18%, transparent), transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+.ff-app[data-bg="gradient"][data-bg-style="top-bottom"]::after {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, color-mix(in oklab, var(--accent) 18%, transparent), transparent 70%),
+    radial-gradient(ellipse 80% 50% at 50% 100%, color-mix(in oklab, var(--accent) 14%, transparent), transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+.ff-app[data-bg="gradient"][data-bg-style="aurora"]::after {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 20% 0%, color-mix(in oklab, var(--accent) 22%, transparent), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 30%, color-mix(in oklab, var(--accent) 14%, transparent), transparent 60%),
+    radial-gradient(ellipse 70% 40% at 50% 100%, color-mix(in oklab, var(--accent) 12%, transparent), transparent 65%);
+  pointer-events: none; z-index: 0; opacity: 0.9;
+}
+.ff-app[data-bg="wallpaper"] {
+  background-image: var(--wallpaper-url, none);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.ff-app[data-bg="wallpaper"]::after {
+  content: '';
+  position: fixed; inset: 0;
+  background: color-mix(in oklab, var(--ink-0) 50%, transparent);
+  pointer-events: none; z-index: 0;
+}
+
+/* Light theme */
+[data-theme="light"] {
+  --ink-0: #F5F2EC;
+  --ink-1: #FFFFFF;
+  --ink-2: #FAF7F0;
+  --ink-3: #F0EBE0;
+  --ink-4: #E4DECF;
+  --fg-1:  #1A1817;
+  --fg-2:  #4A4742;
+  --fg-3:  #7A766F;
+  --fg-4:  #B8B3AC;
+  --line-1: rgba(0,0,0,0.07);
+  --line-2: rgba(0,0,0,0.12);
+  --line-3: rgba(0,0,0,0.18);
+  --frost-strong: rgba(255,255,255,0.85);
+  --frost-light:  rgba(255,255,255,0.6);
+  --shadow-inset-hairline: inset 0 1px 0 rgba(255,255,255,0.8);
+  --shadow-sm: 0 1px 2px rgba(20,16,8,0.08);
+  --shadow-md: 0 4px 14px rgba(20,16,8,0.10), 0 1px 2px rgba(20,16,8,0.06);
+  --shadow-lg: 0 12px 28px rgba(20,16,8,0.14), 0 2px 6px rgba(20,16,8,0.08);
+  --shadow-xl: 0 24px 56px rgba(20,16,8,0.18), 0 4px 10px rgba(20,16,8,0.10);
+}
+[data-theme="light"] body { background: var(--ink-0); color: var(--fg-1); }
+[data-theme="light"] .ff-folder-tile {
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--ink-1) 90%, var(--accent) 10%),
+    color-mix(in oklab, var(--ink-2) 90%, var(--accent) 10%));
+}

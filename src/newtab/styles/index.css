@@ -1,2 +1,14 @@
+/* Newtab stylesheet entry. Load order matters: tokens first, then base shell,
+   then feature stylesheets (groups of related components), then responsive
+   overrides last so media queries win the cascade. */
+
 @import url('./tokens.css');
-@import url('./styles.css');
+@import url('./base.css');
+@import url('./nav.css');
+@import url('./hero.css');
+@import url('./tiles.css');
+@import url('./overlay.css');
+@import url('./dock.css');
+@import url('./dialogs.css');
+@import url('./interactions.css');
+@import url('./responsive.css');

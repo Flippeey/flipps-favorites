@@ -1,0 +1,47 @@
+/* Fixed bottom dock — always-visible row, hover-reveal mode, hidden mode. */
+
+.ff-dock-wrap {
+  position: fixed;
+  left: 50%; bottom: var(--s-5);
+  transform: translateX(-50%);
+  z-index: 25; pointer-events: none;
+}
+.ff-dock {
+  pointer-events: auto;
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: 10px var(--s-4);
+  background: var(--frost-strong);
+  -webkit-backdrop-filter: var(--frost-blur);
+  backdrop-filter: var(--frost-blur);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-xl), var(--shadow-inset-hairline);
+  transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+}
+.ff-dock-wrap[data-mode="hover"] .ff-dock { transform: translateY(72%); opacity: 0.6; }
+.ff-dock-wrap[data-mode="hover"]:hover .ff-dock,
+.ff-dock-wrap[data-mode="hover"] .ff-dock:hover { transform: translateY(0); opacity: 1; }
+.ff-dock-wrap[data-mode="hidden"] { display: none; }
+.ff-dock__item {
+  display: grid; place-items: center;
+  width: 56px; height: 56px;
+  background: transparent; border: 0;
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  transition: transform var(--dur-base) var(--ease-out);
+  padding: 4px;
+}
+.ff-dock__item:hover { transform: translateY(-6px) scale(1.06); }
+.ff-dock__item:active { transform: translateY(-2px) scale(0.98); }
+.ff-dock__divider { width: 1px; align-self: stretch; background: var(--line-1); margin: 0 var(--s-1); }
+.ff-dock__add {
+  width: 48px; height: 48px;
+  display: grid; place-items: center;
+  border-radius: var(--r-lg);
+  background: var(--ink-3);
+  border: 1px dashed var(--line-2);
+  color: var(--fg-3);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.ff-dock__add:hover { border-color: var(--accent); color: var(--accent); }

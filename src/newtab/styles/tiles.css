@@ -1,0 +1,215 @@
+/* Canvas + grid layout, bookmark tile, favicon backplate, folder tile (with
+   2x2 mini grid + count badge), inline sections view, empty state, and the
+   data-labels="false" tweak that hides labels app-wide. */
+
+.ff-canvas {
+  position: relative; z-index: 4;
+  flex: 1 1 auto;
+  padding: 0 max(var(--s-8), 5vw) calc(var(--s-16) + 80px);
+}
+.ff-app[data-dock="hidden"] .ff-canvas { padding-bottom: var(--s-16); }
+
+.ff-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--tile-width));
+  justify-content: center;
+  gap: var(--grid-gap-y) var(--grid-gap-x);
+  max-width: var(--content-max);
+  margin: 0 auto;
+}
+
+.ff-tile {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 10px; padding: 8px 4px; width: 100%;
+  background: transparent; border: 0;
+  border-radius: var(--r-lg);
+  cursor: pointer; color: inherit; position: relative;
+  transition: transform var(--dur-instant) var(--ease-press), background var(--dur-fast) var(--ease-out);
+}
+.ff-tile:hover { background: color-mix(in oklab, var(--fg-1) 4%, transparent); }
+.ff-tile:active { transform: scale(0.96); }
+.ff-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.ff-tile__icon {
+  width: var(--tile-size); height: var(--tile-size);
+  position: relative; display: block;
+  transition: transform var(--dur-base) var(--ease-out);
+  flex: 0 0 auto;
+}
+.ff-tile__icon > svg, .ff-tile__icon > div, .ff-tile__icon > img {
+  width: 100%; height: 100%;
+}
+.ff-tile:hover .ff-tile__icon { transform: translateY(-3px); }
+
+.ff-tile__label {
+  font-size: 12.5px; font-weight: 500;
+  color: var(--fg-2); text-align: center;
+  max-width: 100%; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.ff-tile:hover .ff-tile__label { color: var(--fg-1); }
+
+.ff-tile[data-selected="true"] {
+  background: var(--accent-soft);
+  outline: 1.5px solid var(--accent-border);
+  outline-offset: -1px;
+}
+.ff-tile[data-selected="true"] .ff-tile__label { color: var(--accent); }
+
+.ff-tile:not([data-selected="true"]) .ff-tile__label { position: relative; }
+.ff-tile:hover .ff-tile__label::after {
+  content: '';
+  position: absolute; bottom: -8px; left: 50%;
+  transform: translateX(-50%);
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--accent);
+  animation: ffDotIn 200ms var(--ease-out);
+}
+@keyframes ffDotIn { from { transform: translate(-50%, -4px); opacity: 0; } to { opacity: 1; } }
+
+/* Favicon backplate driven by tile shape */
+.ff-favicon { width: 100%; height: 100%; aspect-ratio: 1; display: block; }
+[data-tile-shape="circle"] .ff-favicon { clip-path: circle(50% at 50% 50%); }
+
+/* Folder tile (2x2 mini-grid preview + count badge) */
+.ff-folder-tile {
+  width: var(--tile-size); height: var(--tile-size);
+  border-radius: calc(var(--tile-size) * 0.28);
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--ink-3) 95%, var(--accent) 5%),
+    color-mix(in oklab, var(--ink-2) 95%, var(--accent) 8%));
+  border: 1px solid var(--line-1);
+  padding: calc(var(--tile-size) * 0.06);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: calc(var(--tile-size) * 0.04);
+  box-shadow: var(--shadow-inset-hairline), var(--shadow-md);
+  position: relative;
+  transition: border-color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out),
+              transform var(--dur-base) var(--ease-out);
+}
+.ff-tile:hover .ff-folder-tile {
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-inset-hairline), var(--shadow-lg),
+              0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent);
+}
+[data-tile-shape="circle"] .ff-folder-tile { border-radius: 50%; }
+[data-tile-shape="rounded"] .ff-folder-tile { border-radius: calc(var(--tile-size) * 0.16); }
+
+.ff-folder-tile__mini {
+  border-radius: calc(var(--tile-size) * 0.10);
+  overflow: hidden; display: block; position: relative;
+}
+.ff-folder-tile__mini > svg,
+.ff-folder-tile__mini > div,
+.ff-folder-tile__mini > img { width: 100%; height: 100%; display: block; }
+
+.ff-folder-tile__count {
+  position: absolute; bottom: -4px; right: -4px;
+  min-width: 22px; height: 22px; padding: 0 6px;
+  border-radius: 11px;
+  background: var(--accent); color: #fff;
+  font-size: 11px; font-weight: 600;
+  display: grid; place-items: center;
+  box-shadow: 0 2px 8px color-mix(in oklab, var(--accent) 35%, transparent);
+  opacity: 0; transform: scale(0.7);
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.ff-tile:hover .ff-folder-tile__count { opacity: 1; transform: scale(1); }
+
+.ff-folder-tile__sub {
+  width: 100%; height: 100%;
+  background: color-mix(in oklab, var(--accent) 14%, var(--ink-3));
+  border-radius: inherit;
+  display: grid; place-items: center;
+  color: var(--accent);
+}
+.ff-folder-tile__empty {
+  width: 100%; height: 100%;
+  background: rgba(255,255,255,0.04);
+  border-radius: inherit;
+}
+
+/* Sections view (inline folder rows on the root surface) */
+.ff-sections {
+  display: flex; flex-direction: column; gap: var(--s-10);
+  max-width: var(--content-max);
+  margin: 0 auto;
+  width: 100%;
+}
+.ff-section__header {
+  display: flex; align-items: center; gap: var(--s-3);
+  margin: 0 0 var(--s-5);
+  padding: 0 4px; position: relative;
+}
+.ff-section__icon-folder {
+  width: 32px; height: 32px;
+  border-radius: var(--r-sm);
+  display: grid; place-items: center;
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 14%, var(--ink-2));
+  border: 1px solid var(--accent-border);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, var(--accent) 20%, transparent);
+}
+.ff-section__title {
+  font-family: var(--font-display);
+  font-size: 17px; font-weight: 600;
+  letter-spacing: var(--tr-snug);
+  color: var(--fg-1); margin: 0;
+}
+.ff-section__count {
+  font-size: 11.5px; color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+  border: 1px solid var(--accent-border);
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.ff-section__spacer { flex: 1; }
+.ff-section__action {
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  border-radius: var(--r-sm);
+  background: transparent; color: var(--fg-3);
+  border: 0; cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.ff-section__action:hover { background: var(--ink-3); color: var(--accent); }
+.ff-section__rule {
+  height: 1px;
+  background: linear-gradient(90deg,
+    color-mix(in oklab, var(--accent) 24%, transparent) 0%,
+    var(--line-1) 30%,
+    transparent 100%);
+  margin: 0 4px var(--s-5);
+}
+
+/* Empty state (folder page with no items) */
+.ff-empty {
+  text-align: center;
+  padding: var(--s-16) var(--s-6);
+  color: var(--fg-3);
+}
+.ff-empty h3 {
+  font-family: var(--font-display);
+  font-size: 22px; font-weight: 600;
+  color: var(--fg-2); margin: 0 0 8px;
+}
+.ff-empty p { margin: 0 0 var(--s-4); }
+.ff-empty__icon {
+  width: 64px; height: 64px;
+  margin: 0 auto var(--s-4);
+  display: grid; place-items: center;
+  border-radius: var(--r-xl);
+  background: var(--ink-2);
+  border: 1px solid var(--line-1);
+  color: var(--fg-3);
+}
+
+/* Labels tweak (data-labels="false" hides tile labels) */
+.ff-app[data-labels="false"] .ff-tile__label { display: none; }
+.ff-app[data-labels="false"] .ff-tile { gap: 0; }

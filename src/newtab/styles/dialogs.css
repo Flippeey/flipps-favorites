@@ -1,0 +1,353 @@
+/* All modal/dialog surfaces: the scrim, generic dialog shell, form fields,
+   primary/ghost buttons, icon preview + grid (edit-bookmark), settings drawer
+   (with side-nav + cards + theme grid + accent chips), and onboarding wizard. */
+
+/* Modal scrim — used by every modal-like surface */
+.ff-modal-scrim {
+  position: fixed; inset: 0; z-index: 70;
+  background: rgba(0, 0, 0, 0.45);
+  display: grid; place-items: center;
+  padding: var(--s-6);
+  animation: ffFadeIn 200ms var(--ease-out);
+}
+
+/* Generic dialog (edit bookmark, folder name, quick add) */
+.ff-dialog {
+  width: min(880px, 100%); max-height: 88vh;
+  background: var(--ink-1);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-xl), var(--shadow-inset-hairline);
+  display: flex; flex-direction: column;
+  animation: ffPop 240ms var(--ease-out);
+  overflow: hidden;
+}
+.ff-dialog__head {
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: var(--s-5) var(--s-6);
+  border-bottom: 1px solid var(--line-1);
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--accent) 14%, var(--ink-2)) 0%,
+    color-mix(in oklab, var(--accent) 4%, var(--ink-1)) 100%);
+  position: relative;
+}
+.ff-dialog__head::after {
+  content: ''; position: absolute;
+  left: 0; right: 0; bottom: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-border), transparent);
+}
+.ff-dialog__head-left {
+  display: flex; align-items: center; gap: 12px; flex: 1;
+}
+.ff-dialog__head-icon {
+  width: 36px; height: 36px;
+}
+.ff-dialog__eyebrow {
+  font-size: 11px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--accent);
+  font-weight: 600;
+}
+.ff-dialog__title {
+  font-family: var(--font-display);
+  font-size: 18px; font-weight: 600; color: var(--fg-1);
+}
+.ff-dialog__body {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: var(--s-6);
+  padding: var(--s-6);
+  overflow-y: auto;
+}
+
+/* Form primitives */
+.ff-field { display: flex; flex-direction: column; gap: 6px; }
+.ff-field__label { font-size: 12px; font-weight: 500; color: var(--fg-2); }
+.ff-input {
+  height: 38px; padding: 0 12px;
+  background: var(--ink-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-md);
+  color: var(--fg-1); font-size: 14px;
+  font-family: inherit; outline: none;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.ff-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 14%, transparent);
+}
+
+.ff-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: var(--s-2);
+  height: 38px; padding: 0 16px;
+  border-radius: var(--r-md);
+  background: var(--accent);
+  border: 1px solid color-mix(in oklab, var(--accent) 70%, #000);
+  color: #fff;
+  font-size: 14px; font-weight: 600;
+  cursor: pointer;
+  transition: transform var(--dur-instant) var(--ease-press), background var(--dur-fast) var(--ease-out);
+  box-shadow: 0 6px 18px color-mix(in oklab, var(--accent) 30%, transparent);
+}
+.ff-btn:hover { background: color-mix(in oklab, var(--accent) 90%, #fff); }
+.ff-btn:active { transform: scale(0.97); }
+.ff-btn--ghost {
+  background: var(--ink-3);
+  border: 1px solid var(--line-1);
+  color: var(--fg-1);
+  box-shadow: none;
+}
+.ff-btn--ghost:hover { background: var(--ink-4); }
+
+/* Icon preview + icon-search grid (edit-bookmark dialog) */
+.ff-iconpreview {
+  width: 100%; aspect-ratio: 1;
+  background: var(--ink-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-lg);
+  display: grid; place-items: center;
+  position: relative; overflow: hidden;
+}
+.ff-iconpreview__hover {
+  position: absolute; inset: 0;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.ff-iconpreview:hover .ff-iconpreview__hover { opacity: 1; }
+.ff-iconpreview__hover button {
+  background: rgba(0,0,0,0.65);
+  border: 0; color: #fff;
+  font-size: 11px; font-weight: 500;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  gap: 6px;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.ff-iconpreview__hover button:hover { background: rgba(0,0,0,0.85); }
+
+.ff-icongrid {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: var(--s-2);
+}
+.ff-icongrid__cell {
+  aspect-ratio: 1;
+  background: var(--ink-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  overflow: hidden;
+  display: grid; place-items: center;
+  padding: 14px;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.ff-icongrid__cell:hover { border-color: var(--accent-border); background: var(--ink-3); }
+.ff-icongrid__cell[data-active="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
+}
+
+/* Settings drawer — right-side slide-in panel with side-nav */
+.ff-drawer {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: min(680px, 92vw);
+  z-index: 70;
+  background: var(--ink-1);
+  border-left: 1px solid var(--line-2);
+  box-shadow: var(--shadow-xl);
+  display: flex; flex-direction: column;
+  animation: ffSlide 280ms var(--ease-out);
+}
+@keyframes ffSlide { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.ff-drawer__head {
+  padding: var(--s-4) var(--s-5);
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--line-1);
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--accent) 14%, var(--ink-2)) 0%,
+    color-mix(in oklab, var(--accent) 4%, var(--ink-1)) 100%);
+  position: relative;
+}
+.ff-drawer__head::after {
+  content: ''; position: absolute;
+  left: 0; right: 0; bottom: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-border), transparent);
+}
+.ff-drawer__body { flex: 1; display: grid; grid-template-columns: 200px 1fr; overflow: hidden; }
+.ff-drawer__nav {
+  border-right: 1px solid var(--line-1);
+  padding: var(--s-3);
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--ink-0);
+  overflow-y: auto;
+}
+.ff-drawer__navitem {
+  display: flex; align-items: center; gap: var(--s-3);
+  height: 36px; padding: 0 12px;
+  border-radius: var(--r-md);
+  background: transparent;
+  border: 0;
+  color: var(--fg-2); font-size: 13px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.ff-drawer__navitem:hover { background: var(--ink-2); color: var(--fg-1); }
+.ff-drawer__navitem[data-active="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-left: 2px solid var(--accent);
+  padding-left: 10px;
+}
+.ff-drawer__navdivider { height: 1px; background: var(--line-1); margin: 4px 8px; }
+.ff-drawer__content { padding: var(--s-6); overflow-y: auto; }
+
+/* Settings cards / rows / theme + accent pickers */
+.ff-set-section { margin-bottom: var(--s-8); }
+.ff-set-section__title {
+  font-family: var(--font-display);
+  font-size: 18px; font-weight: 600;
+  margin: 0 0 4px;
+}
+.ff-set-section__desc {
+  font-size: 13px; color: var(--fg-3); margin: 0 0 var(--s-4);
+}
+
+.ff-card {
+  background: var(--ink-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-lg);
+  padding: var(--s-4);
+}
+.ff-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s-4); padding: var(--s-3) 0;
+}
+.ff-row + .ff-row { border-top: 1px solid var(--line-1); }
+.ff-row__label { font-size: 13.5px; font-weight: 500; }
+.ff-row__hint { font-size: 12px; color: var(--fg-3); }
+
+.ff-themegrid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
+.ff-themecard {
+  aspect-ratio: 16/10;
+  border-radius: var(--r-lg);
+  border: 1.5px solid var(--line-1);
+  padding: 12px;
+  cursor: pointer;
+  position: relative; overflow: hidden;
+  transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-instant) var(--ease-press);
+}
+.ff-themecard[data-active="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent);
+}
+.ff-themecard:active { transform: scale(0.98); }
+.ff-themecard--light { background: #F7F5F0; }
+.ff-themecard--dark  { background: #1A1817; }
+.ff-themecard__label {
+  position: absolute; bottom: 10px; left: 12px;
+  font-size: 12.5px; font-weight: 600;
+}
+.ff-themecard--light .ff-themecard__label { color: #1A1817; }
+.ff-themecard--dark  .ff-themecard__label { color: #F5F3F0; }
+
+.ff-accents { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--s-2); }
+.ff-accentchip {
+  aspect-ratio: 1;
+  border-radius: var(--r-md);
+  border: 2px solid transparent;
+  cursor: pointer; position: relative;
+  display: grid; place-items: center;
+  transition: transform var(--dur-instant) var(--ease-press);
+}
+.ff-accentchip:hover { transform: scale(1.08); }
+.ff-accentchip[data-active="true"]::after {
+  content: ''; position: absolute;
+  inset: -5px; border-radius: var(--r-lg);
+  border: 2px solid currentColor;
+}
+.ff-accentchip__label {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: inherit;
+  font-size: 9px; font-weight: 600; letter-spacing: 0.02em;
+  color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  background: rgba(0,0,0,0.22);
+  white-space: nowrap; opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+  pointer-events: none;
+}
+.ff-accentchip:hover .ff-accentchip__label { opacity: 1; }
+.ff-accent-custom-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-1);
+  background: var(--ink-2);
+  cursor: pointer;
+  font-size: 12px; color: var(--fg-2);
+  transition: border-color var(--dur-fast) var(--ease-out);
+  position: relative;
+}
+.ff-accent-custom-btn:hover { border-color: var(--fg-3); }
+.ff-accent-custom-btn--active { border-color: var(--accent); color: var(--fg-1); }
+.ff-accent-custom-swatch {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.2);
+  flex-shrink: 0;
+}
+
+/* Onboarding wizard (multi-step modal shown on first launch + replay) */
+.ff-onboard {
+  width: min(720px, 100%);
+  background: var(--ink-1);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-2xl);
+  box-shadow: var(--shadow-xl), var(--shadow-inset-hairline);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.ff-onboard__hero {
+  position: relative;
+  padding: var(--s-8) var(--s-8) var(--s-5);
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--accent) 14%, var(--ink-2)) 0%,
+    color-mix(in oklab, var(--accent) 4%, var(--ink-1)) 100%);
+  text-align: center;
+  border-bottom: 1px solid var(--line-1);
+}
+.ff-onboard__hero::after {
+  content: ''; position: absolute;
+  left: 0; right: 0; bottom: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-border), transparent);
+}
+.ff-onboard__steps {
+  display: flex; justify-content: center; gap: 6px;
+  margin-bottom: var(--s-6);
+}
+.ff-onboard__step {
+  width: 24px; height: 4px;
+  border-radius: 2px;
+  background: var(--ink-3);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.ff-onboard__step[data-active="true"] { background: var(--accent); }
+.ff-onboard__title {
+  font-family: var(--font-display);
+  font-size: 28px; font-weight: 700;
+  letter-spacing: var(--tr-tight);
+  margin: 0 0 var(--s-2);
+}
+.ff-onboard__desc {
+  font-size: 15px; color: var(--fg-2);
+  line-height: 1.55;
+  max-width: 480px; margin: 0 auto;
+}
+.ff-onboard__body { padding: var(--s-6) var(--s-8); }
+.ff-onboard__foot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--s-4) var(--s-6);
+  border-top: 1px solid var(--line-1);
+  background: var(--ink-0);
+}
