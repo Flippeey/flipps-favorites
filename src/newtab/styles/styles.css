@@ -688,6 +688,12 @@ button { font-family: inherit; }
   left: 0; right: 0; bottom: 0; height: 1px;
   background: linear-gradient(90deg, transparent, var(--accent-border), transparent);
 }
+.ff-dialog__head-left {
+  display: flex; align-items: center; gap: 12px; flex: 1;
+}
+.ff-dialog__head-icon {
+  width: 36px; height: 36px;
+}
 .ff-dialog__eyebrow {
   font-size: 11px; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--accent);

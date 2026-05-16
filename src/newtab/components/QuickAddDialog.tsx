@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BookmarkNode } from '../../shared/messages';
-import { useEscapeKey } from '../interaction/useEscapeKey';
 import { createBookmark } from '../lib/messaging';
 import { getHostname, getSearchName, isValidBookmarkUrl } from '../lib/icon-helpers';
 import { Ico } from './Ico';
+import { ModalDialog } from './ModalDialog';
 
 interface QuickAddDialogProps {
   parentId: string;
@@ -24,10 +24,7 @@ export function QuickAddDialog({ parentId, parentTitle, onClose, onSaved }: Quic
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEscapeKey(onClose);
-
   useEffect(() => {
-    // Place caret after the default "https://www." so the user can immediately type the domain
     const el = inputRef.current;
     if (el) {
       el.focus();
@@ -64,49 +61,36 @@ export function QuickAddDialog({ parentId, parentTitle, onClose, onSaved }: Quic
   };
 
   return (
-    <div className="ff-modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <form
-        className="ff-dialog"
-        style={{ width: 'min(520px, 100%)' }}
-        onSubmit={handleSubmit}
-      >
-        <div className="ff-dialog__head">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
-            <div className="ff-section__icon-folder" style={{ width: 36, height: 36 }}>
-              <Ico name="plus" size={16} />
-            </div>
-            <div>
-              <div className="ff-dialog__eyebrow">Add bookmark</div>
-              <div className="ff-dialog__title">{parentTitle ? `In ${parentTitle}` : 'New bookmark'}</div>
-            </div>
-          </div>
-          <button type="button" className="ff-iconbtn ff-iconbtn--icon" aria-label="Close" onClick={onClose}>
-            <Ico name="close" size={16} />
-          </button>
-        </div>
-        <div className="ff-dialog__body" style={{ gridTemplateColumns: '1fr', gap: 12 }}>
-          <div className="ff-field">
-            <label className="ff-field__label">URL</label>
-            <input
-              ref={inputRef}
-              className="ff-input"
-              type="url"
-              inputMode="url"
-              spellCheck={false}
-              value={value}
-              onChange={(e) => { setValue(e.target.value); if (error) setError(null); }}
-              placeholder="https://example.com"
-            />
-          </div>
-          {error && <div style={{ color: 'var(--danger)', fontSize: 12 }} role="alert">{error}</div>}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <button type="button" className="ff-btn ff-btn--ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className="ff-btn" disabled={saving}>
-              <Ico name="check" size={14} /> {saving ? 'Saving…' : 'Add bookmark'}
-            </button>
-          </div>
-        </div>
-      </form>
-    </div>
+    <ModalDialog
+      icon="plus"
+      eyebrow="Add bookmark"
+      title={parentTitle ? `In ${parentTitle}` : 'New bookmark'}
+      onClose={onClose}
+      width="min(520px, 100%)"
+      bodyStyle={{ gridTemplateColumns: '1fr', gap: 12 }}
+      as="form"
+      onSubmit={handleSubmit}
+    >
+      <div className="ff-field">
+        <label className="ff-field__label">URL</label>
+        <input
+          ref={inputRef}
+          className="ff-input"
+          type="url"
+          inputMode="url"
+          spellCheck={false}
+          value={value}
+          onChange={(e) => { setValue(e.target.value); if (error) setError(null); }}
+          placeholder="https://example.com"
+        />
+      </div>
+      {error && <div style={{ color: 'var(--danger)', fontSize: 12 }} role="alert">{error}</div>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+        <button type="button" className="ff-btn ff-btn--ghost" onClick={onClose}>Cancel</button>
+        <button type="submit" className="ff-btn" disabled={saving}>
+          <Ico name="check" size={14} /> {saving ? 'Saving…' : 'Add bookmark'}
+        </button>
+      </div>
+    </ModalDialog>
   );
 }

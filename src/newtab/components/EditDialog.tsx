@@ -20,6 +20,7 @@ import {
 } from '../lib/icon-helpers';
 import { invalidateFaviconCache } from './Favicon';
 import { Ico } from './Ico';
+import { ModalDialog } from './ModalDialog';
 
 export interface EditTarget {
   id?: string;
@@ -216,23 +217,12 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
   const statusColor = status?.kind === 'error' ? 'var(--danger)' : status?.kind === 'success' ? 'var(--accent)' : 'var(--fg-3)';
 
   return (
-    <div className="ff-modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="ff-dialog">
-        <div className="ff-dialog__head">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
-            <div className="ff-section__icon-folder" style={{ width: 36, height: 36 }}>
-              <Ico name="pencil" size={16} />
-            </div>
-            <div>
-              <div className="ff-dialog__eyebrow">{target.id ? 'Edit bookmark' : 'New bookmark'}</div>
-              <div className="ff-dialog__title">{title || 'Untitled'}</div>
-            </div>
-          </div>
-          <button className="ff-iconbtn ff-iconbtn--icon" aria-label="Close" onClick={onClose}>
-            <Ico name="close" size={16} />
-          </button>
-        </div>
-        <div className="ff-dialog__body">
+    <ModalDialog
+      icon="pencil"
+      eyebrow={target.id ? 'Edit bookmark' : 'New bookmark'}
+      title={title || 'Untitled'}
+      onClose={onClose}
+    >
           <aside style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div className="ff-field">
               <label className="ff-field__label">Name</label>
@@ -349,8 +339,6 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
               </div>
             )}
           </div>
-        </div>
-      </div>
-    </div>
+    </ModalDialog>
   );
 }
