@@ -136,7 +136,25 @@ export function useDrag({
         return;
       }
 
-      const hoverTile = elementUnder?.closest<HTMLElement>('.ff-tile[data-item-id]');
+      let hoverTile = elementUnder?.closest<HTMLElement>('.ff-tile[data-item-id]') ?? null;
+      let directHit = Boolean(hoverTile);
+      if (!hoverTile) {
+        // Expand hit zone: pick nearest tile in the same row band so gaps between
+        // tiles still register as a "before/after neighbor" drop target.
+        const tiles = canvas.querySelectorAll<HTMLElement>('.ff-tile[data-item-id]');
+        let best: { tile: HTMLElement; dx: number } | null = null;
+        for (const t of tiles) {
+          const id = t.dataset.itemId ?? '';
+          if (dragSet.has(id)) continue;
+          const r = t.getBoundingClientRect();
+          if (event.clientY < r.top || event.clientY > r.bottom) continue;
+          const center = r.left + r.width / 2;
+          const dx = Math.abs(event.clientX - center);
+          if (!best || dx < best.dx) best = { tile: t, dx };
+        }
+        hoverTile = best?.tile ?? null;
+      }
+
       if (!hoverTile) {
         const ordered = getOrderedChildrenRef.current(drag.scopeId).filter(c => !dragSet.has(c.id));
         drag.dropTarget = { kind: 'reorder', parentId: drag.scopeId, index: ordered.length };
@@ -153,8 +171,9 @@ export function useDrag({
       const hoverKind = hoverTile.dataset.itemKind;
       const rect = hoverTile.getBoundingClientRect();
 
-      if (hoverKind === 'folder') {
-        // Middle 50% horizontally = drop inside; outer edges = reorder
+      // Only treat as "drop inside folder" when cursor is directly over the folder
+      // tile's middle band — never when we snapped from a gap.
+      if (directHit && hoverKind === 'folder') {
         const inSideZone = event.clientX < rect.left + rect.width * 0.25 || event.clientX > rect.left + rect.width * 0.75;
         if (!inSideZone) {
           hoverTile.dataset.dropPosition = 'inside';
@@ -164,15 +183,23 @@ export function useDrag({
       }
 
       const placeAfter = event.clientX > rect.left + rect.width / 2;
-      hoverTile.dataset.dropPosition = placeAfter ? 'after' : 'before';
-
       const ordered = getOrderedChildrenRef.current(hoverScope).filter(c => !dragSet.has(c.id));
       const idx = ordered.findIndex(c => c.id === hoverId);
-      drag.dropTarget = {
-        kind: 'reorder',
-        parentId: hoverScope,
-        index: idx === -1 ? ordered.length : idx + (placeAfter ? 1 : 0),
-      };
+      const dropIndex = idx === -1 ? ordered.length : idx + (placeAfter ? 1 : 0);
+
+      // Suppress hint + commit when the computed reorder would not actually move
+      // the item (dropping at its current post-removal slot in the same parent).
+      if (drag.dragIds.length === 1 && hoverScope === drag.scopeId) {
+        const unfiltered = getOrderedChildrenRef.current(drag.scopeId);
+        const origIdx = unfiltered.findIndex(c => c.id === drag.dragIds[0]);
+        if (origIdx !== -1 && dropIndex === origIdx) {
+          drag.dropTarget = null;
+          return;
+        }
+      }
+
+      hoverTile.dataset.dropPosition = placeAfter ? 'after' : 'before';
+      drag.dropTarget = { kind: 'reorder', parentId: hoverScope, index: dropIndex };
     };
 
     const onUp = (event: PointerEvent) => {
