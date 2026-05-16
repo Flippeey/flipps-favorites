@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { BookmarkNode, IconSearchCandidate, ResolvedIcon, TileShape } from '../../shared/messages';
+import type { BookmarkNode, IconSearchCandidate, ResolvedIcon } from '../../shared/messages';
 import {
   createBookmark,
   getIcon,
@@ -29,7 +29,6 @@ export interface EditTarget {
 
 interface EditDialogProps {
   target: EditTarget;
-  shape: TileShape;
   onClose: () => void;
   onSaved: (bookmark: BookmarkNode) => void;
 }
@@ -42,7 +41,7 @@ function defaultQuery(title: string, url: string): string {
   return `${seed} logo`.trim();
 }
 
-export function EditDialog({ target, shape: _shape, onClose, onSaved }: EditDialogProps) {
+export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
   const [title, setTitle] = useState(target.title);
   const [url, setUrl] = useState(target.url);
   const [saving, setSaving] = useState(false);

@@ -15,7 +15,7 @@ import { useMarquee, type MarqueeSelection } from './interaction/useMarquee';
 import { useDrag } from './interaction/useDrag';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
 import { getBookmarkTree, getSettings, moveBookmark, patchSettings, removeBookmark } from './lib/messaging';
-import { findFolder, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
+import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 
 interface AppProps {
   initialSettings: AppSettings;
@@ -201,18 +201,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
     let menuTarget: BookmarkNode | null = null;
     let sectionFolder: BookmarkNode | null = null;
     if (tileEl?.dataset.itemId) {
-      const id = tileEl.dataset.itemId;
-      const walk = (nodes: BookmarkNode[]): BookmarkNode | null => {
-        for (const n of nodes) {
-          if (n.id === id) return n;
-          if (n.children) {
-            const r = walk(n.children);
-            if (r) return r;
-          }
-        }
-        return null;
-      };
-      menuTarget = walk(tree);
+      menuTarget = findNode(tree, tileEl.dataset.itemId);
     } else {
       const scopeEl = target.closest('[data-scope-folder-id]') as HTMLElement | null;
       const scopeId = scopeEl?.dataset.scopeFolderId;
@@ -470,7 +459,6 @@ export function App({ initialSettings, initialTree }: AppProps) {
       {editTarget && (
         <EditDialog
           target={editTarget}
-          shape={settings.tileShape}
           onClose={() => setEditTarget(null)}
           onSaved={() => { setEditTarget(null); refreshTree(); }}
         />

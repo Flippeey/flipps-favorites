@@ -33,16 +33,6 @@ export function topLevelFolders(tree: BookmarkNode[]): BookmarkNode[] {
   return out;
 }
 
-export function rootFolderChildren(tree: BookmarkNode[], rootId: string): BookmarkNode[] {
-  if (rootId) {
-    const folder = findFolder(tree, rootId);
-    if (folder) return folder.children ?? [];
-  }
-  // Default: pick the bookmarks-bar-like first folder
-  const top = topLevelFolders(tree);
-  return top.length > 0 ? (top[0].children ?? []) : [];
-}
-
 export function resolveRootFolder(tree: BookmarkNode[], rootId: string): BookmarkNode | null {
   if (rootId) {
     const folder = findFolder(tree, rootId);

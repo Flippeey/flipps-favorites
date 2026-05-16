@@ -1,17 +1,9 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { BookmarkNode, TileShape } from '../../shared/messages';
-import { BookmarkTile, FolderTile, isFolder } from './Tile';
+import { findNode, isFolder } from '../lib/tree';
+import { BookmarkTile, FolderTile } from './Tile';
 import { Ico } from './Ico';
-
-function findNodeById(node: BookmarkNode, id: string): BookmarkNode | undefined {
-  if (node.id === id) return node;
-  for (const child of node.children ?? []) {
-    const found = findNodeById(child, id);
-    if (found) return found;
-  }
-  return undefined;
-}
 
 interface FolderOverlayProps {
   folder: BookmarkNode;
@@ -45,7 +37,7 @@ export function FolderOverlay({ folder, rootFolderId, shape, onClose, onPickBook
       }
       const next: BookmarkNode[] = [folder];
       for (let i = 1; i < prev.length; i++) {
-        const refreshed = findNodeById(folder, prev[i].id);
+        const refreshed = findNode([folder], prev[i].id);
         if (!refreshed) break;
         next.push(refreshed);
       }

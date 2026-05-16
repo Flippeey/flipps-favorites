@@ -1,11 +1,8 @@
 import type { MouseEvent } from 'react';
 import type { BookmarkNode, TileShape } from '../../shared/messages';
+import { isFolder } from '../lib/tree';
 import { Favicon } from './Favicon';
 import { Ico } from './Ico';
-
-export function isFolder(node: BookmarkNode): boolean {
-  return Array.isArray(node.children);
-}
 
 interface BookmarkTileProps {
   item: BookmarkNode;
@@ -93,9 +90,6 @@ export function SectionHeader({ folder, onAdd }: SectionHeaderProps) {
       <h3 className="ff-section__title">{folder.title}</h3>
       <span className="ff-section__count">{folder.children?.length ?? 0}</span>
       <div className="ff-section__spacer" />
-      <button className="ff-section__action" aria-label="More">
-        <Ico name="more" size={16} />
-      </button>
       <button className="ff-section__action" aria-label="Add to section" onClick={() => onAdd?.(folder)}>
         <Ico name="plus" size={16} />
       </button>

@@ -1,6 +1,7 @@
 import type { MouseEvent } from 'react';
 import type { BookmarkNode, TileShape } from '../../shared/messages';
-import { BookmarkTile, FolderTile, isFolder, SectionHeader } from './Tile';
+import { isFolder } from '../lib/tree';
+import { BookmarkTile, FolderTile, SectionHeader } from './Tile';
 import { Ico } from './Ico';
 
 interface BaseViewProps {
