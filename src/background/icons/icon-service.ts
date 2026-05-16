@@ -262,7 +262,7 @@ function buildSearchQueryFromBookmark(bookmarkUrl?: string): string {
 
   const parts = hostname.split('.');
   const core = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0];
-  return `${core} logo`.trim();
+  return `${core} icon`.trim();
 }
 
 function getColorFromLabel(label: string): { start: string; end: string } {
@@ -305,7 +305,7 @@ function getFileNameFromUrl(imageUrl: string): string {
 }
 
 async function searchDuckDuckGoImages(query: string, bookmarkUrl?: string): Promise<IconSearchCandidate[]> {
-  const queryText = /logo/i.test(query) ? query : `${query} logo`;
+  const queryText = /icon/i.test(query) ? query : `${query} icon`;
   const searchPageUrl = `${duckDuckGoSearchUrl}?q=${encodeURIComponent(queryText)}&ia=images&iax=images`;
 
   // Firefox 140 broke the host_permissions CORS bypass for MV3 background pages. As a

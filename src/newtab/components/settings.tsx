@@ -299,11 +299,15 @@ function GeneralSection({ settings, tree, onPatch }: SectionProps & { tree: Book
       <p className="ff-set-section__desc">Workspace defaults and behavior.</p>
       <div className="ff-card">
         <div className="ff-row">
+          <div className="ff-row__label">Show labels</div>
+          <Toggle on={settings.showTileLabels} onChange={(v) => onPatch({ showTileLabels: v })} />
+        </div>
+        <div className="ff-row">
           <div>
-            <div className="ff-row__label">Remember last folder</div>
-            <div className="ff-row__hint">Open the last visited folder on a new tab.</div>
+            <div className="ff-row__label">Show search bar</div>
+            <div className="ff-row__hint">Subtle by default — expands when focused.</div>
           </div>
-          <Toggle on={settings.rememberLastFolder} onChange={(v) => onPatch({ rememberLastFolder: v })} />
+          <Toggle on={settings.showSearchBar} onChange={(v) => onPatch({ showSearchBar: v })} />
         </div>
         <div className="ff-row">
           <div>
@@ -327,6 +331,13 @@ function NavigationSection({ settings, onPatch }: SectionProps) {
       <h3 className="ff-set-section__title">Navigation</h3>
       <p className="ff-set-section__desc">How you move around the new tab page.</p>
       <div className="ff-card">
+        <div className="ff-row">
+          <div>
+            <div className="ff-row__label">Remember last folder</div>
+            <div className="ff-row__hint">Open the last visited folder on a new tab.</div>
+          </div>
+          <Toggle on={settings.rememberLastFolder} onChange={(v) => onPatch({ rememberLastFolder: v })} />
+        </div>
         <div className="ff-row">
           <div>
             <div className="ff-row__label">Folder mode</div>
@@ -355,13 +366,6 @@ function NavigationSection({ settings, onPatch }: SectionProps) {
             <div className="ff-row__hint">Hold Ctrl/Cmd to override per click.</div>
           </div>
           <Toggle on={settings.openLinksInNewTab} onChange={(v) => onPatch({ openLinksInNewTab: v })} />
-        </div>
-        <div className="ff-row">
-          <div>
-            <div className="ff-row__label">Show search bar</div>
-            <div className="ff-row__hint">Subtle by default — expands when focused.</div>
-          </div>
-          <Toggle on={settings.showSearchBar} onChange={(v) => onPatch({ showSearchBar: v })} />
         </div>
       </div>
     </div>
@@ -401,7 +405,7 @@ function AppearanceSection({ settings, onPatch }: SectionProps) {
       <div className="ff-set-section">
         <h3 className="ff-set-section__title">Accent</h3>
         <p className="ff-set-section__desc">Pick a palette colour.</p>
-        <div className="ff-accents" style={{ marginBottom: 28 }}>
+        <div className="ff-accents" style={{ marginBottom: 8 }}>
           {ACCENT_PRESETS.map(a => (
             <button
               key={a.id}
@@ -415,6 +419,23 @@ function AppearanceSection({ settings, onPatch }: SectionProps) {
             </button>
           ))}
         </div>
+        {(() => {
+          const isCustom = !ACCENT_PRESETS.some(a => a.value.toUpperCase() === settings.accentColor.toUpperCase());
+          return (
+            <div style={{ marginBottom: 28 }}>
+              <label className={`ff-accent-custom-btn${isCustom ? ' ff-accent-custom-btn--active' : ''}`}>
+                <span className="ff-accent-custom-swatch" style={{ background: settings.accentColor }} />
+                <span>{isCustom ? `Custom (${settings.accentColor.toUpperCase()})` : 'Custom…'}</span>
+                <input
+                  type="color"
+                  value={settings.accentColor}
+                  onChange={(e) => onPatch({ accentColor: e.target.value })}
+                  style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
+                />
+              </label>
+            </div>
+          );
+        })()}
       </div>
 
       <div className="ff-set-section">
@@ -559,10 +580,6 @@ function LayoutSection({ settings, onPatch }: SectionProps) {
             value={settings.tileShape}
             onChange={(v) => onPatch({ tileShape: v })}
           />
-        </div>
-        <div className="ff-row">
-          <div className="ff-row__label">Show labels</div>
-          <Toggle on={settings.showTileLabels} onChange={(v) => onPatch({ showTileLabels: v })} />
         </div>
       </div>
     </div>

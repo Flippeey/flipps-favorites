@@ -453,6 +453,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
       {openFolder && (
         <FolderOverlay
           folder={openFolder}
+          rootFolderId={rootFolder?.id ?? ''}
           shape={settings.tileShape}
           onClose={() => setOpenFolderId(null)}
           onPickBookmark={handlePickBookmark}

@@ -18,7 +18,7 @@ function inferTitle(url: string): string {
 }
 
 export function QuickAddDialog({ parentId, parentTitle, onClose, onSaved }: QuickAddDialogProps) {
-  const [value, setValue] = useState('https://');
+  const [value, setValue] = useState('https://www.');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -30,7 +30,7 @@ export function QuickAddDialog({ parentId, parentTitle, onClose, onSaved }: Quic
   }, [onClose]);
 
   useEffect(() => {
-    // Select after the default "https://" so the user can immediately paste/replace
+    // Place caret after the default "https://www." so the user can immediately type the domain
     const el = inputRef.current;
     if (el) {
       el.focus();
@@ -42,7 +42,7 @@ export function QuickAddDialog({ parentId, parentTitle, onClose, onSaved }: Quic
     e.preventDefault();
     if (saving) return;
     let url = value.trim();
-    if (!url || url === 'https://' || url === 'http://') {
+    if (!url || url === 'https://' || url === 'http://' || url === 'www.') {
       setError('Enter a URL.');
       return;
     }

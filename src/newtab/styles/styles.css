@@ -910,13 +910,36 @@ button { font-family: inherit; }
   border: 2px solid currentColor;
 }
 .ff-accentchip__label {
-  position: absolute; bottom: -16px; left: 50%;
-  transform: translateX(-50%);
-  font-size: 10px; color: var(--fg-3);
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: inherit;
+  font-size: 9px; font-weight: 600; letter-spacing: 0.02em;
+  color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  background: rgba(0,0,0,0.22);
   white-space: nowrap; opacity: 0;
   transition: opacity var(--dur-fast) var(--ease-out);
+  pointer-events: none;
 }
 .ff-accentchip:hover .ff-accentchip__label { opacity: 1; }
+.ff-accent-custom-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-1);
+  background: var(--ink-2);
+  cursor: pointer;
+  font-size: 12px; color: var(--fg-2);
+  transition: border-color var(--dur-fast) var(--ease-out);
+  position: relative;
+}
+.ff-accent-custom-btn:hover { border-color: var(--fg-3); }
+.ff-accent-custom-btn--active { border-color: var(--accent); color: var(--fg-1); }
+.ff-accent-custom-swatch {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.2);
+  flex-shrink: 0;
+}
 
 /* ONBOARDING */
 .ff-onboard {
@@ -1061,6 +1084,15 @@ button { font-family: inherit; }
 .ff-dock[data-drop-target="true"] {
   outline: 2px solid var(--accent);
   outline-offset: 4px;
+}
+.ff-folder-overlay__crumb[data-drop-position="inside"] {
+  background: color-mix(in oklab, var(--accent) 22%, transparent);
+  color: var(--fg-1);
+}
+.ff-folder-overlay[data-drop-target="true"] {
+  box-shadow: inset 0 0 0 3px color-mix(in oklab, var(--accent) 60%, transparent);
+  background: rgba(0, 0, 0, 0.55);
+  transition: background var(--dur-fast) var(--ease-out);
 }
 .ff-drag-preview {
   position: fixed;

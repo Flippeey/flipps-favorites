@@ -1,5 +1,5 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { BookmarkNode, TileShape } from '../../shared/messages';
 import { BookmarkTile, FolderTile, isFolder } from './Tile';
 import { Ico } from './Ico';
@@ -15,6 +15,7 @@ function findNodeById(node: BookmarkNode, id: string): BookmarkNode | undefined 
 
 interface FolderOverlayProps {
   folder: BookmarkNode;
+  rootFolderId: string;
   shape: TileShape;
   onClose: () => void;
   onPickBookmark: (item: BookmarkNode, event?: { metaKey?: boolean; ctrlKey?: boolean }) => void;
@@ -24,10 +25,17 @@ interface FolderOverlayProps {
   bodyRef?: (el: HTMLElement | null) => void;
 }
 
-export function FolderOverlay({ folder, shape, onClose, onPickBookmark, onContextMenu, onNewBookmark, onNewFolder, bodyRef }: FolderOverlayProps) {
+export function FolderOverlay({ folder, rootFolderId, shape, onClose, onPickBookmark, onContextMenu, onNewBookmark, onNewFolder, bodyRef }: FolderOverlayProps) {
   const [stack, setStack] = useState<BookmarkNode[]>([folder]);
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
   const current = stack[stack.length - 1];
+  const suppressCloseRef = useRef(false);
+
+  useEffect(() => {
+    const onSuppress = () => { suppressCloseRef.current = true; };
+    window.addEventListener('ff-suppress-overlay-close', onSuppress);
+    return () => window.removeEventListener('ff-suppress-overlay-close', onSuppress);
+  }, []);
 
   useEffect(() => {
     setStack(prev => {
@@ -83,7 +91,15 @@ export function FolderOverlay({ folder, shape, onClose, onPickBookmark, onContex
   };
 
   return (
-    <div className="ff-folder-overlay" onClick={onClose}>
+    <div
+      className="ff-folder-overlay"
+      data-overlay-root-id={rootFolderId}
+      onClick={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (suppressCloseRef.current) { suppressCloseRef.current = false; return; }
+        onClose();
+      }}
+    >
       <div className="ff-folder-overlay__card" onClick={(e) => e.stopPropagation()}>
         <div className="ff-folder-overlay__header">
           <button
@@ -105,6 +121,7 @@ export function FolderOverlay({ folder, shape, onClose, onPickBookmark, onContex
                 <button
                   className="ff-folder-overlay__crumb"
                   data-here={i === stack.length - 1}
+                  data-overlay-crumb-id={i < stack.length - 1 ? f.id : undefined}
                   onClick={() => handleBreadcrumbClick(i)}
                 >
                   {f.title}

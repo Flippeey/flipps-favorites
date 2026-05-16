@@ -33,6 +33,12 @@ function clearDropAttrs(): void {
   document.querySelectorAll<HTMLElement>('.ff-dock[data-drop-target]').forEach(el => {
     delete el.dataset.dropTarget;
   });
+  document.querySelectorAll<HTMLElement>('[data-overlay-crumb-id][data-drop-position]').forEach(el => {
+    delete el.dataset.dropPosition;
+  });
+  document.querySelectorAll<HTMLElement>('.ff-folder-overlay[data-drop-target]').forEach(el => {
+    delete el.dataset.dropTarget;
+  });
 }
 
 export interface DragPreviewState {
@@ -60,6 +66,7 @@ export function useDrag({
     dragIds: string[];
     scopeId: string;
     dropTarget: DropTarget | null;
+    dropOnBackdrop: boolean;
   } | null>(null);
   const rootFolderIdRef = useRef(rootFolderId);
   rootFolderIdRef.current = rootFolderId;
@@ -105,6 +112,7 @@ export function useDrag({
         dragIds,
         scopeId,
         dropTarget: null,
+        dropOnBackdrop: false,
       };
     };
 
@@ -129,10 +137,39 @@ export function useDrag({
 
       const dragSet = new Set(drag.dragIds);
       const elementUnder = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
+      drag.dropOnBackdrop = false;
       const dockEl = elementUnder?.closest('.ff-dock') as HTMLElement | null;
       if (dockEl) {
         dockEl.dataset.dropTarget = 'true';
         drag.dropTarget = { kind: 'dock' };
+        return;
+      }
+
+      // Breadcrumb drop target (overlay only)
+      const crumbEl = elementUnder?.closest<HTMLElement>('[data-overlay-crumb-id]');
+      if (crumbEl) {
+        const folderId = crumbEl.dataset.overlayCrumbId ?? '';
+        if (folderId && folderId !== drag.scopeId) {
+          crumbEl.dataset.dropPosition = 'inside';
+          drag.dropTarget = { kind: 'folder', folderId };
+          return;
+        }
+        drag.dropTarget = null;
+        return;
+      }
+
+      // Backdrop drop target → workspace root
+      const overlayBackdrop = elementUnder?.closest<HTMLElement>('.ff-folder-overlay');
+      const overCard = elementUnder?.closest<HTMLElement>('.ff-folder-overlay__card');
+      if (overlayBackdrop && !overCard) {
+        const rootId = overlayBackdrop.dataset.overlayRootId ?? rootFolderIdRef.current;
+        if (rootId && rootId !== drag.scopeId) {
+          overlayBackdrop.dataset.dropTarget = 'true';
+          drag.dropTarget = { kind: 'folder', folderId: rootId };
+          drag.dropOnBackdrop = true;
+          return;
+        }
+        drag.dropTarget = null;
         return;
       }
 
@@ -208,10 +245,14 @@ export function useDrag({
       const target = drag.dropTarget;
       const ids = drag.dragIds;
       const engaged = drag.engaged;
+      const dropOnBackdrop = drag.dropOnBackdrop;
       clearDropAttrs();
       setPreview(null);
       stateRef.current = null;
       if (engaged && target) {
+        if (dropOnBackdrop) {
+          window.dispatchEvent(new CustomEvent('ff-suppress-overlay-close'));
+        }
         onCommitRef.current(ids, target);
       }
     };
@@ -244,6 +285,12 @@ function clearDropPositionAttrs(): void {
     delete el.dataset.dropPosition;
   });
   document.querySelectorAll<HTMLElement>('.ff-dock[data-drop-target]').forEach(el => {
+    delete el.dataset.dropTarget;
+  });
+  document.querySelectorAll<HTMLElement>('[data-overlay-crumb-id][data-drop-position]').forEach(el => {
+    delete el.dataset.dropPosition;
+  });
+  document.querySelectorAll<HTMLElement>('.ff-folder-overlay[data-drop-target]').forEach(el => {
     delete el.dataset.dropTarget;
   });
 }
