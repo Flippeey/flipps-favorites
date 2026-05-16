@@ -76,6 +76,35 @@ export function FolderTile({ folder, shape, selected = false, onClick, onContext
   );
 }
 
+interface TileForProps {
+  item: BookmarkNode;
+  shape: TileShape;
+  scopeFolderId: string;
+  selectedIds?: ReadonlySet<string>;
+  selectionScopeFolderId?: string;
+  onPickFolder?: (folder: BookmarkNode, event: MouseEvent) => void;
+  onPickItem?: (item: BookmarkNode, event: MouseEvent) => void;
+  onContextMenu?: (item: BookmarkNode, event: MouseEvent) => void;
+}
+
+export function TileFor({
+  item,
+  shape,
+  scopeFolderId,
+  selectedIds,
+  selectionScopeFolderId,
+  onPickFolder,
+  onPickItem,
+  onContextMenu,
+}: TileForProps) {
+  const selected = selectedIds && selectionScopeFolderId === scopeFolderId && selectedIds.has(item.id);
+  return isFolder(item) ? (
+    <FolderTile folder={item} shape={shape} selected={selected} onClick={onPickFolder} onContextMenu={onContextMenu} />
+  ) : (
+    <BookmarkTile item={item} shape={shape} selected={selected} onClick={onPickItem} onContextMenu={onContextMenu} />
+  );
+}
+
 interface SectionHeaderProps {
   folder: BookmarkNode;
   onAdd?: (folder: BookmarkNode) => void;

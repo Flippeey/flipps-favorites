@@ -2,7 +2,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { BookmarkNode, TileShape } from '../../shared/messages';
 import { findNode, isFolder } from '../lib/tree';
-import { BookmarkTile, FolderTile } from './Tile';
+import { TileFor } from './Tile';
 import { Ico } from './Ico';
 
 interface FolderOverlayProps {
@@ -155,9 +155,15 @@ export function FolderOverlay({ folder, rootFolderId, shape, onClose, onPickBook
         >
           <div className="ff-grid">
             {(current.children ?? []).map(item => (
-              isFolder(item)
-                ? <FolderTile key={item.id} folder={item} shape={shape} onClick={handleItemClick} onContextMenu={onContextMenu} />
-                : <BookmarkTile key={item.id} item={item} shape={shape} onClick={handleItemClick} onContextMenu={onContextMenu} />
+              <TileFor
+                key={item.id}
+                item={item}
+                shape={shape}
+                scopeFolderId={current.id}
+                onPickFolder={handleItemClick}
+                onPickItem={handleItemClick}
+                onContextMenu={onContextMenu}
+              />
             ))}
           </div>
         </div>

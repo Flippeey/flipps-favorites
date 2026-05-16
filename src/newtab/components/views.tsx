@@ -1,7 +1,6 @@
 import type { MouseEvent } from 'react';
 import type { BookmarkNode, TileShape } from '../../shared/messages';
-import { isFolder } from '../lib/tree';
-import { BookmarkTile, FolderTile, SectionHeader } from './Tile';
+import { BookmarkTile, FolderTile, SectionHeader, TileFor } from './Tile';
 import { Ico } from './Ico';
 
 interface BaseViewProps {
@@ -65,9 +64,17 @@ export function SectionsView({ tree, shape, scopeFolderId, onPickFolder, onPickI
           <div className="ff-section__rule" aria-hidden="true" />
           <div className="ff-grid">
             {(folder.children ?? []).map(item => (
-              isFolder(item)
-                ? <FolderTile key={item.id} folder={item} shape={shape} selected={isSelectedIn(folder.id, selectionScopeFolderId ?? '', selectedIds, item.id)} onClick={onPickFolder} onContextMenu={onContextMenu} />
-                : <BookmarkTile key={item.id} item={item} shape={shape} selected={isSelectedIn(folder.id, selectionScopeFolderId ?? '', selectedIds, item.id)} onClick={onPickItem} onContextMenu={onContextMenu} />
+              <TileFor
+                key={item.id}
+                item={item}
+                shape={shape}
+                scopeFolderId={folder.id}
+                selectedIds={selectedIds}
+                selectionScopeFolderId={selectionScopeFolderId}
+                onPickFolder={onPickFolder}
+                onPickItem={onPickItem}
+                onContextMenu={onContextMenu}
+              />
             ))}
           </div>
         </section>
@@ -86,9 +93,17 @@ export function FolderPageView({ folder, shape, onPickFolder, onPickItem, onCont
     <div className="ff-page-view" data-scope-folder-id={folder.id}>
       <div className="ff-grid">
         {children.map(item => (
-          isFolder(item)
-            ? <FolderTile key={item.id} folder={item} shape={shape} selected={isSelectedIn(folder.id, selectionScopeFolderId ?? '', selectedIds, item.id)} onClick={onPickFolder} onContextMenu={onContextMenu} />
-            : <BookmarkTile key={item.id} item={item} shape={shape} selected={isSelectedIn(folder.id, selectionScopeFolderId ?? '', selectedIds, item.id)} onClick={onPickItem} onContextMenu={onContextMenu} />
+          <TileFor
+            key={item.id}
+            item={item}
+            shape={shape}
+            scopeFolderId={folder.id}
+            selectedIds={selectedIds}
+            selectionScopeFolderId={selectionScopeFolderId}
+            onPickFolder={onPickFolder}
+            onPickItem={onPickItem}
+            onContextMenu={onContextMenu}
+          />
         ))}
       </div>
       {children.length === 0 && (
