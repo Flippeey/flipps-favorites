@@ -90,7 +90,28 @@ export async function normalizeUploadedImage(file: File): Promise<string> {
   return readFileAsDataUrl(blob);
 }
 
+import { IconFetchError } from '../../shared/messages';
+
 export function iconPersistenceErrorMessage(error: unknown, source: 'upload' | 'search'): string {
+  if (error instanceof IconFetchError) {
+    switch (error.kind) {
+      case 'network':
+        return 'Could not reach the icon URL. The image host may block extensions.';
+      case 'http-status':
+        return error.httpStatus !== undefined
+          ? `Icon URL returned HTTP ${String(error.httpStatus)}.`
+          : 'Icon URL returned an error response.';
+      case 'not-image':
+        return 'The URL did not return an image — likely a login page or hotlink block.';
+      case 'decode-fail':
+        return 'The image could not be decoded.';
+      case 'too-small':
+        return 'Image is too small. Pick a larger icon (at least 64×64).';
+      case 'unknown':
+      default:
+        break;
+    }
+  }
   const message = String(error instanceof Error ? error.message : error).toLowerCase();
   if (message.includes('quota')) {
     return 'Storage is full. Remove some icons or clear cache.';

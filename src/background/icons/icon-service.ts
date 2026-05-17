@@ -1,4 +1,5 @@
 import type { GetIconRequest, IconCacheRecord, IconOverrideRecord, IconSearchCandidate, ResolvedIcon, SetIconOverrideRequest } from '../../shared/messages';
+import { IconFetchError } from '../../shared/messages';
 import { extensionApi } from '../../shared/browser';
 import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRecord, readIconCacheRecord, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideRecord } from '../../shared/storage';
 
@@ -7,7 +8,10 @@ const faviconProviderUrl = 'https://www.google.com/s2/favicons';
 const faviconRequestSize = 256;
 const duckDuckGoSearchUrl = 'https://duckduckgo.com/';
 const minimumAcceptedIconSize = 48;
-const maxDuckDuckGoResults = 30;
+const minimumOverrideIconSize = 64;
+const maxDuckDuckGoResults = 48;
+const ddgPrimaryFilter = '&f=,clipart,Square,Transparent';
+const ddgFallbackFilter = '&f=,,Medium,Square';
 let ddgRuleCounter = 0;
 const inFlightIcons = new Map<string, Promise<ResolvedIcon>>();
 
@@ -36,16 +40,66 @@ export async function setIconOverride(request: SetIconOverrideRequest): Promise<
   });
 }
 
-export async function setIconOverrideFromUrl(bookmarkUrl: string, imageUrl: string, fileName?: string): Promise<ResolvedIcon> {
-  const response = await fetch(imageUrl, { cache: 'force-cache' });
-  if (!response.ok) {
-    throw new Error(`Icon image request failed with ${String(response.status)}`);
+export async function setIconOverrideFromUrl(
+  bookmarkUrl: string,
+  imageUrl: string,
+  fileName?: string,
+  fallbackImageUrl?: string,
+): Promise<ResolvedIcon> {
+  try {
+    return await downloadAndPersistOverride(bookmarkUrl, imageUrl, fileName);
+  } catch (primaryError) {
+    if (!fallbackImageUrl || fallbackImageUrl === imageUrl) {
+      throw primaryError;
+    }
+    try {
+      return await downloadAndPersistOverride(bookmarkUrl, fallbackImageUrl, fileName);
+    } catch {
+      throw primaryError;
+    }
+  }
+}
+
+async function downloadAndPersistOverride(
+  bookmarkUrl: string,
+  imageUrl: string,
+  fileName?: string,
+): Promise<ResolvedIcon> {
+  let response: Response;
+  try {
+    response = await fetch(imageUrl, { cache: 'force-cache' });
+  } catch (error) {
+    throw new IconFetchError('network', `Could not reach the icon URL: ${describeError(error)}`);
   }
 
-  const blob = await response.blob();
+  if (!response.ok) {
+    throw new IconFetchError('http-status', `Icon image request failed with ${String(response.status)}.`, response.status);
+  }
+
+  const blob = await response.blob().catch((error: unknown) => {
+    throw new IconFetchError('decode-fail', `Could not read icon body: ${describeError(error)}`);
+  });
+
   const mimeType = blob.type || 'image/png';
   if (!mimeType.startsWith('image/')) {
-    throw new Error('Remote icon response is not an image.');
+    throw new IconFetchError('not-image', 'Remote icon response is not an image.');
+  }
+
+  let dimensions: { width: number; height: number };
+  try {
+    dimensions = await getImageDimensions(blob);
+  } catch (error) {
+    throw new IconFetchError('decode-fail', `Could not decode icon image: ${describeError(error)}`);
+  }
+
+  if (
+    dimensions.width < minimumOverrideIconSize ||
+    dimensions.height < minimumOverrideIconSize
+  ) {
+    throw new IconFetchError(
+      'too-small',
+      `Icon is ${String(dimensions.width)}x${String(dimensions.height)}; minimum is ${String(minimumOverrideIconSize)}x${String(minimumOverrideIconSize)}.`,
+    );
   }
 
   const dataUrl = await blobToDataUrl(blob, mimeType);
@@ -55,6 +109,11 @@ export async function setIconOverrideFromUrl(bookmarkUrl: string, imageUrl: stri
     fileName: fileName || getFileNameFromUrl(imageUrl),
     mimeType,
   });
+}
+
+function describeError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
 
 export async function searchIcons(query: string, bookmarkUrl?: string): Promise<IconSearchCandidate[]> {
@@ -262,7 +321,7 @@ function buildSearchQueryFromBookmark(bookmarkUrl?: string): string {
 
   const parts = hostname.split('.');
   const core = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0];
-  return `${core} icon`.trim();
+  return `${core} logo`.trim();
 }
 
 function getColorFromLabel(label: string): { start: string; end: string } {
@@ -305,7 +364,7 @@ function getFileNameFromUrl(imageUrl: string): string {
 }
 
 async function searchDuckDuckGoImages(query: string, bookmarkUrl?: string): Promise<IconSearchCandidate[]> {
-  const queryText = /icon/i.test(query) ? query : `${query} icon`;
+  const queryText = /logo|icon/i.test(query) ? query : `${query} logo`;
   const searchPageUrl = `${duckDuckGoSearchUrl}?q=${encodeURIComponent(queryText)}&ia=images&iax=images`;
 
   // Firefox 140 broke the host_permissions CORS bypass for MV3 background pages. As a
@@ -352,20 +411,14 @@ async function searchDuckDuckGoImages(query: string, bookmarkUrl?: string): Prom
       return [];
     }
 
-    const data = await fetch(`${duckDuckGoSearchUrl}i.js?q=${encodeURIComponent(queryText)}&o=json&vqd=${encodeURIComponent(vqd)}&f=,,Medium,Square&p=1&l=us-en`, {
-      cache: 'no-store',
-      headers: {
-        Accept: 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-      referrer: searchPageUrl,
-      referrerPolicy: 'origin-when-cross-origin',
-    }).then(async response => {
-      if (!response.ok) {
-        throw new Error(`DuckDuckGo search failed with ${String(response.status)}`);
+    let data = await fetchDuckDuckGoJson(queryText, vqd, searchPageUrl, ddgPrimaryFilter);
+    if ((data.results?.length ?? 0) < 5) {
+      const fallbackData = await fetchDuckDuckGoJson(queryText, vqd, searchPageUrl, ddgFallbackFilter)
+        .catch(() => ({ results: [] }));
+      if ((fallbackData.results?.length ?? 0) > (data.results?.length ?? 0)) {
+        data = fallbackData;
       }
-      return response.json() as Promise<{ results?: Array<{ image: string; thumbnail: string; title: string; url: string; width: number; height: number }> }>;
-    });
+    }
 
     const results = data.results ?? [];
     const bookmarkHostname = extractHostname(bookmarkUrl);
@@ -374,7 +427,7 @@ async function searchDuckDuckGoImages(query: string, bookmarkUrl?: string): Prom
       .filter(result => typeof result.image === 'string' && typeof result.thumbnail === 'string')
       .filter(result => result.width >= 200 && result.height >= 200)
       .filter(result => result.width <= 1600 && result.height <= 1600)
-      .filter(result => Math.max(result.width, result.height) / Math.min(result.width, result.height) <= 2)
+      .filter(result => Math.max(result.width, result.height) / Math.max(1, Math.min(result.width, result.height)) <= 1.2)
       .sort((left, right) => scoreDuckDuckGoResult(right, bookmarkHostname, queryTerms) - scoreDuckDuckGoResult(left, bookmarkHostname, queryTerms))
       .slice(0, maxDuckDuckGoResults)
       .map(result => ({
@@ -391,6 +444,32 @@ async function searchDuckDuckGoImages(query: string, bookmarkUrl?: string): Prom
       }).catch(() => undefined);
     }
   }
+}
+
+interface DuckDuckGoSearchResponse {
+  results?: Array<{ image: string; thumbnail: string; title: string; url: string; width: number; height: number }>;
+}
+
+async function fetchDuckDuckGoJson(
+  queryText: string,
+  vqd: string,
+  searchPageUrl: string,
+  filterParams: string,
+): Promise<DuckDuckGoSearchResponse> {
+  const requestUrl = `${duckDuckGoSearchUrl}i.js?q=${encodeURIComponent(queryText)}&o=json&vqd=${encodeURIComponent(vqd)}${filterParams}&p=1&l=us-en`;
+  const response = await fetch(requestUrl, {
+    cache: 'no-store',
+    headers: {
+      Accept: 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    referrer: searchPageUrl,
+    referrerPolicy: 'origin-when-cross-origin',
+  });
+  if (!response.ok) {
+    throw new Error(`DuckDuckGo search failed with ${String(response.status)}`);
+  }
+  return response.json() as Promise<DuckDuckGoSearchResponse>;
 }
 
 function extractDuckDuckGoToken(html: string): string | null {
@@ -449,14 +528,26 @@ function scoreDuckDuckGoResult(
     score += 140;
   }
 
+  if (/icon|logo|favicon|apple-touch-icon/i.test(result.image)) {
+    score += 300;
+  }
+
+  if (/screenshot|banner|header|cover|hero/i.test(result.image)) {
+    score -= 600;
+  }
+
+  if (/screenshot|banner|cover|hero/i.test(normalizedTitle)) {
+    score -= 400;
+  }
+
   if (/\.svg(?:$|\?)/i.test(result.image)) {
     score += 500;
   }
 
-  if (aspectRatio <= 1.2) {
-    score += 250;
-  } else if (aspectRatio <= 1.5) {
-    score += 100;
+  if (aspectRatio <= 1.05) {
+    score += 300;
+  } else if (aspectRatio <= 1.15) {
+    score += 150;
   }
 
   if (imageArea >= 256 * 256 && imageArea <= 1200 * 1200) {
@@ -466,7 +557,7 @@ function scoreDuckDuckGoResult(
   }
 
   if (isLikelyAggregatorHost(sourceHostname) || isLikelyAggregatorHost(imageHostname)) {
-    score -= 600;
+    score -= 1500;
   }
 
   return score;

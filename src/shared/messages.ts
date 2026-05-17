@@ -101,6 +101,34 @@ export interface BookmarkUsageRecord {
 
 export type IconSourceKind = 'override' | 'favicon' | 'search' | 'generated';
 
+export type IconFetchErrorKind =
+  | 'network'
+  | 'http-status'
+  | 'not-image'
+  | 'too-small'
+  | 'decode-fail'
+  | 'unknown';
+
+export class IconFetchError extends Error {
+  readonly kind: IconFetchErrorKind;
+  readonly httpStatus?: number;
+
+  constructor(kind: IconFetchErrorKind, message: string, httpStatus?: number) {
+    super(message);
+    this.name = 'IconFetchError';
+    this.kind = kind;
+    this.httpStatus = httpStatus;
+  }
+}
+
+export interface AppErrorResponse {
+  __error: {
+    kind: IconFetchErrorKind;
+    message: string;
+    httpStatus?: number;
+  };
+}
+
 export interface ResolvedIcon {
   cacheKey: string;
   sourceKind: IconSourceKind;
@@ -264,6 +292,7 @@ export interface SetIconOverrideFromUrlRequest {
   bookmarkUrl: string;
   bookmarkTitle?: string;
   imageUrl: string;
+  fallbackImageUrl?: string;
   fileName?: string;
 }
 

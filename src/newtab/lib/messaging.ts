@@ -1,5 +1,6 @@
 import { extensionApi } from '../../shared/browser';
 import type {
+  AppErrorResponse,
   AppRequest,
   AppResponse,
   AppSettings,
@@ -22,10 +23,18 @@ import type {
   GetBookmarkUsageResponse,
   RecordBookmarkUseResponse,
 } from '../../shared/messages';
-import { messageTypes } from '../../shared/messages';
+import { IconFetchError, messageTypes } from '../../shared/messages';
 
 async function send<T extends AppResponse>(req: AppRequest): Promise<T> {
-  return (await extensionApi.runtime.sendMessage(req)) as T;
+  const res = (await extensionApi.runtime.sendMessage(req)) as T | AppErrorResponse | undefined;
+  if (res && typeof res === 'object' && '__error' in res) {
+    const { kind, message, httpStatus } = (res as AppErrorResponse).__error;
+    throw new IconFetchError(kind, message, httpStatus);
+  }
+  if (res === undefined) {
+    throw new IconFetchError('unknown', 'No response from background service worker.');
+  }
+  return res as T;
 }
 
 export async function getSettings(): Promise<AppSettings> {
@@ -87,6 +96,7 @@ export async function setIconOverrideFromUrl(args: {
   bookmarkUrl: string;
   bookmarkTitle?: string;
   imageUrl: string;
+  fallbackImageUrl?: string;
   fileName?: string;
 }): Promise<ResolvedIcon> {
   const res = await send<SetIconOverrideFromUrlResponse>({ type: messageTypes.setIconOverrideFromUrl, ...args });

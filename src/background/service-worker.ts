@@ -1,5 +1,5 @@
 import { extensionApi } from '../shared/browser';
-import { messageTypes, type AppRequest, type AppResponse, type BookmarkNode } from '../shared/messages';
+import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type IconFetchErrorKind } from '../shared/messages';
 import { markOnboardingPending, readBookmarkUsageRecords, readSettings, writeBookmarkUsageRecord, writeSettings } from '../shared/storage';
 import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl } from './icons/icon-service';
 
@@ -15,10 +15,32 @@ extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }
   console.info('Flipp\'s Favorites - Bookmarks & more installed');
 });
 
-extensionApi.runtime.onMessage.addListener((message: AppRequest, _sender: unknown, sendResponse: (response: AppResponse | undefined) => void) => {
-  handleMessage(message).then(sendResponse).catch(() => { sendResponse(undefined); });
+extensionApi.runtime.onMessage.addListener((message: AppRequest, _sender: unknown, sendResponse: (response: AppResponse | AppErrorResponse | undefined) => void) => {
+  handleMessage(message)
+    .then(sendResponse)
+    .catch((error: unknown) => {
+      sendResponse(buildErrorEnvelope(error));
+    });
   return true; // Keep the message channel open for the async response
 });
+
+function buildErrorEnvelope(error: unknown): AppErrorResponse {
+  let kind: IconFetchErrorKind = 'unknown';
+  let message = 'Unknown error.';
+  let httpStatus: number | undefined;
+
+  if (error instanceof IconFetchError) {
+    kind = error.kind;
+    message = error.message;
+    httpStatus = error.httpStatus;
+  } else if (error instanceof Error) {
+    message = error.message || message;
+  } else if (typeof error === 'string') {
+    message = error;
+  }
+
+  return { __error: { kind, message, httpStatus } };
+}
 
 async function handleMessage(message: AppRequest): Promise<AppResponse> {
   switch (message.type) {
@@ -83,7 +105,9 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
     case messageTypes.setIconOverride:
       return { icon: await setIconOverride(message) };
     case messageTypes.setIconOverrideFromUrl:
-      return { icon: await setIconOverrideFromUrl(message.bookmarkUrl, message.imageUrl, message.fileName) };
+      return {
+        icon: await setIconOverrideFromUrl(message.bookmarkUrl, message.imageUrl, message.fileName, message.fallbackImageUrl),
+      };
     case messageTypes.removeIconOverride:
       return { icon: await removeIconOverride(message.bookmarkUrl, message.bookmarkTitle) };
     case messageTypes.invalidateIcon:
