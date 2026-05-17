@@ -1,7 +1,7 @@
 import { extensionApi } from '../shared/browser';
 import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type IconFetchErrorKind } from '../shared/messages';
 import { markOnboardingPending, readBookmarkUsageRecords, readSettings, writeBookmarkUsageRecord, writeSettings } from '../shared/storage';
-import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl } from './icons/icon-service';
+import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl, sweepGeneratedRecords } from './icons/icon-service';
 
 extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }) => {
   const reason = details.reason ?? 'unknown';
@@ -11,9 +11,22 @@ extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }
   if (details.reason === 'install' || details.reason === 'update') {
     await invalidateIcon();
   }
+  void scheduleGeneratedRecordSweep();
   console.info(`Flipp's Favorites install event reason: ${reason}`);
   console.info('Flipp\'s Favorites - Bookmarks & more installed');
 });
+
+if (extensionApi.runtime.onStartup) {
+  extensionApi.runtime.onStartup.addListener(() => {
+    void scheduleGeneratedRecordSweep();
+  });
+}
+
+function scheduleGeneratedRecordSweep(): Promise<void> {
+  return sweepGeneratedRecords().catch((error: unknown) => {
+    console.warn('Generated-icon sweep failed.', error);
+  });
+}
 
 extensionApi.runtime.onMessage.addListener((message: AppRequest, _sender: unknown, sendResponse: (response: AppResponse | AppErrorResponse | undefined) => void) => {
   handleMessage(message)

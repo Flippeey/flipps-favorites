@@ -15,11 +15,12 @@ const firefoxAndroidStrictMinVersion = process.env.FIREFOX_ANDROID_STRICT_MIN_VE
 const firefoxUpdateUrl = process.env.FIREFOX_UPDATE_URL;
 const includeHttpHosts = process.env.INCLUDE_HTTP_HOSTS === '1';
 
-// https://duckduckgo.com/* is listed explicitly because Firefox MV3 does not
-// honour the https://*/* wildcard for CORS bypass on extension background fetches.
+// https://duckduckgo.com/* and https://icon.horse/* are listed explicitly because
+// Firefox MV3 does not honour the https://*/* wildcard for CORS bypass on
+// extension background fetches.
 const hostPermissions = includeHttpHosts
-  ? ['https://*/*', 'http://*/*', 'https://duckduckgo.com/*']
-  : ['https://*/*', 'https://duckduckgo.com/*'];
+  ? ['https://*/*', 'http://*/*', 'https://duckduckgo.com/*', 'https://icon.horse/*']
+  : ['https://*/*', 'https://duckduckgo.com/*', 'https://icon.horse/*'];
 
 const homepageUrl = process.env.EXTENSION_HOMEPAGE_URL;
 const extensionIcons = {

@@ -99,7 +99,7 @@ export interface BookmarkUsageRecord {
   usedAt: number;
 }
 
-export type IconSourceKind = 'override' | 'favicon' | 'search' | 'generated';
+export type IconSourceKind = 'override' | 'origin' | 'iconhorse' | 'favicon' | 'search' | 'generated';
 
 export type IconFetchErrorKind =
   | 'network'
@@ -144,6 +144,7 @@ export interface IconCacheRecord {
   dataUrl: string;
   mimeType: string;
   updatedAt: number;
+  expiresAt?: number;
   pipelineVersion: string;
 }
 

@@ -1,19 +1,31 @@
-import type { GetIconRequest, IconCacheRecord, IconOverrideRecord, IconSearchCandidate, ResolvedIcon, SetIconOverrideRequest } from '../../shared/messages';
+import type { GetIconRequest, IconCacheRecord, IconOverrideRecord, IconSearchCandidate, IconSourceKind, ResolvedIcon, SetIconOverrideRequest } from '../../shared/messages';
 import { IconFetchError } from '../../shared/messages';
 import { extensionApi } from '../../shared/browser';
-import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRecord, readIconCacheRecord, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideRecord } from '../../shared/storage';
+import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRecord, readIconCacheRecord, readIconCacheRecords, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideRecord } from '../../shared/storage';
 
-const iconPipelineVersion = 'bookmark-icons-v5';
+const iconPipelineVersion = 'bookmark-icons-v6';
 const faviconProviderUrl = 'https://www.google.com/s2/favicons';
 const faviconRequestSize = 256;
 const duckDuckGoSearchUrl = 'https://duckduckgo.com/';
-const minimumAcceptedIconSize = 48;
+const iconHorseBaseUrl = 'https://icon.horse/icon/';
+const minimumAcceptedIconSize = 64;
+const minimumAutoIconSize = 96;
 const minimumOverrideIconSize = 64;
 const maxDuckDuckGoResults = 48;
 const ddgPrimaryFilter = '&f=,clipart,Square,Transparent';
 const ddgFallbackFilter = '&f=,,Medium,Square';
-let ddgRuleCounter = 0;
+const cacheTtlMs = 30 * 24 * 60 * 60 * 1000; // 30 days
+const autoSourceTimeoutMs = 5000;
+const originFetchTimeoutMs = 3500;
+const iconHorseTimeoutMs = 4000;
+const s2TimeoutMs = 4000;
+const ddgFirstHitTimeoutMs = 6000;
+const sweepBatchSize = 4;
+const sweepBatchSpacingMs = 250;
+const maxConcurrentResolutions = 6;
+let corsBypassRuleCounter = 0;
 const inFlightIcons = new Map<string, Promise<ResolvedIcon>>();
+const inFlightRefreshes = new Set<string>();
 
 export async function getIcon(request: GetIconRequest): Promise<ResolvedIcon> {
   const cacheKey = getIconCacheKey(request.bookmarkUrl);
@@ -165,16 +177,22 @@ async function resolveIcon(request: GetIconRequest, cacheKey: string): Promise<R
 
   const cached = await readIconCacheRecord(cacheKey);
   if (cached && cached.pipelineVersion === iconPipelineVersion && isDataUrl(cached.dataUrl)) {
+    const isStale = typeof cached.expiresAt === 'number' && Date.now() > cached.expiresAt;
+    if (isStale && cached.sourceKind !== 'generated') {
+      scheduleBackgroundRefresh(request, cacheKey);
+    }
     return toResolvedIcon(cached);
   }
 
-  const hasFaviconPermission = await extensionApi.permissions.contains({ origins: ['https://www.google.com/*'] }).catch(() => false);
-  if (hasFaviconPermission) {
-    const faviconRecord = await createFaviconRecord(request.bookmarkUrl, cacheKey).catch(() => null);
-    if (faviconRecord) {
-      await writeIconCacheRecord(faviconRecord);
-      return toResolvedIcon(faviconRecord);
+  const release = await resolutionSemaphore.acquire();
+  try {
+    const automatic = await resolveAutomaticIcon(request, cacheKey);
+    if (automatic) {
+      await writeIconCacheRecord(automatic);
+      return toResolvedIcon(automatic);
     }
+  } finally {
+    release();
   }
 
   const generatedRecord = createGeneratedRecord(request.bookmarkUrl, request.bookmarkTitle, cacheKey);
@@ -182,36 +200,90 @@ async function resolveIcon(request: GetIconRequest, cacheKey: string): Promise<R
   return toResolvedIcon(generatedRecord);
 }
 
-async function createFaviconRecord(bookmarkUrl: string, cacheKey: string): Promise<IconCacheRecord> {
+async function resolveAutomaticIcon(request: GetIconRequest, cacheKey: string): Promise<IconCacheRecord | null> {
+  const racers: Array<Promise<IconCacheRecord | null>> = [
+    fetchOriginScrape(request.bookmarkUrl, cacheKey).catch(() => null),
+    fetchIconHorse(request.bookmarkUrl, cacheKey).catch(() => null),
+  ];
+
+  const winner = await Promise.race([
+    firstSuccessful(racers),
+    sleep(autoSourceTimeoutMs).then(() => null),
+  ]);
+  if (winner) return winner;
+
+  const hasFaviconPermission = await extensionApi.permissions
+    .contains({ origins: ['https://www.google.com/*'] })
+    .catch(() => false);
+  if (hasFaviconPermission) {
+    const s2 = await fetchS2Favicon(request.bookmarkUrl, cacheKey).catch(() => null);
+    if (s2) return s2;
+  }
+
+  const ddgFirst = await fetchDuckDuckGoFirstHit(request, cacheKey).catch(() => null);
+  if (ddgFirst) return ddgFirst;
+
+  return null;
+}
+
+function scheduleBackgroundRefresh(request: GetIconRequest, cacheKey: string): void {
+  if (inFlightRefreshes.has(cacheKey)) return;
+  inFlightRefreshes.add(cacheKey);
+  void (async () => {
+    try {
+      const release = await resolutionSemaphore.acquire();
+      try {
+        const fresh = await resolveAutomaticIcon(request, cacheKey);
+        if (fresh) {
+          await writeIconCacheRecord(fresh);
+        }
+      } finally {
+        release();
+      }
+    } finally {
+      inFlightRefreshes.delete(cacheKey);
+    }
+  })();
+}
+
+export async function sweepGeneratedRecords(): Promise<void> {
+  const records = await readIconCacheRecords().catch(() => ({}));
+  const generated = Object.values(records).filter(record => record.sourceKind === 'generated');
+  if (!generated.length) return;
+
+  for (let index = 0; index < generated.length; index += sweepBatchSize) {
+    const batch = generated.slice(index, index + sweepBatchSize);
+    await Promise.all(batch.map(async record => {
+      const release = await resolutionSemaphore.acquire();
+      try {
+        const fresh = await resolveAutomaticIcon(
+          { type: 'icons/get', bookmarkUrl: record.bookmarkUrl },
+          record.cacheKey,
+        );
+        if (fresh) {
+          await writeIconCacheRecord(fresh);
+        }
+      } finally {
+        release();
+      }
+    }));
+    if (index + sweepBatchSize < generated.length) {
+      await sleep(sweepBatchSpacingMs);
+    }
+  }
+}
+
+async function fetchS2Favicon(bookmarkUrl: string, cacheKey: string): Promise<IconCacheRecord | null> {
   const providerRequestUrl = `${faviconProviderUrl}?domain_url=${encodeURIComponent(bookmarkUrl)}&sz=${String(clampFaviconSize(faviconRequestSize))}`;
-  const response = await fetch(providerRequestUrl, { cache: 'force-cache' });
-  if (!response.ok) {
-    throw new Error(`Favicon request failed with ${String(response.status)}`);
-  }
-
-  const blob = await response.blob();
-  const mimeType = blob.type || 'image/png';
-  if (!mimeType.startsWith('image/')) {
-    throw new Error('Favicon response is not an image.');
-  }
-
-  const dimensions = await getImageDimensions(blob);
-  assertImageIsUseful(dimensions);
-
-  const dataUrl = await blobToDataUrl(blob, mimeType);
-  if (!isDataUrl(dataUrl)) {
-    throw new Error('Favicon conversion failed.');
-  }
-
-  return {
-    cacheKey,
+  return fetchAndValidateImage({
+    imageUrl: providerRequestUrl,
     bookmarkUrl,
+    cacheKey,
     sourceKind: 'favicon',
-    dataUrl,
-    mimeType,
-    updatedAt: Date.now(),
-    pipelineVersion: iconPipelineVersion,
-  };
+    timeoutMs: s2TimeoutMs,
+    minimumEdge: minimumAcceptedIconSize,
+    requireOpaqueCenter: true,
+  });
 }
 
 
@@ -367,36 +439,7 @@ async function searchDuckDuckGoImages(query: string, bookmarkUrl?: string): Prom
   const queryText = /logo|icon/i.test(query) ? query : `${query} logo`;
   const searchPageUrl = `${duckDuckGoSearchUrl}?q=${encodeURIComponent(queryText)}&ia=images&iax=images`;
 
-  // Firefox 140 broke the host_permissions CORS bypass for MV3 background pages. As a
-  // workaround, temporarily inject Access-Control-Allow-Origin via a declarativeNetRequest
-  // session rule so fetch() can read the DDG response. The rule is removed immediately after.
-  const ruleId = ++ddgRuleCounter;
-  let ruleAdded = false;
-  if (extensionApi.declarativeNetRequest?.updateSessionRules) {
-    try {
-      await extensionApi.declarativeNetRequest.updateSessionRules({
-        addRules: [{
-          id: ruleId,
-          priority: 1,
-          action: {
-            type: 'modifyHeaders',
-            responseHeaders: [
-              { header: 'access-control-allow-origin', operation: 'set', value: '*' },
-            ],
-          },
-          condition: {
-            urlFilter: '||duckduckgo.com/',
-            resourceTypes: ['xmlhttprequest', 'other'],
-          },
-        }],
-      });
-      ruleAdded = true;
-    } catch {
-      // declarativeNetRequest unavailable — proceed without CORS header injection
-    }
-  }
-
-  try {
+  return withCorsBypass('||duckduckgo.com/', async () => {
     const html = await fetch(searchPageUrl, {
       cache: 'no-store',
       headers: {
@@ -437,6 +480,323 @@ async function searchDuckDuckGoImages(query: string, bookmarkUrl?: string): Prom
         sourceKind: 'search' as const,
         sourcePageUrl: result.url,
       }));
+  });
+}
+
+async function fetchDuckDuckGoFirstHit(request: GetIconRequest, cacheKey: string): Promise<IconCacheRecord | null> {
+  const query = buildSearchQueryFromBookmark(request.bookmarkUrl);
+  if (!query) return null;
+
+  const candidates = await Promise.race([
+    searchDuckDuckGoImages(query, request.bookmarkUrl).catch(() => [] as IconSearchCandidate[]),
+    sleep(ddgFirstHitTimeoutMs).then(() => [] as IconSearchCandidate[]),
+  ]);
+  if (!candidates.length) return null;
+
+  for (const candidate of candidates.slice(0, 3)) {
+    const record = await fetchAndValidateImage({
+      imageUrl: candidate.imageUrl,
+      bookmarkUrl: request.bookmarkUrl,
+      cacheKey,
+      sourceKind: 'search',
+      timeoutMs: 4000,
+      minimumEdge: minimumAcceptedIconSize,
+      requireOpaqueCenter: false,
+    }).catch(() => null);
+    if (record) return record;
+
+    if (candidate.previewUrl && candidate.previewUrl !== candidate.imageUrl) {
+      const previewRecord = await fetchAndValidateImage({
+        imageUrl: candidate.previewUrl,
+        bookmarkUrl: request.bookmarkUrl,
+        cacheKey,
+        sourceKind: 'search',
+        timeoutMs: 4000,
+        minimumEdge: minimumAcceptedIconSize,
+        requireOpaqueCenter: false,
+      }).catch(() => null);
+      if (previewRecord) return previewRecord;
+    }
+  }
+  return null;
+}
+
+async function fetchOriginScrape(bookmarkUrl: string, cacheKey: string): Promise<IconCacheRecord | null> {
+  const hostname = extractHostname(bookmarkUrl);
+  if (!hostname) return null;
+
+  return withCorsBypass(`||${hostname}/`, async () => {
+    const origin = `https://${hostname}`;
+    let html = '';
+    try {
+      const response = await fetchWithTimeout(`${origin}/`, originFetchTimeoutMs, {
+        headers: {
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+        redirect: 'follow',
+      });
+      if (response.ok) {
+        html = await response.text();
+      }
+    } catch {
+      html = '';
+    }
+
+    const probes: Array<{ url: string; sizeHint: number; weight: number }> = [];
+    if (html) {
+      probes.push(...parseOriginIconCandidates(html, origin));
+      const manifestMatch = html.match(/<link[^>]+rel=["']?manifest["']?[^>]*href=["']([^"']+)["']/i);
+      if (manifestMatch?.[1]) {
+        try {
+          const manifestUrl = new URL(manifestMatch[1], `${origin}/`).toString();
+          const manifestResponse = await fetchWithTimeout(manifestUrl, 2500).catch(() => null);
+          if (manifestResponse?.ok) {
+            const manifest = await manifestResponse.json().catch(() => null) as { icons?: Array<{ src: string; sizes?: string; type?: string }> } | null;
+            if (manifest?.icons) {
+              for (const icon of manifest.icons) {
+                if (!icon.src) continue;
+                try {
+                  const url = new URL(icon.src, manifestUrl).toString();
+                  const sizeHint = parseLargestSize(icon.sizes ?? '');
+                  probes.push({ url, sizeHint, weight: 120 });
+                } catch {
+                  continue;
+                }
+              }
+            }
+          }
+        } catch {
+          // manifest fetch failed
+        }
+      }
+    }
+
+    probes.push(
+      { url: `${origin}/apple-touch-icon.png`, sizeHint: 180, weight: 80 },
+      { url: `${origin}/apple-touch-icon-precomposed.png`, sizeHint: 180, weight: 75 },
+      { url: `${origin}/apple-touch-icon-180x180.png`, sizeHint: 180, weight: 70 },
+    );
+
+    const unique = new Map<string, { url: string; sizeHint: number; weight: number }>();
+    for (const probe of probes) {
+      if (!unique.has(probe.url)) {
+        unique.set(probe.url, probe);
+      }
+    }
+
+    const ordered = Array.from(unique.values()).sort(
+      (left, right) => (right.sizeHint - left.sizeHint) || (right.weight - left.weight),
+    );
+
+    for (const probe of ordered.slice(0, 8)) {
+      const record = await fetchAndValidateImage({
+        imageUrl: probe.url,
+        bookmarkUrl,
+        cacheKey,
+        sourceKind: 'origin',
+        timeoutMs: originFetchTimeoutMs,
+        minimumEdge: minimumAutoIconSize,
+        requireOpaqueCenter: true,
+      }).catch(() => null);
+      if (record) return record;
+    }
+    return null;
+  }).catch(() => null);
+}
+
+async function fetchIconHorse(bookmarkUrl: string, cacheKey: string): Promise<IconCacheRecord | null> {
+  const hostname = extractHostname(bookmarkUrl);
+  if (!hostname) return null;
+
+  return withCorsBypass('||icon.horse/', async () => {
+    return fetchAndValidateImage({
+      imageUrl: `${iconHorseBaseUrl}${hostname}`,
+      bookmarkUrl,
+      cacheKey,
+      sourceKind: 'iconhorse',
+      timeoutMs: iconHorseTimeoutMs,
+      minimumEdge: minimumAutoIconSize,
+      requireOpaqueCenter: true,
+    });
+  }).catch(() => null);
+}
+
+function parseOriginIconCandidates(html: string, origin: string): Array<{ url: string; sizeHint: number; weight: number }> {
+  const candidates: Array<{ url: string; sizeHint: number; weight: number }> = [];
+  const linkRegex = /<link\b[^>]*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = linkRegex.exec(html)) !== null) {
+    const tag = match[0];
+    const rel = extractAttr(tag, 'rel')?.toLowerCase() ?? '';
+    if (!/(icon|apple-touch-icon|shortcut icon|mask-icon|fluid-icon)/.test(rel)) continue;
+    const href = extractAttr(tag, 'href');
+    if (!href) continue;
+    let absolute: string;
+    try {
+      absolute = new URL(href, `${origin}/`).toString();
+    } catch {
+      continue;
+    }
+    const sizesAttr = extractAttr(tag, 'sizes') ?? '';
+    const sizeHint = parseLargestSize(sizesAttr);
+    let weight = 50;
+    if (rel.includes('apple-touch-icon')) weight = 100;
+    else if (rel.includes('mask-icon')) weight = 30;
+    else if (rel.includes('shortcut icon')) weight = 60;
+    candidates.push({ url: absolute, sizeHint, weight });
+  }
+  return candidates;
+}
+
+function extractAttr(tag: string, attr: string): string | null {
+  const re = new RegExp(`${attr}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i');
+  const match = tag.match(re);
+  if (!match) return null;
+  return match[1] ?? match[2] ?? match[3] ?? null;
+}
+
+function parseLargestSize(sizes: string): number {
+  if (!sizes) return 0;
+  let best = 0;
+  for (const part of sizes.toLowerCase().split(/\s+/)) {
+    if (part === 'any') {
+      best = Math.max(best, 512);
+      continue;
+    }
+    const m = part.match(/^(\d+)x(\d+)$/);
+    if (m) {
+      const edge = Math.min(Number(m[1]), Number(m[2]));
+      if (Number.isFinite(edge)) {
+        best = Math.max(best, edge);
+      }
+    }
+  }
+  return best;
+}
+
+interface FetchAndValidateArgs {
+  imageUrl: string;
+  bookmarkUrl: string;
+  cacheKey: string;
+  sourceKind: Exclude<IconSourceKind, 'override'>;
+  timeoutMs: number;
+  minimumEdge: number;
+  requireOpaqueCenter: boolean;
+}
+
+async function fetchAndValidateImage(args: FetchAndValidateArgs): Promise<IconCacheRecord | null> {
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(args.imageUrl, args.timeoutMs, { cache: 'force-cache' });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+
+  const blob = await response.blob().catch(() => null);
+  if (!blob) return null;
+
+  const mimeType = blob.type || 'image/png';
+  if (!mimeType.startsWith('image/')) return null;
+
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(blob);
+  } catch {
+    return null;
+  }
+
+  try {
+    const minEdge = Math.min(bitmap.width, bitmap.height);
+    const aspectRatio = Math.max(bitmap.width, bitmap.height) / Math.max(1, minEdge);
+    if (minEdge < args.minimumEdge) return null;
+    if (aspectRatio > 1.4) return null;
+    if (args.requireOpaqueCenter && !hasOpaqueCenter(bitmap)) return null;
+  } finally {
+    bitmap.close();
+  }
+
+  const dataUrl = await blobToDataUrl(blob, mimeType);
+  if (!isDataUrl(dataUrl)) return null;
+
+  const now = Date.now();
+  return {
+    cacheKey: args.cacheKey,
+    bookmarkUrl: args.bookmarkUrl,
+    sourceKind: args.sourceKind,
+    dataUrl,
+    mimeType,
+    updatedAt: now,
+    expiresAt: now + cacheTtlMs,
+    pipelineVersion: iconPipelineVersion,
+  };
+}
+
+function hasOpaqueCenter(bitmap: ImageBitmap): boolean {
+  if (typeof OffscreenCanvas === 'undefined') return true;
+  try {
+    const sampleSize = 8;
+    const canvas = new OffscreenCanvas(sampleSize, sampleSize);
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return true;
+    const centerX = bitmap.width / 2 - sampleSize / 2;
+    const centerY = bitmap.height / 2 - sampleSize / 2;
+    context.drawImage(
+      bitmap,
+      centerX, centerY, sampleSize, sampleSize,
+      0, 0, sampleSize, sampleSize,
+    );
+    const data = context.getImageData(0, 0, sampleSize, sampleSize).data;
+    let totalAlpha = 0;
+    for (let index = 3; index < data.length; index += 4) {
+      totalAlpha += data[index];
+    }
+    const meanAlpha = totalAlpha / (data.length / 4);
+    return meanAlpha >= 32;
+  } catch {
+    return true;
+  }
+}
+
+async function fetchWithTimeout(url: string, timeoutMs: number, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function withCorsBypass<T>(urlFilter: string, fn: () => Promise<T>): Promise<T> {
+  const ruleId = ++corsBypassRuleCounter;
+  let ruleAdded = false;
+  if (extensionApi.declarativeNetRequest?.updateSessionRules) {
+    try {
+      await extensionApi.declarativeNetRequest.updateSessionRules({
+        addRules: [{
+          id: ruleId,
+          priority: 1,
+          action: {
+            type: 'modifyHeaders',
+            responseHeaders: [
+              { header: 'access-control-allow-origin', operation: 'set', value: '*' },
+            ],
+          },
+          condition: {
+            urlFilter,
+            resourceTypes: ['xmlhttprequest', 'other'],
+          },
+        }],
+      });
+      ruleAdded = true;
+    } catch {
+      // declarativeNetRequest unavailable — proceed without CORS header injection
+    }
+  }
+
+  try {
+    return await fn();
   } finally {
     if (ruleAdded) {
       await extensionApi.declarativeNetRequest.updateSessionRules({
@@ -445,6 +805,55 @@ async function searchDuckDuckGoImages(query: string, bookmarkUrl?: string): Prom
     }
   }
 }
+
+async function firstSuccessful<T>(promises: Array<Promise<T | null>>): Promise<T | null> {
+  if (!promises.length) return null;
+  return new Promise(resolve => {
+    let pending = promises.length;
+    let settled = false;
+    for (const promise of promises) {
+      promise.then(value => {
+        if (!settled && value !== null && value !== undefined) {
+          settled = true;
+          resolve(value);
+        }
+      }).catch(() => undefined).finally(() => {
+        pending -= 1;
+        if (pending === 0 && !settled) {
+          settled = true;
+          resolve(null);
+        }
+      });
+    }
+  });
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+class ResolutionSemaphore {
+  private active = 0;
+  private readonly queue: Array<() => void> = [];
+
+  constructor(private readonly limit: number) {}
+
+  async acquire(): Promise<() => void> {
+    if (this.active >= this.limit) {
+      await new Promise<void>(resolve => this.queue.push(resolve));
+    }
+    this.active += 1;
+    return () => this.release();
+  }
+
+  private release(): void {
+    this.active -= 1;
+    const next = this.queue.shift();
+    if (next) next();
+  }
+}
+
+const resolutionSemaphore = new ResolutionSemaphore(maxConcurrentResolutions);
 
 interface DuckDuckGoSearchResponse {
   results?: Array<{ image: string; thumbnail: string; title: string; url: string; width: number; height: number }>;
@@ -642,12 +1051,6 @@ async function getImageDimensions(blob: Blob): Promise<{ width: number; height: 
     return { width: bitmap.width, height: bitmap.height };
   } finally {
     bitmap.close();
-  }
-}
-
-function assertImageIsUseful(dimensions: { width: number; height: number }): void {
-  if (dimensions.width < minimumAcceptedIconSize || dimensions.height < minimumAcceptedIconSize) {
-    throw new Error('Icon image is too small to use.');
   }
 }
 
