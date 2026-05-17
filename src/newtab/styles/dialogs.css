@@ -132,16 +132,16 @@
 }
 .ff-icongrid__cell {
   aspect-ratio: 1;
-  background: var(--ink-2);
-  border: 1px solid var(--line-1);
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: var(--r-md);
   cursor: pointer;
   overflow: hidden;
   display: grid; place-items: center;
-  padding: 14px;
+  padding: 6px;
   transition: all var(--dur-fast) var(--ease-out);
 }
-.ff-icongrid__cell:hover { border-color: var(--accent-border); background: var(--ink-3); }
+.ff-icongrid__cell:hover { border-color: var(--accent-border); background: color-mix(in oklab, var(--ink-2) 60%, transparent); }
 .ff-icongrid__cell[data-active="true"] {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);

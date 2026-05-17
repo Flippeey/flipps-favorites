@@ -63,9 +63,6 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
   const [searching, setSearching] = useState(false);
   const [previewIcon, setPreviewIcon] = useState<ResolvedIcon | null>(null);
   const [working, setWorking] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(12);
-
-  const pageSize = 12;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -76,7 +73,6 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
 
   const runSearch = useCallback(async (q: string) => {
     setSearching(true);
-    setVisibleCount(pageSize);
     try {
       const candidates = await searchIcons(q, bookmarkUrl);
       setResults(candidates);
@@ -351,37 +347,25 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
             ) : results.length === 0 ? (
               <p style={{ fontSize: 12, color: 'var(--fg-3)', margin: 0 }}>No results yet.</p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
-                <div className="ff-icongrid" style={{ overflowY: 'auto' }}>
-                  {results.slice(0, visibleCount).map((candidate) => (
-                    <button
-                      key={candidate.imageUrl}
-                      type="button"
-                      className="ff-icongrid__cell"
-                      title={candidate.label}
-                      onClick={() => handlePickCandidate(candidate)}
-                      disabled={working}
-                    >
-                      <img
-                        src={candidate.previewUrl}
-                        alt=""
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                      />
-                    </button>
-                  ))}
-                </div>
-                {visibleCount < results.length && (
+              <div className="ff-icongrid" style={{ overflowY: 'auto' }}>
+                {results.map((candidate) => (
                   <button
+                    key={candidate.imageUrl}
                     type="button"
-                    className="ff-btn"
-                    onClick={() => setVisibleCount((current) => Math.min(current + pageSize, results.length))}
-                    style={{ alignSelf: 'center' }}
+                    className="ff-icongrid__cell"
+                    title={candidate.label}
+                    onClick={() => handlePickCandidate(candidate)}
+                    disabled={working}
                   >
-                    Load more ({String(results.length - visibleCount)} remaining)
+                    <img
+                      src={candidate.previewUrl}
+                      alt=""
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    />
                   </button>
-                )}
+                ))}
               </div>
             )}
           </div>
