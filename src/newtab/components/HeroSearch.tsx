@@ -57,25 +57,8 @@ export function HeroSearch({ shape, index, onPickBookmark, onPickFolder }: HeroS
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
-
-  useEffect(() => {
-    const focusInput = () => inputRef.current?.focus({ preventScroll: true });
-    focusInput();
-    const raf = requestAnimationFrame(focusInput);
-    const t1 = window.setTimeout(focusInput, 50);
-    const t2 = window.setTimeout(focusInput, 200);
-    const onVis = () => { if (document.visibilityState === 'visible') focusInput(); };
-    document.addEventListener('visibilitychange', onVis);
-    window.addEventListener('focus', focusInput);
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(t1);
-      clearTimeout(t2);
-      document.removeEventListener('visibilitychange', onVis);
-      window.removeEventListener('focus', focusInput);
-    };
-  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -96,6 +79,18 @@ export function HeroSearch({ shape, index, onPickBookmark, onPickFolder }: HeroS
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target;
+      if (!(target instanceof Node)) return;
+      if (wrapRef.current?.contains(target)) return;
+      setFocused(false);
+      if (document.activeElement === inputRef.current) inputRef.current?.blur();
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
   }, []);
 
   const results = useMemo(() => {
@@ -147,7 +142,7 @@ export function HeroSearch({ shape, index, onPickBookmark, onPickFolder }: HeroS
   };
 
   return (
-    <>
+    <div className="ff-search-wrap" ref={wrapRef}>
       <label className="ff-search">
         <span className="ff-search__icon"><Ico name="search" size={18} /></span>
         <input
@@ -241,7 +236,7 @@ export function HeroSearch({ shape, index, onPickBookmark, onPickFolder }: HeroS
           })}
         </div>
       )}
-    </>
+    </div>
   );
 }
 

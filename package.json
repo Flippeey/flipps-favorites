@@ -15,7 +15,9 @@
     "test:ui": "playwright test --ui",
     "test:build": "npm run build && npm test",
     "screenshots": "node scripts/take-promo-screenshots.mjs",
-    "videos": "node scripts/record-promo-videos.mjs"
+    "videos": "node scripts/record-promo-videos.mjs",
+    "promo": "node scripts/promo/record.mjs",
+    "promo:gif": "node scripts/promo/to-gif.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

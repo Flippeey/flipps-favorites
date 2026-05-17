@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
 import type {
   AppSettings,
   BackgroundMode,
@@ -10,6 +10,13 @@ import type {
   TileShape,
   ThemeMode,
 } from '../../shared/messages';
+import {
+  applyWorkspaceImport,
+  buildWorkspaceExport,
+  downloadWorkspaceExport,
+  parseWorkspaceFile,
+  type WorkspaceImportMode,
+} from '../lib/workspace-transfer';
 import { Ico } from './Ico';
 
 export const ACCENT_PRESETS: { id: string; label: string; value: string }[] = [
@@ -195,9 +202,10 @@ interface SettingsDrawerProps {
   tree: BookmarkNode[];
   onPatch: (patch: Partial<AppSettings>) => void;
   onClose: () => void;
+  onAfterImport: (settings: AppSettings) => void;
 }
 
-export function SettingsDrawer({ settings, tree, onPatch, onClose }: SettingsDrawerProps) {
+export function SettingsDrawer({ settings, tree, onPatch, onClose, onAfterImport }: SettingsDrawerProps) {
   const [section, setSection] = useState<SectionId>('appearance');
 
   useEffect(() => {
@@ -213,7 +221,7 @@ export function SettingsDrawer({ settings, tree, onPatch, onClose }: SettingsDra
         <header className="ff-drawer__head">
           <div>
             <div className="ff-dialog__eyebrow">Settings</div>
-            <div className="ff-dialog__title">Workspace controls</div>
+            <div className="ff-dialog__title">Personalize</div>
           </div>
           <button className="ff-iconbtn ff-iconbtn--icon" aria-label="Close" onClick={onClose}>
             <Ico name="close" size={16} />
@@ -238,7 +246,7 @@ export function SettingsDrawer({ settings, tree, onPatch, onClose }: SettingsDra
             {section === 'layout'     && <LayoutSection settings={settings} onPatch={onPatch} />}
             {section === 'dock'       && <DockSection settings={settings} tree={tree} onPatch={onPatch} />}
             {section === 'clock'      && <ClockSection settings={settings} onPatch={onPatch} />}
-            {section === 'backup'     && <BackupSection />}
+            {section === 'backup'     && <BackupSection onAfterImport={onAfterImport} />}
             {section === 'help'       && <HelpSection />}
           </div>
         </div>
@@ -620,18 +628,148 @@ function ClockSection({ settings, onPatch }: SectionProps) {
   );
 }
 
-function BackupSection() {
+interface BackupSectionProps {
+  onAfterImport: (settings: AppSettings) => void;
+}
+
+type BackupStatus = { kind: 'success' | 'error'; text: string } | null;
+
+function BackupSection({ onAfterImport }: BackupSectionProps) {
+  const [busy, setBusy] = useState<'idle' | 'exporting' | 'importing'>('idle');
+  const [status, setStatus] = useState<BackupStatus>(null);
+  const [importMode, setImportMode] = useState<WorkspaceImportMode>('merge');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!status) return;
+    const id = window.setTimeout(() => setStatus(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [status]);
+
+  const handleExport = async () => {
+    if (busy !== 'idle') return;
+    setBusy('exporting');
+    setStatus(null);
+    try {
+      const payload = await buildWorkspaceExport();
+      downloadWorkspaceExport(payload);
+      const overrideLabel = payload.iconOverrides.length === 1 ? 'icon override' : 'icon overrides';
+      setStatus({
+        kind: 'success',
+        text: `Exported settings and ${String(payload.iconOverrides.length)} ${overrideLabel}.`,
+      });
+    } catch (error) {
+      setStatus({
+        kind: 'error',
+        text: error instanceof Error ? error.message : 'Failed to export workspace data.',
+      });
+    } finally {
+      setBusy('idle');
+    }
+  };
+
+  const handlePickFile = () => {
+    if (busy !== 'idle') return;
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setBusy('importing');
+    setStatus(null);
+    try {
+      const payload = await parseWorkspaceFile(file);
+      const summary = await applyWorkspaceImport(payload, importMode);
+      onAfterImport(summary.settings);
+      const overrideLabel = summary.iconOverrideCount === 1 ? 'icon override' : 'icon overrides';
+      setStatus({
+        kind: 'success',
+        text: `Imported settings and ${String(summary.iconOverrideCount)} ${overrideLabel} (${summary.mode} mode).`,
+      });
+    } catch (error) {
+      setStatus({
+        kind: 'error',
+        text: error instanceof Error ? error.message : 'Failed to import workspace data.',
+      });
+    } finally {
+      setBusy('idle');
+    }
+  };
+
   return (
     <div className="ff-set-section">
       <h3 className="ff-set-section__title">Backup</h3>
-      <p className="ff-set-section__desc">Export or restore your full workspace as a single JSON file.</p>
-      <div className="ff-card" style={{ display: 'flex', gap: 12, padding: 16 }}>
-        <button className="ff-btn ff-btn--ghost"><Ico name="download" size={14} /> Export workspace</button>
-        <button className="ff-btn ff-btn--ghost"><Ico name="upload" size={14} /> Import…</button>
+      <p className="ff-set-section__desc">
+        Save your settings and custom icon overrides to a JSON file, or restore from one. Bookmarks
+        and folders sync through the browser — use the browser&rsquo;s built-in bookmark export to move them.
+      </p>
+
+      <div className="ff-card" style={{ marginBottom: 16 }}>
+        <div className="ff-row">
+          <div>
+            <div className="ff-row__label">Export workspace</div>
+            <div className="ff-row__hint">Downloads a JSON file with your settings, icon overrides, and usage history.</div>
+          </div>
+          <button
+            type="button"
+            className="ff-btn ff-btn--ghost"
+            onClick={handleExport}
+            disabled={busy !== 'idle'}
+          >
+            <Ico name="download" size={14} /> {busy === 'exporting' ? 'Exporting…' : 'Export'}
+          </button>
+        </div>
       </div>
-      <div style={{ marginTop: 16, fontSize: 12, color: 'var(--fg-3)' }}>
-        Includes bookmark structure, icon overrides, accent + theme, layout, dock, and clock preferences.
+
+      <div className="ff-card">
+        <div className="ff-row">
+          <div>
+            <div className="ff-row__label">Import mode</div>
+            <div className="ff-row__hint">Merge keeps existing data and overlays the file. Replace wipes settings and icon overrides first.</div>
+          </div>
+          <Segmented<WorkspaceImportMode>
+            options={[{ id: 'merge', label: 'Merge' }, { id: 'replace', label: 'Replace' }]}
+            value={importMode}
+            onChange={setImportMode}
+          />
+        </div>
+        <div className="ff-row">
+          <div>
+            <div className="ff-row__label">Import workspace</div>
+            <div className="ff-row__hint">Choose a JSON file previously exported from Flipp&rsquo;s Favorites.</div>
+          </div>
+          <button
+            type="button"
+            className="ff-btn ff-btn--ghost"
+            onClick={handlePickFile}
+            disabled={busy !== 'idle'}
+          >
+            <Ico name="upload" size={14} /> {busy === 'importing' ? 'Importing…' : 'Import…'}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            style={{ display: 'none' }}
+            onChange={handleFileChange}
+          />
+        </div>
       </div>
+
+      {status && (
+        <div
+          role="status"
+          style={{
+            marginTop: 12,
+            fontSize: 12,
+            color: status.kind === 'error' ? 'var(--danger, #C75252)' : 'var(--fg-2)',
+          }}
+        >
+          {status.text}
+        </div>
+      )}
     </div>
   );
 }

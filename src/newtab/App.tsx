@@ -470,6 +470,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
           tree={tree}
           onPatch={handlePatch}
           onClose={() => setSettingsOpen(false)}
+          onAfterImport={(next) => { setSettings(next); refreshTree(); }}
         />
       )}
 
