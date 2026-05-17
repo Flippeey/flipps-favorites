@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useEscapeKey } from '../interaction/useEscapeKey';
-import type { BookmarkNode, IconSearchCandidate, ResolvedIcon } from '../../shared/messages';
+import type { BookmarkNode, IconSearchCandidate, IconSourceKind, ResolvedIcon } from '../../shared/messages';
 import {
   createBookmark,
   getIcon,
@@ -42,6 +42,15 @@ function defaultQuery(title: string, url: string): string {
   const seed = getSearchName(url) || title.trim() || getHostname(url);
   return `${seed} logo`.trim();
 }
+
+const ICON_SOURCE_LABELS: Record<IconSourceKind, string> = {
+  override: 'Custom upload',
+  origin: 'Site icon',
+  iconhorse: 'Icon Horse',
+  favicon: 'Google favicons',
+  search: 'Web search',
+  generated: 'Placeholder',
+};
 
 export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
   const [title, setTitle] = useState(target.title);
@@ -279,6 +288,22 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
               onChange={handleFileChange}
               style={{ display: 'none' }}
             />
+
+            {previewIcon && (
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 11,
+                  color: 'var(--fg-3)',
+                  textAlign: 'center',
+                  letterSpacing: 0.2,
+                }}
+                title={`Icon source: ${ICON_SOURCE_LABELS[previewIcon.sourceKind]}`}
+              >
+                Source: {ICON_SOURCE_LABELS[previewIcon.sourceKind]}
+                {previewIcon.sourceKind === 'generated' && ' — try Search or Upload for a real icon.'}
+              </p>
+            )}
 
             {status && (
               <div className="ff-status" data-kind={status.kind} role="status">
