@@ -122,7 +122,12 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
         bookmark = await createBookmark(target.parentId ?? '1', title, url);
       }
       invalidateFaviconCache(bookmarkUrl);
-      if (bookmark.url) invalidateFaviconCache(bookmark.url);
+      if (bookmark.url) {
+        invalidateFaviconCache(bookmark.url);
+        // Pre-warm: start auto icon resolution so the tile already has a real
+        // icon by the time the user lands back on the newtab grid.
+        void getIcon(bookmark.url, bookmark.title).catch(() => undefined);
+      }
       onSaved(bookmark);
     } catch (e: unknown) {
       setStatus({ kind: 'error', message: e instanceof Error ? e.message : 'Could not save bookmark.' });
