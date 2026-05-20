@@ -119,10 +119,62 @@ button { font-family: inherit; }
 .ff-app[data-bg="wallpaper"]::after {
   content: '';
   position: fixed; inset: 0;
-  background: color-mix(in oklab, var(--ink-0) calc(100% - var(--wallpaper-alpha, 70%)), transparent);
+  background: color-mix(in oklab, var(--ink-0) max(32%, calc(100% - var(--wallpaper-alpha, 70%))), transparent);
   pointer-events: none; z-index: 0;
   transition: background var(--dur-base) var(--ease-out);
 }
+
+/* Wallpaper readability: stacked text shadow (tight outline + drop + soft glow).
+   Dark theme = dark halo for light text; light theme = light halo for dark text. */
+:root {
+  --text-halo:
+    0 0 1px rgba(0,0,0,0.55),
+    0 1px 2px rgba(0,0,0,0.85),
+    0 0 10px rgba(0,0,0,0.55);
+}
+[data-theme="light"] {
+  --text-halo:
+    0 0 1px rgba(255,255,255,0.7),
+    0 1px 2px rgba(255,255,255,0.95),
+    0 0 10px rgba(255,255,255,0.85);
+}
+
+.ff-app[data-bg="wallpaper"] .ff-tile__label,
+.ff-app[data-bg="wallpaper"] .ff-hero__clock-time,
+.ff-app[data-bg="wallpaper"] .ff-hero__clock-date,
+.ff-app[data-bg="wallpaper"] .ff-section__title,
+.ff-app[data-bg="wallpaper"] .ff-section__count,
+.ff-app[data-bg="wallpaper"] .ff-crumb,
+.ff-app[data-bg="wallpaper"] .ff-crumb__here,
+.ff-app[data-bg="wallpaper"] .ff-crumb__btn,
+.ff-app[data-bg="wallpaper"] .ff-iconbtn,
+.ff-app[data-bg="wallpaper"] .ff-empty h3,
+.ff-app[data-bg="wallpaper"] .ff-empty p {
+  text-shadow: var(--text-halo);
+}
+
+/* Force max-contrast foreground on wallpaper for elements that normally use muted fg-2/fg-3. */
+.ff-app[data-bg="wallpaper"] .ff-tile__label,
+.ff-app[data-bg="wallpaper"] .ff-section__count,
+.ff-app[data-bg="wallpaper"] .ff-crumb,
+.ff-app[data-bg="wallpaper"] .ff-crumb__btn,
+.ff-app[data-bg="wallpaper"] .ff-iconbtn {
+  color: var(--fg-1);
+}
+
+/* Wallpaper: search bar needs an actual frosted plate (default styling is 3% tint + hairline border = vanishes). */
+.ff-app[data-bg="wallpaper"] .ff-search {
+  background: color-mix(in oklab, var(--frost-strong) 70%, transparent);
+  -webkit-backdrop-filter: var(--frost-blur);
+  backdrop-filter: var(--frost-blur);
+  border-color: var(--line-2);
+  box-shadow: var(--shadow-sm);
+}
+.ff-app[data-bg="wallpaper"] .ff-search:hover {
+  background: color-mix(in oklab, var(--frost-strong) 82%, transparent);
+  border-color: var(--line-3);
+}
+.ff-app[data-bg="wallpaper"] .ff-search input::placeholder { color: var(--fg-2); }
 
 /* Light theme */
 [data-theme="light"] {
