@@ -49,6 +49,7 @@ export const STORAGE_KEYS = {
   onboardingState: 'onboarding-state',
   iconCacheRecords: 'icon-cache-records',
   iconOverrideRecords: 'icon-override-records',
+  appWallpaper: 'app-wallpaper',
 } as const;
 
 /** Preset accent colors from src/settings/config/options.ts */

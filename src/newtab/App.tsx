@@ -17,6 +17,7 @@ import { useMarquee, type MarqueeSelection } from './interaction/useMarquee';
 import { useDrag } from './interaction/useDrag';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
 import { getBookmarkTree, getBookmarkUsage, getSettings, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
+import { useBlobUrl } from './lib/useBlobUrl';
 import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 
 interface AppProps {
@@ -329,6 +330,8 @@ export function App({ initialSettings, initialTree }: AppProps) {
     else handlePickBookmark(item, event);
   }, [handlePickBookmark, handlePickFolder, rootFolder]);
 
+  const wallpaperBlobUrl = useBlobUrl(settings.customBackgroundImage);
+
   return (
     <div
       className="ff-app"
@@ -337,7 +340,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
       data-tile-shape={settings.tileShape}
       data-labels={String(settings.showTileLabels)}
       data-dock={dockMode}
-      style={settings.customBackgroundImage ? { ['--wallpaper-url' as string]: `url(${settings.customBackgroundImage})` } : undefined}
+      style={wallpaperBlobUrl ? { ['--wallpaper-url' as string]: `url(${wallpaperBlobUrl})` } : undefined}
     >
       <header>
         <TopNav

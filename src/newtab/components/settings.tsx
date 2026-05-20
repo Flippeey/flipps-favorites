@@ -17,6 +17,7 @@ import {
   parseWorkspaceFile,
   type WorkspaceImportMode,
 } from '../lib/workspace-transfer';
+import { useBlobUrl } from '../lib/useBlobUrl';
 import { Ico } from './Ico';
 
 export const ACCENT_PRESETS: { id: string; label: string; value: string }[] = [
@@ -471,6 +472,7 @@ function AppearanceSection({ settings, onPatch }: SectionProps) {
 }
 
 function WallpaperPicker({ settings, onPatch }: SectionProps) {
+  const previewUrl = useBlobUrl(settings.customBackgroundImage);
   return (
     <>
       <div style={{ height: 12 }} />
@@ -479,10 +481,10 @@ function WallpaperPicker({ settings, onPatch }: SectionProps) {
           style={{
             width: 64, height: 40,
             borderRadius: 8,
-            backgroundImage: settings.customBackgroundImage ? `url(${settings.customBackgroundImage})` : undefined,
+            backgroundImage: previewUrl ? `url(${previewUrl})` : undefined,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
-            background: settings.customBackgroundImage ? undefined : 'var(--ink-3)',
+            backgroundColor: settings.customBackgroundImage ? undefined : 'var(--ink-3)',
             border: '1px solid var(--line-1)',
             display: 'grid', placeItems: 'center',
             color: 'var(--fg-3)',

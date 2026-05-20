@@ -7,6 +7,7 @@ const iconCacheKey = 'icon-cache-records';
 const iconOverrideKey = 'icon-override-records';
 const bookmarkUsageKey = 'bookmark-usage-records';
 const onboardingStateKey = 'onboarding-state';
+const wallpaperKey = 'app-wallpaper';
 
 const settingsStore = createCachedValueStore<AppSettings>({
   storageKey,
@@ -67,6 +68,14 @@ const onboardingStateStore = createCachedValueStore<OnboardingState>({
   },
 });
 
+const wallpaperStore = createCachedValueStore<string>({
+  storageKey: wallpaperKey,
+  area: 'local',
+  deserialize(storedValue) {
+    return typeof storedValue === 'string' ? storedValue : '';
+  },
+});
+
 export const defaultSettings: AppSettings = {
   themeMode: 'system',
   accentColor: '#3f72dc',
@@ -109,16 +118,33 @@ export const defaultSettings: AppSettings = {
 };
 
 export async function readSettings(): Promise<AppSettings> {
-  return settingsStore.read();
+  const [syncSettings, wallpaper] = await Promise.all([
+    settingsStore.read(),
+    wallpaperStore.read(),
+  ]);
+  // Wallpaper data URLs would blow the 8KB sync per-item quota, so they live
+  // in local storage. Prefer the local copy; fall back to any legacy value
+  // still in sync (older installs that saved a tiny wallpaper before the split).
+  const customBackgroundImage = wallpaper || syncSettings.customBackgroundImage;
+  return { ...syncSettings, customBackgroundImage };
 }
 
 export async function writeSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+  const current = await readSettings();
   const nextSettings = normalizeSettings({
-    ...(await readSettings()),
+    ...current,
     ...patch,
   });
 
-  return settingsStore.write(nextSettings);
+  const wallpaperChanged = nextSettings.customBackgroundImage !== current.customBackgroundImage;
+  const writes: Promise<unknown>[] = [
+    settingsStore.write({ ...nextSettings, customBackgroundImage: '' }),
+  ];
+  if (wallpaperChanged) {
+    writes.push(wallpaperStore.write(nextSettings.customBackgroundImage));
+  }
+  await Promise.all(writes);
+  return nextSettings;
 }
 
 function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
