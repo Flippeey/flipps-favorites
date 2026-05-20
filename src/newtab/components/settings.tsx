@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
 import type {
   AppSettings,
+  BackgroundColorSource,
+  BackgroundFitMode,
   BackgroundMode,
+  BackgroundPositionMode,
   BookmarkNode,
   FolderMode,
   FolderOpenMode,
@@ -421,7 +424,7 @@ function AppearanceSection({ settings, onPatch }: SectionProps) {
       <div className="ff-set-section">
         <h3 className="ff-set-section__title">Background</h3>
         <p className="ff-set-section__desc">Solid, a soft accent gradient, or your own wallpaper.</p>
-        <div className="ff-themegrid">
+        <div className="ff-themegrid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
           {(['solid', 'gradient', 'wallpaper'] as BackgroundMode[]).map(opt => (
             <div
               key={opt}
@@ -441,33 +444,263 @@ function AppearanceSection({ settings, onPatch }: SectionProps) {
           ))}
         </div>
 
-        {settings.backgroundMode === 'gradient' && (
-          <>
-            <div style={{ height: 12 }} />
-            <p className="ff-set-section__desc" style={{ margin: 0, marginBottom: 8 }}>Pick a gradient style.</p>
-            <div className="ff-themegrid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-              {([
-                { id: 'top', label: 'Top', bg: 'radial-gradient(ellipse 80% 50% at 50% 0%, color-mix(in oklab, var(--accent) 28%, transparent), transparent 70%), var(--ink-0)' },
-                { id: 'top-bottom', label: 'Top + bottom', bg: 'radial-gradient(ellipse 80% 50% at 50% 0%, color-mix(in oklab, var(--accent) 26%, transparent), transparent 70%), radial-gradient(ellipse 80% 50% at 50% 100%, color-mix(in oklab, var(--accent) 22%, transparent), transparent 70%), var(--ink-0)' },
-                { id: 'aurora', label: 'Aurora', bg: 'radial-gradient(ellipse 60% 50% at 20% 0%, color-mix(in oklab, var(--accent) 32%, transparent), transparent 60%), radial-gradient(ellipse 60% 40% at 80% 30%, color-mix(in oklab, var(--accent) 20%, transparent), transparent 60%), radial-gradient(ellipse 70% 40% at 50% 100%, color-mix(in oklab, var(--accent) 18%, transparent), transparent 65%), var(--ink-0)' },
-              ] as { id: GradientStyle; label: string; bg: string }[]).map(g => (
-                <div
-                  key={g.id}
-                  className="ff-themecard"
-                  data-active={settings.gradientStyle === g.id}
-                  onClick={() => onPatch({ gradientStyle: g.id })}
-                  style={{ gridColumn: 'auto', background: g.bg }}
-                >
-                  <div className="ff-themecard__label" style={{ color: 'var(--fg-1)' }}>{g.label}</div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        {settings.backgroundMode === 'wallpaper' && <WallpaperPicker settings={settings} onPatch={onPatch} />}
+        <div className="ff-bg-panel">
+          {settings.backgroundMode === 'solid' && <SolidPanel settings={settings} onPatch={onPatch} />}
+          {settings.backgroundMode === 'gradient' && <GradientPanel settings={settings} onPatch={onPatch} />}
+          {settings.backgroundMode === 'wallpaper' && <WallpaperPicker settings={settings} onPatch={onPatch} />}
+        </div>
       </div>
     </>
+  );
+}
+
+const SOLID_PRESETS: { id: string; label: string; value: string }[] = [
+  { id: 'noir',    label: 'Noir',     value: '#0A0908' },
+  { id: 'warm',    label: 'Warm',     value: '#1A1110' },
+  { id: 'navy',    label: 'Navy',     value: '#0F1A2B' },
+  { id: 'slate',   label: 'Slate',    value: '#1F2937' },
+  { id: 'paper',   label: 'Paper',    value: '#FAF7F0' },
+  { id: 'sand',    label: 'Sand',     value: '#E5DDD0' },
+];
+
+const GRADIENT_PRESETS: { id: string; label: string; value: string }[] = [
+  { id: 'blue',     label: 'Blue',     value: '#3F72DC' },
+  { id: 'teal',     label: 'Teal',     value: '#23867B' },
+  { id: 'purple',   label: 'Purple',   value: '#7D60D8' },
+  { id: 'orange',   label: 'Orange',   value: '#F57C00' },
+  { id: 'pink',     label: 'Pink',     value: '#C85FA4' },
+  { id: 'slate',    label: 'Slate',    value: '#778292' },
+];
+
+interface BgChip {
+  id: string;
+  label: string;
+  background: string;   // CSS color value (hex or var)
+  active: boolean;
+  onClick: () => void;
+}
+
+interface BgColorPickerProps {
+  chips: BgChip[];
+  customActive: boolean;
+  customColor: string;
+  onCustomColorChange: (hex: string) => void;
+}
+
+function BgColorPicker({ chips, customActive, customColor, onCustomColorChange }: BgColorPickerProps) {
+  return (
+    <div className="ff-bg-row">
+      <div className="ff-accents" style={{ gridTemplateColumns: 'repeat(7, 1fr)' }}>
+        {chips.map(c => (
+          <button
+            key={c.id}
+            type="button"
+            className="ff-accentchip"
+            data-active={c.active}
+            onClick={c.onClick}
+            style={{ background: c.background, color: c.background }}
+            aria-label={c.label}
+          >
+            <span className="ff-accentchip__label">{c.label}</span>
+          </button>
+        ))}
+      </div>
+      <label className={`ff-accent-custom-btn${customActive ? ' ff-accent-custom-btn--active' : ''}`} style={{ marginTop: 10 }}>
+        <span className="ff-accent-custom-swatch" style={{ background: customColor }} />
+        <span>{customActive ? `Custom (${customColor.toUpperCase()})` : 'Custom…'}</span>
+        <input
+          type="color"
+          value={customColor}
+          onChange={(e) => onCustomColorChange(e.target.value)}
+          style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
+        />
+      </label>
+    </div>
+  );
+}
+
+function SolidPanel({ settings, onPatch }: SectionProps) {
+  const currentHex = settings.solidBackgroundColor.toUpperCase();
+  const isTheme = currentHex === '';
+  const matchingPreset = SOLID_PRESETS.find(p => p.value.toUpperCase() === currentHex);
+  const customActive = !isTheme && !matchingPreset;
+  const customValue = settings.solidBackgroundColor || '#141414';
+
+  const chips: BgChip[] = [
+    {
+      id: 'theme',
+      label: 'Theme',
+      background: 'var(--ink-0)',
+      active: isTheme,
+      onClick: () => onPatch({ solidBackgroundColor: '' }),
+    },
+    ...SOLID_PRESETS.map(p => ({
+      id: p.id,
+      label: p.label,
+      background: p.value,
+      active: currentHex === p.value.toUpperCase(),
+      onClick: () => onPatch({ solidBackgroundColor: p.value.toUpperCase() }),
+    })),
+  ];
+
+  return (
+    <BgColorPicker
+      chips={chips}
+      customActive={customActive}
+      customColor={customValue}
+      onCustomColorChange={(hex) => onPatch({ solidBackgroundColor: hex.toUpperCase() })}
+    />
+  );
+}
+
+const GRADIENT_STYLES: { id: GradientStyle; label: string }[] = [
+  { id: 'top',         label: 'Top' },
+  { id: 'top-bottom',  label: 'Top + bottom' },
+  { id: 'bottom',      label: 'Bottom' },
+  { id: 'aurora',      label: 'Aurora' },
+  { id: 'mesh',        label: 'Mesh' },
+  { id: 'vignette',    label: 'Vignette' },
+];
+
+function gradientPreviewBg(style: GradientStyle, color: string, intensity: number): string {
+  const k = intensity / 100;
+  const clamp = (p: number) => Math.max(0, Math.min(100, p * k));
+  const mix = (pct: number) => `color-mix(in oklab, ${color} ${String(clamp(pct))}%, transparent)`;
+  switch (style) {
+    case 'top':
+      return `radial-gradient(ellipse 80% 50% at 50% 0%, ${mix(28)}, transparent 70%), var(--ink-0)`;
+    case 'top-bottom':
+      return `radial-gradient(ellipse 80% 50% at 50% 0%, ${mix(26)}, transparent 70%), radial-gradient(ellipse 80% 50% at 50% 100%, ${mix(22)}, transparent 70%), var(--ink-0)`;
+    case 'bottom':
+      return `radial-gradient(ellipse 80% 50% at 50% 100%, ${mix(28)}, transparent 70%), var(--ink-0)`;
+    case 'aurora':
+      return `radial-gradient(ellipse 60% 50% at 20% 0%, ${mix(32)}, transparent 60%), radial-gradient(ellipse 60% 40% at 80% 30%, ${mix(20)}, transparent 60%), radial-gradient(ellipse 70% 40% at 50% 100%, ${mix(18)}, transparent 65%), var(--ink-0)`;
+    case 'mesh':
+      return `radial-gradient(circle at 15% 20%, ${mix(34)}, transparent 45%), radial-gradient(circle at 85% 25%, ${mix(26)}, transparent 50%), radial-gradient(circle at 60% 90%, ${mix(28)}, transparent 55%), var(--ink-0)`;
+    case 'vignette':
+      return `radial-gradient(ellipse 70% 50% at 50% 50%, ${mix(24)}, transparent 70%), radial-gradient(ellipse 120% 100% at 50% 50%, transparent 55%, rgba(0,0,0,0.55) 100%), var(--ink-0)`;
+  }
+}
+
+function GradientPanel({ settings, onPatch }: SectionProps) {
+  const isAccent = settings.gradientColorSource === 'accent';
+  const currentHex = settings.gradientCustomColor.toUpperCase();
+  const matchingPreset = !isAccent && GRADIENT_PRESETS.find(p => p.value.toUpperCase() === currentHex);
+  const customActive = !isAccent && !matchingPreset;
+  const resolvedColor = isAccent ? settings.accentColor : settings.gradientCustomColor;
+
+  const chips: BgChip[] = [
+    {
+      id: 'accent',
+      label: 'Accent',
+      background: 'var(--accent)',
+      active: isAccent,
+      onClick: () => onPatch({ gradientColorSource: 'accent' }),
+    },
+    ...GRADIENT_PRESETS.map(p => ({
+      id: p.id,
+      label: p.label,
+      background: p.value,
+      active: !isAccent && currentHex === p.value.toUpperCase(),
+      onClick: () => onPatch({ gradientColorSource: 'custom' as BackgroundColorSource, gradientCustomColor: p.value.toUpperCase() }),
+    })),
+  ];
+
+  return (
+    <>
+      <BgColorPicker
+        chips={chips}
+        customActive={customActive}
+        customColor={settings.gradientCustomColor}
+        onCustomColorChange={(hex) => onPatch({ gradientColorSource: 'custom', gradientCustomColor: hex.toUpperCase() })}
+      />
+      <div className="ff-bg-row">
+        <div className="ff-row__hint" style={{ marginBottom: 8 }}>Style</div>
+        <div className="ff-themegrid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+          {GRADIENT_STYLES.map(g => (
+            <div
+              key={g.id}
+              className="ff-themecard"
+              data-active={settings.gradientStyle === g.id}
+              onClick={() => onPatch({ gradientStyle: g.id })}
+              style={{ gridColumn: 'auto', background: gradientPreviewBg(g.id, resolvedColor, settings.gradientIntensity) }}
+            >
+              <div className="ff-themecard__label" style={{ color: 'var(--fg-1)' }}>{g.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="ff-bg-row">
+        <div className="ff-bg-row__head">
+          <div>
+            <div className="ff-row__label">Intensity</div>
+            <div className="ff-row__hint">Dial the gradient strength up or down.</div>
+          </div>
+          <Slider
+            value={settings.gradientIntensity}
+            min={0}
+            max={200}
+            step={5}
+            onChange={(v) => onPatch({ gradientIntensity: v })}
+            onPreview={(v) => {
+              const el = document.querySelector('.ff-app') as HTMLElement | null;
+              if (el) el.style.setProperty('--gradient-intensity', String(v / 100));
+            }}
+            formatValue={(v) => `${String(v)}%`}
+          />
+        </div>
+      </div>
+    </>
+  );
+}
+
+interface SliderProps {
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  onChange: (v: number) => void;
+  onPreview?: (v: number) => void;
+  formatValue?: (v: number) => string;
+}
+
+// Local drag state keeps the range input responsive at 60fps without
+// dispatching a settings patch on every frame. onPreview lets the parent
+// reflect intermediate values (e.g. by writing a CSS variable directly to the
+// DOM) for live feedback while a settings commit only happens on release.
+function Slider({ value, min, max, step = 1, onChange, onPreview, formatValue }: SliderProps) {
+  const [dragValue, setDragValue] = useState<number | null>(null);
+  const displayValue = dragValue ?? value;
+
+  useEffect(() => {
+    if (dragValue !== null && dragValue === value) setDragValue(null);
+  }, [value, dragValue]);
+
+  const commit = useCallback(() => {
+    if (dragValue === null) return;
+    const committed = dragValue;
+    if (committed !== value) onChange(committed);
+  }, [dragValue, value, onChange]);
+
+  return (
+    <div className="ff-slider">
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={displayValue}
+        onChange={(e) => {
+          const next = Number(e.target.value);
+          setDragValue(next);
+          onPreview?.(next);
+        }}
+        onPointerUp={commit}
+        onKeyUp={commit}
+        onBlur={commit}
+      />
+      <span className="ff-slider__value">{formatValue ? formatValue(displayValue) : String(displayValue)}</span>
+    </div>
   );
 }
 
@@ -475,7 +708,6 @@ function WallpaperPicker({ settings, onPatch }: SectionProps) {
   const previewUrl = useBlobUrl(settings.customBackgroundImage);
   return (
     <>
-      <div style={{ height: 12 }} />
       <div className="ff-card" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12 }}>
         <div
           style={{
@@ -503,7 +735,9 @@ function WallpaperPicker({ settings, onPatch }: SectionProps) {
             accept="image/*"
             style={{ display: 'none' }}
             onChange={(e) => {
-              const file = e.target.files?.[0];
+              const input = e.target;
+              const file = input.files?.[0];
+              input.value = '';
               if (!file) return;
               const reader = new FileReader();
               reader.onload = () => onPatch({ customBackgroundImage: String(reader.result) });
@@ -517,6 +751,57 @@ function WallpaperPicker({ settings, onPatch }: SectionProps) {
           </button>
         )}
       </div>
+      {settings.customBackgroundImage && (
+        <>
+          <div className="ff-bg-row">
+            <div className="ff-bg-row__head">
+              <div>
+                <div className="ff-row__label">Opacity</div>
+                <div className="ff-row__hint">Blend the wallpaper toward the theme color.</div>
+              </div>
+              <Slider
+                value={settings.backgroundOpacity}
+                min={0}
+                max={100}
+                onChange={(v) => onPatch({ backgroundOpacity: v })}
+                onPreview={(v) => {
+                  const el = document.querySelector('.ff-app') as HTMLElement | null;
+                  if (el) el.style.setProperty('--wallpaper-alpha', `${String(v)}%`);
+                }}
+                formatValue={(v) => `${String(v)}%`}
+              />
+            </div>
+          </div>
+          <div className="ff-bg-row">
+            <div className="ff-bg-row__head">
+              <div className="ff-row__label">Fit</div>
+              <Segmented<BackgroundFitMode>
+                options={[
+                  { id: 'cover',   label: 'Cover' },
+                  { id: 'contain', label: 'Contain' },
+                  { id: 'fill',    label: 'Fill' },
+                ]}
+                value={settings.backgroundFitMode}
+                onChange={(v) => onPatch({ backgroundFitMode: v })}
+              />
+            </div>
+          </div>
+          <div className="ff-bg-row">
+            <div className="ff-bg-row__head">
+              <div className="ff-row__label">Position</div>
+              <Segmented<BackgroundPositionMode>
+                options={[
+                  { id: 'top',    label: 'Top' },
+                  { id: 'center', label: 'Center' },
+                  { id: 'bottom', label: 'Bottom' },
+                ]}
+                value={settings.backgroundPositionMode}
+                onChange={(v) => onPatch({ backgroundPositionMode: v })}
+              />
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }

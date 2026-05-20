@@ -80,6 +80,10 @@ export const defaultSettings: AppSettings = {
   themeMode: 'system',
   accentColor: '#3f72dc',
   customBackgroundImage: '',
+  solidBackgroundColor: '',
+  gradientColorSource: 'accent',
+  gradientCustomColor: '#3F72DC',
+  gradientIntensity: 100,
   backgroundOpacity: 70,
   backgroundFitMode: 'cover',
   backgroundPositionMode: 'center',
@@ -129,22 +133,33 @@ export async function readSettings(): Promise<AppSettings> {
   return { ...syncSettings, customBackgroundImage };
 }
 
+let writeQueue: Promise<unknown> = Promise.resolve();
+
 export async function writeSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+  const run = writeQueue.then(() => doWriteSettings(patch));
+  writeQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function doWriteSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+  const wallpaperInPatch = Object.prototype.hasOwnProperty.call(patch, 'customBackgroundImage');
   const current = await readSettings();
-  const nextSettings = normalizeSettings({
+  const merged = normalizeSettings({
     ...current,
     ...patch,
+    customBackgroundImage: wallpaperInPatch
+      ? (typeof patch.customBackgroundImage === 'string' ? patch.customBackgroundImage : '')
+      : current.customBackgroundImage,
   });
 
-  const wallpaperChanged = nextSettings.customBackgroundImage !== current.customBackgroundImage;
   const writes: Promise<unknown>[] = [
-    settingsStore.write({ ...nextSettings, customBackgroundImage: '' }),
+    settingsStore.write({ ...merged, customBackgroundImage: '' }),
   ];
-  if (wallpaperChanged) {
-    writes.push(wallpaperStore.write(nextSettings.customBackgroundImage));
+  if (wallpaperInPatch && merged.customBackgroundImage !== current.customBackgroundImage) {
+    writes.push(wallpaperStore.write(merged.customBackgroundImage));
   }
   await Promise.all(writes);
-  return nextSettings;
+  return merged;
 }
 
 function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
@@ -158,6 +173,14 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     customBackgroundImage: typeof settings.customBackgroundImage === 'string'
       ? settings.customBackgroundImage
       : defaultSettings.customBackgroundImage,
+    solidBackgroundColor: normalizeHexOrEmpty(settings.solidBackgroundColor, defaultSettings.solidBackgroundColor),
+    gradientColorSource: settings.gradientColorSource === 'accent' || settings.gradientColorSource === 'custom'
+      ? settings.gradientColorSource
+      : defaultSettings.gradientColorSource,
+    gradientCustomColor: /^#[0-9a-fA-F]{6}$/.test(settings.gradientCustomColor ?? '')
+      ? String(settings.gradientCustomColor).toUpperCase()
+      : defaultSettings.gradientCustomColor.toUpperCase(),
+    gradientIntensity: normalizeNumber(settings.gradientIntensity, defaultSettings.gradientIntensity, 0, 200),
     backgroundOpacity: normalizeNumber(settings.backgroundOpacity, defaultSettings.backgroundOpacity, 0, 100),
     backgroundFitMode: settings.backgroundFitMode === 'cover' || settings.backgroundFitMode === 'contain' || settings.backgroundFitMode === 'fill'
       ? settings.backgroundFitMode
@@ -228,10 +251,16 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     backgroundMode: settings.backgroundMode === 'solid' || settings.backgroundMode === 'gradient' || settings.backgroundMode === 'wallpaper'
       ? settings.backgroundMode
       : defaultSettings.backgroundMode,
-    gradientStyle: settings.gradientStyle === 'top' || settings.gradientStyle === 'top-bottom' || settings.gradientStyle === 'aurora'
+    gradientStyle: settings.gradientStyle === 'top' || settings.gradientStyle === 'top-bottom' || settings.gradientStyle === 'bottom'
+        || settings.gradientStyle === 'aurora' || settings.gradientStyle === 'mesh' || settings.gradientStyle === 'vignette'
       ? settings.gradientStyle
       : defaultSettings.gradientStyle,
   };
+}
+
+function normalizeHexOrEmpty(value: unknown, fallback: string): string {
+  if (typeof value !== 'string' || value === '') return '';
+  return /^#[0-9a-fA-F]{6}$/.test(value) ? value.toUpperCase() : fallback;
 }
 
 function normalizeNumber(value: unknown, fallback: number, min: number, max: number): number {

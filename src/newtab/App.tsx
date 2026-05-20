@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { AppSettings, BookmarkNode, BookmarkSortMode, SortDirection } from '../shared/messages';
 import { ConfirmDeleteDialog } from './components/ConfirmDeleteDialog';
 import { ContextMenu, type ContextMenuItem } from './components/ContextMenu';
@@ -76,7 +76,13 @@ export function App({ initialSettings, initialTree }: AppProps) {
     setSettings(prev => ({ ...prev, ...patch }));
     try {
       const next = await patchSettings(patch);
-      setSettings(next);
+      const wallpaperPatched = Object.prototype.hasOwnProperty.call(patch, 'customBackgroundImage');
+      setSettings(prev => ({
+        ...next,
+        customBackgroundImage: wallpaperPatched
+          ? next.customBackgroundImage
+          : (next.customBackgroundImage || prev.customBackgroundImage),
+      }));
     } catch {
       // keep optimistic value
     }
@@ -332,6 +338,32 @@ export function App({ initialSettings, initialTree }: AppProps) {
 
   const wallpaperBlobUrl = useBlobUrl(settings.customBackgroundImage);
 
+  const appStyle = useMemo(() => {
+    const style: Record<string, string> = {};
+    if (wallpaperBlobUrl) style['--wallpaper-url'] = `url(${wallpaperBlobUrl})`;
+    if (settings.solidBackgroundColor) style['--solid-bg'] = settings.solidBackgroundColor;
+    style['--gradient-color'] = settings.gradientColorSource === 'custom'
+      ? settings.gradientCustomColor
+      : settings.accentColor;
+    style['--gradient-intensity'] = String(settings.gradientIntensity / 100);
+    style['--wallpaper-alpha'] = `${String(settings.backgroundOpacity)}%`;
+    style['--wallpaper-size'] = settings.backgroundFitMode === 'fill'
+      ? '100% 100%'
+      : settings.backgroundFitMode;
+    style['--wallpaper-position'] = settings.backgroundPositionMode;
+    return style;
+  }, [
+    wallpaperBlobUrl,
+    settings.solidBackgroundColor,
+    settings.gradientColorSource,
+    settings.gradientCustomColor,
+    settings.gradientIntensity,
+    settings.accentColor,
+    settings.backgroundOpacity,
+    settings.backgroundFitMode,
+    settings.backgroundPositionMode,
+  ]);
+
   return (
     <div
       className="ff-app"
@@ -340,8 +372,15 @@ export function App({ initialSettings, initialTree }: AppProps) {
       data-tile-shape={settings.tileShape}
       data-labels={String(settings.showTileLabels)}
       data-dock={dockMode}
-      style={wallpaperBlobUrl ? { ['--wallpaper-url' as string]: `url(${wallpaperBlobUrl})` } : undefined}
+      style={appStyle as CSSProperties}
     >
+      {wallpaperBlobUrl && (
+        <div
+          className="ff-bg-wallpaper"
+          aria-hidden="true"
+          data-active={settings.backgroundMode === 'wallpaper'}
+        />
+      )}
       <header>
         <TopNav
           rootTitle={rootFolder?.title ?? 'My bookmarks'}

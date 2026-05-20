@@ -56,56 +56,72 @@ button { font-family: inherit; }
   transition: background var(--dur-slow) var(--ease-out), color var(--dur-slow) var(--ease-out);
 }
 
-.ff-app::before {
-  content: '';
-  position: fixed;
-  inset: -180px -10% auto -10%;
-  height: 600px;
-  background: radial-gradient(ellipse 60% 70% at 50% 0%,
-              var(--accent-glow) 0%,
-              color-mix(in oklab, var(--accent) 22%, transparent) 30%,
-              transparent 70%);
-  filter: blur(40px);
-  pointer-events: none;
-  z-index: 0;
-  opacity: 1;
-  transition: opacity var(--dur-slow) var(--ease-out);
+.ff-app[data-bg="solid"] {
+  background: var(--solid-bg, var(--ink-0));
 }
-
 .ff-app[data-bg="gradient"][data-bg-style="top"]::after {
   content: '';
   position: fixed; inset: 0;
-  background: radial-gradient(ellipse 80% 50% at 50% 0%, color-mix(in oklab, var(--accent) 18%, transparent), transparent 70%);
+  background: radial-gradient(ellipse 80% 50% at 50% 0%, color-mix(in oklab, var(--gradient-color, var(--accent)) calc(18% * var(--gradient-intensity, 1)), transparent), transparent 70%);
   pointer-events: none; z-index: 0;
 }
 .ff-app[data-bg="gradient"][data-bg-style="top-bottom"]::after {
   content: '';
   position: fixed; inset: 0;
   background:
-    radial-gradient(ellipse 80% 50% at 50% 0%, color-mix(in oklab, var(--accent) 18%, transparent), transparent 70%),
-    radial-gradient(ellipse 80% 50% at 50% 100%, color-mix(in oklab, var(--accent) 14%, transparent), transparent 70%);
+    radial-gradient(ellipse 80% 50% at 50% 0%, color-mix(in oklab, var(--gradient-color, var(--accent)) calc(18% * var(--gradient-intensity, 1)), transparent), transparent 70%),
+    radial-gradient(ellipse 80% 50% at 50% 100%, color-mix(in oklab, var(--gradient-color, var(--accent)) calc(14% * var(--gradient-intensity, 1)), transparent), transparent 70%);
   pointer-events: none; z-index: 0;
 }
 .ff-app[data-bg="gradient"][data-bg-style="aurora"]::after {
   content: '';
   position: fixed; inset: 0;
   background:
-    radial-gradient(ellipse 60% 50% at 20% 0%, color-mix(in oklab, var(--accent) 22%, transparent), transparent 60%),
-    radial-gradient(ellipse 60% 40% at 80% 30%, color-mix(in oklab, var(--accent) 14%, transparent), transparent 60%),
-    radial-gradient(ellipse 70% 40% at 50% 100%, color-mix(in oklab, var(--accent) 12%, transparent), transparent 65%);
+    radial-gradient(ellipse 60% 50% at 20% 0%, color-mix(in oklab, var(--gradient-color, var(--accent)) calc(22% * var(--gradient-intensity, 1)), transparent), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 30%, color-mix(in oklab, var(--gradient-color, var(--accent)) calc(14% * var(--gradient-intensity, 1)), transparent), transparent 60%),
+    radial-gradient(ellipse 70% 40% at 50% 100%, color-mix(in oklab, var(--gradient-color, var(--accent)) calc(12% * var(--gradient-intensity, 1)), transparent), transparent 65%);
   pointer-events: none; z-index: 0; opacity: 0.9;
 }
-.ff-app[data-bg="wallpaper"] {
-  background-image: var(--wallpaper-url, none);
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
+.ff-app[data-bg="gradient"][data-bg-style="bottom"]::after {
+  content: '';
+  position: fixed; inset: 0;
+  background: radial-gradient(ellipse 80% 50% at 50% 100%, color-mix(in oklab, var(--gradient-color, var(--accent)) calc(18% * var(--gradient-intensity, 1)), transparent), transparent 70%);
+  pointer-events: none; z-index: 0;
 }
+.ff-app[data-bg="gradient"][data-bg-style="mesh"]::after {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(circle at 15% 20%, color-mix(in oklab, var(--gradient-color, var(--accent)) calc(26% * var(--gradient-intensity, 1)), transparent), transparent 45%),
+    radial-gradient(circle at 85% 25%, color-mix(in oklab, var(--gradient-color, var(--accent)) calc(20% * var(--gradient-intensity, 1)), transparent), transparent 50%),
+    radial-gradient(circle at 60% 90%, color-mix(in oklab, var(--gradient-color, var(--accent)) calc(22% * var(--gradient-intensity, 1)), transparent), transparent 55%);
+  pointer-events: none; z-index: 0;
+}
+.ff-app[data-bg="gradient"][data-bg-style="vignette"]::after {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 50%, color-mix(in oklab, var(--gradient-color, var(--accent)) calc(18% * var(--gradient-intensity, 1)), transparent), transparent 70%),
+    radial-gradient(ellipse 120% 100% at 50% 50%, transparent 55%, rgba(0,0,0,0.5) 100%);
+  pointer-events: none; z-index: 0;
+}
+.ff-bg-wallpaper {
+  position: fixed; inset: 0;
+  background-image: var(--wallpaper-url, none);
+  background-size: var(--wallpaper-size, cover);
+  background-position: var(--wallpaper-position, center);
+  background-repeat: no-repeat;
+  pointer-events: none; z-index: 0;
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease-out);
+}
+.ff-bg-wallpaper[data-active="true"] { opacity: 1; }
 .ff-app[data-bg="wallpaper"]::after {
   content: '';
   position: fixed; inset: 0;
-  background: color-mix(in oklab, var(--ink-0) 50%, transparent);
+  background: color-mix(in oklab, var(--ink-0) calc(100% - var(--wallpaper-alpha, 70%)), transparent);
   pointer-events: none; z-index: 0;
+  transition: background var(--dur-base) var(--ease-out);
 }
 
 /* Light theme */

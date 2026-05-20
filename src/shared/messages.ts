@@ -37,12 +37,17 @@ export type FolderMode = 'tiles' | 'sections';
 export type FolderOpenMode = 'overlay' | 'page';
 export type TileShape = 'squircle' | 'rounded' | 'circle';
 export type BackgroundMode = 'solid' | 'gradient' | 'wallpaper';
-export type GradientStyle = 'top' | 'top-bottom' | 'aurora';
+export type GradientStyle = 'top' | 'top-bottom' | 'bottom' | 'aurora' | 'mesh' | 'vignette';
+export type BackgroundColorSource = 'accent' | 'custom';
 
 export interface AppSettings {
   themeMode: ThemeMode;
   accentColor: string;
   customBackgroundImage: string;
+  solidBackgroundColor: string;
+  gradientColorSource: BackgroundColorSource;
+  gradientCustomColor: string;
+  gradientIntensity: number;
   backgroundOpacity: number;
   backgroundFitMode: BackgroundFitMode;
   backgroundPositionMode: BackgroundPositionMode;

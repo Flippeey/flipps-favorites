@@ -317,6 +317,67 @@
   flex-shrink: 0;
 }
 
+/* Background settings contextual panel */
+.ff-bg-panel {
+  margin-top: var(--s-3);
+  padding: var(--s-4);
+  background: var(--ink-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-lg);
+  display: flex; flex-direction: column;
+  gap: var(--s-4);
+}
+.ff-bg-panel:empty { display: none; }
+.ff-bg-row { display: flex; flex-direction: column; gap: var(--s-2); }
+.ff-bg-row + .ff-bg-row {
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--line-1);
+}
+.ff-bg-row__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s-4);
+}
+
+/* Slider — range input with inline value */
+.ff-slider { display: inline-flex; align-items: center; gap: var(--s-3); min-width: 200px; }
+.ff-slider input[type="range"] {
+  flex: 1;
+  -webkit-appearance: none; appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right,
+    var(--accent) 0%,
+    var(--accent) calc((var(--val, 0) - var(--min, 0)) / (var(--max, 100) - var(--min, 0)) * 100%),
+    var(--ink-3) 0%);
+  background: var(--ink-3);
+  outline: none;
+  cursor: pointer;
+}
+.ff-slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--ink-1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  cursor: pointer;
+  transition: transform var(--dur-instant) var(--ease-press);
+}
+.ff-slider input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.ff-slider input[type="range"]::-moz-range-thumb {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--ink-1);
+  cursor: pointer;
+}
+.ff-slider__value {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--fg-2);
+  min-width: 36px; text-align: right;
+}
+
 /* Onboarding wizard (multi-step modal shown on first launch + replay) */
 .ff-onboard {
   width: min(720px, 100%);
