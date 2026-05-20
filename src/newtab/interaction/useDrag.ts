@@ -24,11 +24,11 @@ function closestScopeId(el: HTMLElement | null, rootFolderId: string): string {
 }
 
 function clearDropAttrs({ includeSource }: { includeSource: boolean }): void {
-  document.querySelectorAll<HTMLElement>('.ff-tile[data-drop-position]').forEach(el => {
+  document.querySelectorAll<HTMLElement>('[data-item-id][data-drop-position]').forEach(el => {
     delete el.dataset.dropPosition;
   });
   if (includeSource) {
-    document.querySelectorAll<HTMLElement>('.ff-tile[data-drag-source]').forEach(el => {
+    document.querySelectorAll<HTMLElement>('[data-item-id][data-drag-source]').forEach(el => {
       delete el.dataset.dragSource;
     });
   }
@@ -94,7 +94,7 @@ export function useDrag({
     const onDown = (event: PointerEvent) => {
       if (event.button !== 0) return;
       const target = event.target as HTMLElement;
-      const tileEl = target.closest<HTMLElement>('.ff-tile[data-item-id]');
+      const tileEl = target.closest<HTMLElement>('[data-item-id]');
       if (!tileEl) return;
       const tileId = tileEl.dataset.itemId;
       if (!tileId) return;
@@ -129,7 +129,7 @@ export function useDrag({
         drag.engaged = true;
         // Mark source tiles
         for (const id of drag.dragIds) {
-          const el = canvas.querySelector<HTMLElement>(`.ff-tile[data-item-id="${id}"]`);
+          const el = canvas.querySelector<HTMLElement>(`[data-item-id="${id}"]`);
           if (el) el.dataset.dragSource = 'true';
         }
       }
@@ -141,7 +141,7 @@ export function useDrag({
       const elementUnder = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
       drag.dropOnBackdrop = false;
       const dockEl = elementUnder?.closest('.ff-dock') as HTMLElement | null;
-      if (dockEl) {
+      if (dockEl && dockEl.dataset.scopeFolderId !== drag.scopeId) {
         dockEl.dataset.dropTarget = 'true';
         drag.dropTarget = { kind: 'dock' };
         return;
@@ -175,12 +175,12 @@ export function useDrag({
         return;
       }
 
-      let hoverTile = elementUnder?.closest<HTMLElement>('.ff-tile[data-item-id]') ?? null;
+      let hoverTile = elementUnder?.closest<HTMLElement>('[data-item-id]') ?? null;
       let directHit = Boolean(hoverTile);
       if (!hoverTile) {
         // Expand hit zone: pick nearest tile in the same row band so gaps between
         // tiles still register as a "before/after neighbor" drop target.
-        const tiles = canvas.querySelectorAll<HTMLElement>('.ff-tile[data-item-id]');
+        const tiles = canvas.querySelectorAll<HTMLElement>('[data-item-id]');
         let best: { tile: HTMLElement; dx: number } | null = null;
         for (const t of tiles) {
           const id = t.dataset.itemId ?? '';

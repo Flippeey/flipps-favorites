@@ -56,6 +56,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
   const canvasRef = useRef<HTMLElement | null>(null);
   const [canvasEl, setCanvasEl] = useState<HTMLElement | null>(null);
   const [overlayBodyEl, setOverlayBodyEl] = useState<HTMLElement | null>(null);
+  const [dockEl, setDockEl] = useState<HTMLElement | null>(null);
 
   const rootFolder = useMemo(() => resolveRootFolder(tree, settings.rootFolderId), [tree, settings.rootFolderId]);
 
@@ -209,9 +210,9 @@ export function App({ initialSettings, initialTree }: AppProps) {
 
   const handleCanvasContextMenu = useCallback((event: React.MouseEvent) => {
     const target = event.target as HTMLElement;
-    if (target.closest('input, textarea, [contenteditable="true"], .ff-modal-scrim, .ff-drawer, .ff-ctx, .ff-nav, .ff-dock-wrap, .ff-results')) return;
+    if (target.closest('input, textarea, [contenteditable="true"], .ff-modal-scrim, .ff-drawer, .ff-ctx, .ff-nav, .ff-results')) return;
     event.preventDefault();
-    const tileEl = target.closest('.ff-tile') as HTMLElement | null;
+    const tileEl = target.closest('[data-item-id]') as HTMLElement | null;
     let menuTarget: BookmarkNode | null = null;
     let sectionFolder: BookmarkNode | null = null;
     if (tileEl?.dataset.itemId) {
@@ -313,7 +314,15 @@ export function App({ initialSettings, initialTree }: AppProps) {
     getOrderedChildren,
     onCommit: handleDragCommit,
   });
-  const dragPreview = canvasDragPreview ?? overlayDragPreview;
+  const dockDragPreview = useDrag({
+    surface: dockEl,
+    rootFolderId: rootFolder?.id ?? '',
+    enabled: dragEnabled,
+    selectionRef,
+    getOrderedChildren,
+    onCommit: handleDragCommit,
+  });
+  const dragPreview = canvasDragPreview ?? overlayDragPreview ?? dockDragPreview;
 
   const handleTileClick = useCallback((item: BookmarkNode, event: React.MouseEvent) => {
     if (event.shiftKey || event.metaKey || event.ctrlKey) {
@@ -468,7 +477,14 @@ export function App({ initialSettings, initialTree }: AppProps) {
         </div>
       )}
 
-      <Dock items={dockItems} mode={dockMode} shape={settings.tileShape} onItemClick={handlePickBookmark} />
+      <Dock
+        items={dockItems}
+        mode={dockMode}
+        shape={settings.tileShape}
+        dockFolderId={settings.dockFolderId || rootFolder?.id || ''}
+        onItemClick={handlePickBookmark}
+        surfaceRef={setDockEl}
+      />
 
       {openFolder && (
         <FolderOverlay

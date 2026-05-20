@@ -23,6 +23,7 @@
 .ff-dock-wrap[data-mode="hover"] .ff-dock:hover { transform: translateY(0); opacity: 1; }
 .ff-dock-wrap[data-mode="hidden"] { display: none; }
 .ff-dock__item {
+  position: relative;
   display: grid; place-items: center;
   width: 56px; height: 56px;
   background: transparent; border: 0;
@@ -33,15 +34,16 @@
 }
 .ff-dock__item:hover { transform: translateY(-6px) scale(1.06); }
 .ff-dock__item:active { transform: translateY(-2px) scale(0.98); }
-.ff-dock__divider { width: 1px; align-self: stretch; background: var(--line-1); margin: 0 var(--s-1); }
-.ff-dock__add {
-  width: 48px; height: 48px;
-  display: grid; place-items: center;
-  border-radius: var(--r-lg);
-  background: var(--ink-3);
-  border: 1px dashed var(--line-2);
-  color: var(--fg-3);
-  cursor: pointer;
-  transition: all var(--dur-fast) var(--ease-out);
+.ff-dock__item[data-drag-source="true"] { opacity: 0.4; }
+.ff-dock__item[data-drop-position]::after {
+  content: '';
+  position: absolute;
+  top: 6px; bottom: 6px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 8px color-mix(in oklab, var(--accent) 60%, transparent);
+  pointer-events: none;
 }
-.ff-dock__add:hover { border-color: var(--accent); color: var(--accent); }
+.ff-dock__item[data-drop-position="before"]::after { left: -7px; }
+.ff-dock__item[data-drop-position="after"]::after  { right: -7px; }
