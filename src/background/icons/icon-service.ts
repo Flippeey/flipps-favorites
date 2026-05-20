@@ -11,7 +11,7 @@ const iconHorseBaseUrl = 'https://icon.horse/icon/';
 const minimumAcceptedIconSize = 64;
 const minimumAutoIconSize = 96;
 const minimumOverrideIconSize = 64;
-const maxDuckDuckGoResults = 48;
+const maxDuckDuckGoResults = 30;
 const ddgPrimaryFilter = '&f=,clipart,Square,Transparent';
 const ddgFallbackFilter = '&f=,,Medium,Square';
 const cacheTtlMs = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -136,9 +136,29 @@ export async function searchIcons(query: string, bookmarkUrl?: string): Promise<
     return fallbackCandidates;
   }
 
-  const remoteCandidates = await searchDuckDuckGoImages(fallbackQuery, bookmarkUrl).catch(() => []);
-  if (remoteCandidates.length) {
-    return dedupeIconCandidates([...remoteCandidates, ...fallbackCandidates]).slice(0, maxDuckDuckGoResults);
+  const searchBudgetMs = 5000;
+  const startTime = Date.now();
+
+  let authoritative: IconSearchCandidate[] = [];
+  if (bookmarkUrl) {
+    authoritative = await Promise.race([
+      gatherAuthoritativeCandidates(bookmarkUrl).catch(() => [] as IconSearchCandidate[]),
+      sleep(searchBudgetMs).then(() => [] as IconSearchCandidate[]),
+    ]);
+  }
+
+  const remainingMs = Math.max(0, searchBudgetMs - (Date.now() - startTime));
+  let remoteCandidates: IconSearchCandidate[] = [];
+  if (remainingMs > 0) {
+    remoteCandidates = await Promise.race([
+      searchDuckDuckGoImages(fallbackQuery, bookmarkUrl).catch(() => [] as IconSearchCandidate[]),
+      sleep(remainingMs).then(() => [] as IconSearchCandidate[]),
+    ]);
+  }
+
+  const merged = dedupeIconCandidates([...authoritative, ...remoteCandidates, ...fallbackCandidates]);
+  if (merged.length) {
+    return merged.slice(0, maxDuckDuckGoResults);
   }
 
   return fallbackCandidates;
@@ -468,9 +488,11 @@ async function searchDuckDuckGoImages(query: string, bookmarkUrl?: string): Prom
     const queryTerms = tokenizeQuery(queryText);
     return results
       .filter(result => typeof result.image === 'string' && typeof result.thumbnail === 'string')
-      .filter(result => result.width >= 200 && result.height >= 200)
-      .filter(result => result.width <= 1600 && result.height <= 1600)
-      .filter(result => Math.max(result.width, result.height) / Math.max(1, Math.min(result.width, result.height)) <= 1.2)
+      .filter(result => result.width >= 96 && result.height >= 96)
+      .filter(result => result.width <= 4096 && result.height <= 4096)
+      .filter(result => Math.max(result.width, result.height) / Math.max(1, Math.min(result.width, result.height)) <= 3.5)
+      .filter(result => !isStockPhotoHost(extractHostname(result.url)) && !isStockPhotoHost(extractHostname(result.image)))
+      .filter(result => !isCollageTitle(stripHtml(result.title)))
       .sort((left, right) => scoreDuckDuckGoResult(right, bookmarkHostname, queryTerms) - scoreDuckDuckGoResult(left, bookmarkHostname, queryTerms))
       .slice(0, maxDuckDuckGoResults)
       .map(result => ({
@@ -521,10 +543,7 @@ async function fetchDuckDuckGoFirstHit(request: GetIconRequest, cacheKey: string
   return null;
 }
 
-async function fetchOriginScrape(bookmarkUrl: string, cacheKey: string): Promise<IconCacheRecord | null> {
-  const hostname = extractHostname(bookmarkUrl);
-  if (!hostname) return null;
-
+async function gatherOriginIconProbes(hostname: string): Promise<Array<{ url: string; sizeHint: number; weight: number }>> {
   return withCorsBypass(`||${hostname}/`, async () => {
     const origin = `https://${hostname}`;
     let html = '';
@@ -584,10 +603,20 @@ async function fetchOriginScrape(bookmarkUrl: string, cacheKey: string): Promise
       }
     }
 
-    const ordered = Array.from(unique.values()).sort(
+    return Array.from(unique.values()).sort(
       (left, right) => (right.sizeHint - left.sizeHint) || (right.weight - left.weight),
     );
+  }).catch(() => [] as Array<{ url: string; sizeHint: number; weight: number }>);
+}
 
+async function fetchOriginScrape(bookmarkUrl: string, cacheKey: string): Promise<IconCacheRecord | null> {
+  const hostname = extractHostname(bookmarkUrl);
+  if (!hostname) return null;
+
+  const ordered = await gatherOriginIconProbes(hostname);
+  if (!ordered.length) return null;
+
+  return withCorsBypass(`||${hostname}/`, async () => {
     for (const probe of ordered.slice(0, 8)) {
       const record = await fetchAndValidateImage({
         imageUrl: probe.url,
@@ -602,6 +631,42 @@ async function fetchOriginScrape(bookmarkUrl: string, cacheKey: string): Promise
     }
     return null;
   }).catch(() => null);
+}
+
+async function gatherAuthoritativeCandidates(bookmarkUrl: string): Promise<IconSearchCandidate[]> {
+  const hostname = extractHostname(bookmarkUrl);
+  if (!hostname) return [];
+
+  const origin = `https://${hostname}`;
+  const probes = await gatherOriginIconProbes(hostname);
+
+  const candidates: IconSearchCandidate[] = probes
+    .filter(probe => probe.sizeHint === 0 || probe.sizeHint >= 64)
+    .map(probe => ({
+      imageUrl: probe.url,
+      previewUrl: probe.url,
+      label: `${hostname} – site icon`,
+      sourceKind: 'favicon' as const,
+      sourcePageUrl: origin,
+    }));
+
+  candidates.push({
+    imageUrl: `${iconHorseBaseUrl}${hostname}`,
+    previewUrl: `${iconHorseBaseUrl}${hostname}`,
+    label: `${hostname} – Icon Horse`,
+    sourceKind: 'favicon',
+    sourcePageUrl: origin,
+  });
+
+  candidates.push({
+    imageUrl: `${faviconProviderUrl}?domain_url=${encodeURIComponent(bookmarkUrl)}&sz=256`,
+    previewUrl: `${faviconProviderUrl}?domain_url=${encodeURIComponent(bookmarkUrl)}&sz=128`,
+    label: `${hostname} – Google favicon`,
+    sourceKind: 'favicon',
+    sourcePageUrl: origin,
+  });
+
+  return candidates;
 }
 
 async function fetchIconHorse(bookmarkUrl: string, cacheKey: string): Promise<IconCacheRecord | null> {
@@ -909,16 +974,20 @@ function scoreDuckDuckGoResult(
     const imageRoot = getDomainRoot(imageHostname);
 
     if (sourceHostname === bookmarkHostname) {
-      score += 6000;
+      score += 400;
     } else if (sourceRoot && bookmarkRoot && sourceRoot === bookmarkRoot) {
-      score += 4500;
+      score += 200;
     }
 
     if (imageHostname === bookmarkHostname) {
-      score += 4000;
+      score += 300;
     } else if (imageRoot && bookmarkRoot && imageRoot === bookmarkRoot) {
-      score += 2500;
+      score += 150;
     }
+  }
+
+  if (isLogoAggregatorHost(sourceHostname) || isLogoAggregatorHost(imageHostname)) {
+    score += 600;
   }
 
   for (const term of queryTerms) {
@@ -947,6 +1016,10 @@ function scoreDuckDuckGoResult(
 
   if (/screenshot|banner|cover|hero/i.test(normalizedTitle)) {
     score -= 400;
+  }
+
+  if (/\/(icons?|logos?|favicons?|brand|assets?\/(icon|logo|brand))\//i.test(result.image)) {
+    score += 400;
   }
 
   if (/\.svg(?:$|\?)/i.test(result.image)) {
@@ -1009,6 +1082,57 @@ function isLikelyAggregatorHost(hostname: string | null): boolean {
     'msn.',
     'redd.it',
   ].some(fragment => hostname.includes(fragment));
+}
+
+function isLogoAggregatorHost(hostname: string | null): boolean {
+  if (!hostname) {
+    return false;
+  }
+
+  return [
+    'seeklogo.',
+    'vectorseek.',
+    'brandslogos.',
+    'pngwing.',
+    'worldvectorlogo.',
+    'logos-world.',
+    'logos-download.',
+    'logodownload.',
+    'logo.wine',
+    'logosvector.',
+    'logotyp.us',
+    'cdn.worldvectorlogo.',
+    'brandlogos.',
+    'freebiesupply.',
+    'logoeps.',
+  ].some(fragment => hostname.includes(fragment));
+}
+
+function isStockPhotoHost(hostname: string | null): boolean {
+  if (!hostname) {
+    return false;
+  }
+
+  return [
+    'alamy.',
+    'shutterstock.',
+    'gettyimages.',
+    'istockphoto.',
+    'dreamstime.',
+    'depositphotos.',
+    '123rf.',
+    'vectorstock.',
+    'freepik.',
+    'adobestock.',
+    'stock.adobe.',
+    'canstockphoto.',
+    'bigstockphoto.',
+  ].some(fragment => hostname.includes(fragment));
+}
+
+function isCollageTitle(title: string): boolean {
+  const lowered = title.toLowerCase();
+  return /\b(set|collection|various|bundle|pack|collage|montage|assorted|logos\s+pack|icons\s+set|logo\s+set)\b/.test(lowered);
 }
 
 function stripHtml(value: string): string {

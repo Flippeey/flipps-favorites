@@ -99,6 +99,25 @@
 }
 .ff-btn--ghost:hover { background: var(--ink-4); }
 
+.ff-btn--danger {
+  background: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 70%, #000);
+  box-shadow: 0 6px 18px color-mix(in oklab, var(--danger) 30%, transparent);
+}
+.ff-btn--danger:hover { background: color-mix(in oklab, var(--danger) 90%, #fff); }
+
+.ff-confirm__message {
+  margin: 0;
+  font-size: 14px;
+  color: var(--fg-1);
+  line-height: 1.5;
+}
+.ff-confirm__hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--fg-3);
+}
+
 /* Icon preview + icon-search grid (edit-bookmark dialog) */
 .ff-iconpreview {
   width: 100%; aspect-ratio: 1;

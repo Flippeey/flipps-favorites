@@ -15,10 +15,10 @@ interface BaseViewProps {
 interface TreeViewProps extends BaseViewProps {
   tree: BookmarkNode[];
   scopeFolderId: string;
-  onAdd?: (folder: BookmarkNode) => void;
+  onSectionMenu?: (folder: BookmarkNode, event: MouseEvent) => void;
 }
 
-interface TilesViewProps extends TreeViewProps {
+interface TilesViewProps extends Omit<TreeViewProps, 'onSectionMenu'> {
   rootBookmarks?: BookmarkNode[];
 }
 
@@ -55,12 +55,12 @@ export function TilesView({ tree, rootBookmarks, shape, scopeFolderId, onPickFol
   );
 }
 
-export function SectionsView({ tree, shape, scopeFolderId, onPickFolder, onPickItem, onAdd, onContextMenu, selectedIds, selectionScopeFolderId }: TreeViewProps) {
+export function SectionsView({ tree, shape, scopeFolderId, onPickFolder, onPickItem, onSectionMenu, onContextMenu, selectedIds, selectionScopeFolderId }: TreeViewProps) {
   return (
     <div className="ff-sections" data-scope-folder-id={scopeFolderId}>
       {tree.map(folder => (
         <section key={folder.id} data-scope-folder-id={folder.id}>
-          <SectionHeader folder={folder} onAdd={onAdd} />
+          <SectionHeader folder={folder} onMenu={onSectionMenu} />
           <div className="ff-section__rule" aria-hidden="true" />
           <div className="ff-grid">
             {(folder.children ?? []).map(item => (

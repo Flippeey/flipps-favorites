@@ -60,6 +60,7 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
 
   const [query, setQuery] = useState(() => defaultQuery(target.title, target.url));
   const [results, setResults] = useState<IconSearchCandidate[]>([]);
+  const [validatedPreviews, setValidatedPreviews] = useState<Set<string>>(new Set());
   const [searching, setSearching] = useState(false);
   const [previewIcon, setPreviewIcon] = useState<ResolvedIcon | null>(null);
   const [working, setWorking] = useState(false);
@@ -73,6 +74,7 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
 
   const runSearch = useCallback(async (q: string) => {
     setSearching(true);
+    setValidatedPreviews(new Set());
     try {
       const candidates = await searchIcons(q, bookmarkUrl);
       setResults(candidates);
@@ -89,6 +91,17 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
       setSearching(false);
     }
   }, [bookmarkUrl]);
+
+  const handlePreviewLoad = useCallback((imageUrl: string, image: HTMLImageElement) => {
+    const minEdge = Math.min(image.naturalWidth, image.naturalHeight);
+    if (minEdge < 64) return;
+    setValidatedPreviews(prev => {
+      if (prev.has(imageUrl)) return prev;
+      const next = new Set(prev);
+      next.add(imageUrl);
+      return next;
+    });
+  }, []);
 
   const loadPreview = useCallback(async () => {
     if (!bookmarkUrl) return;
@@ -348,24 +361,28 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
               <p style={{ fontSize: 12, color: 'var(--fg-3)', margin: 0 }}>No results yet.</p>
             ) : (
               <div className="ff-icongrid" style={{ overflowY: 'auto' }}>
-                {results.map((candidate) => (
-                  <button
-                    key={candidate.imageUrl}
-                    type="button"
-                    className="ff-icongrid__cell"
-                    title={candidate.label}
-                    onClick={() => handlePickCandidate(candidate)}
-                    disabled={working}
-                  >
-                    <img
-                      src={candidate.previewUrl}
-                      alt=""
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                    />
-                  </button>
-                ))}
+                {results.map((candidate) => {
+                  const isValidated = validatedPreviews.has(candidate.imageUrl);
+                  return (
+                    <button
+                      key={candidate.imageUrl}
+                      type="button"
+                      className="ff-icongrid__cell"
+                      title={candidate.label}
+                      onClick={() => handlePickCandidate(candidate)}
+                      disabled={working}
+                      style={{ display: isValidated ? undefined : 'none' }}
+                    >
+                      <img
+                        src={candidate.previewUrl}
+                        alt=""
+                        referrerPolicy="no-referrer"
+                        onLoad={(e) => handlePreviewLoad(candidate.imageUrl, e.currentTarget)}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      />
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

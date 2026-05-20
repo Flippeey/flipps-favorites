@@ -107,20 +107,30 @@ export function TileFor({
 
 interface SectionHeaderProps {
   folder: BookmarkNode;
-  onAdd?: (folder: BookmarkNode) => void;
+  onMenu?: (folder: BookmarkNode, event: MouseEvent) => void;
 }
 
-export function SectionHeader({ folder, onAdd }: SectionHeaderProps) {
+export function SectionHeader({ folder, onMenu }: SectionHeaderProps) {
+  const count = folder.children?.length ?? 0;
   return (
     <header className="ff-section__header">
       <div className="ff-section__icon-folder">
         <Ico name="folder" size={16} />
       </div>
       <h3 className="ff-section__title">{folder.title}</h3>
-      <span className="ff-section__count">{folder.children?.length ?? 0}</span>
-      <div className="ff-section__spacer" />
-      <button className="ff-section__action" aria-label="Add to section" onClick={() => onAdd?.(folder)}>
-        <Ico name="plus" size={16} />
+      <span className="ff-section__count" aria-label={`${count} ${count === 1 ? 'item' : 'items'}`}>
+        {count}
+      </span>
+      <button
+        type="button"
+        className="ff-section__menu"
+        aria-label={`Open menu for ${folder.title}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onMenu?.(folder, e);
+        }}
+      >
+        <Ico name="moreVertical" size={16} />
       </button>
     </header>
   );

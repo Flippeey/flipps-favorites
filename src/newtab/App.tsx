@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppSettings, BookmarkNode, BookmarkSortMode, SortDirection } from '../shared/messages';
+import { ConfirmDeleteDialog } from './components/ConfirmDeleteDialog';
 import { ContextMenu, type ContextMenuItem } from './components/ContextMenu';
 import { Dock } from './components/Dock';
 import { EditDialog, type EditTarget } from './components/EditDialog';
@@ -45,6 +46,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
   const [onboardOpen, setOnboardOpen] = useState(false);
   const [folderPath, setFolderPath] = useState<BookmarkNode[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+  const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<BookmarkNode | null>(null);
 
   const [selection, setSelection] = useState<MarqueeSelection>({ ids: new Set(), scopeFolderId: '' });
   const selectionRef = useRef(selection);
@@ -167,8 +169,6 @@ export function App({ initialSettings, initialTree }: AppProps) {
         { kind: 'item', icon: 'plus',       label: `New bookmark${labelSuffix}`, onClick: () => handleNewBookmark(parentId, sectionFolder?.title) },
         { kind: 'item', icon: 'folderPlus', label: `New folder${labelSuffix}`,
           onClick: () => handleNewFolder(parentId, sectionFolder?.title) },
-        { kind: 'separator' },
-        { kind: 'item', icon: 'refresh',    label: 'Refresh icons', onClick: () => refreshTree() },
       ];
     }
     if (isFolder(target)) {
@@ -183,7 +183,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
           onClick: () => handleNewFolder(target.id, target.title) },
         { kind: 'separator' },
         { kind: 'item', icon: 'trash', label: 'Delete folder', kbd: '⌫', destructive: true,
-          onClick: async () => { await removeBookmark(target.id, true); refreshTree(); } },
+          onClick: () => setConfirmDeleteFolder(target) },
       ];
     }
     return [
@@ -196,7 +196,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
       { kind: 'item', icon: 'trash',      label: 'Delete',          kbd: '⌫', destructive: true,
         onClick: async () => { await removeBookmark(target.id); refreshTree(); } },
     ];
-  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, refreshTree]);
+  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder]);
 
   const handleCanvasContextMenu = useCallback((event: React.MouseEvent) => {
     event.preventDefault();
@@ -380,7 +380,14 @@ export function App({ initialSettings, initialTree }: AppProps) {
             shape={settings.tileShape}
             onPickFolder={handleTileClick}
             onPickItem={handleTileClick}
-            onAdd={(folder) => handleNewBookmark(folder.id, folder.title)}
+            onSectionMenu={(folder, event) => {
+              const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+              setContextMenu({
+                x: rect.left,
+                y: rect.bottom + 4,
+                items: buildContextMenuItems(folder),
+              });
+            }}
             selectedIds={selection.ids}
             selectionScopeFolderId={selection.scopeFolderId}
           />
@@ -461,6 +468,18 @@ export function App({ initialSettings, initialTree }: AppProps) {
           target={folderNameTarget}
           onClose={() => setFolderNameTarget(null)}
           onSaved={() => { setFolderNameTarget(null); refreshTree(); }}
+        />
+      )}
+
+      {confirmDeleteFolder && (
+        <ConfirmDeleteDialog
+          folder={confirmDeleteFolder}
+          onClose={() => setConfirmDeleteFolder(null)}
+          onConfirm={async () => {
+            await removeBookmark(confirmDeleteFolder.id, true);
+            setConfirmDeleteFolder(null);
+            await refreshTree();
+          }}
         />
       )}
 

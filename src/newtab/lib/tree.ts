@@ -21,6 +21,28 @@ export function isFolder(node: BookmarkNode): boolean {
   return Array.isArray(node.children);
 }
 
+export interface DescendantCount {
+  bookmarks: number;
+  folders: number;
+}
+
+export function countDescendants(folder: BookmarkNode): DescendantCount {
+  let bookmarks = 0;
+  let folders = 0;
+  const visit = (node: BookmarkNode): void => {
+    for (const child of node.children ?? []) {
+      if (Array.isArray(child.children)) {
+        folders += 1;
+        visit(child);
+      } else {
+        bookmarks += 1;
+      }
+    }
+  };
+  visit(folder);
+  return { bookmarks, folders };
+}
+
 export function topLevelFolders(tree: BookmarkNode[]): BookmarkNode[] {
   // tree from browser comes as root with virtual roots; flatten to first user folders
   const out: BookmarkNode[] = [];
