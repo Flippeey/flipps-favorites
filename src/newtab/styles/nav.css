@@ -83,10 +83,11 @@
   border: 1px solid var(--line-2);
   border-radius: var(--r-md);
   box-shadow: var(--shadow-lg), var(--shadow-inset-hairline);
-  animation: ffSlideUp 160ms var(--ease-out);
+  animation: ffPanelIn 160ms var(--ease-out);
   max-height: 320px;
   overflow-y: auto;
 }
+@keyframes ffPanelIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 .ff-sort__option, .ff-fpicker__option {
   display: flex; align-items: center; justify-content: space-between;
   gap: var(--s-3); padding: 8px 10px;

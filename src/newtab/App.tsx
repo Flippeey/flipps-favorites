@@ -176,6 +176,8 @@ export function App({ initialSettings, initialTree }: AppProps) {
         { kind: 'item', icon: 'plus',       label: `New bookmark${labelSuffix}`, onClick: () => handleNewBookmark(parentId, sectionFolder?.title) },
         { kind: 'item', icon: 'folderPlus', label: `New folder${labelSuffix}`,
           onClick: () => handleNewFolder(parentId, sectionFolder?.title) },
+        { kind: 'separator' },
+        { kind: 'item', icon: 'settings',   label: 'Settings', onClick: () => setSettingsOpen(true) },
       ];
     }
     if (isFolder(target)) {
@@ -206,8 +208,9 @@ export function App({ initialSettings, initialTree }: AppProps) {
   }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder]);
 
   const handleCanvasContextMenu = useCallback((event: React.MouseEvent) => {
-    event.preventDefault();
     const target = event.target as HTMLElement;
+    if (target.closest('input, textarea, [contenteditable="true"], .ff-modal-scrim, .ff-drawer, .ff-ctx, .ff-nav, .ff-dock-wrap, .ff-results')) return;
+    event.preventDefault();
     const tileEl = target.closest('.ff-tile') as HTMLElement | null;
     let menuTarget: BookmarkNode | null = null;
     let sectionFolder: BookmarkNode | null = null;
@@ -373,6 +376,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
       data-labels={String(settings.showTileLabels)}
       data-dock={dockMode}
       style={appStyle as CSSProperties}
+      onContextMenu={handleCanvasContextMenu}
     >
       {wallpaperBlobUrl && (
         <div
@@ -405,7 +409,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
         )}
       </section>
 
-      <main className="ff-canvas" ref={(el) => { canvasRef.current = el; setCanvasEl(el); }} onContextMenu={handleCanvasContextMenu}>
+      <main className="ff-canvas" ref={(el) => { canvasRef.current = el; setCanvasEl(el); }}>
         {!isAtRoot && sortedCurrentFolder ? (
           <FolderPageView
             folder={sortedCurrentFolder}

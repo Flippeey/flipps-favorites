@@ -58,12 +58,7 @@ export function TopNav({ rootTitle, path, onCrumb, sortValue, onSort, onOpenSett
 
   return (
     <nav className={`ff-nav ${scrolled ? 'is-scrolled' : ''}`} aria-label="Workspace">
-      <div className="ff-nav__left">
-        <button className="ff-iconbtn" aria-label="Home" onClick={() => onCrumb(0)}>
-          <Ico name="home" size={16} />
-          <span>Home</span>
-        </button>
-      </div>
+      <div className="ff-nav__left" aria-hidden="true" />
       <div className="ff-nav__center">
         <div className="ff-crumb">
           {atRoot ? (
