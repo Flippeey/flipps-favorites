@@ -38,6 +38,7 @@ export function buildSearchIndex(tree: BookmarkNode[]): FlatSearchResult[] {
 interface HeroSearchProps {
   shape: TileShape;
   index: FlatSearchResult[];
+  usage?: Record<string, number>;
   onPickBookmark: (item: FlatSearchResult) => void;
   onPickFolder: (item: FlatSearchResult) => void;
 }
@@ -52,7 +53,103 @@ function isTypingTarget(el: EventTarget | null): boolean {
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 
-export function HeroSearch({ shape, index, onPickBookmark, onPickFolder }: HeroSearchProps) {
+const SCORE_TITLE_EXACT = 1000;
+const SCORE_TITLE_STARTS = 500;
+const SCORE_TITLE_TOKEN_EQ = 600;
+const SCORE_TITLE_TOKEN_STARTS = 300;
+const SCORE_TITLE_CONTAINS = 150;
+const SCORE_HOST_EXACT = 800;
+const SCORE_HOST_STARTS = 400;
+const SCORE_HOST_SEG_EQ = 500;
+const SCORE_HOST_SEG_STARTS = 350;
+const SCORE_URL_CONTAINS = 60;
+const SCORE_FOLDER_EXACT_BONUS = 200;
+const RECENCY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const RECENCY_MAX_BOOST = 50;
+
+function getHostname(url: string | undefined): string {
+  if (!url) return '';
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    try {
+      return new URL(`https://${url}`).hostname.toLowerCase();
+    } catch {
+      return '';
+    }
+  }
+}
+
+function tokenizeTitle(title: string): string[] {
+  return title.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+function recencyBoost(lastUsedAt: number | undefined): number {
+  if (!lastUsedAt) return 0;
+  const age = Date.now() - lastUsedAt;
+  if (age <= 0) return RECENCY_MAX_BOOST;
+  if (age >= RECENCY_WINDOW_MS) return 0;
+  return Math.round(RECENCY_MAX_BOOST * (1 - age / RECENCY_WINDOW_MS));
+}
+
+function scoreResult(result: FlatSearchResult, query: string, usage: Record<string, number>): number {
+  const q = query.toLowerCase().trim();
+  if (!q) return 0;
+
+  const title = result.title.toLowerCase();
+  const url = (result.url ?? '').toLowerCase();
+  const hostname = getHostname(result.url);
+  const segments = hostname.split('.').filter(Boolean);
+  const tokens = tokenizeTitle(result.title);
+
+  let score = 0;
+
+  if (title === q) {
+    score += SCORE_TITLE_EXACT;
+  } else if (title.startsWith(q)) {
+    score += SCORE_TITLE_STARTS;
+  } else {
+    let tokenHit = 0;
+    for (const tok of tokens) {
+      if (tok === q) { tokenHit = SCORE_TITLE_TOKEN_EQ; break; }
+      if (tok.startsWith(q) && tokenHit < SCORE_TITLE_TOKEN_STARTS) tokenHit = SCORE_TITLE_TOKEN_STARTS;
+    }
+    if (tokenHit > 0) score += tokenHit;
+    else if (title.includes(q)) score += SCORE_TITLE_CONTAINS;
+  }
+
+  if (hostname) {
+    const noWww = hostname.replace(/^www\./, '');
+    if (hostname === q || noWww === q) {
+      score += SCORE_HOST_EXACT;
+    } else if (hostname.startsWith(q) || noWww.startsWith(q)) {
+      score += SCORE_HOST_STARTS;
+    } else {
+      let segHit = 0;
+      for (const seg of segments) {
+        if (seg === q) { segHit = SCORE_HOST_SEG_EQ; break; }
+        if (seg.startsWith(q) && segHit < SCORE_HOST_SEG_STARTS) segHit = SCORE_HOST_SEG_STARTS;
+      }
+      if (segHit > 0) score += segHit;
+    }
+  }
+
+  if (score === 0 && url.includes(q)) {
+    score += SCORE_URL_CONTAINS;
+  }
+
+  if (result.isFolder && title === q) {
+    score += SCORE_FOLDER_EXACT_BONUS;
+  }
+
+  if (score > 0) {
+    score += recencyBoost(usage[result.id]);
+  }
+
+  return score;
+}
+
+export function HeroSearch({ shape, index, usage, onPickBookmark, onPickFolder }: HeroSearchProps) {
   const [value, setValue] = useState('');
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -93,22 +190,17 @@ export function HeroSearch({ shape, index, onPickBookmark, onPickFolder }: HeroS
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, []);
 
-  const results = useMemo(() => {
-    if (!value) return [];
-    const q = value.toLowerCase();
-    return index.filter(item =>
-      item.title.toLowerCase().includes(q) ||
-      (item.url && item.url.toLowerCase().includes(q))
-    );
-  }, [value, index]);
-
-  const bookmarks = results.filter(r => !r.isFolder);
-  const folders = results.filter(r => r.isFolder);
-
-  const visible = useMemo(
-    () => [...bookmarks.slice(0, 6), ...folders.slice(0, 3)],
-    [bookmarks, folders],
-  );
+  const visible = useMemo<FlatSearchResult[]>(() => {
+    const q = value.trim();
+    if (!q) return [];
+    const usageMap = usage ?? {};
+    const scored = index
+      .map(item => ({ item, score: scoreResult(item, q, usageMap) }))
+      .filter(entry => entry.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 12);
+    return scored.map(entry => entry.item);
+  }, [value, index, usage]);
 
   useEffect(() => {
     setActiveIndex(0);
@@ -189,51 +281,47 @@ export function HeroSearch({ shape, index, onPickBookmark, onPickFolder }: HeroS
               No matches.
             </div>
           )}
-          {visible.map((r, i) => {
-            const prev = visible[i - 1];
-            const showBookmarksHeader = i === 0 && !r.isFolder;
-            const showFoldersHeader = r.isFolder && (i === 0 || !prev?.isFolder);
-            return (
-              <div key={r.id}>
-                {showBookmarksHeader && <div className="ff-results__group">Bookmarks</div>}
-                {showFoldersHeader && <div className="ff-results__group">Folders</div>}
-                <div
-                  ref={el => { rowRefs.current[i] = el; }}
-                  id={`ff-search-opt-${i}`}
-                  className="ff-results__item"
-                  data-active={i === activeIndex}
-                  role="option"
-                  aria-selected={i === activeIndex}
-                  onMouseEnter={() => setActiveIndex(i)}
-                  onMouseDown={() => openAt(i)}
-                >
-                  {r.isFolder ? (
-                    <>
-                      <div style={{
-                        width: 28, height: 28, borderRadius: 6,
-                        background: 'color-mix(in oklab, var(--accent) 12%, var(--ink-2))',
-                        display: 'grid', placeItems: 'center', color: 'var(--accent)',
-                      }}>
-                        <Ico name="folder" size={16} />
-                      </div>
-                      <span className="ff-results__title">{r.title}</span>
-                    </>
-                  ) : (
-                    <>
-                      <div style={{ width: 28, height: 28, flex: '0 0 28px' }}>
-                        <Favicon url={r.url} title={r.title} shape={shape} />
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <span className="ff-results__title">{r.title}</span>
-                        <span className="ff-results__url">{r.url}</span>
-                      </div>
-                      <span className="ff-results__path">{r.folderTitle}</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          {visible.map((r, i) => (
+            <div
+              key={r.id}
+              ref={el => { rowRefs.current[i] = el; }}
+              id={`ff-search-opt-${i}`}
+              className="ff-results__item"
+              data-active={i === activeIndex}
+              role="option"
+              aria-selected={i === activeIndex}
+              onMouseEnter={() => setActiveIndex(i)}
+              onMouseDown={() => openAt(i)}
+            >
+              {r.isFolder ? (
+                <>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: 6,
+                    background: 'color-mix(in oklab, var(--accent) 12%, var(--ink-2))',
+                    display: 'grid', placeItems: 'center', color: 'var(--accent)',
+                    flex: '0 0 28px',
+                  }}>
+                    <Ico name="folder" size={16} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span className="ff-results__title">{r.title}</span>
+                    <span className="ff-results__url" style={{ color: 'var(--fg-3)', fontSize: 11 }}>Folder</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ width: 28, height: 28, flex: '0 0 28px' }}>
+                    <Favicon url={r.url} title={r.title} shape={shape} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span className="ff-results__title">{r.title}</span>
+                    <span className="ff-results__url">{r.url}</span>
+                  </div>
+                  <span className="ff-results__path">{r.folderTitle}</span>
+                </>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

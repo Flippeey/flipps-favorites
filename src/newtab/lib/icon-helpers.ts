@@ -1,3 +1,5 @@
+import { getBrandName } from '../../shared/url-brand';
+
 export function isValidBookmarkUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
@@ -7,48 +9,8 @@ export function isValidBookmarkUrl(value: string): boolean {
   }
 }
 
-const REGISTRY_SLDS = new Set(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac', 'ne', 'or']);
-const GENERIC_SUBDOMAIN_RE = /^(?:www2?|m|mobile|app|apps|secure|login|account|accounts|signin|auth|my|portal|dashboard|web)\./i;
-const PERSONAL_INFRA_TLDS = new Set(['local', 'lan', 'home', 'internal', 'intranet']);
-const PERSONAL_INFRA_MARKERS = new Set(['local', 'lan', 'home', 'homelab', 'internal', 'intranet', 'lab']);
-
 export function getSearchName(url: string): string {
-  try {
-    let hostname = new URL(url).hostname.toLowerCase();
-    hostname = hostname.replace(GENERIC_SUBDOMAIN_RE, '');
-    const parts = hostname.split('.').filter(Boolean);
-    let name = '';
-
-    if (parts.length === 0) {
-      return '';
-    }
-
-    // Rule: personal-infra TLD (e.g. service.local, jellyfin.homelab.lan)
-    if (parts.length >= 2 && PERSONAL_INFRA_TLDS.has(parts[parts.length - 1])) {
-      name = parts[0];
-    }
-    // Rule: personal-infra marker mid-hostname (e.g. jellyfin.local.flippflix.com)
-    else if (
-      parts.length >= 3 &&
-      parts.slice(1, -1).some(seg => PERSONAL_INFRA_MARKERS.has(seg))
-    ) {
-      name = parts[0];
-    }
-    // Rule: ccTLD registry SLD (e.g. pogdesign.co.uk)
-    else if (parts.length >= 3 && REGISTRY_SLDS.has(parts[parts.length - 2])) {
-      name = parts[parts.length - 3] ?? '';
-    }
-    // Default: second-to-last segment (e.g. google.com → google, mail.google.com → google)
-    else if (parts.length >= 2) {
-      name = parts[parts.length - 2] ?? '';
-    } else {
-      name = parts[0] ?? '';
-    }
-
-    return name.length >= 3 ? name : '';
-  } catch {
-    return '';
-  }
+  return getBrandName(url);
 }
 
 export function getHostname(url: string): string {

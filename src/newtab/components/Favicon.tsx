@@ -48,6 +48,18 @@ async function fetchIcon(url: string, title?: string): Promise<string> {
   return promise;
 }
 
+export function isFaviconCached(url: string): boolean {
+  return iconCache.has(url);
+}
+
+export async function prefetchFavicon(url: string, title?: string): Promise<void> {
+  try {
+    await fetchIcon(url, title);
+  } catch {
+    // ignore — prefetch is best-effort
+  }
+}
+
 function radiusForShape(shape: TileShape): string {
   switch (shape) {
     case 'circle':  return '50%';

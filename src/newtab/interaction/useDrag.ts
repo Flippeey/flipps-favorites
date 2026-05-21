@@ -142,6 +142,15 @@ export function useDrag({
       drag.dropOnBackdrop = false;
       const dockEl = elementUnder?.closest('.ff-dock') as HTMLElement | null;
       if (dockEl && dockEl.dataset.scopeFolderId !== drag.scopeId) {
+        const dockFolderTile = elementUnder?.closest<HTMLElement>('[data-item-id][data-item-kind="folder"]');
+        if (dockFolderTile && dockEl.contains(dockFolderTile)) {
+          const folderId = dockFolderTile.dataset.itemId ?? '';
+          if (folderId && !dragSet.has(folderId)) {
+            dockFolderTile.dataset.dropPosition = 'inside';
+            drag.dropTarget = { kind: 'folder', folderId };
+            return;
+          }
+        }
         dockEl.dataset.dropTarget = 'true';
         drag.dropTarget = { kind: 'dock' };
         return;

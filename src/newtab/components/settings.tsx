@@ -39,11 +39,15 @@ export const ACCENT_PRESETS: { id: string; label: string; value: string }[] = [
 ];
 
 export const LAYOUT_PRESETS: { id: LayoutPresetId; label: string; desc: string; cols: number }[] = [
-  { id: 'compact',      label: 'Compact',      desc: '12 columns, dense',    cols: 12 },
-  { id: 'balanced',     label: 'Balanced',     desc: '10 columns, default',  cols: 10 },
-  { id: 'spacious',     label: 'Spacious',     desc: '8 columns, roomy',     cols: 8 },
-  { id: 'presentation', label: 'Presentation', desc: '6 columns, large',     cols: 6 },
+  { id: 'compact',      label: 'Compact',      desc: 'Dense',    cols: 12 },
+  { id: 'balanced',     label: 'Balanced',     desc: 'Default',  cols: 10 },
+  { id: 'spacious',     label: 'Spacious',     desc: 'Roomy',    cols: 8 },
+  { id: 'presentation', label: 'Presentation', desc: 'Large',    cols: 6 },
 ];
+
+export const CUSTOM_LAYOUT_PRESET: { id: LayoutPresetId; label: string; desc: string } = {
+  id: 'custom', label: 'Custom', desc: 'Fine-tune',
+};
 
 // Small reusable controls
 export function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
@@ -806,7 +810,26 @@ function WallpaperPicker({ settings, onPatch }: SectionProps) {
   );
 }
 
+function CustomLayoutPreview({ active }: { active?: boolean }) {
+  const bars = [70, 45, 60, 35];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '2px 0' }}>
+      {bars.map((w, i) => (
+        <div key={i} style={{
+          height: 6,
+          width: `${w}%`,
+          borderRadius: 3,
+          background: active
+            ? 'color-mix(in oklab, var(--accent) 55%, var(--ink-3))'
+            : 'var(--ink-3)',
+        }} />
+      ))}
+    </div>
+  );
+}
+
 function LayoutSection({ settings, onPatch }: SectionProps) {
+  const isCustom = settings.layoutPreset === 'custom';
   return (
     <div className="ff-set-section">
       <h3 className="ff-set-section__title">Layout</h3>
@@ -833,7 +856,84 @@ function LayoutSection({ settings, onPatch }: SectionProps) {
             </button>
           );
         })}
+        <button
+          key={CUSTOM_LAYOUT_PRESET.id}
+          onClick={() => onPatch({ layoutPreset: 'custom' })}
+          className="ff-card"
+          style={{
+            gridColumn: 'span 2',
+            textAlign: 'left', cursor: 'pointer', color: 'var(--fg-1)', font: 'inherit',
+            borderColor: isCustom ? 'var(--accent)' : 'var(--line-1)',
+            background: isCustom ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontWeight: 600 }}>{CUSTOM_LAYOUT_PRESET.label}</span>
+            <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>{CUSTOM_LAYOUT_PRESET.desc}</span>
+          </div>
+          <CustomLayoutPreview active={isCustom} />
+        </button>
       </div>
+      {isCustom && (
+        <div className="ff-card" style={{ marginBottom: 16 }}>
+          <div className="ff-row">
+            <div>
+              <div className="ff-row__label">Icon size</div>
+              <div className="ff-row__hint">How big each tile icon renders.</div>
+            </div>
+            <Slider
+              value={settings.bookmarkIconSize}
+              min={40}
+              max={112}
+              onChange={(v) => onPatch({ bookmarkIconSize: v })}
+              onPreview={(v) => document.documentElement.style.setProperty('--tile-size', `${String(v)}px`)}
+              formatValue={(v) => `${String(v)}px`}
+            />
+          </div>
+          <div className="ff-row">
+            <div>
+              <div className="ff-row__label">Tile width</div>
+              <div className="ff-row__hint">Cell width — affects label wrapping and column count.</div>
+            </div>
+            <Slider
+              value={settings.bookmarkTileWidth}
+              min={88}
+              max={180}
+              onChange={(v) => onPatch({ bookmarkTileWidth: v })}
+              onPreview={(v) => document.documentElement.style.setProperty('--tile-width', `${String(v)}px`)}
+              formatValue={(v) => `${String(v)}px`}
+            />
+          </div>
+          <div className="ff-row">
+            <div>
+              <div className="ff-row__label">Column gap</div>
+              <div className="ff-row__hint">Horizontal space between tiles.</div>
+            </div>
+            <Slider
+              value={settings.favoritesColumnGap}
+              min={0}
+              max={48}
+              onChange={(v) => onPatch({ favoritesColumnGap: v })}
+              onPreview={(v) => document.documentElement.style.setProperty('--grid-gap-x', `${String(v)}px`)}
+              formatValue={(v) => `${String(v)}px`}
+            />
+          </div>
+          <div className="ff-row">
+            <div>
+              <div className="ff-row__label">Row gap</div>
+              <div className="ff-row__hint">Vertical space between tiles.</div>
+            </div>
+            <Slider
+              value={settings.favoritesRowGap}
+              min={0}
+              max={48}
+              onChange={(v) => onPatch({ favoritesRowGap: v })}
+              onPreview={(v) => document.documentElement.style.setProperty('--grid-gap-y', `${String(v)}px`)}
+              formatValue={(v) => `${String(v)}px`}
+            />
+          </div>
+        </div>
+      )}
       <div className="ff-card">
         <div className="ff-row">
           <div className="ff-row__label">Tile shape</div>

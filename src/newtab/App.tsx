@@ -18,6 +18,7 @@ import { useDrag } from './interaction/useDrag';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
 import { getBookmarkTree, getBookmarkUsage, getSettings, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
+import { prefetchAllIcons } from './lib/icon-prefetch';
 import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 
 interface AppProps {
@@ -62,7 +63,20 @@ export function App({ initialSettings, initialTree }: AppProps) {
 
   // Apply tweaks → CSS variables
   useEffect(() => { applyAccent(settings.accentColor); }, [settings.accentColor]);
-  useEffect(() => { applyDensity(settings.layoutPreset); }, [settings.layoutPreset]);
+  useEffect(() => {
+    applyDensity(settings.layoutPreset, {
+      tileSize: settings.bookmarkIconSize,
+      tileWidth: settings.bookmarkTileWidth,
+      gapX: settings.favoritesColumnGap,
+      gapY: settings.favoritesRowGap,
+    });
+  }, [
+    settings.layoutPreset,
+    settings.bookmarkIconSize,
+    settings.bookmarkTileWidth,
+    settings.favoritesColumnGap,
+    settings.favoritesRowGap,
+  ]);
   useEffect(() => {
     document.documentElement.dataset.theme = resolveThemeAttr(settings.themeMode);
   }, [settings.themeMode]);
@@ -72,6 +86,10 @@ export function App({ initialSettings, initialTree }: AppProps) {
     getBookmarkUsage().then(u => { if (!cancelled) setUsage(u); }).catch(() => { /* ignore */ });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    prefetchAllIcons(tree);
+  }, [tree]);
 
   const handlePatch = useCallback(async (patch: Partial<AppSettings>) => {
     setSettings(prev => ({ ...prev, ...patch }));
@@ -113,9 +131,9 @@ export function App({ initialSettings, initialTree }: AppProps) {
     if (!settings.showDock) return [];
     if (settings.dockFolderId) {
       const folder = findFolder(tree, settings.dockFolderId);
-      if (folder) return (folder.children ?? []).filter(c => !isFolder(c)).slice(0, 8);
+      if (folder) return (folder.children ?? []).slice(0, 8);
     }
-    return (rootFolder?.children ?? []).filter(c => !isFolder(c)).slice(0, 8);
+    return (rootFolder?.children ?? []).slice(0, 8);
   }, [tree, settings.showDock, settings.dockFolderId, rootFolder]);
 
   const dockMode: 'always' | 'hover' | 'hidden' =
@@ -412,6 +430,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
           <HeroSearch
             shape={settings.tileShape}
             index={searchIndex}
+            usage={usage}
             onPickBookmark={onPickSearchBookmark}
             onPickFolder={onPickSearchFolder}
           />
@@ -483,6 +502,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
         shape={settings.tileShape}
         dockFolderId={settings.dockFolderId || rootFolder?.id || ''}
         onItemClick={handlePickBookmark}
+        onFolderClick={handlePickFolder}
         surfaceRef={setDockEl}
       />
 
@@ -567,6 +587,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
       {onboardOpen && (
         <Onboarding
           settings={settings}
+          tree={tree}
           onPatch={handlePatch}
           onFinish={() => setOnboardOpen(false)}
         />

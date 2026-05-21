@@ -2,6 +2,7 @@ import type { GetIconRequest, IconCacheRecord, IconOverrideRecord, IconSearchCan
 import { IconFetchError } from '../../shared/messages';
 import { extensionApi } from '../../shared/browser';
 import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRecord, readIconCacheRecord, readIconCacheRecords, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideRecord } from '../../shared/storage';
+import { extractBrandInfo } from '../../shared/url-brand';
 
 const iconPipelineVersion = 'bookmark-icons-v6';
 const faviconProviderUrl = 'https://www.google.com/s2/favicons';
@@ -406,11 +407,18 @@ function extractHostname(value: string | undefined): string | null {
 
 
 function buildSearchQueryFromBookmark(bookmarkUrl?: string): string {
-  const hostname = extractHostname(bookmarkUrl);
-  if (!hostname) {
-    return '';
+  if (!bookmarkUrl) return '';
+  const { brand, isPersonalInfra } = extractBrandInfo(bookmarkUrl);
+  if (brand) {
+    return `${brand} logo`.trim();
   }
-
+  // Fallback for unusual hostnames where brand extraction yielded nothing.
+  const hostname = extractHostname(bookmarkUrl);
+  if (!hostname) return '';
+  if (isPersonalInfra) {
+    const first = hostname.split('.')[0];
+    return first ? `${first} logo`.trim() : '';
+  }
   const parts = hostname.split('.');
   const core = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0];
   return `${core} logo`.trim();
@@ -484,7 +492,12 @@ async function searchDuckDuckGoImages(query: string, bookmarkUrl?: string): Prom
     }
 
     const results = data.results ?? [];
-    const bookmarkHostname = extractHostname(bookmarkUrl);
+    const rawBookmarkHostname = extractHostname(bookmarkUrl);
+    const { isPersonalInfra } = bookmarkUrl ? extractBrandInfo(bookmarkUrl) : { isPersonalInfra: false };
+    // For personal-infra hosts the bookmark hostname is a private domain
+    // (e.g. flippflix.com behind *.local.flippflix.com). Matching against it
+    // boosts the wrong brand — strip it so only query-term matching applies.
+    const bookmarkHostname = isPersonalInfra ? null : rawBookmarkHostname;
     const queryTerms = tokenizeQuery(queryText);
     return results
       .filter(result => typeof result.image === 'string' && typeof result.thumbnail === 'string')

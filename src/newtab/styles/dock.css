@@ -2,35 +2,61 @@
 
 .ff-dock-wrap {
   position: fixed;
-  left: 50%; bottom: var(--s-5);
+  left: 50%; bottom: var(--s-6);
   transform: translateX(-50%);
   z-index: 25; pointer-events: none;
 }
 .ff-dock {
   pointer-events: auto;
   display: flex; align-items: center; gap: var(--s-3);
-  padding: 10px var(--s-4);
+  padding: 14px var(--s-5);
   background: var(--frost-strong);
   -webkit-backdrop-filter: var(--frost-blur);
   backdrop-filter: var(--frost-blur);
   border: 1px solid var(--line-1);
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-xl), var(--shadow-inset-hairline);
-  transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+  transition:
+    transform 260ms var(--ease-out) 140ms,
+    opacity 260ms var(--ease-out) 140ms;
 }
-.ff-dock-wrap[data-mode="hover"] .ff-dock { transform: translateY(72%); opacity: 0.6; }
+/* Hover mode — wrap takes pointer-events so the larger hitbox below works,
+   and a pseudo-element extends the hover-sensitive area outward so the dock
+   does not flicker when the cursor approaches at an angle. */
+.ff-dock-wrap[data-mode="hover"] {
+  pointer-events: auto;
+}
+.ff-dock-wrap[data-mode="hover"]::after {
+  content: '';
+  position: absolute;
+  inset: -10px -36px -36px -36px;
+  border-radius: var(--r-xl);
+  pointer-events: auto;
+  z-index: -1;
+}
+.ff-dock-wrap[data-mode="hover"] .ff-dock {
+  transform: translateY(76%);
+  opacity: 0.55;
+}
 .ff-dock-wrap[data-mode="hover"]:hover .ff-dock,
-.ff-dock-wrap[data-mode="hover"] .ff-dock:hover { transform: translateY(0); opacity: 1; }
+.ff-dock-wrap[data-mode="hover"] .ff-dock:hover {
+  transform: translateY(0);
+  opacity: 1;
+  /* Faster entry, no delay — feels snappy on approach. */
+  transition:
+    transform 180ms var(--ease-out) 0ms,
+    opacity 180ms var(--ease-out) 0ms;
+}
 .ff-dock-wrap[data-mode="hidden"] { display: none; }
 .ff-dock__item {
   position: relative;
   display: grid; place-items: center;
-  width: 56px; height: 56px;
+  width: 64px; height: 64px;
   background: transparent; border: 0;
   border-radius: var(--r-lg);
   cursor: pointer;
   transition: transform var(--dur-base) var(--ease-out);
-  padding: 4px;
+  padding: 6px;
 }
 .ff-dock__item:hover { transform: translateY(-6px) scale(1.06); }
 .ff-dock__item:active { transform: translateY(-2px) scale(0.98); }
@@ -47,3 +73,22 @@
 }
 .ff-dock__item[data-drop-position="before"]::after { left: -7px; }
 .ff-dock__item[data-drop-position="after"]::after  { right: -7px; }
+
+.ff-dock__folder {
+  width: 100%; height: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 3px;
+  padding: 4px;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--accent) 10%, var(--ink-3));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+}
+.ff-dock__folder-cell {
+  display: grid; place-items: center;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.04);
+  color: color-mix(in oklab, var(--accent) 60%, var(--fg-3));
+}

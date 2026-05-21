@@ -46,9 +46,23 @@ const DENSITY_PRESETS: Record<string, DensitySpec> = {
   presentation: { tile: 116, width: 168, gap: 36 },
 };
 
-export function applyDensity(preset: string): void {
-  const spec = DENSITY_PRESETS[preset] ?? DENSITY_PRESETS.balanced;
+export interface CustomDensityValues {
+  tileSize: number;   // bookmarkIconSize
+  tileWidth: number;  // bookmarkTileWidth
+  gapX: number;       // favoritesColumnGap
+  gapY: number;       // favoritesRowGap
+}
+
+export function applyDensity(preset: string, custom?: CustomDensityValues): void {
   const root = document.documentElement;
+  if (preset === 'custom' && custom) {
+    root.style.setProperty('--tile-size', custom.tileSize + 'px');
+    root.style.setProperty('--tile-width', custom.tileWidth + 'px');
+    root.style.setProperty('--grid-gap-x', custom.gapX + 'px');
+    root.style.setProperty('--grid-gap-y', custom.gapY + 'px');
+    return;
+  }
+  const spec = DENSITY_PRESETS[preset] ?? DENSITY_PRESETS.balanced;
   root.style.setProperty('--tile-size', spec.tile + 'px');
   root.style.setProperty('--tile-width', spec.width + 'px');
   root.style.setProperty('--grid-gap-x', spec.gap + 'px');

@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import type { AppSettings, FolderMode, FolderOpenMode, LayoutPresetId } from '../../shared/messages';
+import type { AppSettings, BookmarkNode, FolderMode, FolderOpenMode, LayoutPresetId } from '../../shared/messages';
 import { Ico } from './Ico';
-import { ACCENT_PRESETS, LAYOUT_PRESETS } from './settings';
+import { ACCENT_PRESETS, FolderPicker, LAYOUT_PRESETS } from './settings';
 
 interface OnboardingProps {
   settings: AppSettings;
+  tree: BookmarkNode[];
   onPatch: (patch: Partial<AppSettings>) => void;
   onFinish: () => void;
 }
@@ -27,12 +28,12 @@ function DensityMini({ cols, active }: { cols: number; active?: boolean }) {
   );
 }
 
-export function Onboarding({ settings, onPatch, onFinish }: OnboardingProps) {
+export function Onboarding({ settings, tree, onPatch, onFinish }: OnboardingProps) {
   const [step, setStep] = useState(0);
 
   const steps = [
     { title: "Welcome to Flipp's Favorites", desc: "A new-tab dashboard that uses your existing bookmarks. No imports. No accounts. Just a faster way to get where you're going." },
-    { title: 'Pick your accent', desc: 'Your accent shows up subtly across the page — selection, focus, the glow at the top. Try a few.' },
+    { title: 'Pick your accent', desc: 'Pick the accent that feels right. You can change it any time in Settings.' },
     { title: 'Choose your layout', desc: 'Pick the density that fits your screen. You can fine-tune later in Settings.' },
     { title: 'How do you want to navigate?', desc: 'Folders can stay compact as tiles, or always show inline as sections. You can change this any time.' },
     { title: "You're all set", desc: 'Open Settings any time to tweak themes, layout, the dock and clock. Drag bookmarks to reorder. Right-click anywhere for context actions.' },
@@ -107,7 +108,7 @@ export function Onboarding({ settings, onPatch, onFinish }: OnboardingProps) {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <span style={{ fontWeight: 600 }}>{p.label}</span>
-                      <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>{p.cols} cols</span>
+                      <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>{p.desc}</span>
                     </div>
                     <DensityMini cols={p.cols} active={active} />
                   </button>
@@ -118,10 +119,21 @@ export function Onboarding({ settings, onPatch, onFinish }: OnboardingProps) {
 
           {step === 3 && (
             <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
+              <div className="ff-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <div className="ff-row__label">Root folder</div>
+                  <div className="ff-row__hint">Your starting view. Change later in Settings.</div>
+                </div>
+                <FolderPicker
+                  tree={tree}
+                  value={settings.rootFolderId}
+                  onChange={(id) => onPatch({ rootFolderId: id })}
+                />
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
                 {([
-                  { id: 'tiles',    label: 'Tiles',    desc: 'Folders show as compact tiles. Click to open.' },
-                  { id: 'sections', label: 'Sections', desc: 'All folders visible inline as labeled rows.' },
+                  { id: 'tiles',    label: 'Tiles',    desc: 'Folders shown as one-click tiles. Keeps the top view tidy.' },
+                  { id: 'sections', label: 'Sections', desc: 'Every folder unfolded inline. See everything at a glance.' },
                 ] as { id: FolderMode; label: string; desc: string }[]).map(m => {
                   const active = settings.folderMode === m.id;
                   return (
@@ -145,8 +157,8 @@ export function Onboarding({ settings, onPatch, onFinish }: OnboardingProps) {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
                 {([
-                  { id: 'overlay', label: 'Open folders as overlay', desc: 'Stays on the new tab page, with breadcrumbs.' },
-                  { id: 'page',    label: 'Open folders as page',    desc: 'Full-page navigation with the top breadcrumb.' },
+                  { id: 'overlay', label: 'Open folders as overlay', desc: 'Folder opens as a popup. Close to return to the main view.' },
+                  { id: 'page',    label: 'Open folders as page',    desc: 'Folder fills the screen. Use the breadcrumb to step back.' },
                 ] as { id: FolderOpenMode; label: string; desc: string }[]).map(m => {
                   const active = settings.folderOpenMode === m.id;
                   return (
