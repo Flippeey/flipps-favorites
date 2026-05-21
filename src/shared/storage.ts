@@ -118,7 +118,7 @@ export const defaultSettings: AppSettings = {
   tileShape: 'squircle',
   showTileLabels: true,
   backgroundMode: 'gradient',
-  gradientStyle: 'top-bottom',
+  gradientStyle: 'top',
 };
 
 export async function readSettings(): Promise<AppSettings> {

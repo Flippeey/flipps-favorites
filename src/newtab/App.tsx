@@ -20,10 +20,12 @@ import { getBookmarkTree, getBookmarkUsage, getSettings, moveBookmark, patchSett
 import { useBlobUrl } from './lib/useBlobUrl';
 import { prefetchAllIcons } from './lib/icon-prefetch';
 import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
+import { markOnboardingCompleted } from '../shared/storage';
 
 interface AppProps {
   initialSettings: AppSettings;
   initialTree: BookmarkNode[];
+  initialOnboardOpen?: boolean;
 }
 
 function settingsToSortValue(mode: BookmarkSortMode, direction: SortDirection): string {
@@ -31,7 +33,7 @@ function settingsToSortValue(mode: BookmarkSortMode, direction: SortDirection): 
   return `${mode}:${direction}`;
 }
 
-export function App({ initialSettings, initialTree }: AppProps) {
+export function App({ initialSettings, initialTree, initialOnboardOpen }: AppProps) {
   const [settings, setSettings] = useState(initialSettings);
   const [tree, setTree] = useState(initialTree);
   const [usage, setUsage] = useState<Record<string, number>>({});
@@ -45,7 +47,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
   const [quickAddTarget, setQuickAddTarget] = useState<{ parentId: string; parentTitle?: string } | null>(null);
   const [folderNameTarget, setFolderNameTarget] = useState<FolderNameDialogTarget | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [onboardOpen, setOnboardOpen] = useState(false);
+  const [onboardOpen, setOnboardOpen] = useState(initialOnboardOpen ?? false);
   const [folderPath, setFolderPath] = useState<BookmarkNode[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<BookmarkNode | null>(null);
@@ -243,7 +245,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
     setContextMenu({ x: event.clientX, y: event.clientY, items: buildContextMenuItems(menuTarget, sectionFolder) });
   }, [tree, buildContextMenuItems]);
 
-  const searchIndex = useMemo(() => buildSearchIndex(rootFolder?.children ?? []), [rootFolder]);
+  const searchIndex = useMemo(() => buildSearchIndex(tree), [tree]);
 
   const onPickSearchBookmark = useCallback((r: FlatSearchResult) => {
     if (!r.url) return;
@@ -589,7 +591,7 @@ export function App({ initialSettings, initialTree }: AppProps) {
           settings={settings}
           tree={tree}
           onPatch={handlePatch}
-          onFinish={() => setOnboardOpen(false)}
+          onFinish={() => { setOnboardOpen(false); void markOnboardingCompleted(); }}
         />
       )}
 
