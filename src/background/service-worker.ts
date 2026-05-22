@@ -1,5 +1,5 @@
 import { extensionApi } from '../shared/browser';
-import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceRequest, type CreateWorkspaceResponse, type DeleteWorkspaceRequest, type DeleteWorkspaceResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type PatchWorkspaceRequest, type PatchWorkspaceResponse } from '../shared/messages';
+import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceRequest, type CreateWorkspaceResponse, type DeleteWorkspaceRequest, type DeleteWorkspaceResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type PatchWorkspaceRequest, type PatchWorkspaceResponse, type WorkspaceRecord } from '../shared/messages';
 import { deleteWorkspace, markOnboardingPending, readBookmarkUsageRecords, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
 import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl, sweepGeneratedRecords } from './icons/icon-service';
 
@@ -151,7 +151,7 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
       const all = await readWorkspaces();
       const current = all.find(w => w.id === id);
       if (!current) throw new Error(`Workspace ${id} not found`);
-      const updated = { ...current, ...patch };
+      const updated: WorkspaceRecord = { ...current, ...patch, id };
       await writeWorkspace(updated);
       return { workspace: updated } satisfies PatchWorkspaceResponse;
     }
