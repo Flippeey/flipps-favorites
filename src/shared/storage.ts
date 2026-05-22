@@ -1,5 +1,5 @@
 import { extensionApi } from './browser';
-import type { AppSettings, BookmarkUsageRecord, ClockHourFormat, ClockPosition, ClockSize, ClockStyle, IconCacheRecord, IconOverrideRecord, SearchBarPosition, SearchScope } from './messages';
+import type { AppSettings, BookmarkUsageRecord, ClockHourFormat, ClockPosition, ClockSize, ClockStyle, IconCacheRecord, IconOverrideRecord, SearchBarPosition, SearchScope, WorkspaceRecord } from './messages';
 import { createCachedRecordStore, createCachedValueStore } from './storage-buckets';
 
 const storageKey = 'app-settings';
@@ -76,19 +76,20 @@ const wallpaperStore = createCachedValueStore<string>({
   },
 });
 
+const workspacesKey = 'workspaces';
+
+const workspacesStore = createCachedRecordStore<WorkspaceRecord>({
+  storageKey: workspacesKey,
+  area: 'sync-preferred',
+});
+
+function workspaceWallpaperKey(workspaceId: string): string {
+  return `app-wallpaper-${workspaceId}`;
+}
+
 export const defaultSettings: AppSettings = {
+  activeWorkspaceId: '',
   themeMode: 'system',
-  accentColor: '#3f72dc',
-  customBackgroundImage: '',
-  solidBackgroundColor: '',
-  gradientColorSource: 'accent',
-  gradientCustomColor: '#3F72DC',
-  gradientIntensity: 100,
-  backgroundOpacity: 70,
-  backgroundFitMode: 'cover',
-  backgroundPositionMode: 'center',
-  settingsSection: 'general',
-  rootFolderId: '',
   rememberLastFolder: true,
   openLinksInNewTab: false,
   showDock: false,
@@ -97,15 +98,6 @@ export const defaultSettings: AppSettings = {
   bookmarkSortMode: 'manual',
   bookmarkSortDirection: 'asc',
   searchScope: 'library',
-  favoritesColumns: 10,
-  favoritesRows: 0,
-  favoritesColumnGap: 24,
-  favoritesRowGap: 20,
-  bookmarkTileWidth: 130,
-  bookmarkIconSize: 75,
-  showBookmarkIconBackground: false,
-  showAccentBackground: true,
-  layoutPreset: 'balanced',
   showClock: false,
   clockStyle: 'standard',
   clockPosition: 'bottom-right',
@@ -115,22 +107,35 @@ export const defaultSettings: AppSettings = {
   searchBarPosition: 'center',
   folderMode: 'tiles',
   folderOpenMode: 'overlay',
-  tileShape: 'squircle',
-  showTileLabels: true,
+  settingsSection: 'general',
+};
+
+export const defaultWorkspaceSettings: Omit<WorkspaceRecord, 'id' | 'name' | 'rootFolderId'> = {
+  accentColor: '#3F72DC',
   backgroundMode: 'gradient',
+  solidBackgroundColor: '',
   gradientStyle: 'top',
+  gradientColorSource: 'accent',
+  gradientCustomColor: '#3F72DC',
+  gradientIntensity: 100,
+  backgroundOpacity: 70,
+  backgroundFitMode: 'cover',
+  backgroundPositionMode: 'center',
+  layoutPreset: 'balanced',
+  favoritesColumns: 10,
+  favoritesRows: 0,
+  favoritesColumnGap: 24,
+  favoritesRowGap: 20,
+  bookmarkTileWidth: 130,
+  bookmarkIconSize: 75,
+  tileShape: 'squircle',
+  showBookmarkIconBackground: false,
+  showAccentBackground: true,
+  showTileLabels: true,
 };
 
 export async function readSettings(): Promise<AppSettings> {
-  const [syncSettings, wallpaper] = await Promise.all([
-    settingsStore.read(),
-    wallpaperStore.read(),
-  ]);
-  // Wallpaper data URLs would blow the 8KB sync per-item quota, so they live
-  // in local storage. Prefer the local copy; fall back to any legacy value
-  // still in sync (older installs that saved a tiny wallpaper before the split).
-  const customBackgroundImage = wallpaper || syncSettings.customBackgroundImage;
-  return { ...syncSettings, customBackgroundImage };
+  return settingsStore.read();
 }
 
 let writeQueue: Promise<unknown> = Promise.resolve();
@@ -142,135 +147,49 @@ export async function writeSettings(patch: Partial<AppSettings>): Promise<AppSet
 }
 
 async function doWriteSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
-  const wallpaperInPatch = Object.prototype.hasOwnProperty.call(patch, 'customBackgroundImage');
-  const current = await readSettings();
-  const merged = normalizeSettings({
-    ...current,
-    ...patch,
-    customBackgroundImage: wallpaperInPatch
-      ? (typeof patch.customBackgroundImage === 'string' ? patch.customBackgroundImage : '')
-      : current.customBackgroundImage,
-  });
-
-  const writes: Promise<unknown>[] = [
-    settingsStore.write({ ...merged, customBackgroundImage: '' }),
-  ];
-  if (wallpaperInPatch && merged.customBackgroundImage !== current.customBackgroundImage) {
-    writes.push(wallpaperStore.write(merged.customBackgroundImage));
-  }
-  await Promise.all(writes);
+  const current = await settingsStore.read();
+  const merged = normalizeSettings({ ...current, ...patch });
+  await settingsStore.write(merged);
   return merged;
 }
 
 function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
   return {
+    activeWorkspaceId: typeof settings.activeWorkspaceId === 'string' ? settings.activeWorkspaceId : defaultSettings.activeWorkspaceId,
     themeMode: settings.themeMode === 'light' || settings.themeMode === 'dark' || settings.themeMode === 'system'
-      ? settings.themeMode
-      : defaultSettings.themeMode,
-    accentColor: /^#[0-9a-fA-F]{6}$/.test(settings.accentColor ?? '')
-      ? String(settings.accentColor).toUpperCase()
-      : defaultSettings.accentColor.toUpperCase(),
-    customBackgroundImage: typeof settings.customBackgroundImage === 'string'
-      ? settings.customBackgroundImage
-      : defaultSettings.customBackgroundImage,
-    solidBackgroundColor: normalizeHexOrEmpty(settings.solidBackgroundColor, defaultSettings.solidBackgroundColor),
-    gradientColorSource: settings.gradientColorSource === 'accent' || settings.gradientColorSource === 'custom'
-      ? settings.gradientColorSource
-      : defaultSettings.gradientColorSource,
-    gradientCustomColor: /^#[0-9a-fA-F]{6}$/.test(settings.gradientCustomColor ?? '')
-      ? String(settings.gradientCustomColor).toUpperCase()
-      : defaultSettings.gradientCustomColor.toUpperCase(),
-    gradientIntensity: normalizeNumber(settings.gradientIntensity, defaultSettings.gradientIntensity, 0, 200),
-    backgroundOpacity: normalizeNumber(settings.backgroundOpacity, defaultSettings.backgroundOpacity, 0, 100),
-    backgroundFitMode: settings.backgroundFitMode === 'cover' || settings.backgroundFitMode === 'contain' || settings.backgroundFitMode === 'fill'
-      ? settings.backgroundFitMode
-      : defaultSettings.backgroundFitMode,
-    backgroundPositionMode: settings.backgroundPositionMode === 'center' || settings.backgroundPositionMode === 'top' || settings.backgroundPositionMode === 'bottom'
-      ? settings.backgroundPositionMode
-      : defaultSettings.backgroundPositionMode,
-    settingsSection: settings.settingsSection === 'general' || settings.settingsSection === 'appearance' || settings.settingsSection === 'backup' || settings.settingsSection === 'help'
-      ? settings.settingsSection
-      : defaultSettings.settingsSection,
-    rootFolderId: typeof settings.rootFolderId === 'string' ? settings.rootFolderId : defaultSettings.rootFolderId,
+      ? settings.themeMode : defaultSettings.themeMode,
     rememberLastFolder: typeof settings.rememberLastFolder === 'boolean' ? settings.rememberLastFolder : defaultSettings.rememberLastFolder,
     openLinksInNewTab: typeof settings.openLinksInNewTab === 'boolean' ? settings.openLinksInNewTab : defaultSettings.openLinksInNewTab,
     showDock: typeof settings.showDock === 'boolean' ? settings.showDock : defaultSettings.showDock,
     autoHideDock: typeof settings.autoHideDock === 'boolean' ? settings.autoHideDock : defaultSettings.autoHideDock,
     dockFolderId: typeof settings.dockFolderId === 'string' ? settings.dockFolderId : defaultSettings.dockFolderId,
     bookmarkSortMode: settings.bookmarkSortMode === 'manual' || settings.bookmarkSortMode === 'name' || settings.bookmarkSortMode === 'lastUsed' || settings.bookmarkSortMode === 'created'
-      ? settings.bookmarkSortMode
-      : defaultSettings.bookmarkSortMode,
+      ? settings.bookmarkSortMode : defaultSettings.bookmarkSortMode,
     bookmarkSortDirection: settings.bookmarkSortDirection === 'asc' || settings.bookmarkSortDirection === 'desc'
-      ? settings.bookmarkSortDirection
-      : defaultSettings.bookmarkSortDirection,
+      ? settings.bookmarkSortDirection : defaultSettings.bookmarkSortDirection,
     searchScope: settings.searchScope === 'folder' || settings.searchScope === 'library'
-      ? settings.searchScope
-      : defaultSettings.searchScope,
-    favoritesColumns: normalizeNumber(settings.favoritesColumns, defaultSettings.favoritesColumns, 3, 12),
-    favoritesRows: normalizeNumber(settings.favoritesRows, defaultSettings.favoritesRows, 0, 8),
-    favoritesColumnGap: normalizeNumber(settings.favoritesColumnGap, defaultSettings.favoritesColumnGap, 0, 48),
-    favoritesRowGap: normalizeNumber(settings.favoritesRowGap, defaultSettings.favoritesRowGap, 0, 48),
-    bookmarkTileWidth: normalizeNumber(settings.bookmarkTileWidth, defaultSettings.bookmarkTileWidth, 88, 180),
-    bookmarkIconSize: normalizeNumber(settings.bookmarkIconSize, defaultSettings.bookmarkIconSize, 40, 112),
-    showBookmarkIconBackground: typeof settings.showBookmarkIconBackground === 'boolean'
-      ? settings.showBookmarkIconBackground
-      : defaultSettings.showBookmarkIconBackground,
-    showAccentBackground: typeof settings.showAccentBackground === 'boolean'
-      ? settings.showAccentBackground
-      : defaultSettings.showAccentBackground,
-    layoutPreset: settings.layoutPreset === 'balanced' || settings.layoutPreset === 'compact' || settings.layoutPreset === 'spacious' || settings.layoutPreset === 'presentation' || settings.layoutPreset === 'custom'
-      ? settings.layoutPreset
-      : defaultSettings.layoutPreset,
+      ? settings.searchScope : defaultSettings.searchScope,
     showClock: typeof settings.showClock === 'boolean' ? settings.showClock : defaultSettings.showClock,
     clockStyle: (['minimal', 'standard', 'full', 'compact'] as const).includes(settings.clockStyle as ClockStyle)
-      ? (settings.clockStyle as ClockStyle)
-      : defaultSettings.clockStyle,
+      ? (settings.clockStyle as ClockStyle) : defaultSettings.clockStyle,
     clockPosition: (['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'] as const).includes(settings.clockPosition as ClockPosition)
-      ? (settings.clockPosition as ClockPosition)
-      : defaultSettings.clockPosition,
+      ? (settings.clockPosition as ClockPosition) : defaultSettings.clockPosition,
     clockSize: (['small', 'medium', 'large', 'x-large'] as const).includes(settings.clockSize as ClockSize)
-      ? (settings.clockSize as ClockSize)
-      : defaultSettings.clockSize,
+      ? (settings.clockSize as ClockSize) : defaultSettings.clockSize,
     clockHourFormat: settings.clockHourFormat === '12' || settings.clockHourFormat === '24'
-      ? settings.clockHourFormat
-      : defaultSettings.clockHourFormat,
+      ? settings.clockHourFormat : defaultSettings.clockHourFormat,
     showSearchBar: typeof settings.showSearchBar === 'boolean' ? settings.showSearchBar : defaultSettings.showSearchBar,
     searchBarPosition: settings.searchBarPosition === 'left' || settings.searchBarPosition === 'center' || settings.searchBarPosition === 'right'
-      ? (settings.searchBarPosition as SearchBarPosition)
-      : defaultSettings.searchBarPosition,
+      ? (settings.searchBarPosition as SearchBarPosition) : defaultSettings.searchBarPosition,
     folderMode: settings.folderMode === 'tiles' || settings.folderMode === 'sections'
-      ? settings.folderMode
-      : defaultSettings.folderMode,
+      ? settings.folderMode : defaultSettings.folderMode,
     folderOpenMode: settings.folderOpenMode === 'overlay' || settings.folderOpenMode === 'page'
-      ? settings.folderOpenMode
-      : defaultSettings.folderOpenMode,
-    tileShape: settings.tileShape === 'squircle' || settings.tileShape === 'rounded' || settings.tileShape === 'circle'
-      ? settings.tileShape
-      : defaultSettings.tileShape,
-    showTileLabels: typeof settings.showTileLabels === 'boolean' ? settings.showTileLabels : defaultSettings.showTileLabels,
-    backgroundMode: settings.backgroundMode === 'solid' || settings.backgroundMode === 'gradient' || settings.backgroundMode === 'wallpaper'
-      ? settings.backgroundMode
-      : defaultSettings.backgroundMode,
-    gradientStyle: settings.gradientStyle === 'top' || settings.gradientStyle === 'top-bottom' || settings.gradientStyle === 'bottom'
-        || settings.gradientStyle === 'aurora' || settings.gradientStyle === 'mesh' || settings.gradientStyle === 'vignette'
-      ? settings.gradientStyle
-      : defaultSettings.gradientStyle,
+      ? settings.folderOpenMode : defaultSettings.folderOpenMode,
+    settingsSection: settings.settingsSection === 'general' || settings.settingsSection === 'appearance' || settings.settingsSection === 'backup' || settings.settingsSection === 'help'
+      ? settings.settingsSection : defaultSettings.settingsSection,
   };
 }
 
-function normalizeHexOrEmpty(value: unknown, fallback: string): string {
-  if (typeof value !== 'string' || value === '') return '';
-  return /^#[0-9a-fA-F]{6}$/.test(value) ? value.toUpperCase() : fallback;
-}
-
-function normalizeNumber(value: unknown, fallback: number, min: number, max: number): number {
-  const parsed = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(parsed)) {
-    return fallback;
-  }
-
-  return Math.min(max, Math.max(min, Math.round(parsed)));
-}
 
 export async function readIconCacheRecords(): Promise<Record<string, IconCacheRecord>> {
   return iconCacheStore.readAll();
@@ -326,6 +245,34 @@ export async function writeBookmarkUsageRecord(record: BookmarkUsageRecord): Pro
 
 export async function deleteBookmarkUsageRecord(bookmarkId: string): Promise<void> {
   await bookmarkUsageStore.deleteOne(bookmarkId);
+}
+
+export async function readWorkspaces(): Promise<WorkspaceRecord[]> {
+  const all = await workspacesStore.readAll();
+  return Object.values(all);
+}
+
+export async function writeWorkspace(record: WorkspaceRecord): Promise<void> {
+  await workspacesStore.writeOne(record.id, record);
+}
+
+export async function deleteWorkspace(id: string): Promise<void> {
+  await workspacesStore.deleteOne(id);
+}
+
+export async function readWorkspaceWallpaper(workspaceId: string): Promise<string> {
+  const key = workspaceWallpaperKey(workspaceId);
+  const area = extensionApi.storage?.local;
+  if (!area?.get) return '';
+  const result = await area.get(key) as Record<string, unknown>;
+  return typeof result[key] === 'string' ? result[key] as string : '';
+}
+
+export async function writeWorkspaceWallpaper(workspaceId: string, dataUrl: string): Promise<void> {
+  const key = workspaceWallpaperKey(workspaceId);
+  const area = extensionApi.storage?.local;
+  if (!area?.set) return;
+  await area.set({ [key]: dataUrl });
 }
 
 export async function readOnboardingState(): Promise<OnboardingState> {
@@ -445,4 +392,78 @@ function normalizeNullableTimestamp(value: unknown, fallback: number): number | 
   }
 
   return normalizeNonNegativeTimestamp(value, fallback);
+}
+
+export async function migrateToWorkspaces(): Promise<{ workspaceId: string } | null> {
+  // Already migrated if workspacesStore has records
+  const existing = await workspacesStore.readAll();
+  if (Object.keys(existing).length > 0) return null;
+
+  // Read raw settings from storage to get old per-workspace fields before they're stripped
+  const syncArea = extensionApi.storage?.sync;
+  const localArea = extensionApi.storage?.local;
+  if (!syncArea?.get || !localArea?.get) return null;
+
+  const [syncRaw, localRaw] = await Promise.all([
+    syncArea.get('app-settings'),
+    localArea.get(['app-settings', 'app-wallpaper']),
+  ]) as [Record<string, unknown>, Record<string, unknown>];
+
+  const raw = (syncRaw['app-settings'] ?? localRaw['app-settings'] ?? {}) as Record<string, unknown>;
+  const wallpaper = typeof localRaw['app-wallpaper'] === 'string' ? localRaw['app-wallpaper'] as string : '';
+
+  const id = crypto.randomUUID();
+
+  const record: WorkspaceRecord = {
+    id,
+    name: 'My workspace',
+    rootFolderId: typeof raw['rootFolderId'] === 'string' ? raw['rootFolderId'] as string : '',
+    accentColor: /^#[0-9a-fA-F]{6}$/.test(String(raw['accentColor'] ?? ''))
+      ? String(raw['accentColor']).toUpperCase()
+      : defaultWorkspaceSettings.accentColor,
+    backgroundMode: (['solid', 'gradient', 'wallpaper'] as const).includes(raw['backgroundMode'] as WorkspaceRecord['backgroundMode'])
+      ? raw['backgroundMode'] as WorkspaceRecord['backgroundMode']
+      : defaultWorkspaceSettings.backgroundMode,
+    solidBackgroundColor: typeof raw['solidBackgroundColor'] === 'string' ? raw['solidBackgroundColor'] as string : defaultWorkspaceSettings.solidBackgroundColor,
+    gradientStyle: (['top', 'top-bottom', 'bottom', 'aurora', 'mesh', 'vignette'] as const).includes(raw['gradientStyle'] as WorkspaceRecord['gradientStyle'])
+      ? raw['gradientStyle'] as WorkspaceRecord['gradientStyle']
+      : defaultWorkspaceSettings.gradientStyle,
+    gradientColorSource: raw['gradientColorSource'] === 'accent' || raw['gradientColorSource'] === 'custom'
+      ? raw['gradientColorSource'] as WorkspaceRecord['gradientColorSource']
+      : defaultWorkspaceSettings.gradientColorSource,
+    gradientCustomColor: /^#[0-9a-fA-F]{6}$/.test(String(raw['gradientCustomColor'] ?? ''))
+      ? String(raw['gradientCustomColor']).toUpperCase()
+      : defaultWorkspaceSettings.gradientCustomColor,
+    gradientIntensity: typeof raw['gradientIntensity'] === 'number' ? raw['gradientIntensity'] as number : defaultWorkspaceSettings.gradientIntensity,
+    backgroundOpacity: typeof raw['backgroundOpacity'] === 'number' ? raw['backgroundOpacity'] as number : defaultWorkspaceSettings.backgroundOpacity,
+    backgroundFitMode: (['cover', 'contain', 'fill'] as const).includes(raw['backgroundFitMode'] as WorkspaceRecord['backgroundFitMode'])
+      ? raw['backgroundFitMode'] as WorkspaceRecord['backgroundFitMode']
+      : defaultWorkspaceSettings.backgroundFitMode,
+    backgroundPositionMode: (['center', 'top', 'bottom'] as const).includes(raw['backgroundPositionMode'] as WorkspaceRecord['backgroundPositionMode'])
+      ? raw['backgroundPositionMode'] as WorkspaceRecord['backgroundPositionMode']
+      : defaultWorkspaceSettings.backgroundPositionMode,
+    layoutPreset: (['balanced', 'compact', 'spacious', 'presentation', 'custom'] as const).includes(raw['layoutPreset'] as WorkspaceRecord['layoutPreset'])
+      ? raw['layoutPreset'] as WorkspaceRecord['layoutPreset']
+      : defaultWorkspaceSettings.layoutPreset,
+    favoritesColumns: typeof raw['favoritesColumns'] === 'number' ? raw['favoritesColumns'] as number : defaultWorkspaceSettings.favoritesColumns,
+    favoritesRows: typeof raw['favoritesRows'] === 'number' ? raw['favoritesRows'] as number : defaultWorkspaceSettings.favoritesRows,
+    favoritesColumnGap: typeof raw['favoritesColumnGap'] === 'number' ? raw['favoritesColumnGap'] as number : defaultWorkspaceSettings.favoritesColumnGap,
+    favoritesRowGap: typeof raw['favoritesRowGap'] === 'number' ? raw['favoritesRowGap'] as number : defaultWorkspaceSettings.favoritesRowGap,
+    bookmarkTileWidth: typeof raw['bookmarkTileWidth'] === 'number' ? raw['bookmarkTileWidth'] as number : defaultWorkspaceSettings.bookmarkTileWidth,
+    bookmarkIconSize: typeof raw['bookmarkIconSize'] === 'number' ? raw['bookmarkIconSize'] as number : defaultWorkspaceSettings.bookmarkIconSize,
+    tileShape: (['squircle', 'rounded', 'circle'] as const).includes(raw['tileShape'] as WorkspaceRecord['tileShape'])
+      ? raw['tileShape'] as WorkspaceRecord['tileShape']
+      : defaultWorkspaceSettings.tileShape,
+    showBookmarkIconBackground: typeof raw['showBookmarkIconBackground'] === 'boolean' ? raw['showBookmarkIconBackground'] as boolean : defaultWorkspaceSettings.showBookmarkIconBackground,
+    showAccentBackground: typeof raw['showAccentBackground'] === 'boolean' ? raw['showAccentBackground'] as boolean : defaultWorkspaceSettings.showAccentBackground,
+    showTileLabels: typeof raw['showTileLabels'] === 'boolean' ? raw['showTileLabels'] as boolean : defaultWorkspaceSettings.showTileLabels,
+  };
+
+  await writeWorkspace(record);
+  if (wallpaper) {
+    await writeWorkspaceWallpaper(id, wallpaper);
+  }
+  await writeSettings({ activeWorkspaceId: id });
+
+  return { workspaceId: id };
 }
