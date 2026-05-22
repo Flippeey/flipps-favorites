@@ -3,7 +3,8 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 export type DropTarget =
   | { kind: 'reorder'; parentId: string; index: number }
   | { kind: 'folder'; folderId: string }
-  | { kind: 'dock' };
+  | { kind: 'dock' }
+  | { kind: 'workspace'; workspaceId: string };
 
 interface UseDragArgs {
   surface: HTMLElement | null;
@@ -40,6 +41,9 @@ function clearDropAttrs({ includeSource }: { includeSource: boolean }): void {
   });
   document.querySelectorAll<HTMLElement>('.ff-folder-overlay[data-drop-target]').forEach(el => {
     delete el.dataset.dropTarget;
+  });
+  document.querySelectorAll<HTMLElement>('[data-workspace-id][data-drop-hover]').forEach(el => {
+    delete el.dataset.dropHover;
   });
 }
 
@@ -182,6 +186,17 @@ export function useDrag({
         }
         drag.dropTarget = null;
         return;
+      }
+
+      // Workspace tab drop target
+      const wsTabEl = elementUnder?.closest<HTMLElement>('[data-workspace-id]');
+      if (wsTabEl) {
+        const workspaceId = wsTabEl.dataset.workspaceId ?? '';
+        if (workspaceId) {
+          wsTabEl.dataset.dropHover = 'true';
+          drag.dropTarget = { kind: 'workspace', workspaceId };
+          return;
+        }
       }
 
       let hoverTile = elementUnder?.closest<HTMLElement>('[data-item-id]') ?? null;

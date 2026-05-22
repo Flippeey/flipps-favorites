@@ -90,6 +90,8 @@ export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
                 className={`ff-ws-tab${ws.id === activeWorkspaceId ? ' is-active' : ''}`}
                 onClick={() => onSwitchWorkspace(ws.id)}
                 onContextMenu={e => { e.preventDefault(); onWorkspaceContextMenu(ws.id, e.clientX, e.clientY); }}
+                data-drop-target="workspace"
+                data-workspace-id={ws.id}
               >
                 <span className="ff-ws-tab__dot" style={{ background: ws.accentColor }} />
                 <span className="ff-ws-tab__name">{ws.name}</span>

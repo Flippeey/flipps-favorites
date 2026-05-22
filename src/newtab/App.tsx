@@ -384,6 +384,12 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
         for (const id of dragIds) {
           await moveBookmark(id, dockFolderId);
         }
+      } else if (target.kind === 'workspace') {
+        const ws = workspaces.find(w => w.id === target.workspaceId);
+        if (!ws) return;
+        for (const id of dragIds) {
+          await moveBookmark(id, ws.rootFolderId);
+        }
       } else {
         // reorder — preserve drag-source order, increment index as we go for items moving forward in same parent
         let idx = target.index;
@@ -393,12 +399,12 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
         }
       }
       // Drop selection scope if target moved away
-      const moveTargetScope = target.kind === 'folder' ? target.folderId : target.kind === 'dock' ? (settings.dockFolderId || rootFolder?.id || '') : target.parentId;
+      const moveTargetScope = target.kind === 'folder' ? target.folderId : target.kind === 'dock' ? (settings.dockFolderId || rootFolder?.id || '') : target.kind === 'workspace' ? (workspaces.find(w => w.id === target.workspaceId)?.rootFolderId ?? '') : target.parentId;
       setSelection({ ids: new Set(dragIds), scopeFolderId: moveTargetScope });
     } finally {
       await refreshTree();
     }
-  }, [refreshTree, rootFolder, settings.dockFolderId]);
+  }, [refreshTree, rootFolder, settings.dockFolderId, workspaces]);
 
   const dragEnabled = settings.bookmarkSortMode === 'manual';
 
