@@ -23,6 +23,11 @@ import {
 } from '../lib/workspace-transfer';
 import { defaultWorkspaceSettings } from '../../shared/storage';
 import { useBlobUrl } from '../lib/useBlobUrl';
+
+const FALLBACK_WORKSPACE: WorkspaceRecord = {
+  id: '', name: '', rootFolderId: '',
+  ...defaultWorkspaceSettings,
+};
 import { Ico } from './Ico';
 
 export const ACCENT_PRESETS: { id: string; label: string; value: string }[] = [
@@ -396,7 +401,7 @@ interface AppearanceSectionProps {
 }
 
 function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSetWallpaper, settings, onPatchGlobal }: AppearanceSectionProps) {
-  const ws = workspace ?? (defaultWorkspaceSettings as WorkspaceRecord);
+  const ws = workspace ?? FALLBACK_WORKSPACE;
   return (
     <>
       <div className="ff-set-section">
@@ -561,7 +566,7 @@ function BgColorPicker({ chips, customActive, customColor, onCustomColorChange }
 }
 
 function SolidPanel({ workspace, onPatch }: WorkspaceSectionProps) {
-  const ws = workspace ?? (defaultWorkspaceSettings as WorkspaceRecord);
+  const ws = workspace ?? FALLBACK_WORKSPACE;
   const currentHex = ws.solidBackgroundColor.toUpperCase();
   const isTheme = currentHex === '';
   const matchingPreset = SOLID_PRESETS.find(p => p.value.toUpperCase() === currentHex);
@@ -625,7 +630,7 @@ function gradientPreviewBg(style: GradientStyle, color: string, intensity: numbe
 }
 
 function GradientPanel({ workspace, onPatch }: WorkspaceSectionProps) {
-  const ws = workspace ?? (defaultWorkspaceSettings as WorkspaceRecord);
+  const ws = workspace ?? FALLBACK_WORKSPACE;
   const isAccent = ws.gradientColorSource === 'accent';
   const currentHex = ws.gradientCustomColor.toUpperCase();
   const matchingPreset = !isAccent && GRADIENT_PRESETS.find(p => p.value.toUpperCase() === currentHex);
@@ -756,7 +761,7 @@ interface WallpaperPickerProps {
 
 function WallpaperPicker({ wallpaper, onSetWallpaper, workspace, onPatch }: WallpaperPickerProps) {
   const previewUrl = useBlobUrl(wallpaper);
-  const ws = workspace ?? (defaultWorkspaceSettings as WorkspaceRecord);
+  const ws = workspace ?? FALLBACK_WORKSPACE;
   return (
     <>
       <div className="ff-card" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12 }}>
@@ -876,7 +881,7 @@ function CustomLayoutPreview({ active }: { active?: boolean }) {
 }
 
 function LayoutSection({ workspace, onPatch }: WorkspaceSectionProps) {
-  const ws = workspace ?? (defaultWorkspaceSettings as WorkspaceRecord);
+  const ws = workspace ?? FALLBACK_WORKSPACE;
   const isCustom = ws.layoutPreset === 'custom';
   return (
     <div className="ff-set-section">
