@@ -22,6 +22,10 @@ import type {
   MoveBookmarkResponse,
   GetBookmarkUsageResponse,
   RecordBookmarkUseResponse,
+  WorkspaceRecord,
+  GetWorkspacesResponse,
+  CreateWorkspaceResponse,
+  PatchWorkspaceResponse,
 } from '../../shared/messages';
 import { IconFetchError, messageTypes } from '../../shared/messages';
 
@@ -120,4 +124,23 @@ export async function getBookmarkUsage(): Promise<Record<string, number>> {
 export async function recordBookmarkUse(bookmarkId: string): Promise<number> {
   const res = await send<RecordBookmarkUseResponse>({ type: messageTypes.recordBookmarkUse, bookmarkId });
   return res.usedAt;
+}
+
+export async function getWorkspaces(): Promise<WorkspaceRecord[]> {
+  const res = await send<GetWorkspacesResponse>({ type: messageTypes.getWorkspaces });
+  return res.workspaces;
+}
+
+export async function createWorkspace(workspace: WorkspaceRecord): Promise<WorkspaceRecord> {
+  const res = await send<CreateWorkspaceResponse>({ type: messageTypes.createWorkspace, workspace });
+  return res.workspace;
+}
+
+export async function patchWorkspace(id: string, patch: Partial<WorkspaceRecord>): Promise<WorkspaceRecord> {
+  const res = await send<PatchWorkspaceResponse>({ type: messageTypes.patchWorkspace, id, patch });
+  return res.workspace;
+}
+
+export async function deleteWorkspace(id: string): Promise<void> {
+  await send<{ ok: true }>({ type: messageTypes.deleteWorkspace, id });
 }
