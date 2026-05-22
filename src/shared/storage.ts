@@ -260,6 +260,7 @@ export async function deleteWorkspace(id: string): Promise<void> {
   await workspacesStore.deleteOne(id);
 }
 
+// Wallpapers are data URLs too large to cache in memory — bypass CachedValueStore intentionally.
 export async function readWorkspaceWallpaper(workspaceId: string): Promise<string> {
   const key = workspaceWallpaperKey(workspaceId);
   const area = extensionApi.storage?.local;
@@ -434,8 +435,8 @@ export async function migrateToWorkspaces(): Promise<{ workspaceId: string } | n
     gradientCustomColor: /^#[0-9a-fA-F]{6}$/.test(String(raw['gradientCustomColor'] ?? ''))
       ? String(raw['gradientCustomColor']).toUpperCase()
       : defaultWorkspaceSettings.gradientCustomColor,
-    gradientIntensity: typeof raw['gradientIntensity'] === 'number' ? raw['gradientIntensity'] as number : defaultWorkspaceSettings.gradientIntensity,
-    backgroundOpacity: typeof raw['backgroundOpacity'] === 'number' ? raw['backgroundOpacity'] as number : defaultWorkspaceSettings.backgroundOpacity,
+    gradientIntensity: typeof raw['gradientIntensity'] === 'number' && Number.isFinite(raw['gradientIntensity'] as number) ? raw['gradientIntensity'] as number : defaultWorkspaceSettings.gradientIntensity,
+    backgroundOpacity: typeof raw['backgroundOpacity'] === 'number' && Number.isFinite(raw['backgroundOpacity'] as number) ? raw['backgroundOpacity'] as number : defaultWorkspaceSettings.backgroundOpacity,
     backgroundFitMode: (['cover', 'contain', 'fill'] as const).includes(raw['backgroundFitMode'] as WorkspaceRecord['backgroundFitMode'])
       ? raw['backgroundFitMode'] as WorkspaceRecord['backgroundFitMode']
       : defaultWorkspaceSettings.backgroundFitMode,
@@ -445,12 +446,12 @@ export async function migrateToWorkspaces(): Promise<{ workspaceId: string } | n
     layoutPreset: (['balanced', 'compact', 'spacious', 'presentation', 'custom'] as const).includes(raw['layoutPreset'] as WorkspaceRecord['layoutPreset'])
       ? raw['layoutPreset'] as WorkspaceRecord['layoutPreset']
       : defaultWorkspaceSettings.layoutPreset,
-    favoritesColumns: typeof raw['favoritesColumns'] === 'number' ? raw['favoritesColumns'] as number : defaultWorkspaceSettings.favoritesColumns,
-    favoritesRows: typeof raw['favoritesRows'] === 'number' ? raw['favoritesRows'] as number : defaultWorkspaceSettings.favoritesRows,
-    favoritesColumnGap: typeof raw['favoritesColumnGap'] === 'number' ? raw['favoritesColumnGap'] as number : defaultWorkspaceSettings.favoritesColumnGap,
-    favoritesRowGap: typeof raw['favoritesRowGap'] === 'number' ? raw['favoritesRowGap'] as number : defaultWorkspaceSettings.favoritesRowGap,
-    bookmarkTileWidth: typeof raw['bookmarkTileWidth'] === 'number' ? raw['bookmarkTileWidth'] as number : defaultWorkspaceSettings.bookmarkTileWidth,
-    bookmarkIconSize: typeof raw['bookmarkIconSize'] === 'number' ? raw['bookmarkIconSize'] as number : defaultWorkspaceSettings.bookmarkIconSize,
+    favoritesColumns: typeof raw['favoritesColumns'] === 'number' && Number.isFinite(raw['favoritesColumns'] as number) ? raw['favoritesColumns'] as number : defaultWorkspaceSettings.favoritesColumns,
+    favoritesRows: typeof raw['favoritesRows'] === 'number' && Number.isFinite(raw['favoritesRows'] as number) ? raw['favoritesRows'] as number : defaultWorkspaceSettings.favoritesRows,
+    favoritesColumnGap: typeof raw['favoritesColumnGap'] === 'number' && Number.isFinite(raw['favoritesColumnGap'] as number) ? raw['favoritesColumnGap'] as number : defaultWorkspaceSettings.favoritesColumnGap,
+    favoritesRowGap: typeof raw['favoritesRowGap'] === 'number' && Number.isFinite(raw['favoritesRowGap'] as number) ? raw['favoritesRowGap'] as number : defaultWorkspaceSettings.favoritesRowGap,
+    bookmarkTileWidth: typeof raw['bookmarkTileWidth'] === 'number' && Number.isFinite(raw['bookmarkTileWidth'] as number) ? raw['bookmarkTileWidth'] as number : defaultWorkspaceSettings.bookmarkTileWidth,
+    bookmarkIconSize: typeof raw['bookmarkIconSize'] === 'number' && Number.isFinite(raw['bookmarkIconSize'] as number) ? raw['bookmarkIconSize'] as number : defaultWorkspaceSettings.bookmarkIconSize,
     tileShape: (['squircle', 'rounded', 'circle'] as const).includes(raw['tileShape'] as WorkspaceRecord['tileShape'])
       ? raw['tileShape'] as WorkspaceRecord['tileShape']
       : defaultWorkspaceSettings.tileShape,
@@ -459,11 +460,16 @@ export async function migrateToWorkspaces(): Promise<{ workspaceId: string } | n
     showTileLabels: typeof raw['showTileLabels'] === 'boolean' ? raw['showTileLabels'] as boolean : defaultWorkspaceSettings.showTileLabels,
   };
 
-  await writeWorkspace(record);
-  if (wallpaper) {
-    await writeWorkspaceWallpaper(id, wallpaper);
+  try {
+    if (wallpaper) {
+      await writeWorkspaceWallpaper(id, wallpaper);
+    }
+    await writeSettings({ activeWorkspaceId: id });
+    await writeWorkspace(record); // write last — this is the idempotency sentinel
+  } catch (error) {
+    console.warn('Failed to migrate settings to workspaces.', error);
+    return null;
   }
-  await writeSettings({ activeWorkspaceId: id });
 
   return { workspaceId: id };
 }
