@@ -387,6 +387,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       } else if (target.kind === 'workspace') {
         const ws = workspaces.find(w => w.id === target.workspaceId);
         if (!ws) return;
+        if (ws.rootFolderId === rootFolder?.id) return;
         for (const id of dragIds) {
           await moveBookmark(id, ws.rootFolderId);
         }
