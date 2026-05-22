@@ -19,7 +19,7 @@ import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
 import { getBookmarkTree, getBookmarkUsage, getSettings, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark, createWorkspace, patchWorkspace, deleteWorkspace } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
 import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
-import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper } from '../shared/storage';
+import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper, writeWorkspaceWallpaper } from '../shared/storage';
 
 interface AppProps {
   initialSettings: AppSettings;
@@ -137,6 +137,16 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     try {
       const next = await patchWorkspace(activeWorkspace.id, patch);
       setWorkspaces(prev => prev.map(w => w.id === next.id ? next : w));
+    } catch {
+      // keep optimistic value
+    }
+  }, [activeWorkspace]);
+
+  const handleSetWorkspaceWallpaper = useCallback(async (dataUrl: string) => {
+    if (!activeWorkspace) return;
+    setWorkspaceWallpaper(dataUrl);
+    try {
+      await writeWorkspaceWallpaper(activeWorkspace.id, dataUrl);
     } catch {
       // keep optimistic value
     }
@@ -656,8 +666,12 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       {settingsOpen && (
         <SettingsDrawer
           settings={settings}
+          activeWorkspace={activeWorkspace}
+          workspaceWallpaper={workspaceWallpaper}
+          onPatchGlobal={handlePatch}
+          onPatchWorkspace={handlePatchWorkspace}
+          onSetWorkspaceWallpaper={handleSetWorkspaceWallpaper}
           tree={tree}
-          onPatch={handlePatch}
           onClose={() => setSettingsOpen(false)}
           onAfterImport={(next) => { setSettings(next); refreshTree(); }}
         />
