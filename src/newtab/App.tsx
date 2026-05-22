@@ -168,6 +168,30 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     if (nextActiveId) await handlePatch({ activeWorkspaceId: nextActiveId });
   }, [workspaces, settings.activeWorkspaceId, handlePatch]);
 
+  const handleAddWorkspace = useCallback(() => {
+    // Task 10: open NewWorkspaceDialog
+  }, []);
+
+  const handleWorkspaceContextMenu = useCallback((id: string, x: number, y: number) => {
+    const ws = workspaces.find(w => w.id === id);
+    if (!ws) return;
+    setContextMenu({
+      x, y,
+      items: [
+        { kind: 'item', icon: 'pencil', label: 'Rename', onClick: () => { /* TODO Task 10 */ } },
+        { kind: 'item', icon: 'settings', label: 'Appearance', onClick: () => {
+          void handlePatch({ settingsSection: 'appearance' });
+          setSettingsOpen(true);
+        }},
+        ...(workspaces.length > 1 ? [{
+          kind: 'item' as const, icon: 'trash', label: 'Delete workspace',
+          destructive: true,
+          onClick: () => void handleDeleteWorkspace(id),
+        }] : []),
+      ],
+    });
+  }, [workspaces, handlePatch, handleDeleteWorkspace]);
+
   const refreshTree = useCallback(async () => {
     try {
       const t = await getBookmarkTree();
@@ -469,7 +493,12 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       )}
       <header>
         <TopNav
-          rootTitle={rootFolder?.title ?? 'My bookmarks'}
+          workspaces={workspaces}
+          activeWorkspaceId={settings.activeWorkspaceId}
+          onSwitchWorkspace={handleSwitchWorkspace}
+          onWorkspaceContextMenu={handleWorkspaceContextMenu}
+          onAddWorkspace={handleAddWorkspace}
+          onAddFolder={handleNewFolder}
           path={folderPath}
           onCrumb={handleGoToCrumb}
           sortValue={sortChoice}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BookmarkNode, BookmarkSortMode, SortDirection } from '../../shared/messages';
+import type { BookmarkNode, BookmarkSortMode, SortDirection, WorkspaceRecord } from '../../shared/messages';
 import { Ico } from './Ico';
 
 export interface SortChoice {
@@ -19,7 +19,12 @@ export const SORT_OPTIONS: SortChoice[] = [
 ];
 
 interface TopNavProps {
-  rootTitle: string;
+  workspaces: WorkspaceRecord[];
+  activeWorkspaceId: string;
+  onSwitchWorkspace: (id: string) => void;
+  onWorkspaceContextMenu: (id: string, x: number, y: number) => void;
+  onAddWorkspace: () => void;
+  onAddFolder: () => void;
   path: BookmarkNode[];
   onCrumb: (index: number) => void;
   sortValue: string;
@@ -28,10 +33,12 @@ interface TopNavProps {
   onAddBookmark: () => void;
 }
 
-export function TopNav({ rootTitle, path, onCrumb, sortValue, onSort, onOpenSettings, onAddBookmark }: TopNavProps) {
+export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onAddWorkspace, onAddFolder, path, onCrumb, sortValue, onSort, onOpenSettings, onAddBookmark }: TopNavProps) {
   const [scrolled, setScrolled] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const sortRef = useRef<HTMLDivElement>(null);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const addRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -53,32 +60,59 @@ export function TopNav({ rootTitle, path, onCrumb, sortValue, onSort, onOpenSett
     };
   }, [sortOpen]);
 
-  const atRoot = path.length === 0;
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (addRef.current && !addRef.current.contains(e.target as Node)) setAddMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setAddMenuOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [addMenuOpen]);
+
   const sortLabel = SORT_OPTIONS.find(o => o.value === sortValue)?.label ?? 'Manual';
 
   return (
     <nav className={`ff-nav ${scrolled ? 'is-scrolled' : ''}`} aria-label="Workspace">
       <div className="ff-nav__left" aria-hidden="true" />
       <div className="ff-nav__center">
-        <div className="ff-crumb">
-          {atRoot ? (
-            <span className="ff-crumb__here">{rootTitle}</span>
-          ) : (
-            <>
-              <button className="ff-crumb__btn" onClick={() => onCrumb(0)}>{rootTitle}</button>
-              {path.map((f, i) => (
-                <span key={f.id} className="ff-crumb-segment">
-                  <Ico name="chevronRight" size={11} className="ff-crumb__sep" />
-                  {i === path.length - 1 ? (
-                    <span className="ff-crumb__here">{f.title}</span>
-                  ) : (
-                    <button className="ff-crumb__btn" onClick={() => onCrumb(i + 1)}>{f.title}</button>
-                  )}
-                </span>
-              ))}
-            </>
-          )}
-        </div>
+        {path.length === 0 ? (
+          <div className="ff-ws-tabs" role="tablist">
+            {workspaces.map(ws => (
+              <button
+                key={ws.id}
+                role="tab"
+                aria-selected={ws.id === activeWorkspaceId}
+                className={`ff-ws-tab${ws.id === activeWorkspaceId ? ' is-active' : ''}`}
+                onClick={() => onSwitchWorkspace(ws.id)}
+                onContextMenu={e => { e.preventDefault(); onWorkspaceContextMenu(ws.id, e.clientX, e.clientY); }}
+              >
+                <span className="ff-ws-tab__dot" style={{ background: ws.accentColor }} />
+                <span className="ff-ws-tab__name">{ws.name}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="ff-crumb">
+            <button className="ff-crumb__btn" onClick={() => onSwitchWorkspace(activeWorkspaceId)}>
+              {workspaces.find(w => w.id === activeWorkspaceId)?.name ?? ''}
+            </button>
+            {path.map((f, i) => (
+              <span key={f.id} className="ff-crumb-segment">
+                <Ico name="chevronRight" size={11} className="ff-crumb__sep" />
+                {i === path.length - 1 ? (
+                  <span className="ff-crumb__here">{f.title}</span>
+                ) : (
+                  <button className="ff-crumb__btn" onClick={() => onCrumb(i + 1)}>{f.title}</button>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       <div className="ff-nav__right">
         <div className="ff-sort" ref={sortRef}>
@@ -110,9 +144,45 @@ export function TopNav({ rootTitle, path, onCrumb, sortValue, onSort, onOpenSett
             </ul>
           )}
         </div>
-        <button className="ff-iconbtn ff-iconbtn--icon" aria-label="Add bookmark" onClick={onAddBookmark}>
-          <Ico name="plus" size={16} />
-        </button>
+        <div className="ff-add-menu" ref={addRef}>
+          <button
+            className="ff-iconbtn ff-iconbtn--icon"
+            aria-label="Add"
+            aria-haspopup="menu"
+            aria-expanded={addMenuOpen}
+            onClick={() => setAddMenuOpen(o => !o)}
+          >
+            <Ico name="plus" size={16} />
+          </button>
+          {addMenuOpen && (
+            <ul className="ff-sort__panel" role="menu">
+              <li
+                role="menuitem"
+                className="ff-sort__option"
+                onClick={() => { onAddBookmark(); setAddMenuOpen(false); }}
+              >
+                <Ico name="link" size={14} />
+                <span>Add bookmark</span>
+              </li>
+              <li
+                role="menuitem"
+                className="ff-sort__option"
+                onClick={() => { onAddFolder(); setAddMenuOpen(false); }}
+              >
+                <Ico name="folderPlus" size={14} />
+                <span>Add folder</span>
+              </li>
+              <li
+                role="menuitem"
+                className="ff-sort__option"
+                onClick={() => { onAddWorkspace(); setAddMenuOpen(false); }}
+              >
+                <Ico name="layers" size={14} />
+                <span>New workspace</span>
+              </li>
+            </ul>
+          )}
+        </div>
         <button className="ff-iconbtn" onClick={onOpenSettings} aria-label="Settings">
           <Ico name="settings" size={16} />
           <span>Settings</span>

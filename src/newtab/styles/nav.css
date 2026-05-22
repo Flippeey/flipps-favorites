@@ -138,3 +138,57 @@
 .ff-ctx__icon { display: flex; align-items: center; justify-content: center; color: currentColor; }
 .ff-ctx__label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ff-ctx__kbd { font-family: var(--font-mono); font-size: 11px; color: var(--fg-3); letter-spacing: 0.04em; }
+
+/* Workspace tabs */
+.ff-ws-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ff-ws-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+}
+
+.ff-ws-tab:hover {
+  background: var(--surface-2);
+  color: var(--ink-1);
+}
+
+.ff-ws-tab.is-active {
+  background: var(--surface-2);
+  color: var(--ink-1);
+  font-weight: 600;
+}
+
+.ff-ws-tab__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.ff-ws-tab__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Add menu */
+.ff-add-menu {
+  position: relative;
+}
