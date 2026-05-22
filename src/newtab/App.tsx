@@ -16,7 +16,7 @@ import { SectionsView, TilesView, FolderPageView } from './components/views';
 import { useMarquee, type MarqueeSelection } from './interaction/useMarquee';
 import { useDrag } from './interaction/useDrag';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
-import { getBookmarkTree, getBookmarkUsage, getSettings, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark, getWorkspaces, createWorkspace, patchWorkspace, deleteWorkspace } from './lib/messaging';
+import { getBookmarkTree, getBookmarkUsage, getSettings, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark, createWorkspace, patchWorkspace, deleteWorkspace } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
 import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper } from '../shared/storage';
@@ -157,11 +157,15 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const handleDeleteWorkspace = useCallback(async (id: string) => {
     if (workspaces.length <= 1) return;
     await deleteWorkspace(id);
-    setWorkspaces(prev => prev.filter(w => w.id !== id));
-    if (settings.activeWorkspaceId === id) {
-      const remaining = workspaces.filter(w => w.id !== id);
-      if (remaining[0]) await handlePatch({ activeWorkspaceId: remaining[0].id });
-    }
+    let nextActiveId: string | undefined;
+    setWorkspaces(prev => {
+      const remaining = prev.filter(w => w.id !== id);
+      if (settings.activeWorkspaceId === id && remaining[0]) {
+        nextActiveId = remaining[0].id;
+      }
+      return remaining;
+    });
+    if (nextActiveId) await handlePatch({ activeWorkspaceId: nextActiveId });
   }, [workspaces, settings.activeWorkspaceId, handlePatch]);
 
   const refreshTree = useCallback(async () => {
