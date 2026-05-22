@@ -6,6 +6,7 @@ import { Dock } from './components/Dock';
 import { EditDialog, type EditTarget } from './components/EditDialog';
 import { FolderNameDialog, type FolderNameDialogTarget } from './components/FolderNameDialog';
 import { FolderOverlay } from './components/FolderOverlay';
+import { NewWorkspaceDialog } from './components/NewWorkspaceDialog';
 import { QuickAddDialog } from './components/QuickAddDialog';
 import { buildSearchIndex, ClockGreeting, HeroSearch, type FlatSearchResult } from './components/HeroSearch';
 import { Ico } from './components/Ico';
@@ -65,6 +66,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const [folderNameTarget, setFolderNameTarget] = useState<FolderNameDialogTarget | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [onboardOpen, setOnboardOpen] = useState(initialOnboardOpen ?? false);
+  const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   const [folderPath, setFolderPath] = useState<BookmarkNode[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<BookmarkNode | null>(null);
@@ -183,7 +185,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   }, [workspaces, settings.activeWorkspaceId, handlePatch]);
 
   const handleAddWorkspace = useCallback(() => {
-    // Task 10: open NewWorkspaceDialog
+    setNewWorkspaceOpen(true);
   }, []);
 
   const handleWorkspaceContextMenu = useCallback((id: string, x: number, y: number) => {
@@ -648,6 +650,14 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           target={folderNameTarget}
           onClose={() => setFolderNameTarget(null)}
           onSaved={() => { setFolderNameTarget(null); refreshTree(); }}
+        />
+      )}
+
+      {newWorkspaceOpen && (
+        <NewWorkspaceDialog
+          tree={tree}
+          onConfirm={handleCreateWorkspace}
+          onClose={() => setNewWorkspaceOpen(false)}
         />
       )}
 
