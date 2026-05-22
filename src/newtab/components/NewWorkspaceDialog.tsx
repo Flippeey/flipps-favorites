@@ -6,7 +6,7 @@ import { ModalDialog } from './ModalDialog';
 
 interface NewWorkspaceDialogProps {
   tree: BookmarkNode[];
-  onConfirm: (rootFolderId: string, name: string) => void;
+  onConfirm: (rootFolderId: string, name: string) => Promise<void>;
   onClose: () => void;
 }
 
@@ -15,10 +15,10 @@ export function NewWorkspaceDialog({ tree, onConfirm, onClose }: NewWorkspaceDia
   const [selectedId, setSelectedId] = useState(topLevel[0]?.id ?? '');
   const [name, setName] = useState('');
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!selectedId) return;
     const folder = topLevel.find(f => f.id === selectedId);
-    onConfirm(selectedId, name.trim() || folder?.title || 'Workspace');
+    await onConfirm(selectedId, name.trim() || folder?.title || 'Workspace');
     onClose();
   };
 

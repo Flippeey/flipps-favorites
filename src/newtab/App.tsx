@@ -161,9 +161,13 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       rootFolderId,
       ...defaultWorkspaceSettings,
     };
-    const created = await createWorkspace(workspace);
-    setWorkspaces(prev => [...prev, created]);
-    await handlePatch({ activeWorkspaceId: created.id });
+    try {
+      const created = await createWorkspace(workspace);
+      setWorkspaces(prev => [...prev, created]);
+      await handlePatch({ activeWorkspaceId: created.id });
+    } catch {
+      // creation failed — leave UI unchanged
+    }
   }, [handlePatch]);
 
   const handleDeleteWorkspace = useCallback(async (id: string) => {
@@ -173,14 +177,9 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     } catch {
       return;
     }
-    let nextActiveId: string | undefined;
-    setWorkspaces(prev => {
-      const remaining = prev.filter(w => w.id !== id);
-      if (settings.activeWorkspaceId === id && remaining[0]) {
-        nextActiveId = remaining[0].id;
-      }
-      return remaining;
-    });
+    const remaining = workspaces.filter(w => w.id !== id);
+    const nextActiveId = settings.activeWorkspaceId === id ? remaining[0]?.id : undefined;
+    setWorkspaces(remaining);
     if (nextActiveId) await handlePatch({ activeWorkspaceId: nextActiveId });
   }, [workspaces, settings.activeWorkspaceId, handlePatch]);
 
@@ -194,7 +193,6 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setContextMenu({
       x, y,
       items: [
-        { kind: 'item', icon: 'pencil', label: 'Rename', onClick: () => { /* TODO Task 10 */ } },
         { kind: 'item', icon: 'settings', label: 'Appearance', onClick: () => {
           void handlePatch({ settingsSection: 'appearance' });
           setSettingsOpen(true);

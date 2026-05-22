@@ -26,6 +26,7 @@ import type {
   GetWorkspacesResponse,
   CreateWorkspaceResponse,
   PatchWorkspaceResponse,
+  DeleteWorkspaceResponse,
 } from '../../shared/messages';
 import { IconFetchError, messageTypes } from '../../shared/messages';
 
@@ -142,5 +143,5 @@ export async function patchWorkspace(id: string, patch: Partial<WorkspaceRecord>
 }
 
 export async function deleteWorkspace(id: string): Promise<void> {
-  await send<{ ok: true }>({ type: messageTypes.deleteWorkspace, id });
+  await send<DeleteWorkspaceResponse>({ type: messageTypes.deleteWorkspace, id });
 }
