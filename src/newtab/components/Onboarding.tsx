@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { AppSettings, BookmarkNode, FolderMode, FolderOpenMode, LayoutPresetId, WorkspaceRecord } from '../../shared/messages';
+import { topLevelFolders } from '../lib/tree';
 import { Ico } from './Ico';
 import { ACCENT_PRESETS, FolderPicker, LAYOUT_PRESETS } from './settings';
 
@@ -38,7 +39,7 @@ interface FolderMultiPickerProps {
 }
 
 function FolderMultiPicker({ tree, selectedIds, onToggle }: FolderMultiPickerProps) {
-  const folders = tree.filter(n => n.children !== undefined);
+  const folders = topLevelFolders(tree);
   return (
     <div style={{ display: 'grid', gap: 6 }}>
       {folders.map(f => {
@@ -69,6 +70,7 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
   const [step, setStep] = useState(0);
   const [workspaceMode, setWorkspaceMode] = useState<'single' | 'multiple'>('single');
   const [selectedWorkspaceFolderIds, setSelectedWorkspaceFolderIds] = useState<string[]>([]);
+  const [finishing, setFinishing] = useState(false);
 
   const steps = [
     { title: "Welcome to Flipp's Favorites", desc: "A new-tab dashboard that uses your existing bookmarks. No imports. No accounts. Just a faster way to get where you're going." },
@@ -81,16 +83,23 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
   const s = steps[step];
 
   const handleFinish = async () => {
-    if (workspaceMode === 'multiple' && selectedWorkspaceFolderIds.length > 0) {
-      const folders = tree.filter(n => n.children !== undefined);
-      for (const id of selectedWorkspaceFolderIds) {
-        const folder = folders.find(f => f.id === id);
-        if (folder) {
-          await onCreateWorkspace(id, folder.title);
+    if (finishing) return;
+    setFinishing(true);
+    try {
+      if (workspaceMode === 'multiple' && selectedWorkspaceFolderIds.length > 0) {
+        const folders = topLevelFolders(tree);
+        for (const id of selectedWorkspaceFolderIds) {
+          const folder = folders.find(f => f.id === id);
+          if (folder) {
+            await onCreateWorkspace(id, folder.title);
+          }
         }
       }
+    } catch {
+      // workspace creation failed — proceed to finish anyway
+    } finally {
+      onFinish();
     }
-    onFinish();
   };
 
   return (
@@ -319,7 +328,7 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
                 Next <Ico name="chevronRight" size={14} />
               </button>
             ) : (
-              <button className="ff-btn" onClick={handleFinish}>
+              <button className="ff-btn" onClick={handleFinish} disabled={finishing}>
                 <Ico name="check" size={14} /> Get started
               </button>
             )}
