@@ -156,7 +156,11 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
 
   const handleDeleteWorkspace = useCallback(async (id: string) => {
     if (workspaces.length <= 1) return;
-    await deleteWorkspace(id);
+    try {
+      await deleteWorkspace(id);
+    } catch {
+      return;
+    }
     let nextActiveId: string | undefined;
     setWorkspaces(prev => {
       const remaining = prev.filter(w => w.id !== id);
