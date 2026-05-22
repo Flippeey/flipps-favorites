@@ -18,7 +18,6 @@ import { useDrag } from './interaction/useDrag';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
 import { getBookmarkTree, getBookmarkUsage, getSettings, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
-import { prefetchAllIcons } from './lib/icon-prefetch';
 import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 import { markOnboardingCompleted } from '../shared/storage';
 
@@ -88,10 +87,6 @@ export function App({ initialSettings, initialTree, initialOnboardOpen }: AppPro
     getBookmarkUsage().then(u => { if (!cancelled) setUsage(u); }).catch(() => { /* ignore */ });
     return () => { cancelled = true; };
   }, []);
-
-  useEffect(() => {
-    prefetchAllIcons(tree);
-  }, [tree]);
 
   const handlePatch = useCallback(async (patch: Partial<AppSettings>) => {
     setSettings(prev => ({ ...prev, ...patch }));

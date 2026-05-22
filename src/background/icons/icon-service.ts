@@ -4,7 +4,7 @@ import { extensionApi } from '../../shared/browser';
 import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRecord, readIconCacheRecord, readIconCacheRecords, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideRecord } from '../../shared/storage';
 import { extractBrandInfo } from '../../shared/url-brand';
 
-const iconPipelineVersion = 'bookmark-icons-v6';
+const iconPipelineVersion = 'bookmark-icons-v7';
 const faviconProviderUrl = 'https://www.google.com/s2/favicons';
 const faviconRequestSize = 256;
 const duckDuckGoSearchUrl = 'https://duckduckgo.com/';
@@ -16,11 +16,11 @@ const maxDuckDuckGoResults = 30;
 const ddgPrimaryFilter = '&f=,clipart,Square,Transparent';
 const ddgFallbackFilter = '&f=,,Medium,Square';
 const cacheTtlMs = 30 * 24 * 60 * 60 * 1000; // 30 days
-const autoSourceTimeoutMs = 5000;
-const originFetchTimeoutMs = 3500;
-const iconHorseTimeoutMs = 4000;
-const s2TimeoutMs = 4000;
-const ddgFirstHitTimeoutMs = 6000;
+const autoSourceTimeoutMs = 3000;
+const originFetchTimeoutMs = 2000;
+const iconHorseTimeoutMs = 2500;
+const s2TimeoutMs = 2000;
+const ddgFirstHitTimeoutMs = 4000;
 const sweepBatchSize = 4;
 const sweepBatchSpacingMs = 250;
 const maxConcurrentResolutions = 6;
@@ -222,10 +222,21 @@ async function resolveIcon(request: GetIconRequest, cacheKey: string): Promise<R
 }
 
 async function resolveAutomaticIcon(request: GetIconRequest, cacheKey: string): Promise<IconCacheRecord | null> {
+  // Primary race: origin scrape + Google S2 favicon. Both return real, brand-correct icons.
+  // Icon Horse used to race here too, but it returns generic letter-placeholder PNGs
+  // (e.g. grey "C" tile for calendar.google.com) that pass our quality checks and
+  // poison the cache. S2 returns the real per-domain favicon (the "31" calendar tile)
+  // for sites whose origin HTML is gated behind a login redirect.
+  const hasFaviconPermission = await extensionApi.permissions
+    .contains({ origins: ['https://www.google.com/*'] })
+    .catch(() => false);
+
   const racers: Array<Promise<IconCacheRecord | null>> = [
     fetchOriginScrape(request.bookmarkUrl, cacheKey).catch(() => null),
-    fetchIconHorse(request.bookmarkUrl, cacheKey).catch(() => null),
   ];
+  if (hasFaviconPermission) {
+    racers.push(fetchS2Favicon(request.bookmarkUrl, cacheKey).catch(() => null));
+  }
 
   const winner = await Promise.race([
     firstSuccessful(racers),
@@ -233,13 +244,9 @@ async function resolveAutomaticIcon(request: GetIconRequest, cacheKey: string): 
   ]);
   if (winner) return winner;
 
-  const hasFaviconPermission = await extensionApi.permissions
-    .contains({ origins: ['https://www.google.com/*'] })
-    .catch(() => false);
-  if (hasFaviconPermission) {
-    const s2 = await fetchS2Favicon(request.bookmarkUrl, cacheKey).catch(() => null);
-    if (s2) return s2;
-  }
+  // Fallback: Icon Horse. Accepts placeholder output as last resort before DDG.
+  const iconHorse = await fetchIconHorse(request.bookmarkUrl, cacheKey).catch(() => null);
+  if (iconHorse) return iconHorse;
 
   const ddgFirst = await fetchDuckDuckGoFirstHit(request, cacheKey).catch(() => null);
   if (ddgFirst) return ddgFirst;

@@ -8,7 +8,7 @@ extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }
   if (details.reason === 'install') {
     await markOnboardingPending();
   }
-  if (details.reason === 'install' || details.reason === 'update') {
+  if (details.reason === 'install') {
     await invalidateIcon();
   }
   void scheduleGeneratedRecordSweep();

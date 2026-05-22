@@ -30,6 +30,34 @@ function subscribeFaviconCache(url: string, listener: () => void): () => void {
   };
 }
 
+function escapeSvgText(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function makeFallbackSvg(title?: string): string {
+  const label = title?.trim() || '?';
+  const initials = label.slice(0, 2).toUpperCase();
+  const seed = Array.from(label).reduce((sum, c) => sum + c.charCodeAt(0), 0);
+  const hue = seed % 360;
+  const svg = [
+    '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">',
+    '<defs>',
+    `<linearGradient id="g" x1="0" y1="0" x2="1" y2="1">`,
+    `<stop offset="0%" stop-color="hsl(${String(hue)},70%,58%)"/>`,
+    `<stop offset="100%" stop-color="hsl(${String((hue + 36) % 360)},68%,40%)"/>`,
+    '</linearGradient></defs>',
+    '<rect width="96" height="96" rx="24" fill="url(#g)"/>',
+    `<text x="48" y="54" text-anchor="middle" font-family="system-ui,sans-serif" font-size="32" font-weight="700" fill="#FFF">${escapeSvgText(initials)}</text>`,
+    '</svg>',
+  ].join('');
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
 async function fetchIcon(url: string, title?: string): Promise<string> {
   const cached = iconCache.get(url);
   if (cached) return cached;
@@ -46,18 +74,6 @@ async function fetchIcon(url: string, title?: string): Promise<string> {
   })();
   inflight.set(url, promise);
   return promise;
-}
-
-export function isFaviconCached(url: string): boolean {
-  return iconCache.has(url);
-}
-
-export async function prefetchFavicon(url: string, title?: string): Promise<void> {
-  try {
-    await fetchIcon(url, title);
-  } catch {
-    // ignore — prefetch is best-effort
-  }
 }
 
 function radiusForShape(shape: TileShape): string {
@@ -104,7 +120,7 @@ export function Favicon({ url, title, shape = 'squircle' }: FaviconProps) {
     }
     fetchIcon(url, title)
       .then(dataUrl => { if (mounted.current) setSrc(dataUrl); })
-      .catch(() => { if (mounted.current) setSrc(null); });
+      .catch(() => { if (mounted.current) setSrc(makeFallbackSvg(title)); });
   }, [url, title, version]);
 
   const radius = radiusForShape(shape);
