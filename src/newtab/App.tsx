@@ -65,6 +65,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const [quickAddTarget, setQuickAddTarget] = useState<{ parentId: string; parentTitle?: string } | null>(null);
   const [folderNameTarget, setFolderNameTarget] = useState<FolderNameDialogTarget | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsInitialSection, setSettingsInitialSection] = useState<'appearance' | 'workspace-manage'>('appearance');
   const [onboardOpen, setOnboardOpen] = useState(initialOnboardOpen ?? false);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   const [folderPath, setFolderPath] = useState<BookmarkNode[]>([]);
@@ -187,24 +188,21 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setNewWorkspaceOpen(true);
   }, []);
 
-  const handleWorkspaceContextMenu = useCallback((id: string, x: number, y: number) => {
-    const ws = workspaces.find(w => w.id === id);
-    if (!ws) return;
+  const handleWorkspaceContextMenu = useCallback((_id: string, x: number, y: number) => {
     setContextMenu({
       x, y,
       items: [
-        { kind: 'item', icon: 'settings', label: 'Appearance', onClick: () => {
-          void handlePatch({ settingsSection: 'appearance' });
+        { kind: 'item', icon: 'palette', label: 'Appearance', onClick: () => {
+          setSettingsInitialSection('appearance');
           setSettingsOpen(true);
         }},
-        ...(workspaces.length > 1 ? [{
-          kind: 'item' as const, icon: 'trash', label: 'Delete workspace',
-          destructive: true,
-          onClick: () => void handleDeleteWorkspace(id),
-        }] : []),
+        { kind: 'item', icon: 'settings', label: 'Manage', onClick: () => {
+          setSettingsInitialSection('workspace-manage');
+          setSettingsOpen(true);
+        }},
       ],
     });
-  }, [workspaces, handlePatch, handleDeleteWorkspace]);
+  }, []);
 
   const refreshTree = useCallback(async () => {
     try {
@@ -686,8 +684,11 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           onPatchGlobal={handlePatch}
           onPatchWorkspace={handlePatchWorkspace}
           onSetWorkspaceWallpaper={handleSetWorkspaceWallpaper}
+          onDeleteWorkspace={handleDeleteWorkspace}
+          isOnlyWorkspace={workspaces.length <= 1}
+          initialSection={settingsInitialSection}
           tree={tree}
-          onClose={() => setSettingsOpen(false)}
+          onClose={() => { setSettingsOpen(false); setSettingsInitialSection('appearance'); }}
           onAfterImport={(next) => { setSettings(next); refreshTree(); }}
         />
       )}
