@@ -706,8 +706,11 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       {onboardOpen && (
         <Onboarding
           settings={settings}
+          activeWorkspace={activeWorkspace}
           tree={tree}
           onPatch={handlePatch}
+          onPatchWorkspace={handlePatchWorkspace}
+          onCreateWorkspace={handleCreateWorkspace}
           onFinish={() => { setOnboardOpen(false); void markOnboardingCompleted(); }}
         />
       )}
