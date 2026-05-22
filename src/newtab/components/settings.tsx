@@ -249,39 +249,41 @@ export function SettingsDrawer({ settings, activeWorkspace, workspaceWallpaper, 
           </button>
         </header>
         <div className="ff-drawer__body">
-          <div className="ff-drawer__scope-tabs">
-            <button
-              className={`ff-drawer__scope-tab${scopeTab === 'workspace' ? ' is-active' : ''}`}
-              onClick={() => { setScopeTab('workspace'); setSection('appearance'); }}
-            >
-              {activeWorkspace?.name ?? 'Workspace'}
-            </button>
-            <button
-              className={`ff-drawer__scope-tab${scopeTab === 'global' ? ' is-active' : ''}`}
-              onClick={() => { setScopeTab('global'); setSection('general'); }}
-            >
-              Global
-            </button>
+          <div className="ff-drawer__sidebar">
+            <div className="ff-drawer__scope-tabs">
+              <button
+                className={`ff-drawer__scope-tab${scopeTab === 'workspace' ? ' is-active' : ''}`}
+                onClick={() => { setScopeTab('workspace'); setSection('appearance'); }}
+              >
+                Workspace
+              </button>
+              <button
+                className={`ff-drawer__scope-tab${scopeTab === 'global' ? ' is-active' : ''}`}
+                onClick={() => { setScopeTab('global'); setSection('general'); }}
+              >
+                Global
+              </button>
+            </div>
+            <nav className="ff-drawer__nav">
+              {scopeTab === 'workspace' && (
+                <>
+                  <DrawerNav id="appearance" label="Appearance" icon="palette"    active={section} setActive={setSection} />
+                  <DrawerNav id="layout"     label="Layout"     icon="rows"       active={section} setActive={setSection} />
+                </>
+              )}
+              {scopeTab === 'global' && (
+                <>
+                  <DrawerNav id="general"    label="General"    icon="layoutGrid" active={section} setActive={setSection} />
+                  <DrawerNav id="navigation" label="Navigation" icon="command"    active={section} setActive={setSection} />
+                  <DrawerNav id="dock"       label="Dock"       icon="layers"     active={section} setActive={setSection} />
+                  <DrawerNav id="clock"      label="Clock"      icon="clock"      active={section} setActive={setSection} />
+                  <DrawerNav id="backup"     label="Backup"     icon="cloud"      active={section} setActive={setSection} />
+                  <div className="ff-drawer__navdivider" />
+                  <DrawerNav id="help"       label="Help"       icon="link"       active={section} setActive={setSection} />
+                </>
+              )}
+            </nav>
           </div>
-          <nav className="ff-drawer__nav">
-            {scopeTab === 'workspace' && (
-              <>
-                <DrawerNav id="appearance" label="Appearance" icon="palette"    active={section} setActive={setSection} />
-                <DrawerNav id="layout"     label="Layout"     icon="rows"       active={section} setActive={setSection} />
-              </>
-            )}
-            {scopeTab === 'global' && (
-              <>
-                <DrawerNav id="general"    label="General"    icon="layoutGrid" active={section} setActive={setSection} />
-                <DrawerNav id="navigation" label="Navigation" icon="command"    active={section} setActive={setSection} />
-                <DrawerNav id="dock"       label="Dock"       icon="layers"     active={section} setActive={setSection} />
-                <DrawerNav id="clock"      label="Clock"      icon="clock"      active={section} setActive={setSection} />
-                <DrawerNav id="backup"     label="Backup"     icon="cloud"      active={section} setActive={setSection} />
-                <div className="ff-drawer__navdivider" />
-                <DrawerNav id="help"       label="Help"       icon="link"       active={section} setActive={setSection} />
-              </>
-            )}
-          </nav>
           <div className="ff-drawer__content no-scrollbar">
             {scopeTab === 'workspace' && (
               <>

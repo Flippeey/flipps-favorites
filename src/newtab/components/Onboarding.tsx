@@ -38,10 +38,25 @@ interface FolderMultiPickerProps {
   onToggle: (id: string) => void;
 }
 
+function twoLevelFolders(tree: BookmarkNode[]): { id: string; title: string; depth: number }[] {
+  const result: { id: string; title: string; depth: number }[] = [];
+  for (const f of topLevelFolders(tree)) {
+    result.push({ id: f.id, title: f.title, depth: 0 });
+    if (f.children) {
+      for (const child of f.children) {
+        if (Array.isArray(child.children)) {
+          result.push({ id: child.id, title: child.title, depth: 1 });
+        }
+      }
+    }
+  }
+  return result;
+}
+
 function FolderMultiPicker({ tree, selectedIds, onToggle }: FolderMultiPickerProps) {
-  const folders = topLevelFolders(tree);
+  const folders = twoLevelFolders(tree);
   return (
-    <div style={{ display: 'grid', gap: 6 }}>
+    <div style={{ display: 'grid', gap: 4, maxHeight: 240, overflowY: 'auto', paddingRight: 2 }}>
       {folders.map(f => {
         const active = selectedIds.includes(f.id);
         return (
@@ -54,11 +69,14 @@ function FolderMultiPicker({ tree, selectedIds, onToggle }: FolderMultiPickerPro
               borderColor: active ? 'var(--accent)' : 'var(--line-1)',
               background: active ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
               boxShadow: active ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' : 'none',
-              padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8,
+              padding: '7px 12px',
+              paddingLeft: 12 + f.depth * 18,
+              display: 'flex', alignItems: 'center', gap: 8,
             }}
           >
-            <Ico name="folder" size={14} />
-            <span>{f.title}</span>
+            <Ico name="folder" size={f.depth === 0 ? 14 : 12} style={{ opacity: f.depth === 0 ? 1 : 0.7 }} />
+            <span style={{ fontSize: f.depth === 0 ? 13 : 12, opacity: f.depth === 0 ? 1 : 0.85 }}>{f.title}</span>
+            {active && <Ico name="check" size={13} style={{ marginLeft: 'auto', color: 'var(--accent)' }} />}
           </button>
         );
       })}
@@ -76,8 +94,8 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
     { title: "Welcome to Flipp's Favorites", desc: "A new-tab dashboard that uses your existing bookmarks. No imports. No accounts. Just a faster way to get where you're going." },
     { title: 'Pick your accent', desc: 'Pick the accent that feels right. You can change it any time in Settings.' },
     { title: 'Choose your layout', desc: 'Pick the density that fits your screen. You can fine-tune later in Settings.' },
+    { title: 'Set up your workspace', desc: 'Pick a root folder, or create multiple workspaces — each with its own layout and theme.' },
     { title: 'How do you want to navigate?', desc: 'Folders can stay compact as tiles, or always show inline as sections. You can change this any time.' },
-    { title: 'Workspaces', desc: 'Workspaces let you switch between different bookmark collections, each with its own layout and theme.' },
     { title: "You're all set", desc: 'Open Settings any time to tweak themes, layout, the dock and clock. Drag bookmarks to reorder. Right-click anywhere for context actions.' },
   ];
   const s = steps[step];
@@ -180,18 +198,67 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
           )}
 
           {step === 3 && (
-            <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
-              <div className="ff-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <div>
-                  <div className="ff-row__label">Root folder</div>
-                  <div className="ff-row__hint">Your starting view. Change later in Settings.</div>
-                </div>
-                <FolderPicker
-                  tree={tree}
-                  value={activeWorkspace?.rootFolderId ?? ''}
-                  onChange={(id) => onPatchWorkspace({ rootFolderId: id })}
-                />
+            <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                <button
+                  className="ff-card"
+                  onClick={() => setWorkspaceMode('single')}
+                  style={{
+                    textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'var(--fg-1)',
+                    borderColor: workspaceMode === 'single' ? 'var(--accent)' : 'var(--line-1)',
+                    background: workspaceMode === 'single' ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
+                    boxShadow: workspaceMode === 'single' ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' : 'none',
+                    padding: 14,
+                  }}
+                >
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>Single workspace</div>
+                  <div style={{ fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.45 }}>One collection. Pick your root folder below.</div>
+                </button>
+                <button
+                  className="ff-card"
+                  onClick={() => setWorkspaceMode('multiple')}
+                  style={{
+                    textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'var(--fg-1)',
+                    borderColor: workspaceMode === 'multiple' ? 'var(--accent)' : 'var(--line-1)',
+                    background: workspaceMode === 'multiple' ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
+                    boxShadow: workspaceMode === 'multiple' ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' : 'none',
+                    padding: 14,
+                  }}
+                >
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>Multiple workspaces</div>
+                  <div style={{ fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.45 }}>Separate layouts per folder. Pick up to 5.</div>
+                </button>
               </div>
+              {workspaceMode === 'single' && (
+                <div className="ff-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <div>
+                    <div className="ff-row__label">Root folder</div>
+                    <div className="ff-row__hint">Your starting view. Change later in Settings.</div>
+                  </div>
+                  <FolderPicker
+                    tree={tree}
+                    value={activeWorkspace?.rootFolderId ?? ''}
+                    onChange={(id) => onPatchWorkspace({ rootFolderId: id })}
+                  />
+                </div>
+              )}
+              {workspaceMode === 'multiple' && (
+                <div>
+                  <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>Select folders to use as workspaces:</div>
+                  <FolderMultiPicker
+                    tree={tree}
+                    selectedIds={selectedWorkspaceFolderIds}
+                    onToggle={id => setSelectedWorkspaceFolderIds(prev =>
+                      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id].slice(0, 5)
+                    )}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === 4 && (
+            <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
                 {([
                   { id: 'tiles',    label: 'Tiles',    desc: 'Folders shown as one-click tiles. Keeps the top view tidy.' },
@@ -242,51 +309,6 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
                   );
                 })}
               </div>
-            </div>
-          )}
-
-          {step === 4 && (
-            <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
-              <button
-                className="ff-card"
-                onClick={() => setWorkspaceMode('single')}
-                style={{
-                  textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'var(--fg-1)',
-                  borderColor: workspaceMode === 'single' ? 'var(--accent)' : 'var(--line-1)',
-                  background: workspaceMode === 'single' ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
-                  boxShadow: workspaceMode === 'single' ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' : 'none',
-                  padding: 16,
-                }}
-              >
-                <div style={{ fontWeight: 600, marginBottom: 4 }}>Just one workspace</div>
-                <div style={{ fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.45 }}>Keep it simple — one collection for everything.</div>
-              </button>
-              <button
-                className="ff-card"
-                onClick={() => setWorkspaceMode('multiple')}
-                style={{
-                  textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'var(--fg-1)',
-                  borderColor: workspaceMode === 'multiple' ? 'var(--accent)' : 'var(--line-1)',
-                  background: workspaceMode === 'multiple' ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
-                  boxShadow: workspaceMode === 'multiple' ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' : 'none',
-                  padding: 16,
-                }}
-              >
-                <div style={{ fontWeight: 600, marginBottom: 4 }}>Multiple workspaces</div>
-                <div style={{ fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.45 }}>Pick folders to use as separate workspaces.</div>
-              </button>
-              {workspaceMode === 'multiple' && (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>Select folders (up to 5):</div>
-                  <FolderMultiPicker
-                    tree={tree}
-                    selectedIds={selectedWorkspaceFolderIds}
-                    onToggle={id => setSelectedWorkspaceFolderIds(prev =>
-                      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id].slice(0, 5)
-                    )}
-                  />
-                </div>
-              )}
             </div>
           )}
 

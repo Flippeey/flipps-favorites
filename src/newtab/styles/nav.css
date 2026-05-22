@@ -143,44 +143,52 @@
 .ff-ws-tabs {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .ff-ws-tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
-  border-radius: var(--radius-pill);
-  border: none;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
   background: transparent;
-  color: var(--ink-2);
+  color: var(--fg-2);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
   white-space: nowrap;
   max-width: 160px;
   overflow: hidden;
 }
 
 .ff-ws-tab:hover {
-  background: var(--surface-2);
-  color: var(--ink-1);
+  background: var(--ink-3);
+  color: var(--fg-1);
 }
 
 .ff-ws-tab.is-active {
-  background: var(--surface-2);
-  color: var(--ink-1);
+  background: var(--ink-3);
+  color: var(--fg-1);
   font-weight: 600;
+  border-color: var(--line-2);
+}
+
+.ff-ws-tab[data-drop-hover="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent);
 }
 
 .ff-ws-tab__dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
-  opacity: 0.85;
 }
 
 .ff-ws-tab__name {
