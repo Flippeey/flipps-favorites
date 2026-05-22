@@ -16,6 +16,10 @@ export const messageTypes = {
   invalidateIcon: 'icons/invalidate',
   getBookmarkUsage: 'bookmarks/get-usage',
   recordBookmarkUse: 'bookmarks/record-use',
+  getWorkspaces: 'workspaces/get-all',
+  createWorkspace: 'workspaces/create',
+  patchWorkspace: 'workspaces/patch',
+  deleteWorkspace: 'workspaces/delete',
 } as const;
 
 export type MessageType = (typeof messageTypes)[keyof typeof messageTypes];
@@ -40,49 +44,64 @@ export type BackgroundMode = 'solid' | 'gradient' | 'wallpaper';
 export type GradientStyle = 'top' | 'top-bottom' | 'bottom' | 'aurora' | 'mesh' | 'vignette';
 export type BackgroundColorSource = 'accent' | 'custom';
 
-export interface AppSettings {
-  themeMode: ThemeMode;
+export interface WorkspaceRecord {
+  id: string;
+  name: string;
+  rootFolderId: string;
+  // Visual identity
   accentColor: string;
-  customBackgroundImage: string;
+  backgroundMode: BackgroundMode;
   solidBackgroundColor: string;
+  gradientStyle: GradientStyle;
   gradientColorSource: BackgroundColorSource;
   gradientCustomColor: string;
   gradientIntensity: number;
   backgroundOpacity: number;
   backgroundFitMode: BackgroundFitMode;
   backgroundPositionMode: BackgroundPositionMode;
-  settingsSection: SettingsSectionId;
-  rootFolderId: string;
-  rememberLastFolder: boolean;
-  openLinksInNewTab: boolean;
-  showDock: boolean;
-  autoHideDock: boolean;
-  dockFolderId: string;
-  bookmarkSortMode: BookmarkSortMode;
-  bookmarkSortDirection: SortDirection;
-  searchScope: SearchScope;
+  // Layout identity
+  layoutPreset: LayoutPresetId;
   favoritesColumns: number;
   favoritesRows: number;
   favoritesColumnGap: number;
   favoritesRowGap: number;
   bookmarkTileWidth: number;
   bookmarkIconSize: number;
+  tileShape: TileShape;
   showBookmarkIconBackground: boolean;
   showAccentBackground: boolean;
-  layoutPreset: LayoutPresetId;
+  showTileLabels: boolean;
+}
+
+export interface AppSettings {
+  // Identity
+  activeWorkspaceId: string;
+  // Global behaviour
+  themeMode: ThemeMode;
+  rememberLastFolder: boolean;
+  openLinksInNewTab: boolean;
+  // Dock
+  showDock: boolean;
+  autoHideDock: boolean;
+  dockFolderId: string;
+  // Sort
+  bookmarkSortMode: BookmarkSortMode;
+  bookmarkSortDirection: SortDirection;
+  searchScope: SearchScope;
+  // Clock
   showClock: boolean;
   clockStyle: ClockStyle;
   clockPosition: ClockPosition;
   clockSize: ClockSize;
   clockHourFormat: ClockHourFormat;
+  // Search bar
   showSearchBar: boolean;
   searchBarPosition: SearchBarPosition;
+  // Folder behaviour (global)
   folderMode: FolderMode;
   folderOpenMode: FolderOpenMode;
-  tileShape: TileShape;
-  showTileLabels: boolean;
-  backgroundMode: BackgroundMode;
-  gradientStyle: GradientStyle;
+  // UI state
+  settingsSection: SettingsSectionId;
 }
 
 export interface BookmarkSearchResult {
@@ -343,6 +362,42 @@ export interface RecordBookmarkUseResponse {
   usedAt: number;
 }
 
+export interface GetWorkspacesRequest {
+  type: typeof messageTypes.getWorkspaces;
+}
+
+export interface GetWorkspacesResponse {
+  workspaces: WorkspaceRecord[];
+}
+
+export interface CreateWorkspaceRequest {
+  type: typeof messageTypes.createWorkspace;
+  workspace: WorkspaceRecord;
+}
+
+export interface CreateWorkspaceResponse {
+  workspace: WorkspaceRecord;
+}
+
+export interface PatchWorkspaceRequest {
+  type: typeof messageTypes.patchWorkspace;
+  id: string;
+  patch: Partial<WorkspaceRecord>;
+}
+
+export interface PatchWorkspaceResponse {
+  workspace: WorkspaceRecord;
+}
+
+export interface DeleteWorkspaceRequest {
+  type: typeof messageTypes.deleteWorkspace;
+  id: string;
+}
+
+export interface DeleteWorkspaceResponse {
+  ok: true;
+}
+
 export type AppRequest =
   | PingRequest
   | GetSettingsRequest
@@ -360,7 +415,11 @@ export type AppRequest =
   | RemoveIconOverrideRequest
   | InvalidateIconRequest
   | GetBookmarkUsageRequest
-  | RecordBookmarkUseRequest;
+  | RecordBookmarkUseRequest
+  | GetWorkspacesRequest
+  | CreateWorkspaceRequest
+  | PatchWorkspaceRequest
+  | DeleteWorkspaceRequest;
 
 export type AppResponse =
   | PingResponse
@@ -379,4 +438,8 @@ export type AppResponse =
   | RemoveIconOverrideResponse
   | InvalidateIconResponse
   | GetBookmarkUsageResponse
-  | RecordBookmarkUseResponse;
+  | RecordBookmarkUseResponse
+  | GetWorkspacesResponse
+  | CreateWorkspaceResponse
+  | PatchWorkspaceResponse
+  | DeleteWorkspaceResponse;
