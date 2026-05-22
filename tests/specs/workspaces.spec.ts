@@ -42,7 +42,7 @@ function makeWorkspace(id: string, name: string, rootFolderId: string, accentCol
 /** Send a runtime message through the extension's service worker. */
 async function sendMessage(page: import('@playwright/test').Page, msg: unknown): Promise<unknown> {
   return page.evaluate(async (m) => {
-    const api = (globalThis as any).chrome;
+    const api = (globalThis as any).browser || (globalThis as any).chrome;
     return api.runtime.sendMessage(m);
   }, msg);
 }
@@ -53,7 +53,7 @@ async function clearAllStorage(page: import('@playwright/test').Page): Promise<v
   // clearExtensionStorage only removes 'app-settings' from sync, not the 'workspaces' key.
   // Clear it explicitly so workspace records from prior test runs don't persist.
   await page.evaluate(async () => {
-    const api = (globalThis as any).chrome;
+    const api = (globalThis as any).browser || (globalThis as any).chrome;
     try {
       await api.storage.sync.remove('workspaces');
     } catch {
@@ -160,12 +160,12 @@ test('switching workspace applies the workspace accent color', async ({ newtabPa
   // Switch to the second workspace.
   await newtabPage.locator('.ff-ws-tab').nth(1).click();
 
-  // The accent CSS variable must change to reflect the new workspace color.
+  // The accent CSS variable must change to the second workspace's configured color.
   await expect.poll(async () =>
     newtabPage.evaluate(() =>
       document.documentElement.style.getPropertyValue('--accent').trim()
     )
-  ).not.toBe(accentBefore);
+  ).toBe(distinctAccent);
 
   await removeBookmarkTree(newtabPage, folderId2);
 });
