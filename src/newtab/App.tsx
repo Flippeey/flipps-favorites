@@ -76,6 +76,10 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
 
+  // Keyboard navigation: tracks which tile is currently focused via arrow keys.
+  // Null = no keyboard focus (focus model resumes from real :focus or :focus-visible).
+  const [focusedTileId, setFocusedTileId] = useState<string | null>(null);
+
   const canvasRef = useRef<HTMLElement | null>(null);
   const [canvasEl, setCanvasEl] = useState<HTMLElement | null>(null);
   const [overlayBodyEl, setOverlayBodyEl] = useState<HTMLElement | null>(null);
@@ -224,6 +228,22 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     : null;
   const isAtRoot = folderPath.length === 0;
 
+  // Flat list of currently navigable tiles in render order — drives arrow key navigation.
+  // Sections view flattens across all section grids; folder-page view uses current folder.
+  const navItems = useMemo<BookmarkNode[]>(() => {
+    if (!isAtRoot && sortedCurrentFolder) return sortedCurrentFolder.children ?? [];
+    if (settings.folderMode === 'sections') {
+      const out: BookmarkNode[] = [];
+      for (const folder of sortedRootChildren.filter(isFolder)) {
+        for (const child of folder.children ?? []) out.push(child);
+      }
+      return out;
+    }
+    const folders = sortedRootChildren.filter(isFolder);
+    const bookmarks = sortedRootChildren.filter(c => !isFolder(c));
+    return [...folders, ...bookmarks];
+  }, [isAtRoot, sortedCurrentFolder, sortedRootChildren, settings.folderMode]);
+
   const dockItems = useMemo<BookmarkNode[]>(() => {
     if (!settings.showDock) return [];
     if (settings.dockFolderId) {
@@ -314,7 +334,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     return [
       { kind: 'item', icon: 'link',       label: 'Open',            kbd: '↵',  onClick: () => handlePickBookmark(target) },
       { kind: 'item', icon: 'arrowRight', label: 'Open in new tab', kbd: '⌘↵', onClick: () => target.url && window.open(target.url.startsWith('http') ? target.url : `https://${target.url}`, '_blank', 'noopener') },
-      { kind: 'item', icon: 'copy',       label: 'Copy URL',        kbd: '⌘C', onClick: () => target.url && navigator.clipboard?.writeText(target.url.startsWith('http') ? target.url : `https://${target.url}`) },
+      { kind: 'item', icon: 'copy',       label: 'Copy URL',                   onClick: () => target.url && navigator.clipboard?.writeText(target.url.startsWith('http') ? target.url : `https://${target.url}`) },
       { kind: 'separator' },
       { kind: 'item', icon: 'pencil',     label: 'Edit…',           onClick: () => handleEditBookmark(target) },
       { kind: 'separator' },
@@ -362,6 +382,35 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  // Alt+1-9 switches workspace (only when no modifier conflicts and no input is focused)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)) return;
+      const digit = parseInt(e.key, 10);
+      if (Number.isNaN(digit)) return;
+      if (digit >= 1 && digit <= 9 && digit <= workspaces.length) {
+        e.preventDefault();
+        handleSwitchWorkspace(workspaces[digit - 1].id);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [workspaces, handleSwitchWorkspace]);
+
+  // Reset keyboard focus when navigation context changes (workspace switch, folder open/close).
+  useEffect(() => {
+    setFocusedTileId(null);
+  }, [activeWorkspace?.id, folderPath.length, openFolderId]);
+
+  // Scroll focused tile into view smoothly as it moves around the grid.
+  useEffect(() => {
+    if (!focusedTileId || !canvasEl) return;
+    const el = canvasEl.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(focusedTileId)}"]`);
+    if (el) el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  }, [focusedTileId, canvasEl]);
 
   const getOrderedChildren = useCallback((folderId: string): Array<{ id: string }> => {
     const folder = findFolder(tree, folderId);
@@ -470,6 +519,86 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     else handlePickBookmark(item, event);
   }, [handlePickBookmark, handlePickFolder, rootFolder]);
 
+  const handleDeleteFocused = useCallback(async (item: BookmarkNode) => {
+    if (isFolder(item)) {
+      setConfirmDeleteFolder(item);
+      return;
+    }
+    try {
+      await removeBookmark(item.id);
+      refreshTree();
+    } catch {
+      // ignore
+    }
+  }, [refreshTree]);
+
+  // Arrow-key grid navigation. Active only when no dialog/overlay/input has focus —
+  // otherwise we'd hijack typing or contend with active surfaces.
+  const anyOverlayOpen = Boolean(
+    settingsOpen || editTarget || quickAddTarget || folderNameTarget || onboardOpen
+    || newWorkspaceOpen || confirmDeleteFolder || openFolderId || contextMenu,
+  );
+
+  useEffect(() => {
+    if (anyOverlayOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)) return;
+      if (navItems.length === 0) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      const idx = focusedTileId ? navItems.findIndex(n => n.id === focusedTileId) : -1;
+      const isArrow = e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'ArrowDown';
+
+      if (isArrow) {
+        e.preventDefault();
+        if (idx < 0) {
+          setFocusedTileId(navItems[0].id);
+          return;
+        }
+        // Column count read from the first .ff-grid inside the canvas — matches whatever
+        // layout the active view rendered (tiles or sections).
+        const grid = canvasEl?.querySelector<HTMLElement>('.ff-grid');
+        const cols = grid ? Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(' ').length) : 1;
+        let next = idx;
+        if (e.key === 'ArrowRight') next = Math.min(idx + 1, navItems.length - 1);
+        else if (e.key === 'ArrowLeft') next = Math.max(idx - 1, 0);
+        else if (e.key === 'ArrowDown') next = Math.min(idx + cols, navItems.length - 1);
+        else if (e.key === 'ArrowUp') next = Math.max(idx - cols, 0);
+        if (next !== idx) setFocusedTileId(navItems[next].id);
+        return;
+      }
+
+      if (idx < 0) return;
+      const item = navItems[idx];
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (isFolder(item)) handlePickFolder(item);
+        else handlePickBookmark(item, { metaKey: false, ctrlKey: false });
+        return;
+      }
+      if (e.key === 'Delete') {
+        e.preventDefault();
+        void handleDeleteFocused(item);
+        return;
+      }
+      if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+        e.preventDefault();
+        const el = canvasEl?.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(item.id)}"]`);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          setContextMenu({ x: rect.left + rect.width / 2, y: rect.bottom, items: buildContextMenuItems(item) });
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [
+    navItems, focusedTileId, canvasEl, anyOverlayOpen,
+    handlePickBookmark, handlePickFolder, handleDeleteFocused, buildContextMenuItems,
+  ]);
+
   const wallpaperBlobUrl = useBlobUrl(workspaceWallpaper);
 
   const appStyle = useMemo(() => {
@@ -549,6 +678,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             onPickItem={handleTileClick}
             selectedIds={selection.ids}
             selectionScopeFolderId={selection.scopeFolderId}
+            focusedTileId={focusedTileId}
           />
         ) : settings.folderMode === 'sections' ? (
           <SectionsView
@@ -567,6 +697,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             }}
             selectedIds={selection.ids}
             selectionScopeFolderId={selection.scopeFolderId}
+            focusedTileId={focusedTileId}
           />
         ) : (
           <TilesView
@@ -578,6 +709,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             onPickItem={handleTileClick}
             selectedIds={selection.ids}
             selectionScopeFolderId={selection.scopeFolderId}
+            focusedTileId={focusedTileId}
           />
         )}
         {marqueeRect && (

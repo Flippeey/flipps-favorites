@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BookmarkNode, BookmarkSortMode, SortDirection, WorkspaceRecord } from '../../shared/messages';
+import { altShortcut } from '../lib/platform';
 import { Ico } from './Ico';
 
 export interface SortChoice {
@@ -82,21 +83,26 @@ export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
       <div className="ff-nav__center">
         {path.length === 0 ? (
           <div className="ff-ws-tabs" role="tablist">
-            {workspaces.map(ws => (
-              <button
-                key={ws.id}
-                role="tab"
-                aria-selected={ws.id === activeWorkspaceId}
-                className={`ff-ws-tab${ws.id === activeWorkspaceId ? ' is-active' : ''}`}
-                onClick={() => onSwitchWorkspace(ws.id)}
-                onContextMenu={e => { e.preventDefault(); onWorkspaceContextMenu(ws.id, e.clientX, e.clientY); }}
-                data-drop-target="workspace"
-                data-workspace-id={ws.id}
-              >
-                <span className="ff-ws-tab__dot" style={{ background: ws.accentColor }} />
-                <span className="ff-ws-tab__name">{ws.name}</span>
-              </button>
-            ))}
+            {workspaces.map((ws, i) => {
+              const shortcut = i < 9 ? altShortcut(String(i + 1)) : null;
+              const title = shortcut ? `Switch to ${ws.name} (${shortcut})` : `Switch to ${ws.name}`;
+              return (
+                <button
+                  key={ws.id}
+                  role="tab"
+                  aria-selected={ws.id === activeWorkspaceId}
+                  className={`ff-ws-tab${ws.id === activeWorkspaceId ? ' is-active' : ''}`}
+                  onClick={() => onSwitchWorkspace(ws.id)}
+                  onContextMenu={e => { e.preventDefault(); onWorkspaceContextMenu(ws.id, e.clientX, e.clientY); }}
+                  data-drop-target="workspace"
+                  data-workspace-id={ws.id}
+                  title={title}
+                >
+                  <span className="ff-ws-tab__dot" style={{ background: ws.accentColor }} />
+                  <span className="ff-ws-tab__name">{ws.name}</span>
+                </button>
+              );
+            })}
           </div>
         ) : (
           <div className="ff-crumb">

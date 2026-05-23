@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import type { AppSettings, BookmarkNode, FolderMode, FolderOpenMode, LayoutPresetId, WorkspaceRecord } from '../../shared/messages';
+import type { AppSettings, BookmarkNode, FolderMode, ThemeMode, WorkspaceRecord } from '../../shared/messages';
+import { altShortcut, IS_MAC, modShortcut } from '../lib/platform';
 import { topLevelFolders } from '../lib/tree';
 import { Ico } from './Ico';
-import { ACCENT_PRESETS, FolderPicker, LAYOUT_PRESETS } from './settings';
+import { ACCENT_PRESETS, FolderPicker, ThemeCardPreview } from './settings';
 
 interface OnboardingProps {
   settings: AppSettings;
@@ -12,24 +13,6 @@ interface OnboardingProps {
   onPatchWorkspace: (patch: Partial<WorkspaceRecord>) => void;
   onCreateWorkspace: (rootFolderId: string, name: string) => Promise<void>;
   onFinish: () => void;
-}
-
-function DensityMini({ cols, active }: { cols: number; active?: boolean }) {
-  return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: `repeat(${Math.min(cols, 8)}, 1fr)`,
-      gap: 3,
-    }}>
-      {Array.from({ length: Math.min(cols, 8) * 2 }).map((_, i) => (
-        <div key={i} style={{
-          aspectRatio: 1,
-          background: active ? 'color-mix(in oklab, var(--accent) 55%, var(--ink-3))' : 'var(--ink-3)',
-          borderRadius: 3,
-        }} />
-      ))}
-    </div>
-  );
 }
 
 interface FolderMultiPickerProps {
@@ -84,6 +67,71 @@ function FolderMultiPicker({ tree, selectedIds, onToggle }: FolderMultiPickerPro
   );
 }
 
+// Live preview of the workspace tab bar shown above the folder picker so users can
+// see what "workspaces" actually look like before they finish onboarding.
+function WorkspaceTabPreview({ folders }: { folders: { name: string; color: string }[] }) {
+  if (folders.length === 0) return null;
+  return (
+    <div style={{
+      display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'wrap',
+      padding: '12px 16px', marginBottom: 12,
+      background: 'var(--ink-1)', borderRadius: 10,
+      border: '1px solid var(--line-1)',
+    }}>
+      {folders.map((f, i) => (
+        <div key={`${f.name}-${i}`} style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '4px 10px', borderRadius: 8,
+          background: i === 0 ? 'var(--ink-3)' : 'transparent',
+          fontSize: 12, fontWeight: i === 0 ? 600 : 500,
+          color: i === 0 ? f.color : 'var(--fg-2)',
+        }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
+          {f.name}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ThemeChoiceCard({ id, label, hint, active, onSelect, preview }: {
+  id: ThemeMode;
+  label: string;
+  hint: string;
+  active: boolean;
+  onSelect: (id: ThemeMode) => void;
+  preview: 'light' | 'dark' | 'system';
+}) {
+  return (
+    <button
+      onClick={() => onSelect(id)}
+      className="ff-card"
+      style={{
+        textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'var(--fg-1)',
+        borderColor: active ? 'var(--accent)' : 'var(--line-1)',
+        background: active ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
+        boxShadow: active ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' : 'none',
+        padding: 16,
+        display: 'flex', flexDirection: 'column', gap: 12,
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span style={{ fontWeight: 600 }}>{label}</span>
+        {active && <Ico name="check" size={14} style={{ color: 'var(--accent)' }} />}
+      </div>
+      {preview === 'system' ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+          <ThemeCardPreview light />
+          <ThemeCardPreview />
+        </div>
+      ) : (
+        <ThemeCardPreview light={preview === 'light'} />
+      )}
+      <span style={{ fontSize: 12, color: 'var(--fg-3)' }}>{hint}</span>
+    </button>
+  );
+}
+
 export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWorkspace, onCreateWorkspace, onFinish }: OnboardingProps) {
   const [step, setStep] = useState(0);
   const [workspaceMode, setWorkspaceMode] = useState<'single' | 'multiple'>('single');
@@ -92,13 +140,27 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
 
   const steps = [
     { title: "Welcome to Flipp's Favorites", desc: "A new-tab dashboard that uses your existing bookmarks. No imports. No accounts. Just a faster way to get where you're going." },
-    { title: 'Pick your accent', desc: 'Pick the accent that feels right. You can change it any time in Settings.' },
-    { title: 'Choose your layout', desc: 'Pick the density that fits your screen. You can fine-tune later in Settings.' },
-    { title: 'Set up your workspace', desc: 'Pick a root folder, or create multiple workspaces — each with its own layout and theme.' },
-    { title: 'How do you want to navigate?', desc: 'Folders can stay compact as tiles, or always show inline as sections. You can change this any time.' },
-    { title: "You're all set", desc: 'Open Settings any time to tweak themes, layout, the dock and clock. Drag bookmarks to reorder. Right-click anywhere for context actions.' },
+    { title: 'Choose your theme',           desc: 'Light, dark, or follow your system. You can change this any time in Settings.' },
+    { title: 'Pick your accent',            desc: 'Pick the accent that feels right. You can change it any time in Settings.' },
+    { title: 'Set up your workspace',       desc: 'Pick a root folder, or create multiple workspaces — each with its own layout and theme.' },
+    { title: 'How should folders look?',    desc: 'Folders can stay compact as tiles, or always show inline as sections. You can change this any time.' },
+    { title: "You're all set",              desc: 'Open Settings any time to tweak themes, layout, the dock and clock. Drag bookmarks to reorder. Right-click anywhere for context actions.' },
   ];
   const s = steps[step];
+
+  // Resolve the preview-folders list each render so it stays in sync with the picker.
+  const previewFolders: { name: string; color: string }[] = (() => {
+    if (workspaceMode === 'single') {
+      const folder = topLevelFolders(tree).find(f => f.id === activeWorkspace?.rootFolderId);
+      const name = folder?.title ?? activeWorkspace?.name ?? 'Workspace';
+      return [{ name, color: activeWorkspace?.accentColor ?? ACCENT_PRESETS[0].value }];
+    }
+    const folders = twoLevelFolders(tree);
+    return selectedWorkspaceFolderIds
+      .map(id => folders.find(f => f.id === id))
+      .filter((f): f is { id: string; title: string; depth: number } => Boolean(f))
+      .map((f, i) => ({ name: f.title, color: ACCENT_PRESETS[i % ACCENT_PRESETS.length].value }));
+  })();
 
   const handleFinish = async () => {
     if (finishing) return;
@@ -153,6 +215,14 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
           )}
 
           {step === 1 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 16 }}>
+              <ThemeChoiceCard id="light"  label="Light"  hint="Bright canvas, dark text."  active={settings.themeMode === 'light'}  onSelect={(id) => onPatch({ themeMode: id })} preview="light" />
+              <ThemeChoiceCard id="dark"   label="Dark"   hint="Dim canvas, light text."    active={settings.themeMode === 'dark'}   onSelect={(id) => onPatch({ themeMode: id })} preview="dark" />
+              <ThemeChoiceCard id="system" label="System" hint="Follow OS preference."      active={settings.themeMode === 'system'} onSelect={(id) => onPatch({ themeMode: id })} preview="system" />
+            </div>
+          )}
+
+          {step === 2 && (
             <div className="ff-accents" style={{ margin: '24px auto', maxWidth: 420 }}>
               {ACCENT_PRESETS.map(a => (
                 <button
@@ -169,36 +239,12 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
             </div>
           )}
 
-          {step === 2 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginTop: 16 }}>
-              {LAYOUT_PRESETS.map(p => {
-                const active = (activeWorkspace?.layoutPreset ?? 'balanced') === p.id;
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => onPatchWorkspace({ layoutPreset: p.id as LayoutPresetId })}
-                    className="ff-card"
-                    style={{
-                      textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'var(--fg-1)',
-                      borderColor: active ? 'var(--accent)' : 'var(--line-1)',
-                      background: active ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
-                      boxShadow: active ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' : 'none',
-                      transition: 'all 140ms ease-out',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                      <span style={{ fontWeight: 600 }}>{p.label}</span>
-                      <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>{p.desc}</span>
-                    </div>
-                    <DensityMini cols={p.cols} active={active} />
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
           {step === 3 && (
             <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
+              <WorkspaceTabPreview folders={previewFolders} />
+              <p style={{ fontSize: 12, color: 'var(--fg-3)', textAlign: 'center', margin: '0 0 4px' }}>
+                Each workspace is a separate home screen with its own layout and accent color.
+              </p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
                 <button
                   className="ff-card"
@@ -284,31 +330,6 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
                   );
                 })}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-                {([
-                  { id: 'overlay', label: 'Open folders as overlay', desc: 'Folder opens as a popup. Close to return to the main view.' },
-                  { id: 'page',    label: 'Open folders as page',    desc: 'Folder fills the screen. Use the breadcrumb to step back.' },
-                ] as { id: FolderOpenMode; label: string; desc: string }[]).map(m => {
-                  const active = settings.folderOpenMode === m.id;
-                  return (
-                    <button
-                      key={m.id}
-                      onClick={() => onPatch({ folderOpenMode: m.id })}
-                      className="ff-card"
-                      style={{
-                        textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'var(--fg-1)',
-                        borderColor: active ? 'var(--accent)' : 'var(--line-1)',
-                        background: active ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
-                        boxShadow: active ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' : 'none',
-                        padding: 16,
-                      }}
-                    >
-                      <div style={{ fontWeight: 600, marginBottom: 4 }}>{m.label}</div>
-                      <div style={{ fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.45 }}>{m.desc}</div>
-                    </button>
-                  );
-                })}
-              </div>
             </div>
           )}
 
@@ -316,10 +337,10 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
             <div style={{ display: 'grid', placeItems: 'center', padding: '24px 0', fontSize: 13, color: 'var(--fg-3)' }}>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
                 {([
-                  ['⌘K', 'Search'],
-                  ['⌘C/V', 'Move bookmarks'],
-                  ['Right-click', 'Edit + organize'],
-                  ['Drag', 'Reorder'],
+                  [modShortcut('K'),    'Search'],
+                  ['Right-click',       'Edit & organize'],
+                  ['Drag',              'Reorder bookmarks'],
+                  [altShortcut('1-9'),  'Switch workspace'],
                 ] as const).map(([k, v]) => (
                   <div key={k} style={{
                     padding: '12px 16px',
@@ -334,6 +355,11 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
                   </div>
                 ))}
               </div>
+              {IS_MAC && (
+                <p style={{ marginTop: 16, fontSize: 11, color: 'var(--fg-4)' }}>
+                  Showing Mac shortcuts. Use ⌘ where Ctrl is shown on other platforms.
+                </p>
+              )}
             </div>
           )}
         </div>

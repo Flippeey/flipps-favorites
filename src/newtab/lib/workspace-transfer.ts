@@ -1,19 +1,24 @@
-import type { AppSettings, BookmarkUsageRecord, IconOverrideRecord } from '../../shared/messages';
+import type { AppSettings, BookmarkUsageRecord, IconOverrideRecord, WorkspaceRecord } from '../../shared/messages';
 import {
   defaultSettings,
+  defaultWorkspaceSettings,
   deleteBookmarkUsageRecord,
   deleteIconOverrideRecord,
   readBookmarkUsageRecords,
   readIconOverrideRecords,
   readSettings,
+  readWorkspaces,
+  readWorkspaceWallpaper,
   writeBookmarkUsageRecord,
   writeIconOverrideRecord,
   writeSettings,
+  writeWorkspace,
+  writeWorkspaceWallpaper,
 } from '../../shared/storage';
 import { invalidateIcon } from './messaging';
 
 export const WORKSPACE_SCHEMA = 'flipps-workspace-transfer' as const;
-export const WORKSPACE_SCHEMA_VERSION = 1;
+export const WORKSPACE_SCHEMA_VERSION = 2;
 
 export type WorkspaceImportMode = 'merge' | 'replace';
 
@@ -30,34 +35,54 @@ interface BookmarkUsageTransferRecord {
   usedAt: number;
 }
 
+// Wallpapers are stored separately from WorkspaceRecord because they can be MBs of data URL.
+// In transfer files we ship them as a sidecar map keyed by workspace id.
+type WorkspaceWallpaperMap = Record<string, string>;
+
 export interface WorkspaceExportPayload {
   schema: typeof WORKSPACE_SCHEMA;
   schemaVersion: number;
   exportedAt: number;
   settings: AppSettings;
+  workspaces: WorkspaceRecord[];
+  workspaceWallpapers: WorkspaceWallpaperMap;
   iconOverrides: IconOverrideTransferRecord[];
   bookmarkUsage: BookmarkUsageTransferRecord[];
 }
 
 export interface WorkspaceImportSummary {
   mode: WorkspaceImportMode;
+  workspaceCount: number;
   iconOverrideCount: number;
   bookmarkUsageCount: number;
   settings: AppSettings;
 }
 
 export async function buildWorkspaceExport(): Promise<WorkspaceExportPayload> {
-  const [settings, overrideRecords, usageRecords] = await Promise.all([
+  const [settings, workspaces, overrideRecords, usageRecords] = await Promise.all([
     readSettings(),
+    readWorkspaces(),
     readIconOverrideRecords(),
     readBookmarkUsageRecords(),
   ]);
+
+  const wallpaperEntries = await Promise.all(
+    workspaces
+      .filter(ws => ws.backgroundMode === 'wallpaper')
+      .map(async ws => [ws.id, await readWorkspaceWallpaper(ws.id)] as const),
+  );
+  const workspaceWallpapers: WorkspaceWallpaperMap = {};
+  for (const [id, dataUrl] of wallpaperEntries) {
+    if (dataUrl) workspaceWallpapers[id] = dataUrl;
+  }
 
   return {
     schema: WORKSPACE_SCHEMA,
     schemaVersion: WORKSPACE_SCHEMA_VERSION,
     exportedAt: Date.now(),
     settings,
+    workspaces,
+    workspaceWallpapers,
     iconOverrides: Object.values(overrideRecords).map(toTransferOverride),
     bookmarkUsage: Object.values(usageRecords).map(toTransferUsage),
   };
@@ -66,7 +91,7 @@ export async function buildWorkspaceExport(): Promise<WorkspaceExportPayload> {
 export function downloadWorkspaceExport(payload: WorkspaceExportPayload, fileName?: string): void {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const dateSuffix = new Date(payload.exportedAt).toISOString().slice(0, 10);
-  const finalName = fileName ?? `flipps-workspace-${dateSuffix}.json`;
+  const finalName = fileName ?? `flipps-settings-${dateSuffix}.json`;
   const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = objectUrl;
@@ -93,7 +118,7 @@ export async function parseWorkspaceFile(file: File): Promise<WorkspaceExportPay
 
   const candidate = parsed as Partial<WorkspaceExportPayload>;
   if (candidate.schema !== WORKSPACE_SCHEMA) {
-    throw new Error('Import file is not a Flipp’s Favorites workspace export.');
+    throw new Error('Import file is not a Flipp’s Favorites backup.');
   }
 
   const iconOverrides = Array.isArray(candidate.iconOverrides)
@@ -102,6 +127,10 @@ export async function parseWorkspaceFile(file: File): Promise<WorkspaceExportPay
   const bookmarkUsage = Array.isArray(candidate.bookmarkUsage)
     ? candidate.bookmarkUsage.map(normalizeUsage).filter((r): r is BookmarkUsageTransferRecord => r !== null)
     : [];
+  const workspaces = Array.isArray(candidate.workspaces)
+    ? candidate.workspaces.map(normalizeWorkspace).filter((r): r is WorkspaceRecord => r !== null)
+    : [];
+  const workspaceWallpapers = normalizeWallpaperMap(candidate.workspaceWallpapers);
 
   return {
     schema: WORKSPACE_SCHEMA,
@@ -110,6 +139,8 @@ export async function parseWorkspaceFile(file: File): Promise<WorkspaceExportPay
     settings: (candidate.settings && typeof candidate.settings === 'object'
       ? candidate.settings
       : {}) as AppSettings,
+    workspaces,
+    workspaceWallpapers,
     iconOverrides,
     bookmarkUsage,
   };
@@ -137,6 +168,17 @@ export async function applyWorkspaceImport(
     ? { ...defaultSettings, ...payload.settings }
     : payload.settings;
   const nextSettings = await writeSettings(settingsToWrite);
+
+  // Workspaces: always merge by id (replace would wipe all current workspaces, including
+  // the one the user is currently looking at). Use the payload as the source of truth for
+  // any id collision.
+  for (const ws of payload.workspaces) {
+    await writeWorkspace(ws);
+    const wallpaper = payload.workspaceWallpapers[ws.id];
+    if (wallpaper) {
+      await writeWorkspaceWallpaper(ws.id, wallpaper);
+    }
+  }
 
   for (const record of dedupedOverrides) {
     const fullRecord: IconOverrideRecord = {
@@ -166,6 +208,7 @@ export async function applyWorkspaceImport(
 
   return {
     mode,
+    workspaceCount: payload.workspaces.length,
     iconOverrideCount: dedupedOverrides.length,
     bookmarkUsageCount: dedupedUsage.length,
     settings: nextSettings,
@@ -219,6 +262,33 @@ function normalizeUsage(value: unknown): BookmarkUsageTransferRecord | null {
     : 0;
   if (usedAt === 0) return null;
   return { bookmarkId: candidate.bookmarkId, usedAt };
+}
+
+function normalizeWorkspace(value: unknown): WorkspaceRecord | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as Partial<WorkspaceRecord>;
+  if (typeof candidate.id !== 'string' || !candidate.id.trim()) return null;
+  if (typeof candidate.name !== 'string' || !candidate.name.trim()) return null;
+  if (typeof candidate.rootFolderId !== 'string' || !candidate.rootFolderId.trim()) return null;
+  // Merge with defaults so any missing fields stay valid without trusting the file blindly.
+  return {
+    ...defaultWorkspaceSettings,
+    ...candidate,
+    id: candidate.id,
+    name: candidate.name,
+    rootFolderId: candidate.rootFolderId,
+  } as WorkspaceRecord;
+}
+
+function normalizeWallpaperMap(value: unknown): WorkspaceWallpaperMap {
+  if (!value || typeof value !== 'object') return {};
+  const out: WorkspaceWallpaperMap = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof raw === 'string' && raw.startsWith('data:image/')) {
+      out[key] = raw;
+    }
+  }
+  return out;
 }
 
 function dedupeByKey<T>(items: T[], keyOf: (item: T) => string, compare: (a: T, b: T) => number): T[] {

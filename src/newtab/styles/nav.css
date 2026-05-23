@@ -179,6 +179,7 @@
   color: var(--accent);
   font-weight: 600;
   border-color: var(--line-2);
+  border-bottom: 2px solid var(--accent);
 }
 
 .ff-ws-tab[data-drop-hover="true"] {
@@ -197,11 +198,6 @@
 .ff-ws-tab__name {
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* On wallpaper, reinforce the active tab with an accent bottom border since the photo swallows the background tint. */
-.ff-app[data-bg="wallpaper"] .ff-ws-tab.is-active {
-  border-bottom-color: var(--accent);
 }
 
 /* Add menu */

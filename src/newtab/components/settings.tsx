@@ -22,6 +22,7 @@ import {
   type WorkspaceImportMode,
 } from '../lib/workspace-transfer';
 import { defaultWorkspaceSettings } from '../../shared/storage';
+import { MOD_KEY } from '../lib/platform';
 import { useBlobUrl } from '../lib/useBlobUrl';
 
 const FALLBACK_WORKSPACE: WorkspaceRecord = {
@@ -192,7 +193,7 @@ function DensityPreview({ cols, active }: { cols: number; active?: boolean }) {
   );
 }
 
-function ThemeCardPreview({ light }: { light?: boolean }) {
+export function ThemeCardPreview({ light }: { light?: boolean }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ height: 6, width: 60, background: light ? '#E0DCD2' : '#2B2926', borderRadius: 3 }} />
@@ -210,7 +211,19 @@ function ThemeCardPreview({ light }: { light?: boolean }) {
   );
 }
 
-type SectionId = 'general' | 'navigation' | 'appearance' | 'layout' | 'dock' | 'clock' | 'backup' | 'help' | 'workspace-manage';
+type SectionId = 'navigation' | 'appearance' | 'layout' | 'dock' | 'clock' | 'backup' | 'help' | 'workspace-manage';
+
+// Contextual drawer title — replaces the static "Personalize".
+const SECTION_TITLES: Record<SectionId, string> = {
+  appearance:        'Appearance',
+  layout:            'Layout',
+  'workspace-manage': 'Workspace',
+  navigation:        'Navigation',
+  dock:              'Dock',
+  clock:             'Clock',
+  backup:            'Backup',
+  help:              'Help',
+};
 type SettingsScopeTab = 'global' | 'workspace';
 
 interface SettingsDrawerProps {
@@ -246,7 +259,7 @@ export function SettingsDrawer({ settings, activeWorkspace, workspaceWallpaper, 
         <header className="ff-drawer__head">
           <div>
             <div className="ff-dialog__eyebrow">Settings</div>
-            <div className="ff-dialog__title">Personalize</div>
+            <div className="ff-dialog__title">{SECTION_TITLES[section]}</div>
           </div>
           <button className="ff-iconbtn ff-iconbtn--icon" aria-label="Close" onClick={onClose}>
             <Ico name="close" size={16} />
@@ -263,7 +276,7 @@ export function SettingsDrawer({ settings, activeWorkspace, workspaceWallpaper, 
               </button>
               <button
                 className={`ff-drawer__scope-tab${scopeTab === 'global' ? ' is-active' : ''}`}
-                onClick={() => { setScopeTab('global'); setSection('general'); }}
+                onClick={() => { setScopeTab('global'); setSection('navigation'); }}
               >
                 Global
               </button>
@@ -278,7 +291,6 @@ export function SettingsDrawer({ settings, activeWorkspace, workspaceWallpaper, 
               )}
               {scopeTab === 'global' && (
                 <>
-                  <DrawerNav id="general"    label="General"    icon="layoutGrid" active={section} setActive={setSection} />
                   <DrawerNav id="navigation" label="Navigation" icon="command"    active={section} setActive={setSection} />
                   <DrawerNav id="dock"       label="Dock"       icon="layers"     active={section} setActive={setSection} />
                   <DrawerNav id="clock"      label="Clock"      icon="clock"      active={section} setActive={setSection} />
@@ -299,7 +311,6 @@ export function SettingsDrawer({ settings, activeWorkspace, workspaceWallpaper, 
             )}
             {scopeTab === 'global' && (
               <>
-                {section === 'general'    && <GeneralSection settings={settings} onPatch={onPatchGlobal} />}
                 {section === 'navigation' && <NavigationSection settings={settings} onPatch={onPatchGlobal} />}
                 {section === 'dock'       && <DockSection settings={settings} tree={tree} onPatch={onPatchGlobal} />}
                 {section === 'clock'      && <ClockSection settings={settings} onPatch={onPatchGlobal} />}
@@ -335,23 +346,6 @@ interface WorkspaceSectionProps {
   onPatch: (patch: Partial<WorkspaceRecord>) => void;
 }
 
-function GeneralSection({ settings, onPatch }: SectionProps) {
-  return (
-    <div className="ff-set-section">
-      <h3 className="ff-set-section__title">General</h3>
-      <div className="ff-card">
-        <div className="ff-row">
-          <div>
-            <div className="ff-row__label">Show search bar</div>
-            <div className="ff-row__hint">Subtle by default — expands when focused.</div>
-          </div>
-          <Toggle on={settings.showSearchBar} onChange={(v) => onPatch({ showSearchBar: v })} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function NavigationSection({ settings, onPatch }: SectionProps) {
   return (
     <div className="ff-set-section">
@@ -360,8 +354,15 @@ function NavigationSection({ settings, onPatch }: SectionProps) {
       <div className="ff-card">
         <div className="ff-row">
           <div>
-            <div className="ff-row__label">Remember last folder</div>
-            <div className="ff-row__hint">Open the last visited folder on a new tab.</div>
+            <div className="ff-row__label">Show search bar</div>
+            <div className="ff-row__hint">Subtle by default — expands when focused.</div>
+          </div>
+          <Toggle on={settings.showSearchBar} onChange={(v) => onPatch({ showSearchBar: v })} />
+        </div>
+        <div className="ff-row">
+          <div>
+            <div className="ff-row__label">Remember last workspace</div>
+            <div className="ff-row__hint">Reopen the workspace you were using when you closed the tab.</div>
           </div>
           <Toggle on={settings.rememberLastFolder} onChange={(v) => onPatch({ rememberLastFolder: v })} />
         </div>
@@ -419,7 +420,7 @@ function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSetWallpa
           <div className="ff-row" style={{ padding: 0 }}>
             <div>
               <div className="ff-row__label">Use system preference</div>
-              <div className="ff-row__hint">Light and dark cards below update to show which mode is currently active.</div>
+              <div className="ff-row__hint">The cards below reflect the active mode.</div>
             </div>
             <Toggle
               on={settings.themeMode === 'system'}
@@ -441,7 +442,7 @@ function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSetWallpa
 
       <div className="ff-set-section">
         <h3 className="ff-set-section__title">Accent</h3>
-        <p className="ff-set-section__desc">Pick a palette colour.</p>
+        <p className="ff-set-section__desc">Pick a palette color.</p>
         <div className="ff-accents" style={{ marginBottom: 8 }}>
           {ACCENT_PRESETS.map(a => (
             <button
@@ -1166,15 +1167,16 @@ function BackupSection({ onAfterImport }: BackupSectionProps) {
     try {
       const payload = await buildWorkspaceExport();
       downloadWorkspaceExport(payload);
+      const wsLabel = payload.workspaces.length === 1 ? 'workspace' : 'workspaces';
       const overrideLabel = payload.iconOverrides.length === 1 ? 'icon override' : 'icon overrides';
       setStatus({
         kind: 'success',
-        text: `Exported settings and ${String(payload.iconOverrides.length)} ${overrideLabel}.`,
+        text: `Exported ${String(payload.workspaces.length)} ${wsLabel} and ${String(payload.iconOverrides.length)} ${overrideLabel}.`,
       });
     } catch (error) {
       setStatus({
         kind: 'error',
-        text: error instanceof Error ? error.message : 'Failed to export workspace data.',
+        text: error instanceof Error ? error.message : 'Failed to export settings.',
       });
     } finally {
       setBusy('idle');
@@ -1196,15 +1198,16 @@ function BackupSection({ onAfterImport }: BackupSectionProps) {
       const payload = await parseWorkspaceFile(file);
       const summary = await applyWorkspaceImport(payload, importMode);
       onAfterImport(summary.settings);
+      const wsLabel = summary.workspaceCount === 1 ? 'workspace' : 'workspaces';
       const overrideLabel = summary.iconOverrideCount === 1 ? 'icon override' : 'icon overrides';
       setStatus({
         kind: 'success',
-        text: `Imported settings and ${String(summary.iconOverrideCount)} ${overrideLabel} (${summary.mode} mode).`,
+        text: `Imported ${String(summary.workspaceCount)} ${wsLabel} and ${String(summary.iconOverrideCount)} ${overrideLabel} (${summary.mode} mode).`,
       });
     } catch (error) {
       setStatus({
         kind: 'error',
-        text: error instanceof Error ? error.message : 'Failed to import workspace data.',
+        text: error instanceof Error ? error.message : 'Failed to import settings.',
       });
     } finally {
       setBusy('idle');
@@ -1215,15 +1218,15 @@ function BackupSection({ onAfterImport }: BackupSectionProps) {
     <div className="ff-set-section">
       <h3 className="ff-set-section__title">Backup</h3>
       <p className="ff-set-section__desc">
-        Save your settings and custom icon overrides to a JSON file, or restore from one. Bookmarks
+        Save all your workspaces, settings, and icon overrides to a file, or restore from one. Bookmarks
         and folders sync through the browser — use the browser&rsquo;s built-in bookmark export to move them.
       </p>
 
       <div className="ff-card" style={{ marginBottom: 16 }}>
         <div className="ff-row">
           <div>
-            <div className="ff-row__label">Export workspace</div>
-            <div className="ff-row__hint">Downloads a JSON file with your settings, icon overrides, and usage history.</div>
+            <div className="ff-row__label">Export settings</div>
+            <div className="ff-row__hint">Downloads a JSON file with all workspaces, icon overrides, and usage history.</div>
           </div>
           <button
             type="button"
@@ -1250,8 +1253,8 @@ function BackupSection({ onAfterImport }: BackupSectionProps) {
         </div>
         <div className="ff-row">
           <div>
-            <div className="ff-row__label">Import workspace</div>
-            <div className="ff-row__hint">Choose a JSON file previously exported from Flipp&rsquo;s Favorites.</div>
+            <div className="ff-row__label">Import settings</div>
+            <div className="ff-row__hint">Restore from a previously exported Flipp&rsquo;s Favorites backup.</div>
           </div>
           <button
             type="button"
@@ -1288,23 +1291,61 @@ function BackupSection({ onAfterImport }: BackupSectionProps) {
 }
 
 function HelpSection() {
+  const mod = MOD_KEY;
+  const shortcuts: ReadonlyArray<readonly [string, string]> = [
+    [`${mod}+K  or  /`,           'Focus search'],
+    ['Escape',                     'Close dialog, clear selection, blur search'],
+    ['Alt+1-9',                    'Switch to workspace 1-9'],
+    ['Arrow keys',                 'Navigate between bookmarks'],
+    ['Enter',                      'Open focused bookmark or folder'],
+    [`${mod}+Click`,               'Open in new tab / toggle selection'],
+    ['Shift+Click',                'Add to selection'],
+    ['Delete',                     'Delete focused bookmark'],
+  ];
+
+  const tips: ReadonlyArray<readonly [string, string]> = [
+    ['Drag & drop',        'Drag bookmarks to reorder, move into folders, or drop on workspace tabs to move between workspaces. Requires "Manual" sort mode.'],
+    ['Marquee select',     'Click and drag on empty space to rubber-band select multiple bookmarks at once.'],
+    ['Right-click anywhere','Context menu adapts to what you click — bookmark, folder, or empty space. Quick way to add, edit, or delete.'],
+    ['Custom icons',       'Edit any bookmark to swap its icon. Search for alternatives, upload your own, or paste an image URL.'],
+    ['Workspaces',         'Each workspace can have its own accent color, background, and layout. Use the + button or Settings to create more.'],
+    ['Dock',               'Pin your most-used links to a bottom bar. Configure visibility and source folder in Settings → Dock.'],
+  ];
+
   return (
     <div className="ff-set-section">
       <h3 className="ff-set-section__title">Shortcuts</h3>
-      <div className="ff-card">
-        {([
-          ['⌘K', 'Focus search'],
-          ['⌘+Click', 'Open in new tab'],
-          ['Esc', 'Clear selection / close dialog'],
-          ['⌘C / ⌘X / ⌘V', 'Cut, copy and paste bookmarks'],
-          ['⌘Z / ⌘⇧Z', 'Undo / redo'],
-          ['Drag empty space', 'Marquee multi-select'],
-        ] as const).map(([k, v]) => (
-          <div className="ff-row" key={k}>
-            <div className="ff-row__label">{v}</div>
-            <span className="ff-kbd" style={{ fontSize: 12 }}>{k}</span>
+      <p className="ff-set-section__desc">Work smarter, not harder.</p>
+      <div className="ff-card" style={{ marginBottom: 16 }}>
+        {shortcuts.map(([kbd, label]) => (
+          <div className="ff-row" key={kbd}>
+            <div className="ff-row__label">{label}</div>
+            <span className="ff-kbd" style={{ fontSize: 12 }}>{kbd}</span>
           </div>
         ))}
+      </div>
+
+      <h3 className="ff-set-section__title">Tips</h3>
+      <p className="ff-set-section__desc">Useful things that aren&rsquo;t immediately obvious.</p>
+      <div className="ff-card" style={{ marginBottom: 16 }}>
+        {tips.map(([label, body]) => (
+          <div className="ff-row" key={label} style={{ alignItems: 'flex-start' }}>
+            <div style={{ flex: 1 }}>
+              <div className="ff-row__label">{label}</div>
+              <div className="ff-row__hint">{body}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <h3 className="ff-set-section__title">About</h3>
+      <div className="ff-card">
+        <div className="ff-row">
+          <div>
+            <div className="ff-row__label">Flipp&rsquo;s Favorites</div>
+            <div className="ff-row__hint">Bookmark dashboard for Chrome and Firefox.</div>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ interface BaseViewProps {
   onContextMenu?: (target: BookmarkNode, event: MouseEvent) => void;
   selectedIds?: ReadonlySet<string>;
   selectionScopeFolderId?: string;
+  focusedTileId?: string | null;
 }
 
 interface TreeViewProps extends BaseViewProps {
@@ -28,7 +29,7 @@ function isSelectedIn(scope: string, containerScope: string, ids: ReadonlySet<st
   return ids.has(itemId);
 }
 
-export function TilesView({ tree, rootBookmarks, shape, scopeFolderId, onPickFolder, onPickItem, onContextMenu, selectedIds, selectionScopeFolderId }: TilesViewProps) {
+export function TilesView({ tree, rootBookmarks, shape, scopeFolderId, onPickFolder, onPickItem, onContextMenu, selectedIds, selectionScopeFolderId, focusedTileId }: TilesViewProps) {
   return (
     <div className="ff-grid" data-scope-folder-id={scopeFolderId}>
       {tree.map(folder => (
@@ -37,6 +38,7 @@ export function TilesView({ tree, rootBookmarks, shape, scopeFolderId, onPickFol
           folder={folder}
           shape={shape}
           selected={isSelectedIn(scopeFolderId, selectionScopeFolderId ?? '', selectedIds, folder.id)}
+          focused={focusedTileId === folder.id}
           onClick={onPickFolder}
           onContextMenu={onContextMenu}
         />
@@ -47,6 +49,7 @@ export function TilesView({ tree, rootBookmarks, shape, scopeFolderId, onPickFol
           item={item}
           shape={shape}
           selected={isSelectedIn(scopeFolderId, selectionScopeFolderId ?? '', selectedIds, item.id)}
+          focused={focusedTileId === item.id}
           onClick={onPickItem}
           onContextMenu={onContextMenu}
         />
@@ -55,7 +58,7 @@ export function TilesView({ tree, rootBookmarks, shape, scopeFolderId, onPickFol
   );
 }
 
-export function SectionsView({ tree, shape, scopeFolderId, onPickFolder, onPickItem, onSectionMenu, onContextMenu, selectedIds, selectionScopeFolderId }: TreeViewProps) {
+export function SectionsView({ tree, shape, scopeFolderId, onPickFolder, onPickItem, onSectionMenu, onContextMenu, selectedIds, selectionScopeFolderId, focusedTileId }: TreeViewProps) {
   return (
     <div className="ff-sections" data-scope-folder-id={scopeFolderId}>
       {tree.map(folder => (
@@ -71,6 +74,7 @@ export function SectionsView({ tree, shape, scopeFolderId, onPickFolder, onPickI
                 scopeFolderId={folder.id}
                 selectedIds={selectedIds}
                 selectionScopeFolderId={selectionScopeFolderId}
+                focusedTileId={focusedTileId}
                 onPickFolder={onPickFolder}
                 onPickItem={onPickItem}
                 onContextMenu={onContextMenu}
@@ -87,7 +91,7 @@ interface FolderPageViewProps extends BaseViewProps {
   folder: BookmarkNode;
 }
 
-export function FolderPageView({ folder, shape, onPickFolder, onPickItem, onContextMenu, selectedIds, selectionScopeFolderId }: FolderPageViewProps) {
+export function FolderPageView({ folder, shape, onPickFolder, onPickItem, onContextMenu, selectedIds, selectionScopeFolderId, focusedTileId }: FolderPageViewProps) {
   const children = folder.children ?? [];
   return (
     <div className="ff-page-view" data-scope-folder-id={folder.id}>
@@ -100,6 +104,7 @@ export function FolderPageView({ folder, shape, onPickFolder, onPickItem, onCont
             scopeFolderId={folder.id}
             selectedIds={selectedIds}
             selectionScopeFolderId={selectionScopeFolderId}
+            focusedTileId={focusedTileId}
             onPickFolder={onPickFolder}
             onPickItem={onPickItem}
             onContextMenu={onContextMenu}
