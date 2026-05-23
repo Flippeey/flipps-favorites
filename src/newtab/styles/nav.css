@@ -98,7 +98,7 @@
   border-radius: var(--r-sm); cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
-.ff-sort__option:hover, .ff-fpicker__option:hover { background: var(--ink-3); color: var(--fg-1); }
+.ff-sort__option:hover, .ff-fpicker__option:hover { background: var(--accent-soft); color: var(--accent); }
 .ff-sort__option[data-active="true"], .ff-fpicker__option[data-active="true"] {
   background: var(--accent-soft); color: var(--accent); font-weight: 500;
 }
@@ -239,7 +239,3 @@
   text-overflow: ellipsis;
 }
 
-/* Add menu */
-.ff-add-menu {
-  position: relative;
-}

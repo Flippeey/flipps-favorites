@@ -195,11 +195,34 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     if (nextActiveId) await handlePatch({ activeWorkspaceId: nextActiveId });
   }, [workspaces, settings.activeWorkspaceId, handlePatch]);
 
+  const handleDuplicateWorkspace = useCallback(async (id: string) => {
+    if (workspaces.length >= MAX_WORKSPACES) return;
+    const source = workspaces.find(w => w.id === id);
+    if (!source) return;
+    const duplicate: WorkspaceRecord = {
+      ...source,
+      id: crypto.randomUUID(),
+      name: `Copy of ${source.name}`,
+    };
+    try {
+      const created = await createWorkspace(duplicate);
+      if (source.backgroundMode === 'wallpaper') {
+        const wallpaper = await readWorkspaceWallpaper(source.id);
+        if (wallpaper) await writeWorkspaceWallpaper(created.id, wallpaper);
+      }
+      setWorkspaces(prev => [...prev, created]);
+      await handlePatch({ activeWorkspaceId: created.id });
+    } catch {
+      // creation failed — leave UI unchanged
+    }
+  }, [workspaces, handlePatch]);
+
   const handleAddWorkspace = useCallback(() => {
     setNewWorkspaceOpen(true);
   }, []);
 
-  const handleWorkspaceContextMenu = useCallback((_id: string, x: number, y: number) => {
+  const handleWorkspaceContextMenu = useCallback((id: string, x: number, y: number) => {
+    const atMax = workspaces.length >= MAX_WORKSPACES;
     setContextMenu({
       x, y,
       items: [
@@ -207,13 +230,16 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           setSettingsInitialSection('appearance');
           setSettingsOpen(true);
         }},
+        { kind: 'item', icon: 'copy', label: 'Duplicate', disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => {
+          void handleDuplicateWorkspace(id);
+        }},
         { kind: 'item', icon: 'settings', label: 'Manage', onClick: () => {
           setSettingsInitialSection('workspace-manage');
           setSettingsOpen(true);
         }},
       ],
     });
-  }, []);
+  }, [workspaces.length, handleDuplicateWorkspace]);
 
   const refreshTree = useCallback(async () => {
     try {
@@ -303,6 +329,18 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setFolderNameTarget({ mode: 'create', parentId: parentId ?? defaultParentId(), parentTitle });
   }, [defaultParentId]);
 
+  const handleOpenAddMenu = useCallback((x: number, y: number) => {
+    const atMax = workspaces.length >= MAX_WORKSPACES;
+    setContextMenu({
+      x, y,
+      items: [
+        { kind: 'item', icon: 'link',       label: 'Add bookmark',  onClick: () => handleNewBookmark() },
+        { kind: 'item', icon: 'folderPlus', label: 'Add folder',    onClick: () => handleNewFolder() },
+        { kind: 'item', icon: 'layers',     label: 'Add workspace', disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => handleAddWorkspace() },
+      ],
+    });
+  }, [workspaces.length, handleNewBookmark, handleNewFolder, handleAddWorkspace]);
+
   const handleRenameFolder = useCallback((folder: BookmarkNode) => {
     setFolderNameTarget({ mode: 'rename', id: folder.id, title: folder.title });
   }, []);
@@ -315,10 +353,12 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     if (target == null) {
       const parentId = sectionFolder?.id ?? defaultParentId();
       const labelSuffix = sectionFolder ? ` in ${sectionFolder.title}` : '';
+      const atMax = workspaces.length >= MAX_WORKSPACES;
       return [
-        { kind: 'item', icon: 'plus',       label: `New bookmark${labelSuffix}`, onClick: () => handleNewBookmark(parentId, sectionFolder?.title) },
-        { kind: 'item', icon: 'folderPlus', label: `New folder${labelSuffix}`,
+        { kind: 'item', icon: 'plus',       label: `Add bookmark${labelSuffix}`, onClick: () => handleNewBookmark(parentId, sectionFolder?.title) },
+        { kind: 'item', icon: 'folderPlus', label: `Add folder${labelSuffix}`,
           onClick: () => handleNewFolder(parentId, sectionFolder?.title) },
+        { kind: 'item', icon: 'layers',     label: 'Add workspace', disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => handleAddWorkspace() },
         { kind: 'separator' },
         { kind: 'item', icon: 'settings',   label: 'Settings', onClick: () => setSettingsOpen(true) },
       ];
@@ -353,7 +393,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       { kind: 'item', icon: 'trash',      label: deleteLabel,       kbd: IS_MAC ? '⌫' : 'Del', destructive: true,
         onClick: deleteAction },
     ];
-  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, selection, refreshTree]);
+  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, handleAddWorkspace, workspaces.length, selection, refreshTree]);
 
   const handleCanvasContextMenu = useCallback((event: React.MouseEvent) => {
     const target = event.target as HTMLElement;
@@ -717,14 +757,12 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           activeWorkspaceId={settings.activeWorkspaceId}
           onSwitchWorkspace={handleSwitchWorkspace}
           onWorkspaceContextMenu={handleWorkspaceContextMenu}
-          onAddWorkspace={handleAddWorkspace}
-          onAddFolder={handleNewFolder}
+          onOpenAddMenu={handleOpenAddMenu}
           path={folderPath}
           onCrumb={handleGoToCrumb}
           sortValue={sortChoice}
           onSort={handleSortChange}
           onOpenSettings={() => setSettingsOpen(true)}
-          onAddBookmark={() => handleNewBookmark()}
         />
       </header>
 

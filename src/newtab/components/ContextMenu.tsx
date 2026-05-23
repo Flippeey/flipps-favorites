@@ -6,6 +6,7 @@ export interface ContextMenuItem {
   icon?: string;
   label?: string;
   kbd?: string;
+  title?: string;
   onClick?: () => void;
   disabled?: boolean;
   destructive?: boolean;
@@ -76,6 +77,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
             key={i}
             role="menuitem"
             disabled={it.disabled}
+            title={it.title}
             data-hovered={hovered === i}
             data-destructive={!!it.destructive}
             className="ff-ctx__item"

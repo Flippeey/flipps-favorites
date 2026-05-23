@@ -239,7 +239,7 @@ export function HeroSearch({ shape, index, usage, onPickBookmark, onPickFolder }
         <input
           ref={inputRef}
           type="text"
-          placeholder="Search bookmarks or type a URL"
+          placeholder="Search any bookmark or folder..."
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onFocus={() => setFocused(true)}

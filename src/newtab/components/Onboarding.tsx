@@ -139,11 +139,11 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
   const [finishing, setFinishing] = useState(false);
 
   const steps = [
-    { title: "Welcome to Flipp's Favorites", desc: "A new-tab dashboard that uses your existing bookmarks. No imports. No accounts. Just a faster way to get where you're going." },
-    { title: 'Choose your theme',           desc: 'Light, dark, or follow your system. You can change this any time in Settings.' },
-    { title: 'Pick your accent',            desc: 'Pick the accent that feels right. You can change it any time in Settings.' },
+    { title: "Welcome to Flipp's Favorites", desc: '' },
+    { title: 'Choose your theme',           desc: 'Light or dark?' },
+    { title: 'Pick your accent',            desc: 'Pick the accent that feels right.' },
     { title: 'Set up your workspace',       desc: 'Pick a root folder, or create multiple workspaces — each with its own layout and theme.' },
-    { title: 'How should folders look?',    desc: 'Folders can stay compact as tiles, or always show inline as sections. You can change this any time.' },
+    { title: 'How should folders look?',    desc: 'Folders can stay compact as tiles, or always show inline as sections.' },
     { title: "You're all set",              desc: 'Open Settings any time to tweak themes, layout, and the dock. Right-click anywhere for context actions.' },
   ];
   const s = steps[step];
@@ -192,24 +192,33 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
             ))}
           </div>
           <h2 className="ff-onboard__title">{s.title}</h2>
-          <p className="ff-onboard__desc">{s.desc}</p>
+          {s.desc && <p className="ff-onboard__desc">{s.desc}</p>}
         </div>
         <div className="ff-onboard__body">
           {step === 0 && (
-            <div style={{ display: 'grid', placeItems: 'center', padding: '24px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 28, padding: '20px 0' }}>
               <div style={{
-                width: 96, height: 96, borderRadius: 22,
+                flexShrink: 0,
+                width: 88, height: 88, borderRadius: 20,
                 background: 'linear-gradient(180deg, #2A2826, #0A0908)',
                 border: '1px solid var(--line-2)',
                 display: 'grid',
                 gridTemplateColumns: 'repeat(4, 1fr)',
                 gridTemplateRows: 'repeat(4, 1fr)',
-                gap: 4, padding: 10,
-                boxShadow: '0 24px 48px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)',
+                gap: 4, padding: 9,
+                boxShadow: '0 16px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
               }}>
                 {['#FF7A2B','#FFD479','#FF6B6B','#C96A7D','#7D60D8','#3F72DC','#23867B','#7BAE2C','#2F8F4E','#FFB454','#F1641E','#E94235','#1ABCFE','#60A5FA','#C85FA4','#FFB380'].map((c, i) => (
-                  <div key={i} style={{ background: c, borderRadius: 4 }} />
+                  <div key={i} style={{ background: c, borderRadius: 3 }} />
                 ))}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--fg-1)', lineHeight: 1.6, fontWeight: 500 }}>
+                  We'll guide you through a few quick choices to get you set up. It will only take a minute!
+                </p>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--fg-3)', lineHeight: 1.5 }}>
+                  Any setting you configure here can be changed later from Settings.
+                </p>
               </div>
             </div>
           )}
@@ -243,7 +252,7 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
             <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
               <WorkspaceTabPreview folders={previewFolders} />
               <p style={{ fontSize: 12, color: 'var(--fg-3)', textAlign: 'center', margin: '0 0 4px' }}>
-                Each workspace is a separate home screen with its own layout and accent color.
+                Each workspace is a separate home screen that you can customize how you like.
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
                 <button
@@ -272,7 +281,7 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
                   }}
                 >
                   <div style={{ fontWeight: 600, marginBottom: 4 }}>Multiple workspaces</div>
-                  <div style={{ fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.45 }}>Separate layouts per folder. Pick a few to start — add more later.</div>
+                  <div style={{ fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.45 }}>Multiple collections. Pick a few to start.</div>
                 </button>
               </div>
               {workspaceMode === 'single' && (
