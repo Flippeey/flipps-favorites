@@ -87,6 +87,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const dragEngagedRef = useRef(false);
   const lastClickedRef = useRef<string | null>(null);
   const [canvasEl, setCanvasEl] = useState<HTMLElement | null>(null);
+  const [appEl, setAppEl] = useState<HTMLElement | null>(null);
   const [overlayBodyEl, setOverlayBodyEl] = useState<HTMLElement | null>(null);
   const [dockEl, setDockEl] = useState<HTMLElement | null>(null);
 
@@ -475,6 +476,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
 
   const marqueeRect = useMarquee({
     surface: canvasEl,
+    container: appEl,
     rootFolderId: rootFolder?.id ?? '',
     enabled: true,
     selectionRef,
@@ -693,6 +695,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   return (
     <div
       className="ff-app"
+      ref={setAppEl}
       data-bg={activeWorkspace?.backgroundMode ?? 'gradient'}
       data-bg-style={activeWorkspace?.gradientStyle ?? 'top'}
       data-tile-shape={activeWorkspace?.tileShape ?? 'squircle'}

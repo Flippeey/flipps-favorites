@@ -35,7 +35,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   }, [x, y, items]);
 
   useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
+    const onDoc = (e: PointerEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
     const onKey = (e: KeyboardEvent) => {
@@ -58,10 +58,10 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
         onClose();
       }
     };
-    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('pointerdown', onDoc);
     document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('pointerdown', onDoc);
       document.removeEventListener('keydown', onKey);
     };
   }, [items, hovered, onClose]);
