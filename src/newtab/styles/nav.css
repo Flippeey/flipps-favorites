@@ -208,6 +208,11 @@
   overflow: hidden;
 }
 
+[data-theme="light"] .ff-ws-tab {
+  color: var(--fg-1);
+  text-shadow: none;
+}
+
 .ff-ws-tab:hover {
   background: var(--ink-3);
   color: var(--fg-1);
@@ -219,6 +224,12 @@
   font-weight: 600;
   border-color: var(--line-2);
   border-bottom: 2px solid var(--accent);
+}
+
+[data-theme="light"] .ff-ws-tab.is-active {
+  color: var(--accent-600, var(--accent));
+  background: color-mix(in oklab, var(--accent) 8%, var(--ink-1));
+  border-color: var(--accent-border);
 }
 
 .ff-ws-tab[data-drop-hover="true"] {
