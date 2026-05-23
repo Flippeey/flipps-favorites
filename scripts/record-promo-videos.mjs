@@ -143,82 +143,29 @@ const FOLDERS = [
   },
 ];
 
-// Workspace demo data — two-level nested structure (Work + Personal, each with subfolders)
-const WORKSPACE_FOLDERS = [
-  {
-    title: '🏢 Work',
-    subfolders: [
-      {
-        title: '⚡ Acme Corp',
-        bookmarks: [
-          { title: 'Slack',         url: 'https://slack.com' },
-          { title: 'Jira',          url: 'https://www.atlassian.com/software/jira' },
-          { title: 'Confluence',    url: 'https://www.atlassian.com/software/confluence' },
-          { title: 'Figma',         url: 'https://www.figma.com' },
-          { title: 'Google Drive',  url: 'https://drive.google.com' },
-          { title: 'Gmail',         url: 'https://mail.google.com' },
-        ],
-      },
-      {
-        title: '🚀 Project Apollo',
-        bookmarks: [
-          { title: 'GitHub',    url: 'https://github.com' },
-          { title: 'Linear',    url: 'https://linear.app' },
-          { title: 'Vercel',    url: 'https://vercel.com' },
-          { title: 'Notion',    url: 'https://www.notion.so' },
-          { title: 'Sentry',    url: 'https://sentry.io' },
-          { title: 'Datadog',   url: 'https://www.datadoghq.com' },
-        ],
-      },
-      {
-        title: '🔬 Project Nexus',
-        bookmarks: [
-          { title: 'GitLab',      url: 'https://gitlab.com' },
-          { title: 'Trello',      url: 'https://trello.com' },
-          { title: 'Postman',     url: 'https://www.postman.com' },
-          { title: 'Heroku',      url: 'https://www.heroku.com' },
-          { title: 'Swagger UI',  url: 'https://swagger.io' },
-        ],
-      },
-    ],
-  },
-  {
-    title: '🏠 Personal',
-    subfolders: [
-      {
-        title: '💊 Health',
-        bookmarks: [
-          { title: 'MyFitnessPal', url: 'https://www.myfitnesspal.com' },
-          { title: 'Headspace',    url: 'https://www.headspace.com' },
-          { title: 'Strava',       url: 'https://www.strava.com' },
-          { title: 'WebMD',        url: 'https://www.webmd.com' },
-          { title: 'Calm',         url: 'https://www.calm.com' },
-        ],
-      },
-      {
-        title: '🏦 Banking',
-        bookmarks: [
-          { title: 'Chase',       url: 'https://www.chase.com' },
-          { title: 'PayPal',      url: 'https://www.paypal.com' },
-          { title: 'Wise',        url: 'https://wise.com' },
-          { title: 'Robinhood',   url: 'https://robinhood.com' },
-          { title: 'Mint',        url: 'https://mint.intuit.com' },
-        ],
-      },
-      {
-        title: '🎮 Hobbies',
-        bookmarks: [
-          { title: 'Steam',       url: 'https://store.steampowered.com' },
-          { title: 'Reddit',      url: 'https://www.reddit.com' },
-          { title: 'Twitch',      url: 'https://www.twitch.tv' },
-          { title: 'Goodreads',   url: 'https://www.goodreads.com' },
-          { title: 'YouTube',     url: 'https://www.youtube.com' },
-          { title: 'Duolingo',    url: 'https://www.duolingo.com' },
-        ],
-      },
-    ],
-  },
-];
+// Default values matching defaultWorkspaceSettings in src/shared/storage.ts
+const WORKSPACE_DEFAULTS = {
+  backgroundMode: 'gradient',
+  solidBackgroundColor: '',
+  gradientStyle: 'top',
+  gradientColorSource: 'accent',
+  gradientCustomColor: '#3F72DC',
+  gradientIntensity: 100,
+  backgroundOpacity: 70,
+  backgroundFitMode: 'cover',
+  backgroundPositionMode: 'center',
+  layoutPreset: 'balanced',
+  favoritesColumns: 10,
+  favoritesRows: 0,
+  favoritesColumnGap: 24,
+  favoritesRowGap: 20,
+  bookmarkTileWidth: 130,
+  bookmarkIconSize: 75,
+  tileShape: 'squircle',
+  showBookmarkIconBackground: false,
+  showAccentBackground: true,
+  showTileLabels: true,
+};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -255,6 +202,28 @@ async function applySettings(page, patch) {
   }, patch);
 }
 
+/**
+ * Seed workspace records in storage.
+ * workspaces: [{ id, name, rootFolderId, accentColor, ...overrides }]
+ * Replaces the entire workspaces store — use all desired workspaces in one call.
+ */
+async function seedWorkspaces(page, workspaces) {
+  await page.evaluate(async ({ list, defaults }) => {
+    const records = {};
+    for (const w of list) {
+      records[w.id] = { ...defaults, gradientCustomColor: w.accentColor, ...w };
+    }
+    try { await browser.storage.sync.set({ workspaces: records }); } catch {}
+    await browser.storage.local.set({ workspaces: records });
+    // Set active workspace on app-settings
+    let current = {};
+    try { const s = await browser.storage.sync.get('app-settings'); current = s['app-settings'] ?? {}; } catch {}
+    const updated = { ...current, activeWorkspaceId: list[0].id };
+    try { await browser.storage.sync.set({ 'app-settings': updated }); } catch {}
+    await browser.storage.local.set({ 'app-settings': updated });
+  }, { list: workspaces, defaults: WORKSPACE_DEFAULTS });
+}
+
 async function seedBookmarks(page, extFolderId) {
   for (const bm of ROOT_BOOKMARKS) {
     await page.evaluate(async ({ parentId, title, url }) => {
@@ -281,28 +250,6 @@ async function seedBookmarks(page, extFolderId) {
   return { folderIds };
 }
 
-async function seedWorkspaceBookmarks(page, extFolderId) {
-  for (const workspace of WORKSPACE_FOLDERS) {
-    const workspaceFolderId = await page.evaluate(async ({ parentId, title }) => {
-      const f = await browser.bookmarks.create({ parentId, title });
-      return f.id;
-    }, { parentId: extFolderId, title: workspace.title });
-
-    for (const subfolder of workspace.subfolders) {
-      const subfolderId = await page.evaluate(async ({ parentId, title }) => {
-        const f = await browser.bookmarks.create({ parentId, title });
-        return f.id;
-      }, { parentId: workspaceFolderId, title: subfolder.title });
-
-      for (const bm of subfolder.bookmarks) {
-        await page.evaluate(async ({ parentId, title, url }) => {
-          await browser.bookmarks.create({ parentId, title, url });
-        }, { parentId: subfolderId, title: bm.title, url: bm.url });
-      }
-    }
-  }
-}
-
 async function loadPage(context, origin, settings) {
   const page = await context.newPage();
   await page.setViewportSize({ width: WIDTH, height: HEIGHT });
@@ -312,7 +259,7 @@ async function loadPage(context, origin, settings) {
     // Use goto instead of reload so the extension's hash from the first load doesn't persist
     await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
   }
-  await page.waitForSelector('.shell', { timeout: 15_000 });
+  await page.waitForSelector('.ff-app', { timeout: 15_000 });
   await page.waitForTimeout(2000); // Let icons load
   return page;
 }
@@ -345,6 +292,32 @@ async function saveVideo(page, filename) {
   console.log(`  ✓ Saved: ${filename}`);
 }
 
+/** Find a folder tile by its title text and return its center coordinates */
+async function findFolderCenter(page, text) {
+  return page.evaluate((searchText) => {
+    const folders = Array.from(document.querySelectorAll('.ff-tile[data-item-kind="folder"]'));
+    const folder = folders.find(el =>
+      (el.textContent ?? '').includes(searchText) ||
+      (el.getAttribute('title') ?? '').includes(searchText)
+    );
+    if (!folder) return null;
+    const rect = folder.getBoundingClientRect();
+    return { cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 };
+  }, text);
+}
+
+/** Click a breadcrumb button by its text content and return its center */
+async function clickBreadcrumb(page, text) {
+  return page.evaluate((searchText) => {
+    const crumbs = Array.from(document.querySelectorAll('.ff-crumb__btn'));
+    const crumb = crumbs.find(el => (el.textContent ?? '').includes(searchText));
+    if (!crumb) return null;
+    const rect = crumb.getBoundingClientRect();
+    crumb.click();
+    return { cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 };
+  }, text);
+}
+
 // ─── Video flows ──────────────────────────────────────────────────────────────
 
 async function recordSearch(context, origin, baseSettings) {
@@ -352,7 +325,6 @@ async function recordSearch(context, origin, baseSettings) {
   const page = await loadPage(context, origin, {
     ...baseSettings,
     themeMode: 'dark',
-    accentColor: '#3F72DC',
     showSearchBar: true,
     searchBarPosition: 'center',
     searchScope: 'library',
@@ -362,7 +334,7 @@ async function recordSearch(context, origin, baseSettings) {
   await page.waitForTimeout(2000);
 
   // Move cursor gently toward search bar
-  const searchInput = page.locator('input[name="currentFolderSearch"]');
+  const searchInput = page.locator('input[aria-label="Search bookmarks"]');
   const searchBox = await searchInput.boundingBox();
   await smoothMove(page, 960, 540, searchBox.x + searchBox.width / 2, searchBox.y + searchBox.height / 2, 700);
   await page.waitForTimeout(400);
@@ -398,15 +370,14 @@ async function recordEditIcon(context, origin, baseSettings) {
   const page = await loadPage(context, origin, {
     ...baseSettings,
     themeMode: 'dark',
-    accentColor: '#3F72DC',
     showSearchBar: true,
     searchBarPosition: 'center',
   });
 
   await page.waitForTimeout(2000);
 
-  // Find the Netflix tile
-  const netflixTile = page.locator('[data-grid-item-id][data-bookmark-title="Netflix"]').first();
+  // Find the Netflix tile by its title attribute
+  const netflixTile = page.locator('.ff-tile[title="Netflix"]').first();
   const tileBox = await netflixTile.boundingBox();
   if (!tileBox) throw new Error('Netflix tile not found');
 
@@ -416,33 +387,41 @@ async function recordEditIcon(context, origin, baseSettings) {
 
   // Right-click to open context menu
   await page.mouse.click(tileBox.x + tileBox.width / 2, tileBox.y + tileBox.height / 2, { button: 'right' });
-  await page.waitForSelector('[data-context-action="edit"]', { timeout: 5000 });
+  await page.waitForSelector('.ff-ctx', { timeout: 5000 });
   await page.waitForTimeout(700);
 
   // Move to Edit item and click
-  const editBtn = page.locator('[data-context-action="edit"]');
+  const editBtn = page.locator('.ff-ctx__item', { hasText: 'Edit' });
   const editBox = await editBtn.boundingBox();
   await smoothMove(page, tileBox.x + tileBox.width / 2, tileBox.y + tileBox.height / 2, editBox.x + editBox.width / 2, editBox.y + editBox.height / 2, 400);
   await page.waitForTimeout(300);
   await editBtn.click();
-  await page.waitForSelector('.bookmark-dialog', { timeout: 5000 });
+  await page.waitForSelector('.ff-dialog', { timeout: 5000 });
 
-  // Dialog auto-searches "Netflix logo" on open — wait naturally for results to load
-  await page.waitForSelector('.icon-result-card', { timeout: 15_000 });
-  await page.waitForTimeout(1200);
+  // Wait for icon search results grid to appear in DOM (state: attached — cells start display:none)
+  await page.waitForSelector('div.ff-icongrid', { state: 'attached', timeout: 15_000 });
+  // Wait up to 20s for at least one preview image to load and become visible
+  const cellVisible = await page.waitForSelector('.ff-icongrid__cell', { state: 'visible', timeout: 20_000 }).catch(() => null);
+  await page.waitForTimeout(800);
 
-  // Click the first auto-loaded icon result
-  const firstResult = page.locator('.icon-result-card').first();
-  const resultBox = await firstResult.boundingBox();
-  await smoothMove(page, editBox.x + editBox.width / 2, editBox.y + editBox.height / 2, resultBox.x + resultBox.width / 2, resultBox.y + resultBox.height / 2, 800);
-  await page.waitForTimeout(400);
-  await firstResult.click();
-  await page.waitForTimeout(1000);
+  const saveBtn = page.locator('.ff-dialog button.ff-btn', { hasText: 'Save bookmark' });
 
-  // Save
-  const saveBtn = page.locator('.bookmark-dialog-save-button');
-  const saveBtnBox = await saveBtn.boundingBox();
-  await smoothMove(page, resultBox.x + resultBox.width / 2, resultBox.y + resultBox.height / 2, saveBtnBox.x + saveBtnBox.width / 2, saveBtnBox.y + saveBtnBox.height / 2, 500);
+  if (cellVisible) {
+    // Click the first visible icon result
+    const firstResult = page.locator('.ff-icongrid__cell').first();
+    const resultBox = await firstResult.boundingBox();
+    await smoothMove(page, editBox.x + editBox.width / 2, editBox.y + editBox.height / 2, resultBox.x + resultBox.width / 2, resultBox.y + resultBox.height / 2, 800);
+    await page.waitForTimeout(400);
+    await firstResult.click();
+    await page.waitForTimeout(1000);
+    const saveBtnBox = await saveBtn.boundingBox();
+    await smoothMove(page, resultBox.x + resultBox.width / 2, resultBox.y + resultBox.height / 2, saveBtnBox.x + saveBtnBox.width / 2, saveBtnBox.y + saveBtnBox.height / 2, 500);
+  } else {
+    console.warn('  ⚠ Icon previews did not load — saving without selecting an icon');
+    const saveBtnBox = await saveBtn.boundingBox();
+    await smoothMove(page, editBox.x + editBox.width / 2, editBox.y + editBox.height / 2, saveBtnBox.x + saveBtnBox.width / 2, saveBtnBox.y + saveBtnBox.height / 2, 500);
+  }
+
   await page.waitForTimeout(400);
   await saveBtn.click();
   await page.waitForTimeout(2000);
@@ -450,120 +429,67 @@ async function recordEditIcon(context, origin, baseSettings) {
   await saveVideo(page, '02-edit-icon.webm');
 }
 
-/** Find a folder card by its text content and return its center coordinates */
-async function findFolderCenter(page, text) {
-  return page.evaluate((searchText) => {
-    const folders = Array.from(document.querySelectorAll('.bookmark-grid .folder-card[data-grid-item-id]'));
-    const folder = folders.find(el => (el.textContent ?? '').includes(searchText));
-    if (!folder) return null;
-    const rect = folder.getBoundingClientRect();
-    return { cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 };
-  }, text);
-}
-
-/** Click a breadcrumb by its text content and return its center */
-async function clickBreadcrumb(page, text) {
-  return page.evaluate((searchText) => {
-    const crumbs = Array.from(document.querySelectorAll('.breadcrumb, .library-pill, .library-home'));
-    const crumb = crumbs.find(el => (el.textContent ?? '').includes(searchText));
-    if (!crumb) return null;
-    const rect = crumb.getBoundingClientRect();
-    crumb.click();
-    return { cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 };
-  }, text);
-}
-
-async function recordWorkspaces(context, origin, baseSettings, workspaceRootId) {
+/**
+ * Record video 3: workspace tabs UI demo.
+ * Shows three workspaces (Work, Personal, Creative) in the tab bar at the top.
+ * Clicking each tab switches to that workspace and applies its accent color.
+ * workspaceDefs: [{ id, name, rootFolderId, accentColor }, ...]
+ */
+async function recordWorkspaces(context, origin, baseSettings, workspaceDefs) {
   console.log('\n▶ Recording video 3: workspaces…');
 
-  // Use workspace root — only Work and Personal live here
   const page = await loadPage(context, origin, {
     ...baseSettings,
-    rootFolderId: workspaceRootId,
+    activeWorkspaceId: workspaceDefs[0].id,
     themeMode: 'dark',
-    accentColor: '#3F72DC',
     showDock: false,
-    showSearchBar: true,
-    searchBarPosition: 'center',
+    showSearchBar: false,
+    rememberLastFolder: false,
   });
 
-  // Force-navigate to workspace root via hash — reliable regardless of settings reload timing
-  await page.evaluate((id) => {
-    location.hash = `#folder=${encodeURIComponent(id)}`;
-  }, workspaceRootId);
+  // Wait for workspace tab bar to appear (only visible when path.length === 0)
+  const tabBarPresent = await page.waitForSelector('.ff-ws-tabs', { timeout: 10_000 }).catch(() => null);
+  if (!tabBarPresent) {
+    console.warn('  ⚠ Workspace tab bar not found — check that multiple workspaces are seeded');
+    await saveVideo(page, '03-workspaces.webm');
+    return;
+  }
+
+  // Orient — viewer sees first workspace active (blue accent, Work bookmarks)
   await page.waitForTimeout(2000);
 
-  // Root has only Work and Personal — both should be immediately visible
-  let workCenter = await findFolderCenter(page, 'Work');
-  if (!workCenter) {
-    const debug = await page.evaluate(() => {
-      const cards = Array.from(document.querySelectorAll('[data-grid-item-id]'));
-      return cards.map(el => el.textContent?.trim().slice(0, 40));
-    });
-    console.warn('  ⚠ Work folder not found. Grid items:', debug);
-    await saveVideo(page, '03-workspaces.webm');
-    return;
+  // Cycle through workspaces 1→2→3→1 with smooth cursor movement between tabs
+  let prevCx = 960;
+  let prevCy = 60; // approximate tab bar vertical center
+
+  for (const ws of workspaceDefs.slice(1)) {
+    const tab = page.locator(`.ff-ws-tab[data-workspace-id="${ws.id}"]`);
+    const tabBox = await tab.boundingBox();
+    if (!tabBox) {
+      console.warn(`  ⚠ Tab not found for workspace ${ws.id}`);
+      continue;
+    }
+    const tabCx = tabBox.x + tabBox.width / 2;
+    const tabCy = tabBox.y + tabBox.height / 2;
+    await smoothMove(page, prevCx, prevCy, tabCx, tabCy, 600);
+    await page.waitForTimeout(300);
+    await tab.click();
+    await page.waitForTimeout(1800); // Let accent color transition + grid re-render
+    prevCx = tabCx;
+    prevCy = tabCy;
   }
-  await page.waitForTimeout(1500); // Let viewer see the two workspace folders
 
-  // ── Navigate into Work ────────────────────────────────────────────────────
-  await smoothMove(page, 960, 540, workCenter.cx, workCenter.cy, 700);
-  await page.waitForTimeout(400);
-  await page.mouse.click(workCenter.cx, workCenter.cy);
-  await page.waitForTimeout(2000); // Show Acme Corp, Project Apollo, Project Nexus
-
-  // ── Navigate into Project Apollo ─────────────────────────────────────────
-  let apolloCenter = await findFolderCenter(page, 'Apollo');
-  if (!apolloCenter) {
-    console.warn('  ⚠ Apollo folder not found');
-    await saveVideo(page, '03-workspaces.webm');
-    return;
+  // Click back to first workspace
+  const firstTab = page.locator(`.ff-ws-tab[data-workspace-id="${workspaceDefs[0].id}"]`);
+  const firstBox = await firstTab.boundingBox();
+  if (firstBox) {
+    const firstCx = firstBox.x + firstBox.width / 2;
+    const firstCy = firstBox.y + firstBox.height / 2;
+    await smoothMove(page, prevCx, prevCy, firstCx, firstCy, 600);
+    await page.waitForTimeout(300);
+    await firstTab.click();
+    await page.waitForTimeout(1500);
   }
-  await smoothMove(page, workCenter.cx, workCenter.cy, apolloCenter.cx, apolloCenter.cy, 600);
-  await page.waitForTimeout(400);
-  await page.mouse.click(apolloCenter.cx, apolloCenter.cy);
-  await page.waitForTimeout(2000); // Show GitHub, Linear, Vercel, Notion, Sentry, Datadog
-
-  // ── Navigate back to Work via breadcrumb ─────────────────────────────────
-  let bcCenter = await clickBreadcrumb(page, 'Work');
-  if (!bcCenter) {
-    console.warn('  ⚠ Work breadcrumb not found');
-    await saveVideo(page, '03-workspaces.webm');
-    return;
-  }
-  await page.waitForTimeout(1500); // Show Work subfolders again
-
-  // ── Back to workspace root (switcher view) via home button ───────────────
-  const homeBtn = page.locator('.nav-side--left .library-home').first();
-  const homeBtnBox = await homeBtn.boundingBox();
-  await homeBtn.click();
-  await page.waitForTimeout(1500); // Work and Personal visible again at root
-
-  // ── Navigate into Personal ────────────────────────────────────────────────
-  let personalCenter = await findFolderCenter(page, 'Personal');
-  if (!personalCenter) {
-    console.warn('  ⚠ Personal folder not found');
-    await saveVideo(page, '03-workspaces.webm');
-    return;
-  }
-  const homeCx = homeBtnBox ? homeBtnBox.x + homeBtnBox.width / 2 : 960;
-  const homeCy = homeBtnBox ? homeBtnBox.y + homeBtnBox.height / 2 : 540;
-  await smoothMove(page, homeCx, homeCy, personalCenter.cx, personalCenter.cy, 600);
-  await page.waitForTimeout(400);
-  await page.mouse.click(personalCenter.cx, personalCenter.cy);
-  await page.waitForTimeout(1500); // Show Health, Banking, Hobbies
-
-  // ── Navigate into Health ──────────────────────────────────────────────────
-  let healthCenter = await findFolderCenter(page, 'Health');
-  if (!healthCenter) {
-    console.warn('  ⚠ Health folder not found');
-    await saveVideo(page, '03-workspaces.webm');
-    return;
-  }
-  await smoothMove(page, personalCenter.cx, personalCenter.cy, healthCenter.cx, healthCenter.cy, 600);
-  await page.waitForTimeout(400);
-  await page.mouse.click(healthCenter.cx, healthCenter.cy);
-  await page.waitForTimeout(2000); // Show MyFitnessPal, Headspace, Strava, WebMD, Calm
 
   await saveVideo(page, '03-workspaces.webm');
 }
@@ -573,7 +499,6 @@ async function recordDragReorder(context, origin, baseSettings) {
   const page = await loadPage(context, origin, {
     ...baseSettings,
     themeMode: 'dark',
-    accentColor: '#F57C00',
     showSearchBar: false,
   });
 
@@ -583,7 +508,7 @@ async function recordDragReorder(context, origin, baseSettings) {
   // Drag Notion (position 5) up to position 3 — shows single-item reorder.
   // Positions 0-2 (Netflix/YouTube/Twitch) are intentionally untouched.
   const itemPositions = await page.evaluate(() => {
-    const items = Array.from(document.querySelectorAll('.bookmark-grid [data-grid-item-id][data-link-url]'));
+    const items = Array.from(document.querySelectorAll('.ff-tile[data-item-kind="bookmark"]'));
     return items.slice(0, 8).map(el => {
       const rect = el.getBoundingClientRect();
       return { cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 };
@@ -616,10 +541,10 @@ async function recordDragReorder(context, origin, baseSettings) {
   // empty area to start the marquee. Marquee does NOT call renderApp mid-drag, so
   // selection is stable and includes all three items exactly.
   const marqueeInfo = await page.evaluate(() => {
-    const canvas = document.querySelector('.bookmark-canvas');
-    const netflix = document.querySelector('[data-bookmark-title="Netflix"]');
-    const youtube = document.querySelector('[data-bookmark-title="YouTube"]');
-    const twitch  = document.querySelector('[data-bookmark-title="Twitch"]');
+    const canvas = document.querySelector('.ff-canvas');
+    const netflix = document.querySelector('.ff-tile[title="Netflix"]');
+    const youtube = document.querySelector('.ff-tile[title="YouTube"]');
+    const twitch  = document.querySelector('.ff-tile[title="Twitch"]');
     if (!canvas || !netflix || !youtube || !twitch) return null;
 
     const cr = canvas.getBoundingClientRect();
@@ -668,7 +593,7 @@ async function recordDragReorder(context, origin, baseSettings) {
   if (!entertainCenter) {
     const debug = await page.evaluate(() => ({
       url: location.href,
-      cards: Array.from(document.querySelectorAll('[data-grid-item-id]')).map(el => el.textContent?.trim().slice(0, 30)),
+      cards: Array.from(document.querySelectorAll('.ff-tile[data-item-kind="folder"]')).map(el => el.textContent?.trim().slice(0, 30)),
     }));
     console.warn('  ⚠ Entertainment folder not found. Debug:', JSON.stringify(debug));
     await saveVideo(page, '04-drag-reorder.webm');
@@ -697,36 +622,35 @@ async function recordColorThemes(context, origin, baseSettings) {
   const page = await loadPage(context, origin, {
     ...baseSettings,
     themeMode: 'dark',
-    accentColor: '#3F72DC',
     showSearchBar: false,
   });
 
   await page.waitForTimeout(2000);
 
-  // Open settings drawer
-  const drawerToggle = page.locator('.drawer-toggle').first();
-  const toggleBox = await drawerToggle.boundingBox();
+  // Open settings drawer — it opens on Workspace scope / Appearance section by default
+  const settingsBtn = page.locator('button.ff-iconbtn[aria-label="Settings"]');
+  const toggleBox = await settingsBtn.boundingBox();
   await smoothMove(page, 960, 540, toggleBox.x + toggleBox.width / 2, toggleBox.y + toggleBox.height / 2, 600);
   await page.waitForTimeout(400);
-  await drawerToggle.click();
-  await page.waitForSelector('[data-section="appearance"]', { timeout: 5000 });
+  await settingsBtn.click();
+  await page.waitForSelector('.ff-drawer__scope-tabs', { timeout: 5000 });
+  await page.waitForSelector('.ff-accents', { timeout: 5000 });
   await page.waitForTimeout(800);
 
-  // Navigate to appearance section
-  const appearanceBtn = page.locator('[data-section="appearance"]');
-  const appearanceBox = await appearanceBtn.boundingBox();
-  await smoothMove(page, toggleBox.x, toggleBox.y, appearanceBox.x + appearanceBox.width / 2, appearanceBox.y + appearanceBox.height / 2, 400);
-  await page.waitForTimeout(300);
-  await appearanceBtn.click();
-  await page.waitForTimeout(800);
+  // Map accent hex values to aria-label names for the .ff-accentchip selector
+  const darkAccentColors = [
+    { label: 'Orange', value: '#F57C00' },
+    { label: 'Teal',   value: '#23867B' },
+    { label: 'Purple', value: '#7D60D8' },
+    { label: 'Red',    value: '#C75252' },
+    { label: 'Blue',   value: '#3F72DC' },
+  ];
 
-  // Cycle through accent colors in dark mode
-  const darkAccentColors = ['#F57C00', '#23867B', '#7D60D8', '#C75252', '#3F72DC'];
-  let prevBox = appearanceBox;
-  for (const color of darkAccentColors) {
-    const swatch = page.locator(`[data-accent-option="${color}"]`);
+  let prevBox = toggleBox;
+  for (const accent of darkAccentColors) {
+    const swatch = page.locator(`.ff-accentchip[aria-label="${accent.label}"]`).first();
     const swatchBox = await swatch.boundingBox();
-    await smoothMove(page, prevBox.x, prevBox.y, swatchBox.x + swatchBox.width / 2, swatchBox.y + swatchBox.height / 2, 350);
+    await smoothMove(page, prevBox.x + prevBox.width / 2, prevBox.y + prevBox.height / 2, swatchBox.x + swatchBox.width / 2, swatchBox.y + swatchBox.height / 2, 350);
     await page.waitForTimeout(250);
     await swatch.click();
     await page.waitForTimeout(900);
@@ -734,19 +658,22 @@ async function recordColorThemes(context, origin, baseSettings) {
   }
 
   // Switch to light mode — the big reveal
-  const lightModeCard = page.locator('[data-theme-mode-option="light"]');
+  const lightModeCard = page.locator('.ff-themecard--light').first();
   const lightBox = await lightModeCard.boundingBox();
-  await smoothMove(page, prevBox.x, prevBox.y, lightBox.x + lightBox.width / 2, lightBox.y + lightBox.height / 2, 500);
+  await smoothMove(page, prevBox.x + prevBox.width / 2, prevBox.y + prevBox.height / 2, lightBox.x + lightBox.width / 2, lightBox.y + lightBox.height / 2, 500);
   await page.waitForTimeout(400);
   await lightModeCard.click();
   await page.waitForTimeout(1200);
 
   // Cycle a couple accent colors in light mode too
-  const lightAccentColors = ['#F57C00', '#3F72DC'];
-  for (const color of lightAccentColors) {
-    const swatch = page.locator(`[data-accent-option="${color}"]`);
+  const lightAccentColors = [
+    { label: 'Orange', value: '#F57C00' },
+    { label: 'Blue',   value: '#3F72DC' },
+  ];
+  for (const accent of lightAccentColors) {
+    const swatch = page.locator(`.ff-accentchip[aria-label="${accent.label}"]`).first();
     const swatchBox = await swatch.boundingBox();
-    await smoothMove(page, prevBox.x, prevBox.y, swatchBox.x + swatchBox.width / 2, swatchBox.y + swatchBox.height / 2, 350);
+    await smoothMove(page, prevBox.x + prevBox.width / 2, prevBox.y + prevBox.height / 2, swatchBox.x + swatchBox.width / 2, swatchBox.y + swatchBox.height / 2, 350);
     await page.waitForTimeout(250);
     await swatch.click();
     await page.waitForTimeout(900);
@@ -756,50 +683,44 @@ async function recordColorThemes(context, origin, baseSettings) {
   await saveVideo(page, '05-color-themes.webm');
 }
 
-
 async function recordLayoutSettings(context, origin, baseSettings) {
   console.log('\n▶ Recording video 6: layout settings…');
   const page = await loadPage(context, origin, {
     ...baseSettings,
     themeMode: 'dark',
-    accentColor: '#3F72DC',
     showSearchBar: false,
   });
 
   await page.waitForTimeout(2000);
 
-  // Open settings drawer
-  const drawerToggle = page.locator('.drawer-toggle').first();
-  const toggleBox = await drawerToggle.boundingBox();
+  // Open settings drawer — opens on Workspace scope / Appearance by default
+  const settingsBtn = page.locator('button.ff-iconbtn[aria-label="Settings"]');
+  const toggleBox = await settingsBtn.boundingBox();
   await smoothMove(page, 960, 540, toggleBox.x + toggleBox.width / 2, toggleBox.y + toggleBox.height / 2, 600);
   await page.waitForTimeout(400);
-  await drawerToggle.click();
-  await page.waitForSelector('[data-section="general"]', { timeout: 5000 });
+  await settingsBtn.click();
+  await page.waitForSelector('.ff-drawer__scope-tabs', { timeout: 5000 });
   await page.waitForTimeout(700);
 
-  // Click General section
-  const generalBtn = page.locator('[data-section="general"]');
-  const generalBox = await generalBtn.boundingBox();
-  await smoothMove(page, toggleBox.x, toggleBox.y, generalBox.x + generalBox.width / 2, generalBox.y + generalBox.height / 2, 400);
+  // Navigate to Layout section (Workspace scope, Layout nav item)
+  const layoutBtn = page.locator('.ff-drawer__navitem', { hasText: 'Layout' });
+  const layoutBtnBox = await layoutBtn.boundingBox();
+  await smoothMove(page, toggleBox.x + toggleBox.width / 2, toggleBox.y + toggleBox.height / 2, layoutBtnBox.x + layoutBtnBox.width / 2, layoutBtnBox.y + layoutBtnBox.height / 2, 400);
   await page.waitForTimeout(300);
-  await generalBtn.click();
-  await page.waitForTimeout(700);
-
-  // Click Layout tab
-  const layoutTab = page.locator('[data-general-subpage="layout"]');
-  const layoutTabBox = await layoutTab.boundingBox();
-  await smoothMove(page, generalBox.x, generalBox.y, layoutTabBox.x + layoutTabBox.width / 2, layoutTabBox.y + layoutTabBox.height / 2, 400);
-  await page.waitForTimeout(300);
-  await layoutTab.click();
+  await layoutBtn.click();
   await page.waitForTimeout(800);
 
-  // Cycle through layout presets
-  const presets = ['compact', 'spacious', 'balanced'];
-  let prevBox = layoutTabBox;
+  // Cycle through layout presets — buttons are .ff-card with label text inside
+  const presets = [
+    { id: 'compact',  label: 'Compact' },
+    { id: 'spacious', label: 'Spacious' },
+    { id: 'balanced', label: 'Balanced' },
+  ];
+  let prevBox = layoutBtnBox;
   for (const preset of presets) {
-    const card = page.locator(`[data-layout-preset-option="${preset}"]`);
+    const card = page.locator('button.ff-card', { hasText: preset.label });
     const cardBox = await card.boundingBox();
-    await smoothMove(page, prevBox.x, prevBox.y, cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height / 2, 450);
+    await smoothMove(page, prevBox.x + prevBox.width / 2, prevBox.y + prevBox.height / 2, cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height / 2, 450);
     await page.waitForTimeout(350);
     await card.click();
     await page.waitForTimeout(1100);
@@ -807,9 +728,9 @@ async function recordLayoutSettings(context, origin, baseSettings) {
   }
 
   // Close drawer to reveal the final layout
-  const closeBtn = page.locator('.drawer-close');
+  const closeBtn = page.locator('.ff-drawer button[aria-label="Close"]');
   const closeBox = await closeBtn.boundingBox();
-  await smoothMove(page, prevBox.x, prevBox.y, closeBox.x + closeBox.width / 2, closeBox.y + closeBox.height / 2, 500);
+  await smoothMove(page, prevBox.x + prevBox.width / 2, prevBox.y + prevBox.height / 2, closeBox.x + closeBox.width / 2, closeBox.y + closeBox.height / 2, 500);
   await page.waitForTimeout(400);
   await closeBtn.click();
   await page.waitForTimeout(2000);
@@ -851,11 +772,11 @@ async function main() {
   const origin = `chrome-extension://${extId}`;
   console.log('Extension ID:', extId);
 
-  // Bootstrap: seed bookmarks and base settings on a throwaway page
+  // Bootstrap: seed bookmarks and workspace records on a throwaway page
   const setupPage = await context.newPage();
   await setupPage.setViewportSize({ width: WIDTH, height: HEIGHT });
   await setupPage.goto(`${origin}/newtab.html`);
-  await setupPage.waitForSelector('.shell', { timeout: 15_000 });
+  await setupPage.waitForSelector('.ff-app', { timeout: 15_000 });
   await skipOnboarding(setupPage);
 
   const rootFolderId = await setupPage.evaluate(async () => {
@@ -874,19 +795,21 @@ async function main() {
     }, { parentId: dockFolderId, title: bm.title, url: bm.url });
   }
 
-  await seedBookmarks(setupPage, rootFolderId);
+  const { folderIds } = await seedBookmarks(setupPage, rootFolderId);
   console.log('Bookmarks seeded. rootFolderId:', rootFolderId);
 
-  // Workspace root — separate folder containing only Work and Personal
-  const workspaceRootId = await setupPage.evaluate(async () => {
-    const f = await browser.bookmarks.create({ parentId: '2', title: 'Workspaces' });
-    return f.id;
-  });
-  await seedWorkspaceBookmarks(setupPage, workspaceRootId);
-  console.log('Workspace folders seeded. workspaceRootId:', workspaceRootId);
+  // Three workspace records — each points at a different category folder so switching
+  // workspaces shows visibly different content AND different accent colors.
+  const workspaceDefs = [
+    { id: 'ws-work',     name: 'Work',     rootFolderId,                                  accentColor: '#3F72DC' },
+    { id: 'ws-personal', name: 'Personal', rootFolderId: folderIds['🍳 Cooking'],         accentColor: '#23867B' },
+    { id: 'ws-creative', name: 'Creative', rootFolderId: folderIds['🎬 Entertainment'],   accentColor: '#7D60D8' },
+  ];
+  await seedWorkspaces(setupPage, workspaceDefs);
+  console.log('Workspaces seeded:', workspaceDefs.map(w => w.name).join(', '));
 
   const baseSettings = {
-    rootFolderId,
+    activeWorkspaceId: workspaceDefs[0].id,
     rememberLastFolder: false,
     showDock: true,
     dockFolderId,
@@ -902,7 +825,7 @@ async function main() {
   // Record each video flow
   await recordSearch(context, origin, baseSettings);
   await recordEditIcon(context, origin, baseSettings);
-  await recordWorkspaces(context, origin, baseSettings, workspaceRootId);
+  await recordWorkspaces(context, origin, baseSettings, workspaceDefs);
   await recordDragReorder(context, origin, baseSettings);
   await recordColorThemes(context, origin, baseSettings);
   await recordLayoutSettings(context, origin, baseSettings);
@@ -912,8 +835,9 @@ async function main() {
   // Clean up leftover video files (setup page + any orphans not renamed)
   const { readdir, unlink } = await import('node:fs/promises');
   const remaining = await readdir(outDir);
+  const keepFiles = ['01-search.webm', '02-edit-icon.webm', '03-workspaces.webm', '04-drag-reorder.webm', '05-color-themes.webm', '06-layout-settings.webm'];
   for (const f of remaining) {
-    if (f.endsWith('.webm') && !['01-search.webm', '02-edit-icon.webm', '03-workspaces.webm', '04-drag-reorder.webm', '05-color-themes.webm', '06-layout-settings.webm'].includes(f)) {
+    if (f.endsWith('.webm') && !keepFiles.includes(f)) {
       await unlink(join(outDir, f)).catch(() => undefined);
     }
   }

@@ -1105,7 +1105,7 @@ function DockSection({ settings, tree, onPatch }: SectionProps & { tree: Bookmar
         <div className="ff-row">
           <div>
             <div className="ff-row__label">Source folder</div>
-            <div className="ff-row__hint">Pulls items from this folder.</div>
+            <div className="ff-row__hint">Show items from this folder.</div>
           </div>
           <FolderPicker
             tree={tree}

@@ -141,6 +141,30 @@ const FOLDERS = [
   },
 ];
 
+// Default values matching defaultWorkspaceSettings in src/shared/storage.ts
+const WORKSPACE_DEFAULTS = {
+  backgroundMode: 'gradient',
+  solidBackgroundColor: '',
+  gradientStyle: 'top',
+  gradientColorSource: 'accent',
+  gradientCustomColor: '#3F72DC',
+  gradientIntensity: 100,
+  backgroundOpacity: 70,
+  backgroundFitMode: 'cover',
+  backgroundPositionMode: 'center',
+  layoutPreset: 'balanced',
+  favoritesColumns: 10,
+  favoritesRows: 0,
+  favoritesColumnGap: 24,
+  favoritesRowGap: 20,
+  bookmarkTileWidth: 130,
+  bookmarkIconSize: 75,
+  tileShape: 'squircle',
+  showBookmarkIconBackground: false,
+  showAccentBackground: true,
+  showTileLabels: true,
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function skipOnboarding(page) {
@@ -178,16 +202,43 @@ async function applySettings(page, patch) {
   }, patch);
 }
 
-async function reloadAndWait(page, extraMs = 3000) {
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.shell', { timeout: 15_000 });
-  await page.waitForTimeout(extraMs);
+/**
+ * Seed workspace records in storage.
+ * workspaces: [{ id, name, rootFolderId, accentColor, ...overrides }]
+ * Replaces the entire workspaces store — use all desired workspaces in one call.
+ */
+async function seedWorkspaces(page, workspaces) {
+  await page.evaluate(async ({ list, defaults }) => {
+    const records = {};
+    for (const w of list) {
+      records[w.id] = { ...defaults, gradientCustomColor: w.accentColor, ...w };
+    }
+    try { await browser.storage.sync.set({ workspaces: records }); } catch {}
+    await browser.storage.local.set({ workspaces: records });
+    // Set active workspace on app-settings
+    let current = {};
+    try { const s = await browser.storage.sync.get('app-settings'); current = s['app-settings'] ?? {}; } catch {}
+    const updated = { ...current, activeWorkspaceId: list[0].id };
+    try { await browser.storage.sync.set({ 'app-settings': updated }); } catch {}
+    await browser.storage.local.set({ 'app-settings': updated });
+  }, { list: workspaces, defaults: WORKSPACE_DEFAULTS });
 }
 
-// Full page navigation to a folder via URL hash — reliable across reloads
-async function navigateToFolder(page, folderId, origin, extraMs = 3000) {
-  await page.goto(`${origin}/newtab.html#${folderId}`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.shell', { timeout: 15_000 });
+/** Patch a single workspace record already in storage. */
+async function patchWorkspace(page, id, patch) {
+  await page.evaluate(async ({ id, patch }) => {
+    let ws = {};
+    try { const s = await browser.storage.sync.get('workspaces'); ws = s.workspaces ?? {}; } catch {}
+    if (!ws[id]) { const l = await browser.storage.local.get('workspaces'); ws = l.workspaces ?? {}; }
+    const updated = { ...ws, [id]: { ...ws[id], ...patch } };
+    try { await browser.storage.sync.set({ workspaces: updated }); } catch {}
+    await browser.storage.local.set({ workspaces: updated });
+  }, { id, patch });
+}
+
+async function reloadAndWait(page, extraMs = 3000) {
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.ff-app', { timeout: 15_000 });
   await page.waitForTimeout(extraMs);
 }
 
@@ -264,7 +315,7 @@ async function main() {
   const page = await context.newPage();
   await page.setViewportSize({ width: WIDTH, height: HEIGHT });
   await page.goto(`${origin}/newtab.html`);
-  await page.waitForSelector('.shell', { timeout: 15_000 });
+  await page.waitForSelector('.ff-app', { timeout: 15_000 });
 
   // Bootstrap: skip onboarding
   await skipOnboarding(page);
@@ -286,77 +337,74 @@ async function main() {
   }, rootFolderId);
   console.log('Root folder children count:', bookmarkCheck.length, '  first few:', bookmarkCheck.slice(0, 3).map(b => b.title));
 
-  // Common settings: root = the promo folder (has both individual bookmarks and subfolders)
-  await applySettings(page, {
+  // Seed single promo workspace pointing at the root folder
+  await seedWorkspaces(page, [{
+    id: 'promo-ws',
+    name: "Flipp's Favorites",
     rootFolderId,
+    accentColor: '#3F72DC',
+  }]);
+
+  // Common settings: folderOpenMode=page so clicking folder tiles navigates in-view
+  await applySettings(page, {
+    activeWorkspaceId: 'promo-ws',
     rememberLastFolder: false,
     showDock: true,
     dockFolderId,
     showClock: false,
-    autoHideDock: false
+    autoHideDock: false,
+    folderOpenMode: 'page',
   });
 
   // Verify storage was written
   const storageCheck = await page.evaluate(async () => {
-    const sync = await browser.storage.sync.get('app-settings');
-    const local = await browser.storage.local.get('app-settings');
-    return { sync: sync['app-settings'], local: local['app-settings'] };
+    const sync = await browser.storage.sync.get(['app-settings', 'workspaces']);
+    const local = await browser.storage.local.get(['app-settings', 'workspaces']);
+    return {
+      activeWorkspaceId: sync['app-settings']?.activeWorkspaceId ?? local['app-settings']?.activeWorkspaceId,
+      workspaceCount: Object.keys(sync.workspaces ?? local.workspaces ?? {}).length,
+    };
   });
-  console.log('Storage after applySettings:');
-  console.log('  sync rootFolderId:', storageCheck.sync?.rootFolderId);
-  console.log('  local rootFolderId:', storageCheck.local?.rootFolderId);
+  console.log('Storage check:', JSON.stringify(storageCheck));
 
   // ── Screenshot 1: Light, blue — main dashboard (many tiles) ─────────────
   console.log('Taking screenshot 1: light-main…');
-  await applySettings(page, { themeMode: 'light', accentColor: '#3F72DC' });
+  await patchWorkspace(page, 'promo-ws', { accentColor: '#3F72DC' });
+  await applySettings(page, { themeMode: 'light', rememberLastFolder: false });
   await reloadAndWait(page);
-
-  // Post-reload diagnostics
-  const postReload = await page.evaluate(async () => {
-    const sync = await browser.storage.sync.get('app-settings');
-    const local = await browser.storage.local.get(['app-settings', 'onboarding-state']);
-    const rootId = sync['app-settings']?.rootFolderId;
-    let children = [];
-    try { children = await browser.bookmarks.getChildren(rootId); } catch(e) { children = [String(e)]; }
-    const bodyText = document.body?.innerText?.slice(0, 300);
-    return {
-      syncRootId: sync['app-settings']?.rootFolderId,
-      localRootId: local['app-settings']?.rootFolderId,
-      onboardingStatus: local['onboarding-state']?.status,
-      childCount: children.length,
-      bodySnippet: bodyText,
-    };
-  });
-  console.log('POST-RELOAD:', JSON.stringify(postReload));
-
   await page.screenshot({ path: join(outDir, '01-light-main.png') });
   console.log('  ✓ 01-light-main.png');
 
   // ── Screenshot 2: Light, blue — Tech folder ───────────────────────────────
   console.log('Taking screenshot 2: light-tech-folder…');
-  await navigateToFolder(page, folderIds['💻 Tech'], origin);
+  await page.locator(`.ff-tile[data-item-id="${folderIds['💻 Tech']}"]`).click();
+  await page.waitForTimeout(2500);
   await page.screenshot({ path: join(outDir, '02-light-tech-folder.png') });
   console.log('  ✓ 02-light-tech-folder.png');
 
   // ── Screenshot 3: Dark, teal — main dashboard ─────────────────────────────
   console.log('Taking screenshot 3: dark-teal-main…');
-  await applySettings(page, { themeMode: 'dark', accentColor: '#23867B', rememberLastFolder: false });
+  await patchWorkspace(page, 'promo-ws', { accentColor: '#23867B' });
+  await applySettings(page, { themeMode: 'dark', rememberLastFolder: false });
   await reloadAndWait(page);
   await page.screenshot({ path: join(outDir, '03-dark-teal-main.png') });
   console.log('  ✓ 03-dark-teal-main.png');
 
   // ── Screenshot 4: Dark, orange — Cooking folder ───────────────────────────
   console.log('Taking screenshot 4: dark-orange-cooking…');
-  await applySettings(page, { accentColor: '#F57C00', rememberLastFolder: false });
-  await navigateToFolder(page, folderIds['🍳 Cooking'], origin);
+  await patchWorkspace(page, 'promo-ws', { accentColor: '#F57C00' });
+  await reloadAndWait(page);
+  await page.locator(`.ff-tile[data-item-id="${folderIds['🍳 Cooking']}"]`).click();
+  await page.waitForTimeout(2500);
   await page.screenshot({ path: join(outDir, '04-dark-orange-cooking.png') });
   console.log('  ✓ 04-dark-orange-cooking.png');
 
   // ── Screenshot 5: Light — search in action ────────────────────────────────
   console.log('Taking screenshot 5: light-search…');
-  await applySettings(page, { themeMode: 'light', accentColor: '#3F72DC', rememberLastFolder: false });
+  await patchWorkspace(page, 'promo-ws', { accentColor: '#3F72DC' });
+  await applySettings(page, { themeMode: 'light', rememberLastFolder: false });
   await reloadAndWait(page);
-  const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], .search-input, [role="search"] input').first();
+  const searchInput = page.locator('input[aria-label="Search bookmarks"]');
   await searchInput.click();
   // "n" matches Notion, Netflix, Hacker News, NPR, Pinterest, Duolingo, etc.
   await searchInput.pressSequentially('n', { delay: 80 });
@@ -366,10 +414,40 @@ async function main() {
 
   // ── Screenshot 6: Dark, purple — Smart Home folder ────────────────────────
   console.log('Taking screenshot 6: dark-purple-smarthome…');
-  await applySettings(page, { themeMode: 'dark', accentColor: '#7D60D8', rememberLastFolder: false });
-  await navigateToFolder(page, folderIds['🏠 Smart Home'], origin);
+  await patchWorkspace(page, 'promo-ws', { accentColor: '#7D60D8' });
+  await applySettings(page, { themeMode: 'dark', rememberLastFolder: false });
+  await reloadAndWait(page);
+  await page.locator(`.ff-tile[data-item-id="${folderIds['🏠 Smart Home']}"]`).click();
+  await page.waitForTimeout(2500);
   await page.screenshot({ path: join(outDir, '06-dark-purple-smarthome.png') });
   console.log('  ✓ 06-dark-purple-smarthome.png');
+
+  // ── Screenshot 7: Light — workspace tabs (3 workspaces visible) ───────────
+  console.log('Taking screenshot 7: light-workspaces-tabs…');
+  // Replace with 3-workspace setup so the tab bar shows all three
+  await seedWorkspaces(page, [
+    { id: 'ws-work',     name: 'Work',     rootFolderId: folderIds['💻 Tech'],           accentColor: '#3F72DC' },
+    { id: 'ws-personal', name: 'Personal', rootFolderId: folderIds['🍳 Cooking'],         accentColor: '#23867B' },
+    { id: 'ws-creative', name: 'Creative', rootFolderId: folderIds['🎬 Entertainment'],   accentColor: '#7D60D8' },
+  ]);
+  await applySettings(page, { themeMode: 'light', activeWorkspaceId: 'ws-work', rememberLastFolder: false, showDock: false });
+  await reloadAndWait(page);
+  // Verify workspace tabs are visible
+  await page.waitForSelector('.ff-ws-tabs', { timeout: 10_000 });
+  await page.screenshot({ path: join(outDir, '07-light-workspaces-tabs.png') });
+  console.log('  ✓ 07-light-workspaces-tabs.png');
+
+  // ── Screenshot 8: Dark — workspace settings (appearance section) ──────────
+  console.log('Taking screenshot 8: dark-workspace-settings…');
+  await applySettings(page, { themeMode: 'dark', activeWorkspaceId: 'ws-creative', rememberLastFolder: false });
+  await reloadAndWait(page);
+  // Open settings — drawer defaults to Workspace scope / Appearance section
+  await page.locator('button.ff-iconbtn[aria-label="Settings"]').click();
+  await page.waitForSelector('.ff-drawer__scope-tabs', { timeout: 5000 });
+  await page.waitForSelector('.ff-accents', { timeout: 5000 });
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: join(outDir, '08-dark-workspace-settings.png') });
+  console.log('  ✓ 08-dark-workspace-settings.png');
 
   console.log('\n✅ All screenshots saved to:', outDir);
   await context.close();
