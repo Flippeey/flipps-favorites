@@ -32,7 +32,7 @@
 }
 .ff-search:hover {
   background: color-mix(in oklab, var(--fg-1) 5%, transparent);
-  border-color: var(--line-2);
+  border-color: var(--accent-border);
 }
 .ff-search:focus-within {
   width: min(560px, 80vw);

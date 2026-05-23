@@ -116,6 +116,13 @@ button { font-family: inherit; }
   transition: opacity var(--dur-slow) var(--ease-out);
 }
 .ff-bg-wallpaper[data-active="true"] { opacity: 1; }
+/* Subtle accent tint on wallpaper — keeps workspace identity colour visible through any photo. */
+.ff-app[data-bg="wallpaper"]::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: radial-gradient(ellipse 80% 40% at 50% 0%, color-mix(in oklab, var(--accent) 10%, transparent), transparent 60%);
+  pointer-events: none; z-index: 0;
+}
 .ff-app[data-bg="wallpaper"]::after {
   content: '';
   position: fixed; inset: 0;
@@ -161,6 +168,13 @@ button { font-family: inherit; }
 .ff-app[data-bg="wallpaper"] .ff-iconbtn {
   color: var(--fg-1);
 }
+/* Hover and focus restore accent on wallpaper (specificity fix — the idle rule above wins over :hover otherwise). */
+.ff-app[data-bg="wallpaper"] .ff-iconbtn:hover,
+.ff-app[data-bg="wallpaper"] .ff-iconbtn:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+.ff-app[data-bg="wallpaper"] .ff-crumb__btn:hover { color: var(--accent); }
 
 /* Wallpaper: search bar needs an actual frosted plate (default styling is 3% tint + hairline border = vanishes). */
 .ff-app[data-bg="wallpaper"] .ff-search {

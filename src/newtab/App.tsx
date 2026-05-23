@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import type { AppSettings, BookmarkNode, BookmarkSortMode, SortDirection } from '../shared/messages';
+import type { AppSettings, BookmarkNode, BookmarkSortMode, SortDirection, WorkspaceRecord } from '../shared/messages';
 import { ConfirmDeleteDialog } from './components/ConfirmDeleteDialog';
 import { ContextMenu, type ContextMenuItem } from './components/ContextMenu';
 import { Dock } from './components/Dock';
 import { EditDialog, type EditTarget } from './components/EditDialog';
 import { FolderNameDialog, type FolderNameDialogTarget } from './components/FolderNameDialog';
 import { FolderOverlay } from './components/FolderOverlay';
+import { NewWorkspaceDialog } from './components/NewWorkspaceDialog';
 import { QuickAddDialog } from './components/QuickAddDialog';
 import { buildSearchIndex, ClockGreeting, HeroSearch, type FlatSearchResult } from './components/HeroSearch';
 import { Ico } from './components/Ico';
@@ -16,14 +17,15 @@ import { SectionsView, TilesView, FolderPageView } from './components/views';
 import { useMarquee, type MarqueeSelection } from './interaction/useMarquee';
 import { useDrag } from './interaction/useDrag';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
-import { getBookmarkTree, getBookmarkUsage, getSettings, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
+import { getBookmarkTree, getBookmarkUsage, getSettings, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark, createWorkspace, patchWorkspace, deleteWorkspace } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
 import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
-import { markOnboardingCompleted } from '../shared/storage';
+import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper, writeWorkspaceWallpaper } from '../shared/storage';
 
 interface AppProps {
   initialSettings: AppSettings;
   initialTree: BookmarkNode[];
+  initialWorkspaces: WorkspaceRecord[];
   initialOnboardOpen?: boolean;
 }
 
@@ -32,10 +34,27 @@ function settingsToSortValue(mode: BookmarkSortMode, direction: SortDirection): 
   return `${mode}:${direction}`;
 }
 
-export function App({ initialSettings, initialTree, initialOnboardOpen }: AppProps) {
+export function App({ initialSettings, initialTree, initialWorkspaces, initialOnboardOpen }: AppProps) {
   const [settings, setSettings] = useState(initialSettings);
   const [tree, setTree] = useState(initialTree);
   const [usage, setUsage] = useState<Record<string, number>>({});
+  const [workspaces, setWorkspaces] = useState(initialWorkspaces);
+
+  const activeWorkspace = useMemo(
+    () => workspaces.find(w => w.id === settings.activeWorkspaceId) ?? workspaces[0] ?? null,
+    [workspaces, settings.activeWorkspaceId],
+  );
+
+  const [workspaceWallpaper, setWorkspaceWallpaper] = useState('');
+
+  useEffect(() => {
+    if (!activeWorkspace) { setWorkspaceWallpaper(''); return; }
+    let cancelled = false;
+    readWorkspaceWallpaper(activeWorkspace.id).then(url => {
+      if (!cancelled) setWorkspaceWallpaper(url);
+    }).catch(() => { if (!cancelled) setWorkspaceWallpaper(''); });
+    return () => { cancelled = true; };
+  }, [activeWorkspace?.id]);
 
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const openFolder = useMemo(
@@ -46,7 +65,9 @@ export function App({ initialSettings, initialTree, initialOnboardOpen }: AppPro
   const [quickAddTarget, setQuickAddTarget] = useState<{ parentId: string; parentTitle?: string } | null>(null);
   const [folderNameTarget, setFolderNameTarget] = useState<FolderNameDialogTarget | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsInitialSection, setSettingsInitialSection] = useState<'appearance' | 'workspace-manage'>('appearance');
   const [onboardOpen, setOnboardOpen] = useState(initialOnboardOpen ?? false);
+  const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   const [folderPath, setFolderPath] = useState<BookmarkNode[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<BookmarkNode | null>(null);
@@ -60,24 +81,32 @@ export function App({ initialSettings, initialTree, initialOnboardOpen }: AppPro
   const [overlayBodyEl, setOverlayBodyEl] = useState<HTMLElement | null>(null);
   const [dockEl, setDockEl] = useState<HTMLElement | null>(null);
 
-  const rootFolder = useMemo(() => resolveRootFolder(tree, settings.rootFolderId), [tree, settings.rootFolderId]);
+  const rootFolder = useMemo(
+    () => resolveRootFolder(tree, activeWorkspace?.rootFolderId ?? ''),
+    [tree, activeWorkspace?.rootFolderId],
+  );
 
   // Apply tweaks → CSS variables
-  useEffect(() => { applyAccent(settings.accentColor); }, [settings.accentColor]);
   useEffect(() => {
-    applyDensity(settings.layoutPreset, {
-      tileSize: settings.bookmarkIconSize,
-      tileWidth: settings.bookmarkTileWidth,
-      gapX: settings.favoritesColumnGap,
-      gapY: settings.favoritesRowGap,
+    if (activeWorkspace) applyAccent(activeWorkspace.accentColor);
+  }, [activeWorkspace?.accentColor]);
+
+  useEffect(() => {
+    if (!activeWorkspace) return;
+    applyDensity(activeWorkspace.layoutPreset, {
+      tileSize: activeWorkspace.bookmarkIconSize,
+      tileWidth: activeWorkspace.bookmarkTileWidth,
+      gapX: activeWorkspace.favoritesColumnGap,
+      gapY: activeWorkspace.favoritesRowGap,
     });
   }, [
-    settings.layoutPreset,
-    settings.bookmarkIconSize,
-    settings.bookmarkTileWidth,
-    settings.favoritesColumnGap,
-    settings.favoritesRowGap,
+    activeWorkspace?.layoutPreset,
+    activeWorkspace?.bookmarkIconSize,
+    activeWorkspace?.bookmarkTileWidth,
+    activeWorkspace?.favoritesColumnGap,
+    activeWorkspace?.favoritesRowGap,
   ]);
+
   useEffect(() => {
     document.documentElement.dataset.theme = resolveThemeAttr(settings.themeMode);
   }, [settings.themeMode]);
@@ -92,16 +121,87 @@ export function App({ initialSettings, initialTree, initialOnboardOpen }: AppPro
     setSettings(prev => ({ ...prev, ...patch }));
     try {
       const next = await patchSettings(patch);
-      const wallpaperPatched = Object.prototype.hasOwnProperty.call(patch, 'customBackgroundImage');
-      setSettings(prev => ({
-        ...next,
-        customBackgroundImage: wallpaperPatched
-          ? next.customBackgroundImage
-          : (next.customBackgroundImage || prev.customBackgroundImage),
-      }));
+      setSettings(next);
     } catch {
       // keep optimistic value
     }
+  }, []);
+
+  const handleSwitchWorkspace = useCallback(async (id: string) => {
+    setFolderPath([]);
+    setSelection({ ids: new Set(), scopeFolderId: '' });
+    await handlePatch({ activeWorkspaceId: id });
+  }, [handlePatch]);
+
+  const handlePatchWorkspace = useCallback(async (patch: Partial<WorkspaceRecord>) => {
+    if (!activeWorkspace) return;
+    const optimistic = { ...activeWorkspace, ...patch };
+    setWorkspaces(prev => prev.map(w => w.id === optimistic.id ? optimistic : w));
+    try {
+      const next = await patchWorkspace(activeWorkspace.id, patch);
+      setWorkspaces(prev => prev.map(w => w.id === next.id ? next : w));
+    } catch {
+      // keep optimistic value
+    }
+  }, [activeWorkspace]);
+
+  const handleSetWorkspaceWallpaper = useCallback(async (dataUrl: string) => {
+    if (!activeWorkspace) return;
+    setWorkspaceWallpaper(dataUrl);
+    try {
+      await writeWorkspaceWallpaper(activeWorkspace.id, dataUrl);
+    } catch {
+      // keep optimistic value
+    }
+  }, [activeWorkspace]);
+
+  const handleCreateWorkspace = useCallback(async (rootFolderId: string, name: string) => {
+    const workspace: WorkspaceRecord = {
+      id: crypto.randomUUID(),
+      name,
+      rootFolderId,
+      ...defaultWorkspaceSettings,
+    };
+    try {
+      const created = await createWorkspace(workspace);
+      setWorkspaces(prev => [...prev, created]);
+      await handlePatch({ activeWorkspaceId: created.id });
+    } catch {
+      // creation failed — leave UI unchanged
+    }
+  }, [handlePatch]);
+
+  const handleDeleteWorkspace = useCallback(async (id: string) => {
+    if (workspaces.length <= 1) return;
+    try {
+      await deleteWorkspace(id);
+    } catch {
+      return;
+    }
+    const remaining = workspaces.filter(w => w.id !== id);
+    const nextActiveId = settings.activeWorkspaceId === id ? remaining[0]?.id : undefined;
+    setWorkspaces(remaining);
+    if (nextActiveId) await handlePatch({ activeWorkspaceId: nextActiveId });
+  }, [workspaces, settings.activeWorkspaceId, handlePatch]);
+
+  const handleAddWorkspace = useCallback(() => {
+    setNewWorkspaceOpen(true);
+  }, []);
+
+  const handleWorkspaceContextMenu = useCallback((_id: string, x: number, y: number) => {
+    setContextMenu({
+      x, y,
+      items: [
+        { kind: 'item', icon: 'palette', label: 'Appearance', onClick: () => {
+          setSettingsInitialSection('appearance');
+          setSettingsOpen(true);
+        }},
+        { kind: 'item', icon: 'settings', label: 'Manage', onClick: () => {
+          setSettingsInitialSection('workspace-manage');
+          setSettingsOpen(true);
+        }},
+      ],
+    });
   }, []);
 
   const refreshTree = useCallback(async () => {
@@ -280,6 +380,13 @@ export function App({ initialSettings, initialTree, initialOnboardOpen }: AppPro
         for (const id of dragIds) {
           await moveBookmark(id, dockFolderId);
         }
+      } else if (target.kind === 'workspace') {
+        const ws = workspaces.find(w => w.id === target.workspaceId);
+        if (!ws) return;
+        if (ws.rootFolderId === rootFolder?.id) return;
+        for (const id of dragIds) {
+          await moveBookmark(id, ws.rootFolderId);
+        }
       } else {
         // reorder — preserve drag-source order, increment index as we go for items moving forward in same parent
         let idx = target.index;
@@ -289,12 +396,12 @@ export function App({ initialSettings, initialTree, initialOnboardOpen }: AppPro
         }
       }
       // Drop selection scope if target moved away
-      const moveTargetScope = target.kind === 'folder' ? target.folderId : target.kind === 'dock' ? (settings.dockFolderId || rootFolder?.id || '') : target.parentId;
+      const moveTargetScope = target.kind === 'folder' ? target.folderId : target.kind === 'dock' ? (settings.dockFolderId || rootFolder?.id || '') : target.kind === 'workspace' ? (workspaces.find(w => w.id === target.workspaceId)?.rootFolderId ?? '') : target.parentId;
       setSelection({ ids: new Set(dragIds), scopeFolderId: moveTargetScope });
     } finally {
       await refreshTree();
     }
-  }, [refreshTree, rootFolder, settings.dockFolderId]);
+  }, [refreshTree, rootFolder, settings.dockFolderId, workspaces]);
 
   const dragEnabled = settings.bookmarkSortMode === 'manual';
 
@@ -363,41 +470,35 @@ export function App({ initialSettings, initialTree, initialOnboardOpen }: AppPro
     else handlePickBookmark(item, event);
   }, [handlePickBookmark, handlePickFolder, rootFolder]);
 
-  const wallpaperBlobUrl = useBlobUrl(settings.customBackgroundImage);
+  const wallpaperBlobUrl = useBlobUrl(workspaceWallpaper);
 
   const appStyle = useMemo(() => {
+    const ws = activeWorkspace ?? (defaultWorkspaceSettings as WorkspaceRecord);
     const style: Record<string, string> = {};
     if (wallpaperBlobUrl) style['--wallpaper-url'] = `url(${wallpaperBlobUrl})`;
-    if (settings.solidBackgroundColor) style['--solid-bg'] = settings.solidBackgroundColor;
-    style['--gradient-color'] = settings.gradientColorSource === 'custom'
-      ? settings.gradientCustomColor
-      : settings.accentColor;
-    style['--gradient-intensity'] = String(settings.gradientIntensity / 100);
-    style['--wallpaper-alpha'] = `${String(settings.backgroundOpacity)}%`;
-    style['--wallpaper-size'] = settings.backgroundFitMode === 'fill'
+    if (ws.solidBackgroundColor) style['--solid-bg'] = ws.solidBackgroundColor;
+    style['--gradient-color'] = ws.gradientColorSource === 'custom'
+      ? ws.gradientCustomColor
+      : ws.accentColor;
+    style['--gradient-intensity'] = String(ws.gradientIntensity / 100);
+    style['--wallpaper-alpha'] = `${String(ws.backgroundOpacity)}%`;
+    style['--wallpaper-size'] = ws.backgroundFitMode === 'fill'
       ? '100% 100%'
-      : settings.backgroundFitMode;
-    style['--wallpaper-position'] = settings.backgroundPositionMode;
+      : ws.backgroundFitMode;
+    style['--wallpaper-position'] = ws.backgroundPositionMode;
     return style;
   }, [
+    activeWorkspace,
     wallpaperBlobUrl,
-    settings.solidBackgroundColor,
-    settings.gradientColorSource,
-    settings.gradientCustomColor,
-    settings.gradientIntensity,
-    settings.accentColor,
-    settings.backgroundOpacity,
-    settings.backgroundFitMode,
-    settings.backgroundPositionMode,
   ]);
 
   return (
     <div
       className="ff-app"
-      data-bg={settings.backgroundMode}
-      data-bg-style={settings.gradientStyle}
-      data-tile-shape={settings.tileShape}
-      data-labels={String(settings.showTileLabels)}
+      data-bg={activeWorkspace?.backgroundMode ?? 'gradient'}
+      data-bg-style={activeWorkspace?.gradientStyle ?? 'top'}
+      data-tile-shape={activeWorkspace?.tileShape ?? 'squircle'}
+      data-labels={String(activeWorkspace?.showTileLabels ?? true)}
       data-dock={dockMode}
       style={appStyle as CSSProperties}
       onContextMenu={handleCanvasContextMenu}
@@ -406,12 +507,17 @@ export function App({ initialSettings, initialTree, initialOnboardOpen }: AppPro
         <div
           className="ff-bg-wallpaper"
           aria-hidden="true"
-          data-active={settings.backgroundMode === 'wallpaper'}
+          data-active={activeWorkspace?.backgroundMode === 'wallpaper'}
         />
       )}
       <header>
         <TopNav
-          rootTitle={rootFolder?.title ?? 'My bookmarks'}
+          workspaces={workspaces}
+          activeWorkspaceId={settings.activeWorkspaceId}
+          onSwitchWorkspace={handleSwitchWorkspace}
+          onWorkspaceContextMenu={handleWorkspaceContextMenu}
+          onAddWorkspace={handleAddWorkspace}
+          onAddFolder={handleNewFolder}
           path={folderPath}
           onCrumb={handleGoToCrumb}
           sortValue={sortChoice}
@@ -425,7 +531,7 @@ export function App({ initialSettings, initialTree, initialOnboardOpen }: AppPro
         {settings.showClock && <ClockGreeting hourFormat={settings.clockHourFormat} />}
         {settings.showSearchBar && (
           <HeroSearch
-            shape={settings.tileShape}
+            shape={activeWorkspace?.tileShape ?? 'squircle'}
             index={searchIndex}
             usage={usage}
             onPickBookmark={onPickSearchBookmark}
@@ -438,7 +544,7 @@ export function App({ initialSettings, initialTree, initialOnboardOpen }: AppPro
         {!isAtRoot && sortedCurrentFolder ? (
           <FolderPageView
             folder={sortedCurrentFolder}
-            shape={settings.tileShape}
+            shape={activeWorkspace?.tileShape ?? 'squircle'}
             onPickFolder={handleTileClick}
             onPickItem={handleTileClick}
             selectedIds={selection.ids}
@@ -448,7 +554,7 @@ export function App({ initialSettings, initialTree, initialOnboardOpen }: AppPro
           <SectionsView
             tree={sortedRootChildren.filter(isFolder)}
             scopeFolderId={rootFolder?.id ?? ''}
-            shape={settings.tileShape}
+            shape={activeWorkspace?.tileShape ?? 'squircle'}
             onPickFolder={handleTileClick}
             onPickItem={handleTileClick}
             onSectionMenu={(folder, event) => {
@@ -467,7 +573,7 @@ export function App({ initialSettings, initialTree, initialOnboardOpen }: AppPro
             tree={sortedRootChildren.filter(isFolder)}
             rootBookmarks={sortedRootChildren.filter(c => !isFolder(c))}
             scopeFolderId={rootFolder?.id ?? ''}
-            shape={settings.tileShape}
+            shape={activeWorkspace?.tileShape ?? 'squircle'}
             onPickFolder={handleTileClick}
             onPickItem={handleTileClick}
             selectedIds={selection.ids}
@@ -496,7 +602,7 @@ export function App({ initialSettings, initialTree, initialOnboardOpen }: AppPro
       <Dock
         items={dockItems}
         mode={dockMode}
-        shape={settings.tileShape}
+        shape={activeWorkspace?.tileShape ?? 'squircle'}
         dockFolderId={settings.dockFolderId || rootFolder?.id || ''}
         onItemClick={handlePickBookmark}
         onFolderClick={handlePickFolder}
@@ -507,7 +613,7 @@ export function App({ initialSettings, initialTree, initialOnboardOpen }: AppPro
         <FolderOverlay
           folder={openFolder}
           rootFolderId={rootFolder?.id ?? ''}
-          shape={settings.tileShape}
+          shape={activeWorkspace?.tileShape ?? 'squircle'}
           onClose={() => setOpenFolderId(null)}
           onPickBookmark={handlePickBookmark}
           onContextMenu={(target, e) => {
@@ -550,6 +656,14 @@ export function App({ initialSettings, initialTree, initialOnboardOpen }: AppPro
         />
       )}
 
+      {newWorkspaceOpen && (
+        <NewWorkspaceDialog
+          tree={tree}
+          onConfirm={handleCreateWorkspace}
+          onClose={() => setNewWorkspaceOpen(false)}
+        />
+      )}
+
       {confirmDeleteFolder && (
         <ConfirmDeleteDialog
           folder={confirmDeleteFolder}
@@ -565,9 +679,16 @@ export function App({ initialSettings, initialTree, initialOnboardOpen }: AppPro
       {settingsOpen && (
         <SettingsDrawer
           settings={settings}
+          activeWorkspace={activeWorkspace}
+          workspaceWallpaper={workspaceWallpaper}
+          onPatchGlobal={handlePatch}
+          onPatchWorkspace={handlePatchWorkspace}
+          onSetWorkspaceWallpaper={handleSetWorkspaceWallpaper}
+          onDeleteWorkspace={handleDeleteWorkspace}
+          isOnlyWorkspace={workspaces.length <= 1}
+          initialSection={settingsInitialSection}
           tree={tree}
-          onPatch={handlePatch}
-          onClose={() => setSettingsOpen(false)}
+          onClose={() => { setSettingsOpen(false); setSettingsInitialSection('appearance'); }}
           onAfterImport={(next) => { setSettings(next); refreshTree(); }}
         />
       )}
@@ -584,8 +705,11 @@ export function App({ initialSettings, initialTree, initialOnboardOpen }: AppPro
       {onboardOpen && (
         <Onboarding
           settings={settings}
+          activeWorkspace={activeWorkspace}
           tree={tree}
           onPatch={handlePatch}
+          onPatchWorkspace={handlePatchWorkspace}
+          onCreateWorkspace={handleCreateWorkspace}
           onFinish={() => { setOnboardOpen(false); void markOnboardingCompleted(); }}
         />
       )}

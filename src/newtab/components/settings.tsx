@@ -12,6 +12,7 @@ import type {
   LayoutPresetId,
   TileShape,
   ThemeMode,
+  WorkspaceRecord,
 } from '../../shared/messages';
 import {
   applyWorkspaceImport,
@@ -20,7 +21,13 @@ import {
   parseWorkspaceFile,
   type WorkspaceImportMode,
 } from '../lib/workspace-transfer';
+import { defaultWorkspaceSettings } from '../../shared/storage';
 import { useBlobUrl } from '../lib/useBlobUrl';
+
+const FALLBACK_WORKSPACE: WorkspaceRecord = {
+  id: '', name: '', rootFolderId: '',
+  ...defaultWorkspaceSettings,
+};
 import { Ico } from './Ico';
 
 export const ACCENT_PRESETS: { id: string; label: string; value: string }[] = [
@@ -203,18 +210,28 @@ function ThemeCardPreview({ light }: { light?: boolean }) {
   );
 }
 
-type SectionId = 'general' | 'navigation' | 'appearance' | 'layout' | 'dock' | 'clock' | 'backup' | 'help';
+type SectionId = 'general' | 'navigation' | 'appearance' | 'layout' | 'dock' | 'clock' | 'backup' | 'help' | 'workspace-manage';
+type SettingsScopeTab = 'global' | 'workspace';
 
 interface SettingsDrawerProps {
   settings: AppSettings;
+  activeWorkspace: WorkspaceRecord | null;
+  workspaceWallpaper: string;
+  onPatchGlobal: (patch: Partial<AppSettings>) => void;
+  onPatchWorkspace: (patch: Partial<WorkspaceRecord>) => void;
+  onSetWorkspaceWallpaper: (dataUrl: string) => void;
+  onDeleteWorkspace: (id: string) => void;
+  isOnlyWorkspace: boolean;
+  initialSection?: SectionId;
+  initialScopeTab?: SettingsScopeTab;
   tree: BookmarkNode[];
-  onPatch: (patch: Partial<AppSettings>) => void;
   onClose: () => void;
   onAfterImport: (settings: AppSettings) => void;
 }
 
-export function SettingsDrawer({ settings, tree, onPatch, onClose, onAfterImport }: SettingsDrawerProps) {
-  const [section, setSection] = useState<SectionId>('appearance');
+export function SettingsDrawer({ settings, activeWorkspace, workspaceWallpaper, onPatchGlobal, onPatchWorkspace, onSetWorkspaceWallpaper, onDeleteWorkspace, isOnlyWorkspace, initialSection = 'appearance', initialScopeTab = 'workspace', tree, onClose, onAfterImport }: SettingsDrawerProps) {
+  const [section, setSection] = useState<SectionId>(initialSection);
+  const [scopeTab, setScopeTab] = useState<SettingsScopeTab>(initialScopeTab);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -236,26 +253,60 @@ export function SettingsDrawer({ settings, tree, onPatch, onClose, onAfterImport
           </button>
         </header>
         <div className="ff-drawer__body">
-          <nav className="ff-drawer__nav">
-            <DrawerNav id="general"    label="General"    icon="layoutGrid" active={section} setActive={setSection} />
-            <DrawerNav id="navigation" label="Navigation" icon="command"    active={section} setActive={setSection} />
-            <DrawerNav id="appearance" label="Appearance" icon="palette"    active={section} setActive={setSection} />
-            <DrawerNav id="layout"     label="Layout"     icon="rows"       active={section} setActive={setSection} />
-            <DrawerNav id="dock"       label="Dock"       icon="layers"     active={section} setActive={setSection} />
-            <DrawerNav id="clock"      label="Clock"      icon="clock"      active={section} setActive={setSection} />
-            <DrawerNav id="backup"     label="Backup"     icon="cloud"      active={section} setActive={setSection} />
-            <div className="ff-drawer__navdivider" />
-            <DrawerNav id="help"       label="Help"       icon="link"       active={section} setActive={setSection} />
-          </nav>
+          <div className="ff-drawer__sidebar">
+            <div className="ff-drawer__scope-tabs">
+              <button
+                className={`ff-drawer__scope-tab${scopeTab === 'workspace' ? ' is-active' : ''}`}
+                onClick={() => { setScopeTab('workspace'); setSection('appearance'); }}
+              >
+                Workspace
+              </button>
+              <button
+                className={`ff-drawer__scope-tab${scopeTab === 'global' ? ' is-active' : ''}`}
+                onClick={() => { setScopeTab('global'); setSection('general'); }}
+              >
+                Global
+              </button>
+            </div>
+            <nav className="ff-drawer__nav">
+              {scopeTab === 'workspace' && (
+                <>
+                  <DrawerNav id="appearance"        label="Appearance" icon="palette"    active={section} setActive={setSection} />
+                  <DrawerNav id="layout"            label="Layout"     icon="rows"       active={section} setActive={setSection} />
+                  <DrawerNav id="workspace-manage"  label="Manage"     icon="settings"   active={section} setActive={setSection} />
+                </>
+              )}
+              {scopeTab === 'global' && (
+                <>
+                  <DrawerNav id="general"    label="General"    icon="layoutGrid" active={section} setActive={setSection} />
+                  <DrawerNav id="navigation" label="Navigation" icon="command"    active={section} setActive={setSection} />
+                  <DrawerNav id="dock"       label="Dock"       icon="layers"     active={section} setActive={setSection} />
+                  <DrawerNav id="clock"      label="Clock"      icon="clock"      active={section} setActive={setSection} />
+                  <DrawerNav id="backup"     label="Backup"     icon="cloud"      active={section} setActive={setSection} />
+                  <div className="ff-drawer__navdivider" />
+                  <DrawerNav id="help"       label="Help"       icon="link"       active={section} setActive={setSection} />
+                </>
+              )}
+            </nav>
+          </div>
           <div className="ff-drawer__content no-scrollbar">
-            {section === 'general'    && <GeneralSection settings={settings} tree={tree} onPatch={onPatch} />}
-            {section === 'navigation' && <NavigationSection settings={settings} onPatch={onPatch} />}
-            {section === 'appearance' && <AppearanceSection settings={settings} onPatch={onPatch} />}
-            {section === 'layout'     && <LayoutSection settings={settings} onPatch={onPatch} />}
-            {section === 'dock'       && <DockSection settings={settings} tree={tree} onPatch={onPatch} />}
-            {section === 'clock'      && <ClockSection settings={settings} onPatch={onPatch} />}
-            {section === 'backup'     && <BackupSection onAfterImport={onAfterImport} />}
-            {section === 'help'       && <HelpSection />}
+            {scopeTab === 'workspace' && (
+              <>
+                {section === 'appearance'       && <AppearanceSection workspace={activeWorkspace} workspaceWallpaper={workspaceWallpaper} onPatch={onPatchWorkspace} onSetWallpaper={onSetWorkspaceWallpaper} settings={settings} onPatchGlobal={onPatchGlobal} />}
+                {section === 'layout'           && <LayoutSection workspace={activeWorkspace} onPatch={onPatchWorkspace} />}
+                {section === 'workspace-manage' && <WorkspaceManageSection workspace={activeWorkspace} onPatch={onPatchWorkspace} onDeleteWorkspace={onDeleteWorkspace} isOnlyWorkspace={isOnlyWorkspace} />}
+              </>
+            )}
+            {scopeTab === 'global' && (
+              <>
+                {section === 'general'    && <GeneralSection settings={settings} onPatch={onPatchGlobal} />}
+                {section === 'navigation' && <NavigationSection settings={settings} onPatch={onPatchGlobal} />}
+                {section === 'dock'       && <DockSection settings={settings} tree={tree} onPatch={onPatchGlobal} />}
+                {section === 'clock'      && <ClockSection settings={settings} onPatch={onPatchGlobal} />}
+                {section === 'backup'     && <BackupSection onAfterImport={onAfterImport} />}
+                {section === 'help'       && <HelpSection />}
+              </>
+            )}
           </div>
         </div>
       </aside>
@@ -279,33 +330,22 @@ interface SectionProps {
   onPatch: (patch: Partial<AppSettings>) => void;
 }
 
-function GeneralSection({ settings, tree, onPatch }: SectionProps & { tree: BookmarkNode[] }) {
+interface WorkspaceSectionProps {
+  workspace: WorkspaceRecord | null;
+  onPatch: (patch: Partial<WorkspaceRecord>) => void;
+}
+
+function GeneralSection({ settings, onPatch }: SectionProps) {
   return (
     <div className="ff-set-section">
       <h3 className="ff-set-section__title">General</h3>
-      <p className="ff-set-section__desc">Workspace defaults and behavior.</p>
       <div className="ff-card">
-        <div className="ff-row">
-          <div className="ff-row__label">Show labels</div>
-          <Toggle on={settings.showTileLabels} onChange={(v) => onPatch({ showTileLabels: v })} />
-        </div>
         <div className="ff-row">
           <div>
             <div className="ff-row__label">Show search bar</div>
             <div className="ff-row__hint">Subtle by default — expands when focused.</div>
           </div>
           <Toggle on={settings.showSearchBar} onChange={(v) => onPatch({ showSearchBar: v })} />
-        </div>
-        <div className="ff-row">
-          <div>
-            <div className="ff-row__label">Default workspace folder</div>
-            <div className="ff-row__hint">The root shown on every new tab.</div>
-          </div>
-          <FolderPicker
-            tree={tree}
-            value={settings.rootFolderId}
-            onChange={(id) => onPatch({ rootFolderId: id })}
-          />
         </div>
       </div>
     </div>
@@ -359,7 +399,17 @@ function NavigationSection({ settings, onPatch }: SectionProps) {
   );
 }
 
-function AppearanceSection({ settings, onPatch }: SectionProps) {
+interface AppearanceSectionProps {
+  workspace: WorkspaceRecord | null;
+  workspaceWallpaper: string;
+  onPatch: (patch: Partial<WorkspaceRecord>) => void;
+  onSetWallpaper: (dataUrl: string) => void;
+  settings: AppSettings;
+  onPatchGlobal: (patch: Partial<AppSettings>) => void;
+}
+
+function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSetWallpaper, settings, onPatchGlobal }: AppearanceSectionProps) {
+  const ws = workspace ?? FALLBACK_WORKSPACE;
   return (
     <>
       <div className="ff-set-section">
@@ -373,16 +423,16 @@ function AppearanceSection({ settings, onPatch }: SectionProps) {
             </div>
             <Toggle
               on={settings.themeMode === 'system'}
-              onChange={(v) => onPatch({ themeMode: (v ? 'system' : 'dark') as ThemeMode })}
+              onChange={(v) => onPatchGlobal({ themeMode: (v ? 'system' : 'dark') as ThemeMode })}
             />
           </div>
         </div>
         <div className="ff-themegrid">
-          <div className="ff-themecard ff-themecard--light" data-active={settings.themeMode === 'light'} onClick={() => onPatch({ themeMode: 'light' })}>
+          <div className="ff-themecard ff-themecard--light" data-active={settings.themeMode === 'light'} onClick={() => onPatchGlobal({ themeMode: 'light' })}>
             <ThemeCardPreview light />
             <div className="ff-themecard__label">Light</div>
           </div>
-          <div className="ff-themecard ff-themecard--dark" data-active={settings.themeMode === 'dark'} onClick={() => onPatch({ themeMode: 'dark' })}>
+          <div className="ff-themecard ff-themecard--dark" data-active={settings.themeMode === 'dark'} onClick={() => onPatchGlobal({ themeMode: 'dark' })}>
             <ThemeCardPreview />
             <div className="ff-themecard__label">Dark</div>
           </div>
@@ -397,7 +447,7 @@ function AppearanceSection({ settings, onPatch }: SectionProps) {
             <button
               key={a.id}
               className="ff-accentchip"
-              data-active={settings.accentColor.toUpperCase() === a.value.toUpperCase()}
+              data-active={ws.accentColor.toUpperCase() === a.value.toUpperCase()}
               onClick={() => onPatch({ accentColor: a.value })}
               style={{ background: a.value, color: a.value }}
               aria-label={a.label}
@@ -407,15 +457,15 @@ function AppearanceSection({ settings, onPatch }: SectionProps) {
           ))}
         </div>
         {(() => {
-          const isCustom = !ACCENT_PRESETS.some(a => a.value.toUpperCase() === settings.accentColor.toUpperCase());
+          const isCustom = !ACCENT_PRESETS.some(a => a.value.toUpperCase() === ws.accentColor.toUpperCase());
           return (
             <div style={{ marginBottom: 28 }}>
               <label className={`ff-accent-custom-btn${isCustom ? ' ff-accent-custom-btn--active' : ''}`}>
-                <span className="ff-accent-custom-swatch" style={{ background: settings.accentColor }} />
-                <span>{isCustom ? `Custom (${settings.accentColor.toUpperCase()})` : 'Custom…'}</span>
+                <span className="ff-accent-custom-swatch" style={{ background: ws.accentColor }} />
+                <span>{isCustom ? `Custom (${ws.accentColor.toUpperCase()})` : 'Custom…'}</span>
                 <input
                   type="color"
-                  value={settings.accentColor}
+                  value={ws.accentColor}
                   onChange={(e) => onPatch({ accentColor: e.target.value })}
                   style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
                 />
@@ -433,7 +483,7 @@ function AppearanceSection({ settings, onPatch }: SectionProps) {
             <div
               key={opt}
               className="ff-themecard"
-              data-active={settings.backgroundMode === opt}
+              data-active={ws.backgroundMode === opt}
               onClick={() => onPatch({ backgroundMode: opt })}
               style={{
                 gridColumn: 'auto',
@@ -449,9 +499,9 @@ function AppearanceSection({ settings, onPatch }: SectionProps) {
         </div>
 
         <div className="ff-bg-panel">
-          {settings.backgroundMode === 'solid' && <SolidPanel settings={settings} onPatch={onPatch} />}
-          {settings.backgroundMode === 'gradient' && <GradientPanel settings={settings} onPatch={onPatch} />}
-          {settings.backgroundMode === 'wallpaper' && <WallpaperPicker settings={settings} onPatch={onPatch} />}
+          {ws.backgroundMode === 'solid' && <SolidPanel workspace={workspace} onPatch={onPatch} />}
+          {ws.backgroundMode === 'gradient' && <GradientPanel workspace={workspace} onPatch={onPatch} />}
+          {ws.backgroundMode === 'wallpaper' && <WallpaperPicker wallpaper={workspaceWallpaper} onSetWallpaper={onSetWallpaper} workspace={workspace} onPatch={onPatch} />}
         </div>
       </div>
     </>
@@ -523,12 +573,13 @@ function BgColorPicker({ chips, customActive, customColor, onCustomColorChange }
   );
 }
 
-function SolidPanel({ settings, onPatch }: SectionProps) {
-  const currentHex = settings.solidBackgroundColor.toUpperCase();
+function SolidPanel({ workspace, onPatch }: WorkspaceSectionProps) {
+  const ws = workspace ?? FALLBACK_WORKSPACE;
+  const currentHex = ws.solidBackgroundColor.toUpperCase();
   const isTheme = currentHex === '';
   const matchingPreset = SOLID_PRESETS.find(p => p.value.toUpperCase() === currentHex);
   const customActive = !isTheme && !matchingPreset;
-  const customValue = settings.solidBackgroundColor || '#141414';
+  const customValue = ws.solidBackgroundColor || '#141414';
 
   const chips: BgChip[] = [
     {
@@ -586,12 +637,13 @@ function gradientPreviewBg(style: GradientStyle, color: string, intensity: numbe
   }
 }
 
-function GradientPanel({ settings, onPatch }: SectionProps) {
-  const isAccent = settings.gradientColorSource === 'accent';
-  const currentHex = settings.gradientCustomColor.toUpperCase();
+function GradientPanel({ workspace, onPatch }: WorkspaceSectionProps) {
+  const ws = workspace ?? FALLBACK_WORKSPACE;
+  const isAccent = ws.gradientColorSource === 'accent';
+  const currentHex = ws.gradientCustomColor.toUpperCase();
   const matchingPreset = !isAccent && GRADIENT_PRESETS.find(p => p.value.toUpperCase() === currentHex);
   const customActive = !isAccent && !matchingPreset;
-  const resolvedColor = isAccent ? settings.accentColor : settings.gradientCustomColor;
+  const resolvedColor = isAccent ? ws.accentColor : ws.gradientCustomColor;
 
   const chips: BgChip[] = [
     {
@@ -615,7 +667,7 @@ function GradientPanel({ settings, onPatch }: SectionProps) {
       <BgColorPicker
         chips={chips}
         customActive={customActive}
-        customColor={settings.gradientCustomColor}
+        customColor={ws.gradientCustomColor}
         onCustomColorChange={(hex) => onPatch({ gradientColorSource: 'custom', gradientCustomColor: hex.toUpperCase() })}
       />
       <div className="ff-bg-row">
@@ -625,9 +677,9 @@ function GradientPanel({ settings, onPatch }: SectionProps) {
             <div
               key={g.id}
               className="ff-themecard"
-              data-active={settings.gradientStyle === g.id}
+              data-active={ws.gradientStyle === g.id}
               onClick={() => onPatch({ gradientStyle: g.id })}
-              style={{ gridColumn: 'auto', background: gradientPreviewBg(g.id, resolvedColor, settings.gradientIntensity) }}
+              style={{ gridColumn: 'auto', background: gradientPreviewBg(g.id, resolvedColor, ws.gradientIntensity) }}
             >
               <div className="ff-themecard__label" style={{ color: 'var(--fg-1)' }}>{g.label}</div>
             </div>
@@ -641,7 +693,7 @@ function GradientPanel({ settings, onPatch }: SectionProps) {
             <div className="ff-row__hint">Dial the gradient strength up or down.</div>
           </div>
           <Slider
-            value={settings.gradientIntensity}
+            value={ws.gradientIntensity}
             min={0}
             max={200}
             step={5}
@@ -708,8 +760,16 @@ function Slider({ value, min, max, step = 1, onChange, onPreview, formatValue }:
   );
 }
 
-function WallpaperPicker({ settings, onPatch }: SectionProps) {
-  const previewUrl = useBlobUrl(settings.customBackgroundImage);
+interface WallpaperPickerProps {
+  wallpaper: string;
+  onSetWallpaper: (dataUrl: string) => void;
+  workspace: WorkspaceRecord | null;
+  onPatch: (patch: Partial<WorkspaceRecord>) => void;
+}
+
+function WallpaperPicker({ wallpaper, onSetWallpaper, workspace, onPatch }: WallpaperPickerProps) {
+  const previewUrl = useBlobUrl(wallpaper);
+  const ws = workspace ?? FALLBACK_WORKSPACE;
   return (
     <>
       <div className="ff-card" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12 }}>
@@ -720,20 +780,20 @@ function WallpaperPicker({ settings, onPatch }: SectionProps) {
             backgroundImage: previewUrl ? `url(${previewUrl})` : undefined,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
-            backgroundColor: settings.customBackgroundImage ? undefined : 'var(--ink-3)',
+            backgroundColor: wallpaper ? undefined : 'var(--ink-3)',
             border: '1px solid var(--line-1)',
             display: 'grid', placeItems: 'center',
             color: 'var(--fg-3)',
           } as CSSProperties}
         >
-          {!settings.customBackgroundImage && <Ico name="upload" size={14} />}
+          {!wallpaper && <Ico name="upload" size={14} />}
         </div>
         <div style={{ flex: 1 }}>
-          <div className="ff-row__label">{settings.customBackgroundImage ? 'Custom wallpaper' : 'No wallpaper selected'}</div>
-          <div className="ff-row__hint">{settings.customBackgroundImage ? 'Stored locally in your browser.' : 'JPG, PNG, or WebP. Stays on your device.'}</div>
+          <div className="ff-row__label">{wallpaper ? 'Custom wallpaper' : 'No wallpaper selected'}</div>
+          <div className="ff-row__hint">{wallpaper ? 'Stored locally in your browser.' : 'JPG, PNG, or WebP. Stays on your device.'}</div>
         </div>
         <label className="ff-btn ff-btn--ghost" style={{ cursor: 'pointer' }}>
-          <Ico name="upload" size={14} /> {settings.customBackgroundImage ? 'Replace' : 'Browse…'}
+          <Ico name="upload" size={14} /> {wallpaper ? 'Replace' : 'Browse…'}
           <input
             type="file"
             accept="image/*"
@@ -744,18 +804,18 @@ function WallpaperPicker({ settings, onPatch }: SectionProps) {
               input.value = '';
               if (!file) return;
               const reader = new FileReader();
-              reader.onload = () => onPatch({ customBackgroundImage: String(reader.result) });
+              reader.onload = () => onSetWallpaper(String(reader.result));
               reader.readAsDataURL(file);
             }}
           />
         </label>
-        {settings.customBackgroundImage && (
-          <button className="ff-btn ff-btn--ghost" onClick={() => onPatch({ customBackgroundImage: '' })}>
+        {wallpaper && (
+          <button className="ff-btn ff-btn--ghost" onClick={() => onSetWallpaper('')}>
             <Ico name="trash" size={14} />
           </button>
         )}
       </div>
-      {settings.customBackgroundImage && (
+      {wallpaper && (
         <>
           <div className="ff-bg-row">
             <div className="ff-bg-row__head">
@@ -764,7 +824,7 @@ function WallpaperPicker({ settings, onPatch }: SectionProps) {
                 <div className="ff-row__hint">Blend the wallpaper toward the theme color.</div>
               </div>
               <Slider
-                value={settings.backgroundOpacity}
+                value={ws.backgroundOpacity}
                 min={0}
                 max={100}
                 onChange={(v) => onPatch({ backgroundOpacity: v })}
@@ -785,7 +845,7 @@ function WallpaperPicker({ settings, onPatch }: SectionProps) {
                   { id: 'contain', label: 'Contain' },
                   { id: 'fill',    label: 'Fill' },
                 ]}
-                value={settings.backgroundFitMode}
+                value={ws.backgroundFitMode}
                 onChange={(v) => onPatch({ backgroundFitMode: v })}
               />
             </div>
@@ -799,7 +859,7 @@ function WallpaperPicker({ settings, onPatch }: SectionProps) {
                   { id: 'center', label: 'Center' },
                   { id: 'bottom', label: 'Bottom' },
                 ]}
-                value={settings.backgroundPositionMode}
+                value={ws.backgroundPositionMode}
                 onChange={(v) => onPatch({ backgroundPositionMode: v })}
               />
             </div>
@@ -828,15 +888,16 @@ function CustomLayoutPreview({ active }: { active?: boolean }) {
   );
 }
 
-function LayoutSection({ settings, onPatch }: SectionProps) {
-  const isCustom = settings.layoutPreset === 'custom';
+function LayoutSection({ workspace, onPatch }: WorkspaceSectionProps) {
+  const ws = workspace ?? FALLBACK_WORKSPACE;
+  const isCustom = ws.layoutPreset === 'custom';
   return (
     <div className="ff-set-section">
       <h3 className="ff-set-section__title">Layout</h3>
       <p className="ff-set-section__desc">Choose a preset, or fine-tune each control.</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 24 }}>
         {LAYOUT_PRESETS.map(p => {
-          const active = settings.layoutPreset === p.id;
+          const active = ws.layoutPreset === p.id;
           return (
             <button
               key={p.id}
@@ -882,7 +943,7 @@ function LayoutSection({ settings, onPatch }: SectionProps) {
               <div className="ff-row__hint">How big each tile icon renders.</div>
             </div>
             <Slider
-              value={settings.bookmarkIconSize}
+              value={ws.bookmarkIconSize}
               min={40}
               max={112}
               onChange={(v) => onPatch({ bookmarkIconSize: v })}
@@ -896,7 +957,7 @@ function LayoutSection({ settings, onPatch }: SectionProps) {
               <div className="ff-row__hint">Cell width — affects label wrapping and column count.</div>
             </div>
             <Slider
-              value={settings.bookmarkTileWidth}
+              value={ws.bookmarkTileWidth}
               min={88}
               max={180}
               onChange={(v) => onPatch({ bookmarkTileWidth: v })}
@@ -910,7 +971,7 @@ function LayoutSection({ settings, onPatch }: SectionProps) {
               <div className="ff-row__hint">Horizontal space between tiles.</div>
             </div>
             <Slider
-              value={settings.favoritesColumnGap}
+              value={ws.favoritesColumnGap}
               min={0}
               max={48}
               onChange={(v) => onPatch({ favoritesColumnGap: v })}
@@ -924,7 +985,7 @@ function LayoutSection({ settings, onPatch }: SectionProps) {
               <div className="ff-row__hint">Vertical space between tiles.</div>
             </div>
             <Slider
-              value={settings.favoritesRowGap}
+              value={ws.favoritesRowGap}
               min={0}
               max={48}
               onChange={(v) => onPatch({ favoritesRowGap: v })}
@@ -943,10 +1004,75 @@ function LayoutSection({ settings, onPatch }: SectionProps) {
               { id: 'rounded',  label: 'Rounded' },
               { id: 'circle',   label: 'Circle' },
             ]}
-            value={settings.tileShape}
+            value={ws.tileShape}
             onChange={(v) => onPatch({ tileShape: v })}
           />
         </div>
+      </div>
+      <div className="ff-card" style={{ marginTop: 16 }}>
+        <div className="ff-row">
+          <div className="ff-row__label">Show tile labels</div>
+          <Toggle on={ws.showTileLabels} onChange={(v) => onPatch({ showTileLabels: v })} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface WorkspaceManageSectionProps {
+  workspace: WorkspaceRecord | null;
+  onPatch: (patch: Partial<WorkspaceRecord>) => void;
+  onDeleteWorkspace: (id: string) => void;
+  isOnlyWorkspace: boolean;
+}
+
+function WorkspaceManageSection({ workspace, onPatch, onDeleteWorkspace, isOnlyWorkspace }: WorkspaceManageSectionProps) {
+  const [name, setName] = useState(workspace?.name ?? '');
+
+  useEffect(() => { setName(workspace?.name ?? ''); }, [workspace?.name]);
+
+  const saveName = () => {
+    const trimmed = name.trim();
+    if (trimmed && trimmed !== workspace?.name) onPatch({ name: trimmed });
+  };
+
+  return (
+    <div className="ff-set-section">
+      <h3 className="ff-set-section__title">Manage</h3>
+      <p className="ff-set-section__desc">Rename or delete this workspace.</p>
+
+      <div className="ff-card" style={{ marginBottom: 16 }}>
+        <div className="ff-field">
+          <label className="ff-field__label">Workspace name</label>
+          <input
+            className="ff-input"
+            style={{ width: '100%', boxSizing: 'border-box' }}
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onBlur={saveName}
+            onKeyDown={e => { if (e.key === 'Enter') saveName(); }}
+          />
+        </div>
+      </div>
+
+      <div className="ff-card">
+        <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--fg-3)', lineHeight: 1.5 }}>
+          Deleting removes the workspace from the tab bar. Your bookmarks stay in your
+          browser and remain accessible through another workspace.
+        </p>
+        {isOnlyWorkspace ? (
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--fg-3)' }}>
+            Create another workspace first before deleting this one.
+          </p>
+        ) : (
+          <button
+            className="ff-btn ff-btn--ghost"
+            style={{ width: '100%' }}
+            onClick={() => workspace && onDeleteWorkspace(workspace.id)}
+          >
+            Delete workspace
+          </button>
+        )}
       </div>
     </div>
   );
@@ -979,7 +1105,7 @@ function DockSection({ settings, tree, onPatch }: SectionProps & { tree: Bookmar
         <div className="ff-row">
           <div>
             <div className="ff-row__label">Source folder</div>
-            <div className="ff-row__hint">Pulls items from this folder.</div>
+            <div className="ff-row__hint">Show items from this folder.</div>
           </div>
           <FolderPicker
             tree={tree}
