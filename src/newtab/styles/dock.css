@@ -58,7 +58,11 @@
   transition: transform var(--dur-base) var(--ease-out);
   padding: 6px;
 }
-.ff-dock__item:hover { transform: translateY(-6px) scale(1.06); }
+.ff-dock__item:hover {
+  transform: translateY(-6px) scale(1.06);
+  box-shadow: 0 0 0 2px var(--accent-border),
+              0 8px 24px color-mix(in oklab, var(--accent) 16%, transparent);
+}
 .ff-dock__item:active { transform: translateY(-2px) scale(0.98); }
 .ff-dock__item[data-drag-source="true"] { opacity: 0.4; }
 .ff-dock__item[data-drop-position]::after {

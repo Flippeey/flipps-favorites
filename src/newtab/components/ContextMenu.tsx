@@ -6,6 +6,7 @@ export interface ContextMenuItem {
   icon?: string;
   label?: string;
   kbd?: string;
+  title?: string;
   onClick?: () => void;
   disabled?: boolean;
   destructive?: boolean;
@@ -35,7 +36,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   }, [x, y, items]);
 
   useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
+    const onDoc = (e: PointerEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
     const onKey = (e: KeyboardEvent) => {
@@ -58,10 +59,10 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
         onClose();
       }
     };
-    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('pointerdown', onDoc);
     document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('pointerdown', onDoc);
       document.removeEventListener('keydown', onKey);
     };
   }, [items, hovered, onClose]);
@@ -76,6 +77,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
             key={i}
             role="menuitem"
             disabled={it.disabled}
+            title={it.title}
             data-hovered={hovered === i}
             data-destructive={!!it.destructive}
             className="ff-ctx__item"

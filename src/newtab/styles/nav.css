@@ -98,7 +98,7 @@
   border-radius: var(--r-sm); cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
-.ff-sort__option:hover, .ff-fpicker__option:hover { background: var(--ink-3); color: var(--fg-1); }
+.ff-sort__option:hover, .ff-fpicker__option:hover { background: var(--accent-soft); color: var(--accent); }
 .ff-sort__option[data-active="true"], .ff-fpicker__option[data-active="true"] {
   background: var(--accent-soft); color: var(--accent); font-weight: 500;
 }
@@ -143,10 +143,49 @@
 .ff-ctx__kbd { font-family: var(--font-mono); font-size: 11px; color: var(--fg-3); letter-spacing: 0.04em; }
 
 /* Workspace tabs */
+.ff-ws-tabs-wrap {
+  position: relative;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+}
+
 .ff-ws-tabs {
   display: flex;
   align-items: center;
   gap: 2px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.ff-ws-tabs::-webkit-scrollbar { display: none; }
+
+.ff-ws-scroll {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-full);
+  background: var(--frost-strong);
+  -webkit-backdrop-filter: var(--frost-blur);
+  backdrop-filter: var(--frost-blur);
+  border: 1px solid var(--line-2);
+  color: var(--fg-2);
+  z-index: 2;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: opacity 140ms ease-out;
+}
+.ff-ws-scroll--left  { left: 0; }
+.ff-ws-scroll--right { right: 0; }
+
+.ff-ws-dropdown { display: none; }
+
+@media (max-width: 480px) {
+  .ff-ws-tabs-wrap { display: none; }
+  .ff-ws-dropdown { display: flex; position: relative; }
 }
 
 .ff-ws-tab {
@@ -179,6 +218,7 @@
   color: var(--accent);
   font-weight: 600;
   border-color: var(--line-2);
+  border-bottom: 2px solid var(--accent);
 }
 
 .ff-ws-tab[data-drop-hover="true"] {
@@ -199,12 +239,3 @@
   text-overflow: ellipsis;
 }
 
-/* On wallpaper, reinforce the active tab with an accent bottom border since the photo swallows the background tint. */
-.ff-app[data-bg="wallpaper"] .ff-ws-tab.is-active {
-  border-bottom-color: var(--accent);
-}
-
-/* Add menu */
-.ff-add-menu {
-  position: relative;
-}

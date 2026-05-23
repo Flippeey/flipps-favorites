@@ -1,6 +1,7 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { BookmarkNode, ClockHourFormat, TileShape } from '../../shared/messages';
+import { IS_MAC } from '../lib/platform';
 import { Favicon } from './Favicon';
 import { Ico } from './Ico';
 
@@ -50,8 +51,6 @@ function isTypingTarget(el: EventTarget | null): boolean {
   if (el.isContentEditable) return true;
   return false;
 }
-
-const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 
 const SCORE_TITLE_EXACT = 1000;
 const SCORE_TITLE_STARTS = 500;
@@ -240,7 +239,7 @@ export function HeroSearch({ shape, index, usage, onPickBookmark, onPickFolder }
         <input
           ref={inputRef}
           type="text"
-          placeholder="Search bookmarks or type a URL"
+          placeholder="Search any bookmark or folder..."
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onFocus={() => setFocused(true)}

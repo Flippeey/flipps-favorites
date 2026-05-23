@@ -14,6 +14,7 @@ export interface MarqueeSelection {
 
 interface UseMarqueeArgs {
   surface: HTMLElement | null;
+  container?: HTMLElement | null;
   rootFolderId: string;
   enabled: boolean;
   selectionRef: RefObject<MarqueeSelection>;
@@ -29,7 +30,7 @@ function rectsIntersect(a: DOMRect, b: { left: number; right: number; top: numbe
   return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
 }
 
-export function useMarquee({ surface, rootFolderId, enabled, selectionRef, onSelect }: UseMarqueeArgs): MarqueeRect | null {
+export function useMarquee({ surface, container, rootFolderId, enabled, selectionRef, onSelect }: UseMarqueeArgs): MarqueeRect | null {
   const [rect, setRect] = useState<MarqueeRect | null>(null);
   const stateRef = useRef<{
     active: boolean;
@@ -49,11 +50,19 @@ export function useMarquee({ surface, rootFolderId, enabled, selectionRef, onSel
     if (!enabled) return;
     const canvas = surface;
     if (!canvas) return;
+    const listenerEl = container ?? canvas;
 
     const onDown = (event: PointerEvent) => {
       if (event.button !== 0) return;
       const target = event.target as HTMLElement;
-      if (target.closest('.ff-tile') || target.closest('button')) return;
+      if (
+        target.closest('.ff-tile') ||
+        target.closest('button') ||
+        target.closest('input') ||
+        target.closest('select') ||
+        target.closest('textarea') ||
+        target.closest('label')
+      ) return;
       const scopeId = closestScopeId(target, rootFolderIdRef.current);
       const additive = event.shiftKey;
       const current = selectionRef.current;
@@ -74,7 +83,7 @@ export function useMarquee({ surface, rootFolderId, enabled, selectionRef, onSel
         baseIds,
         additive,
       };
-      try { canvas.setPointerCapture(event.pointerId); } catch { /* noop */ }
+      try { listenerEl.setPointerCapture(event.pointerId); } catch { /* noop */ }
       event.preventDefault();
     };
 
@@ -114,17 +123,17 @@ export function useMarquee({ surface, rootFolderId, enabled, selectionRef, onSel
       stateRef.current = null;
     };
 
-    canvas.addEventListener('pointerdown', onDown);
+    listenerEl.addEventListener('pointerdown', onDown);
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', finish);
     window.addEventListener('pointercancel', finish);
     return () => {
-      canvas.removeEventListener('pointerdown', onDown);
+      listenerEl.removeEventListener('pointerdown', onDown);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', finish);
       window.removeEventListener('pointercancel', finish);
     };
-  }, [surface, enabled, selectionRef]);
+  }, [surface, container, enabled, selectionRef]);
 
   return rect;
 }

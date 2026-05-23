@@ -176,6 +176,20 @@ button { font-family: inherit; }
 }
 .ff-app[data-bg="wallpaper"] .ff-crumb__btn:hover { color: var(--accent); }
 
+/* Wallpaper: tile backplates keep workspace identity visible on busy photos.
+   At rest, each tile gets a frosted accent-tinted plate; on hover, the frost strengthens
+   and the accent ring intensifies. */
+.ff-app[data-bg="wallpaper"] .ff-tile {
+  background: color-mix(in oklab, var(--frost-strong) 35%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent) 14%, transparent);
+  border-radius: var(--r-lg);
+}
+.ff-app[data-bg="wallpaper"] .ff-tile:hover {
+  background: color-mix(in oklab, var(--frost-strong) 55%, transparent);
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 14%, transparent);
+}
+
 /* Wallpaper: search bar needs an actual frosted plate (default styling is 3% tint + hairline border = vanishes). */
 .ff-app[data-bg="wallpaper"] .ff-search {
   background: color-mix(in oklab, var(--frost-strong) 70%, transparent);
@@ -187,6 +201,12 @@ button { font-family: inherit; }
 .ff-app[data-bg="wallpaper"] .ff-search:hover {
   background: color-mix(in oklab, var(--frost-strong) 82%, transparent);
   border-color: var(--line-3);
+}
+.ff-app[data-bg="wallpaper"] .ff-search:focus-within {
+  border-color: var(--accent-border);
+  box-shadow:
+    0 0 0 4px color-mix(in oklab, var(--accent) 14%, transparent),
+    var(--shadow-md);
 }
 .ff-app[data-bg="wallpaper"] .ff-search input::placeholder { color: var(--fg-2); }
 

@@ -8,15 +8,17 @@ interface BookmarkTileProps {
   item: BookmarkNode;
   shape: TileShape;
   selected?: boolean;
+  focused?: boolean;
   onClick?: (item: BookmarkNode, event: MouseEvent) => void;
   onContextMenu?: (item: BookmarkNode, event: MouseEvent) => void;
 }
 
-export function BookmarkTile({ item, shape, selected = false, onClick, onContextMenu }: BookmarkTileProps) {
+export function BookmarkTile({ item, shape, selected = false, focused = false, onClick, onContextMenu }: BookmarkTileProps) {
   return (
     <button
       className="ff-tile"
       data-selected={selected}
+      data-focused={focused || undefined}
       data-item-id={item.id}
       data-item-kind="bookmark"
       onClick={(e) => onClick?.(item, e)}
@@ -35,17 +37,19 @@ interface FolderTileProps {
   folder: BookmarkNode;
   shape: TileShape;
   selected?: boolean;
+  focused?: boolean;
   onClick?: (folder: BookmarkNode, event: MouseEvent) => void;
   onContextMenu?: (folder: BookmarkNode, event: MouseEvent) => void;
 }
 
-export function FolderTile({ folder, shape, selected = false, onClick, onContextMenu }: FolderTileProps) {
+export function FolderTile({ folder, shape, selected = false, focused = false, onClick, onContextMenu }: FolderTileProps) {
   const items: (BookmarkNode | null)[] = (folder.children ?? []).slice(0, 4);
   while (items.length < 4) items.push(null);
   return (
     <button
       className="ff-tile"
       data-selected={selected}
+      data-focused={focused || undefined}
       data-item-id={folder.id}
       data-item-kind="folder"
       onClick={(e) => onClick?.(folder, e)}
@@ -82,6 +86,7 @@ interface TileForProps {
   scopeFolderId: string;
   selectedIds?: ReadonlySet<string>;
   selectionScopeFolderId?: string;
+  focusedTileId?: string | null;
   onPickFolder?: (folder: BookmarkNode, event: MouseEvent) => void;
   onPickItem?: (item: BookmarkNode, event: MouseEvent) => void;
   onContextMenu?: (item: BookmarkNode, event: MouseEvent) => void;
@@ -93,15 +98,17 @@ export function TileFor({
   scopeFolderId,
   selectedIds,
   selectionScopeFolderId,
+  focusedTileId,
   onPickFolder,
   onPickItem,
   onContextMenu,
 }: TileForProps) {
   const selected = selectedIds && selectionScopeFolderId === scopeFolderId && selectedIds.has(item.id);
+  const focused = focusedTileId === item.id;
   return isFolder(item) ? (
-    <FolderTile folder={item} shape={shape} selected={selected} onClick={onPickFolder} onContextMenu={onContextMenu} />
+    <FolderTile folder={item} shape={shape} selected={selected} focused={focused} onClick={onPickFolder} onContextMenu={onContextMenu} />
   ) : (
-    <BookmarkTile item={item} shape={shape} selected={selected} onClick={onPickItem} onContextMenu={onContextMenu} />
+    <BookmarkTile item={item} shape={shape} selected={selected} focused={focused} onClick={onPickItem} onContextMenu={onContextMenu} />
   );
 }
 

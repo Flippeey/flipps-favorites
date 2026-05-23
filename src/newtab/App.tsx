@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { AppSettings, BookmarkNode, BookmarkSortMode, SortDirection, WorkspaceRecord } from '../shared/messages';
-import { ConfirmDeleteDialog } from './components/ConfirmDeleteDialog';
+import { ConfirmBatchDeleteDialog, ConfirmDeleteDialog } from './components/ConfirmDeleteDialog';
 import { ContextMenu, type ContextMenuItem } from './components/ContextMenu';
 import { Dock } from './components/Dock';
 import { EditDialog, type EditTarget } from './components/EditDialog';
@@ -17,10 +17,12 @@ import { SectionsView, TilesView, FolderPageView } from './components/views';
 import { useMarquee, type MarqueeSelection } from './interaction/useMarquee';
 import { useDrag } from './interaction/useDrag';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
+import { IS_MAC } from './lib/platform';
 import { getBookmarkTree, getBookmarkUsage, getSettings, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark, createWorkspace, patchWorkspace, deleteWorkspace } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
 import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper, writeWorkspaceWallpaper } from '../shared/storage';
+import { MAX_WORKSPACES } from '../shared/constants';
 
 interface AppProps {
   initialSettings: AppSettings;
@@ -71,13 +73,21 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const [folderPath, setFolderPath] = useState<BookmarkNode[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<BookmarkNode | null>(null);
+  const [confirmDeleteBatch, setConfirmDeleteBatch] = useState<string[] | null>(null);
 
   const [selection, setSelection] = useState<MarqueeSelection>({ ids: new Set(), scopeFolderId: '' });
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
 
+  // Keyboard navigation: tracks which tile is currently focused via arrow keys.
+  // Null = no keyboard focus (focus model resumes from real :focus or :focus-visible).
+  const [focusedTileId, setFocusedTileId] = useState<string | null>(null);
+
   const canvasRef = useRef<HTMLElement | null>(null);
+  const dragEngagedRef = useRef(false);
+  const lastClickedRef = useRef<string | null>(null);
   const [canvasEl, setCanvasEl] = useState<HTMLElement | null>(null);
+  const [appEl, setAppEl] = useState<HTMLElement | null>(null);
   const [overlayBodyEl, setOverlayBodyEl] = useState<HTMLElement | null>(null);
   const [dockEl, setDockEl] = useState<HTMLElement | null>(null);
 
@@ -156,6 +166,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   }, [activeWorkspace]);
 
   const handleCreateWorkspace = useCallback(async (rootFolderId: string, name: string) => {
+    if (workspaces.length >= MAX_WORKSPACES) return;
     const workspace: WorkspaceRecord = {
       id: crypto.randomUUID(),
       name,
@@ -184,11 +195,34 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     if (nextActiveId) await handlePatch({ activeWorkspaceId: nextActiveId });
   }, [workspaces, settings.activeWorkspaceId, handlePatch]);
 
+  const handleDuplicateWorkspace = useCallback(async (id: string) => {
+    if (workspaces.length >= MAX_WORKSPACES) return;
+    const source = workspaces.find(w => w.id === id);
+    if (!source) return;
+    const duplicate: WorkspaceRecord = {
+      ...source,
+      id: crypto.randomUUID(),
+      name: `Copy of ${source.name}`,
+    };
+    try {
+      const created = await createWorkspace(duplicate);
+      if (source.backgroundMode === 'wallpaper') {
+        const wallpaper = await readWorkspaceWallpaper(source.id);
+        if (wallpaper) await writeWorkspaceWallpaper(created.id, wallpaper);
+      }
+      setWorkspaces(prev => [...prev, created]);
+      await handlePatch({ activeWorkspaceId: created.id });
+    } catch {
+      // creation failed — leave UI unchanged
+    }
+  }, [workspaces, handlePatch]);
+
   const handleAddWorkspace = useCallback(() => {
     setNewWorkspaceOpen(true);
   }, []);
 
-  const handleWorkspaceContextMenu = useCallback((_id: string, x: number, y: number) => {
+  const handleWorkspaceContextMenu = useCallback((id: string, x: number, y: number) => {
+    const atMax = workspaces.length >= MAX_WORKSPACES;
     setContextMenu({
       x, y,
       items: [
@@ -196,13 +230,16 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           setSettingsInitialSection('appearance');
           setSettingsOpen(true);
         }},
+        { kind: 'item', icon: 'copy', label: 'Duplicate', disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => {
+          void handleDuplicateWorkspace(id);
+        }},
         { kind: 'item', icon: 'settings', label: 'Manage', onClick: () => {
           setSettingsInitialSection('workspace-manage');
           setSettingsOpen(true);
         }},
       ],
     });
-  }, []);
+  }, [workspaces.length, handleDuplicateWorkspace]);
 
   const refreshTree = useCallback(async () => {
     try {
@@ -223,6 +260,22 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     ? { ...folderPath[folderPath.length - 1], children: sortedChildren(folderPath[folderPath.length - 1].children) }
     : null;
   const isAtRoot = folderPath.length === 0;
+
+  // Flat list of currently navigable tiles in render order — drives arrow key navigation.
+  // Sections view flattens across all section grids; folder-page view uses current folder.
+  const navItems = useMemo<BookmarkNode[]>(() => {
+    if (!isAtRoot && sortedCurrentFolder) return sortedCurrentFolder.children ?? [];
+    if (settings.folderMode === 'sections') {
+      const out: BookmarkNode[] = [];
+      for (const folder of sortedRootChildren.filter(isFolder)) {
+        for (const child of folder.children ?? []) out.push(child);
+      }
+      return out;
+    }
+    const folders = sortedRootChildren.filter(isFolder);
+    const bookmarks = sortedRootChildren.filter(c => !isFolder(c));
+    return [...folders, ...bookmarks];
+  }, [isAtRoot, sortedCurrentFolder, sortedRootChildren, settings.folderMode]);
 
   const dockItems = useMemo<BookmarkNode[]>(() => {
     if (!settings.showDock) return [];
@@ -276,6 +329,18 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setFolderNameTarget({ mode: 'create', parentId: parentId ?? defaultParentId(), parentTitle });
   }, [defaultParentId]);
 
+  const handleOpenAddMenu = useCallback((x: number, y: number) => {
+    const atMax = workspaces.length >= MAX_WORKSPACES;
+    setContextMenu({
+      x, y,
+      items: [
+        { kind: 'item', icon: 'link',       label: 'Add bookmark',  onClick: () => handleNewBookmark() },
+        { kind: 'item', icon: 'folderPlus', label: 'Add folder',    onClick: () => handleNewFolder() },
+        { kind: 'item', icon: 'layers',     label: 'Add workspace', disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => handleAddWorkspace() },
+      ],
+    });
+  }, [workspaces.length, handleNewBookmark, handleNewFolder, handleAddWorkspace]);
+
   const handleRenameFolder = useCallback((folder: BookmarkNode) => {
     setFolderNameTarget({ mode: 'rename', id: folder.id, title: folder.title });
   }, []);
@@ -288,10 +353,12 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     if (target == null) {
       const parentId = sectionFolder?.id ?? defaultParentId();
       const labelSuffix = sectionFolder ? ` in ${sectionFolder.title}` : '';
+      const atMax = workspaces.length >= MAX_WORKSPACES;
       return [
-        { kind: 'item', icon: 'plus',       label: `New bookmark${labelSuffix}`, onClick: () => handleNewBookmark(parentId, sectionFolder?.title) },
-        { kind: 'item', icon: 'folderPlus', label: `New folder${labelSuffix}`,
+        { kind: 'item', icon: 'plus',       label: `Add bookmark${labelSuffix}`, onClick: () => handleNewBookmark(parentId, sectionFolder?.title) },
+        { kind: 'item', icon: 'folderPlus', label: `Add folder${labelSuffix}`,
           onClick: () => handleNewFolder(parentId, sectionFolder?.title) },
+        { kind: 'item', icon: 'layers',     label: 'Add workspace', disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => handleAddWorkspace() },
         { kind: 'separator' },
         { kind: 'item', icon: 'settings',   label: 'Settings', onClick: () => setSettingsOpen(true) },
       ];
@@ -307,21 +374,26 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
         { kind: 'item', icon: 'folderPlus', label: 'New folder inside',
           onClick: () => handleNewFolder(target.id, target.title) },
         { kind: 'separator' },
-        { kind: 'item', icon: 'trash', label: 'Delete folder', kbd: '⌫', destructive: true,
+        { kind: 'item', icon: 'trash', label: 'Delete folder', kbd: IS_MAC ? '⌫' : 'Del', destructive: true,
           onClick: () => setConfirmDeleteFolder(target) },
       ];
     }
+    const isInSelection = selection.ids.has(target.id) && selection.ids.size > 1;
+    const deleteLabel = isInSelection ? `Delete ${selection.ids.size} items` : 'Delete';
+    const deleteAction = isInSelection
+      ? () => setConfirmDeleteBatch(Array.from(selection.ids))
+      : async () => { await removeBookmark(target.id); refreshTree(); };
     return [
       { kind: 'item', icon: 'link',       label: 'Open',            kbd: '↵',  onClick: () => handlePickBookmark(target) },
-      { kind: 'item', icon: 'arrowRight', label: 'Open in new tab', kbd: '⌘↵', onClick: () => target.url && window.open(target.url.startsWith('http') ? target.url : `https://${target.url}`, '_blank', 'noopener') },
-      { kind: 'item', icon: 'copy',       label: 'Copy URL',        kbd: '⌘C', onClick: () => target.url && navigator.clipboard?.writeText(target.url.startsWith('http') ? target.url : `https://${target.url}`) },
+      { kind: 'item', icon: 'arrowRight', label: 'Open in new tab', kbd: IS_MAC ? '⌘↵' : 'Ctrl+↵', onClick: () => target.url && window.open(target.url.startsWith('http') ? target.url : `https://${target.url}`, '_blank', 'noopener') },
+      { kind: 'item', icon: 'copy',       label: 'Copy URL',                   onClick: () => target.url && navigator.clipboard?.writeText(target.url.startsWith('http') ? target.url : `https://${target.url}`) },
       { kind: 'separator' },
       { kind: 'item', icon: 'pencil',     label: 'Edit…',           onClick: () => handleEditBookmark(target) },
       { kind: 'separator' },
-      { kind: 'item', icon: 'trash',      label: 'Delete',          kbd: '⌫', destructive: true,
-        onClick: async () => { await removeBookmark(target.id); refreshTree(); } },
+      { kind: 'item', icon: 'trash',      label: deleteLabel,       kbd: IS_MAC ? '⌫' : 'Del', destructive: true,
+        onClick: deleteAction },
     ];
-  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder]);
+  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, handleAddWorkspace, workspaces.length, selection, refreshTree]);
 
   const handleCanvasContextMenu = useCallback((event: React.MouseEvent) => {
     const target = event.target as HTMLElement;
@@ -362,6 +434,43 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  // Alt+1-9 switches workspace (only when no modifier conflicts and no input is focused)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)) return;
+      const digit = parseInt(e.key, 10);
+      if (Number.isNaN(digit)) return;
+      if (digit >= 1 && digit <= 9 && digit <= workspaces.length) {
+        e.preventDefault();
+        handleSwitchWorkspace(workspaces[digit - 1].id);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [workspaces, handleSwitchWorkspace]);
+
+  // Reset keyboard focus when navigation context changes (workspace switch, folder open/close).
+  useEffect(() => {
+    setFocusedTileId(null);
+  }, [activeWorkspace?.id, folderPath.length, openFolderId]);
+
+  // Scroll focused tile into view smoothly. Manual calculation avoids scrollIntoView
+  // scrolling the nav bar out of view on some browsers when block:'nearest' overshoots.
+  useEffect(() => {
+    if (!focusedTileId || !canvasEl) return;
+    const el = canvasEl.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(focusedTileId)}"]`);
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const vPad = 16;
+    if (rect.top < vPad) {
+      window.scrollBy({ top: rect.top - vPad, behavior: 'smooth' });
+    } else if (rect.bottom > window.innerHeight - vPad) {
+      window.scrollBy({ top: rect.bottom - window.innerHeight + vPad, behavior: 'smooth' });
+    }
+  }, [focusedTileId, canvasEl]);
 
   const getOrderedChildren = useCallback((folderId: string): Array<{ id: string }> => {
     const folder = findFolder(tree, folderId);
@@ -407,6 +516,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
 
   const marqueeRect = useMarquee({
     surface: canvasEl,
+    container: appEl,
     rootFolderId: rootFolder?.id ?? '',
     enabled: true,
     selectionRef,
@@ -427,6 +537,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     selectionRef,
     getOrderedChildren,
     onCommit: handleDragCommit,
+    dragEngagedRef,
   });
   const overlayDragPreview = useDrag({
     surface: overlayBodyEl,
@@ -435,6 +546,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     selectionRef,
     getOrderedChildren,
     onCommit: handleDragCommit,
+    dragEngagedRef,
   });
   const dockDragPreview = useDrag({
     surface: dockEl,
@@ -443,32 +555,160 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     selectionRef,
     getOrderedChildren,
     onCommit: handleDragCommit,
+    dragEngagedRef,
   });
   const dragPreview = canvasDragPreview ?? overlayDragPreview ?? dockDragPreview;
 
   const handleTileClick = useCallback((item: BookmarkNode, event: React.MouseEvent) => {
-    if (event.shiftKey || event.metaKey || event.ctrlKey) {
-      const scope = (event.currentTarget as HTMLElement | null)?.closest<HTMLElement>('[data-scope-folder-id]')?.dataset.scopeFolderId ?? rootFolder?.id ?? '';
-      setSelection(prev => {
-        const sameScope = prev.scopeFolderId === scope;
-        const baseIds = sameScope ? new Set(prev.ids) : new Set<string>();
-        if (event.metaKey || event.ctrlKey) {
-          if (baseIds.has(item.id)) baseIds.delete(item.id);
-          else baseIds.add(item.id);
-        } else {
-          baseIds.add(item.id);
-        }
-        return { ids: baseIds, scopeFolderId: scope };
-      });
+    if (dragEngagedRef.current) {
+      dragEngagedRef.current = false;
       return;
     }
+    const scope = (event.currentTarget as HTMLElement | null)?.closest<HTMLElement>('[data-scope-folder-id]')?.dataset.scopeFolderId ?? rootFolder?.id ?? '';
+
+    if (event.metaKey || event.ctrlKey) {
+      setSelection(prev => {
+        const sameScope = prev.scopeFolderId === scope;
+        const ids = sameScope ? new Set(prev.ids) : new Set<string>();
+        if (ids.has(item.id)) ids.delete(item.id);
+        else ids.add(item.id);
+        return { ids, scopeFolderId: scope };
+      });
+      lastClickedRef.current = item.id;
+      return;
+    }
+
+    if (event.shiftKey) {
+      const anchor = lastClickedRef.current;
+      if (anchor && navItems.length > 0) {
+        const anchorIdx = navItems.findIndex(n => n.id === anchor);
+        const clickIdx = navItems.findIndex(n => n.id === item.id);
+        if (anchorIdx >= 0 && clickIdx >= 0) {
+          const from = Math.min(anchorIdx, clickIdx);
+          const to = Math.max(anchorIdx, clickIdx);
+          setSelection(prev => {
+            const ids = prev.scopeFolderId === scope ? new Set(prev.ids) : new Set<string>();
+            for (let i = from; i <= to; i++) ids.add(navItems[i].id);
+            return { ids, scopeFolderId: scope };
+          });
+          return;
+        }
+      }
+      // Fallback: no anchor — treat like Ctrl+Click
+      setSelection(prev => {
+        const ids = prev.scopeFolderId === scope ? new Set(prev.ids) : new Set<string>();
+        ids.add(item.id);
+        return { ids, scopeFolderId: scope };
+      });
+      lastClickedRef.current = item.id;
+      return;
+    }
+
     // Plain click — clear selection. Folder/bookmark open behavior handled by caller.
     if (selectionRef.current.ids.size > 0) {
       setSelection({ ids: new Set(), scopeFolderId: '' });
     }
+    lastClickedRef.current = item.id;
     if (isFolder(item)) handlePickFolder(item);
     else handlePickBookmark(item, event);
-  }, [handlePickBookmark, handlePickFolder, rootFolder]);
+  }, [handlePickBookmark, handlePickFolder, rootFolder, navItems]);
+
+  const handleDeleteFocused = useCallback(async (item: BookmarkNode) => {
+    if (isFolder(item)) {
+      setConfirmDeleteFolder(item);
+      return;
+    }
+    try {
+      await removeBookmark(item.id);
+      refreshTree();
+    } catch {
+      // ignore
+    }
+  }, [refreshTree]);
+
+  // Arrow-key grid navigation. Active only when no dialog/overlay/input has focus —
+  // otherwise we'd hijack typing or contend with active surfaces.
+  const anyOverlayOpen = Boolean(
+    settingsOpen || editTarget || quickAddTarget || folderNameTarget || onboardOpen
+    || newWorkspaceOpen || confirmDeleteFolder || confirmDeleteBatch || openFolderId || contextMenu,
+  );
+
+  useEffect(() => {
+    if (anyOverlayOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)) return;
+      if (navItems.length === 0) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      const idx = focusedTileId ? navItems.findIndex(n => n.id === focusedTileId) : -1;
+      const isArrow = e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'ArrowDown';
+
+      if (isArrow) {
+        e.preventDefault();
+        if (idx < 0) {
+          setFocusedTileId(navItems[0].id);
+          return;
+        }
+        // Column count read from the first .ff-grid inside the canvas — matches whatever
+        // layout the active view rendered (tiles or sections).
+        const grid = canvasEl?.querySelector<HTMLElement>('.ff-grid');
+        const cols = grid ? Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(' ').length) : 1;
+        let next = idx;
+        if (e.key === 'ArrowRight') next = Math.min(idx + 1, navItems.length - 1);
+        else if (e.key === 'ArrowLeft') next = Math.max(idx - 1, 0);
+        else if (e.key === 'ArrowDown') next = Math.min(idx + cols, navItems.length - 1);
+        else if (e.key === 'ArrowUp') next = Math.max(idx - cols, 0);
+        if (next !== idx) setFocusedTileId(navItems[next].id);
+        return;
+      }
+
+      if (idx < 0) return;
+      const item = navItems[idx];
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (isFolder(item)) handlePickFolder(item);
+        else handlePickBookmark(item, { metaKey: false, ctrlKey: false });
+        return;
+      }
+      if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+        e.preventDefault();
+        const el = canvasEl?.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(item.id)}"]`);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          setContextMenu({ x: rect.left + rect.width / 2, y: rect.bottom, items: buildContextMenuItems(item) });
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [
+    navItems, focusedTileId, canvasEl, anyOverlayOpen,
+    handlePickBookmark, handlePickFolder, handleDeleteFocused, buildContextMenuItems,
+  ]);
+
+  useEffect(() => {
+    if (anyOverlayOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)) return;
+      e.preventDefault();
+      if (selection.ids.size > 1) {
+        setConfirmDeleteBatch(Array.from(selection.ids));
+      } else if (selection.ids.size === 1) {
+        const id = Array.from(selection.ids)[0];
+        const item = navItems.find(n => n.id === id);
+        if (item) void handleDeleteFocused(item);
+      } else if (focusedTileId) {
+        const item = navItems.find(n => n.id === focusedTileId);
+        if (item) void handleDeleteFocused(item);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [anyOverlayOpen, selection, focusedTileId, navItems, handleDeleteFocused]);
 
   const wallpaperBlobUrl = useBlobUrl(workspaceWallpaper);
 
@@ -495,6 +735,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   return (
     <div
       className="ff-app"
+      ref={setAppEl}
       data-bg={activeWorkspace?.backgroundMode ?? 'gradient'}
       data-bg-style={activeWorkspace?.gradientStyle ?? 'top'}
       data-tile-shape={activeWorkspace?.tileShape ?? 'squircle'}
@@ -516,14 +757,12 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           activeWorkspaceId={settings.activeWorkspaceId}
           onSwitchWorkspace={handleSwitchWorkspace}
           onWorkspaceContextMenu={handleWorkspaceContextMenu}
-          onAddWorkspace={handleAddWorkspace}
-          onAddFolder={handleNewFolder}
+          onOpenAddMenu={handleOpenAddMenu}
           path={folderPath}
           onCrumb={handleGoToCrumb}
           sortValue={sortChoice}
           onSort={handleSortChange}
           onOpenSettings={() => setSettingsOpen(true)}
-          onAddBookmark={() => handleNewBookmark()}
         />
       </header>
 
@@ -549,6 +788,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             onPickItem={handleTileClick}
             selectedIds={selection.ids}
             selectionScopeFolderId={selection.scopeFolderId}
+            focusedTileId={focusedTileId}
           />
         ) : settings.folderMode === 'sections' ? (
           <SectionsView
@@ -567,6 +807,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             }}
             selectedIds={selection.ids}
             selectionScopeFolderId={selection.scopeFolderId}
+            focusedTileId={focusedTileId}
           />
         ) : (
           <TilesView
@@ -578,6 +819,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             onPickItem={handleTileClick}
             selectedIds={selection.ids}
             selectionScopeFolderId={selection.scopeFolderId}
+            focusedTileId={focusedTileId}
           />
         )}
         {marqueeRect && (
@@ -671,6 +913,21 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           onConfirm={async () => {
             await removeBookmark(confirmDeleteFolder.id, true);
             setConfirmDeleteFolder(null);
+            await refreshTree();
+          }}
+        />
+      )}
+
+      {confirmDeleteBatch && (
+        <ConfirmBatchDeleteDialog
+          count={confirmDeleteBatch.length}
+          onClose={() => setConfirmDeleteBatch(null)}
+          onConfirm={async () => {
+            for (const id of confirmDeleteBatch) {
+              await removeBookmark(id);
+            }
+            setConfirmDeleteBatch(null);
+            setSelection({ ids: new Set(), scopeFolderId: '' });
             await refreshTree();
           }}
         />

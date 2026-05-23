@@ -15,6 +15,7 @@ interface UseDragArgs {
   getOrderedChildren: (folderId: string) => Array<{ id: string }>;
   onCommit: (dragIds: string[], target: DropTarget) => void;
   onCancel?: () => void;
+  dragEngagedRef?: { current: boolean };
 }
 
 const DRAG_THRESHOLD = 6;
@@ -61,6 +62,7 @@ export function useDrag({
   getOrderedChildren,
   onCommit,
   onCancel,
+  dragEngagedRef,
 }: UseDragArgs): DragPreviewState | null {
   const [preview, setPreview] = useState<DragPreviewState | null>(null);
   const stateRef = useRef<{
@@ -131,6 +133,7 @@ export function useDrag({
       if (!drag.engaged) {
         if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
         drag.engaged = true;
+        if (dragEngagedRef) dragEngagedRef.current = true;
         // Mark source tiles
         for (const id of drag.dragIds) {
           const el = canvas.querySelector<HTMLElement>(`[data-item-id="${id}"]`);
@@ -275,6 +278,7 @@ export function useDrag({
       clearDropAttrs({ includeSource: true });
       setPreview(null);
       stateRef.current = null;
+      if (dragEngagedRef) queueMicrotask(() => { dragEngagedRef.current = false; });
       if (engaged && target) {
         if (dropOnBackdrop) {
           window.dispatchEvent(new CustomEvent('ff-suppress-overlay-close'));
