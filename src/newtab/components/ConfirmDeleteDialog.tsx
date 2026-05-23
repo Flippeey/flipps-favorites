@@ -4,6 +4,54 @@ import { countDescendants } from '../lib/tree';
 import { Ico } from './Ico';
 import { ModalDialog } from './ModalDialog';
 
+interface ConfirmBatchDeleteDialogProps {
+  count: number;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}
+
+export function ConfirmBatchDeleteDialog({ count, onClose, onConfirm }: ConfirmBatchDeleteDialogProps) {
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleConfirm = async (): Promise<void> => {
+    if (working) return;
+    setWorking(true);
+    setError(null);
+    try {
+      await onConfirm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete bookmarks.');
+      setWorking(false);
+    }
+  };
+
+  return (
+    <ModalDialog
+      icon="trash"
+      eyebrow="Confirm"
+      title={`Delete ${count} bookmarks?`}
+      onClose={onClose}
+      width="min(440px, 100%)"
+      bodyStyle={{ gridTemplateColumns: '1fr', gap: 12 }}
+    >
+      <p className="ff-confirm__message">
+        This will permanently remove {count} bookmarks.
+      </p>
+      <p className="ff-confirm__hint">This action cannot be undone.</p>
+      {error && <div className="ff-status" data-kind="error" role="alert">{error}</div>}
+      <div className="ff-dialog__actions">
+        <button type="button" className="ff-btn ff-btn--ghost" onClick={onClose} disabled={working}>
+          Cancel
+        </button>
+        <button type="button" className="ff-btn ff-btn--danger" onClick={handleConfirm} disabled={working}>
+          <Ico name="trash" size={14} /> {working ? 'Deleting…' : `Delete ${count} bookmarks`}
+        </button>
+      </div>
+    </ModalDialog>
+  );
+}
+
 interface ConfirmDeleteDialogProps {
   folder: BookmarkNode;
   onClose: () => void;

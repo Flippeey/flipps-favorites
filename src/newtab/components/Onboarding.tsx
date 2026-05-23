@@ -144,7 +144,7 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
     { title: 'Pick your accent',            desc: 'Pick the accent that feels right. You can change it any time in Settings.' },
     { title: 'Set up your workspace',       desc: 'Pick a root folder, or create multiple workspaces — each with its own layout and theme.' },
     { title: 'How should folders look?',    desc: 'Folders can stay compact as tiles, or always show inline as sections. You can change this any time.' },
-    { title: "You're all set",              desc: 'Open Settings any time to tweak themes, layout, the dock and clock. Drag bookmarks to reorder. Right-click anywhere for context actions.' },
+    { title: "You're all set",              desc: 'Open Settings any time to tweak themes, layout, and the dock. Right-click anywhere for context actions.' },
   ];
   const s = steps[step];
 
@@ -216,9 +216,9 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
 
           {step === 1 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 16 }}>
+              <ThemeChoiceCard id="system" label="System" hint="Follow OS preference."      active={settings.themeMode === 'system'} onSelect={(id) => onPatch({ themeMode: id })} preview="system" />
               <ThemeChoiceCard id="light"  label="Light"  hint="Bright canvas, dark text."  active={settings.themeMode === 'light'}  onSelect={(id) => onPatch({ themeMode: id })} preview="light" />
               <ThemeChoiceCard id="dark"   label="Dark"   hint="Dim canvas, light text."    active={settings.themeMode === 'dark'}   onSelect={(id) => onPatch({ themeMode: id })} preview="dark" />
-              <ThemeChoiceCard id="system" label="System" hint="Follow OS preference."      active={settings.themeMode === 'system'} onSelect={(id) => onPatch({ themeMode: id })} preview="system" />
             </div>
           )}
 
@@ -272,7 +272,7 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
                   }}
                 >
                   <div style={{ fontWeight: 600, marginBottom: 4 }}>Multiple workspaces</div>
-                  <div style={{ fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.45 }}>Separate layouts per folder. Pick up to 5.</div>
+                  <div style={{ fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.45 }}>Separate layouts per folder. Pick a few to start — add more later.</div>
                 </button>
               </div>
               {workspaceMode === 'single' && (
@@ -339,7 +339,6 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
                 {([
                   [modShortcut('K'),    'Search'],
                   ['Right-click',       'Edit & organize'],
-                  ['Drag',              'Reorder bookmarks'],
                   [altShortcut('1-9'),  'Switch workspace'],
                 ] as const).map(([k, v]) => (
                   <div key={k} style={{

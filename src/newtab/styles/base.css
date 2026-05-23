@@ -202,6 +202,12 @@ button { font-family: inherit; }
   background: color-mix(in oklab, var(--frost-strong) 82%, transparent);
   border-color: var(--line-3);
 }
+.ff-app[data-bg="wallpaper"] .ff-search:focus-within {
+  border-color: var(--accent-border);
+  box-shadow:
+    0 0 0 4px color-mix(in oklab, var(--accent) 14%, transparent),
+    var(--shadow-md);
+}
 .ff-app[data-bg="wallpaper"] .ff-search input::placeholder { color: var(--fg-2); }
 
 /* Light theme */

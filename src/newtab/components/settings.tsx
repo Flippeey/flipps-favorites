@@ -1067,7 +1067,7 @@ function WorkspaceManageSection({ workspace, onPatch, onDeleteWorkspace, isOnlyW
           </p>
         ) : (
           <button
-            className="ff-btn ff-btn--ghost"
+            className="ff-btn ff-btn--danger-ghost"
             style={{ width: '100%' }}
             onClick={() => workspace && onDeleteWorkspace(workspace.id)}
           >
@@ -1298,8 +1298,8 @@ function HelpSection() {
     ['Alt+1-9',                    'Switch to workspace 1-9'],
     ['Arrow keys',                 'Navigate between bookmarks'],
     ['Enter',                      'Open focused bookmark or folder'],
-    [`${mod}+Click`,               'Open in new tab / toggle selection'],
-    ['Shift+Click',                'Add to selection'],
+    [`${mod}+Click`,               'Toggle item in selection'],
+    ['Shift+Click',                'Select range from last clicked'],
     ['Delete',                     'Delete focused bookmark'],
   ];
 
@@ -1326,7 +1326,7 @@ function HelpSection() {
       </div>
 
       <h3 className="ff-set-section__title">Tips</h3>
-      <p className="ff-set-section__desc">Useful things that aren&rsquo;t immediately obvious.</p>
+      <p className="ff-set-section__desc">To help you get started or discover new features.</p>
       <div className="ff-card" style={{ marginBottom: 16 }}>
         {tips.map(([label, body]) => (
           <div className="ff-row" key={label} style={{ alignItems: 'flex-start' }}>
@@ -1343,7 +1343,9 @@ function HelpSection() {
         <div className="ff-row">
           <div>
             <div className="ff-row__label">Flipp&rsquo;s Favorites</div>
-            <div className="ff-row__hint">Bookmark dashboard for Chrome and Firefox.</div>
+            <div className="ff-row__hint"><a href="https://www.flippflix.com/" target="_blank" rel="noopener noreferrer">
+              https://www.flippflix.com/
+            </a></div>
           </div>
         </div>
       </div>

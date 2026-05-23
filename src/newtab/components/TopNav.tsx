@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BookmarkNode, BookmarkSortMode, SortDirection, WorkspaceRecord } from '../../shared/messages';
+import { MAX_WORKSPACES } from '../../shared/constants';
 import { altShortcut } from '../lib/platform';
 import { Ico } from './Ico';
 
@@ -32,6 +33,135 @@ interface TopNavProps {
   onSort: (choice: SortChoice) => void;
   onOpenSettings: () => void;
   onAddBookmark: () => void;
+}
+
+interface WorkspaceTabsProps {
+  workspaces: WorkspaceRecord[];
+  activeWorkspaceId: string;
+  onSwitchWorkspace: (id: string) => void;
+  onWorkspaceContextMenu: (id: string, x: number, y: number) => void;
+}
+
+function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu }: WorkspaceTabsProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateArrows = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(updateArrows);
+    ro.observe(el);
+    el.addEventListener('scroll', updateArrows, { passive: true });
+    updateArrows();
+    return () => { ro.disconnect(); el.removeEventListener('scroll', updateArrows); };
+  }, [updateArrows]);
+
+  useEffect(() => {
+    const el = scrollRef.current?.querySelector<HTMLElement>('.is-active');
+    el?.scrollIntoView({ inline: 'center', behavior: 'smooth', block: 'nearest' });
+  }, [activeWorkspaceId]);
+
+  const scroll = (dir: -1 | 1) => {
+    const el = scrollRef.current;
+    if (el) el.scrollBy({ left: dir * 120, behavior: 'smooth' });
+  };
+
+  return (
+    <div className="ff-ws-tabs-wrap">
+      {canScrollLeft && (
+        <button className="ff-ws-scroll ff-ws-scroll--left" onClick={() => scroll(-1)} aria-label="Scroll tabs left">
+          <Ico name="chevronLeft" size={12} />
+        </button>
+      )}
+      <div className="ff-ws-tabs" ref={scrollRef} role="tablist">
+        {workspaces.map((ws, i) => {
+          const shortcut = i < 9 ? altShortcut(String(i + 1)) : null;
+          const title = shortcut ? `Switch to ${ws.name} (${shortcut})` : `Switch to ${ws.name}`;
+          return (
+            <button
+              key={ws.id}
+              role="tab"
+              aria-selected={ws.id === activeWorkspaceId}
+              className={`ff-ws-tab${ws.id === activeWorkspaceId ? ' is-active' : ''}`}
+              onClick={() => onSwitchWorkspace(ws.id)}
+              onContextMenu={e => { e.preventDefault(); onWorkspaceContextMenu(ws.id, e.clientX, e.clientY); }}
+              data-drop-target="workspace"
+              data-workspace-id={ws.id}
+              title={title}
+            >
+              <span className="ff-ws-tab__dot" style={{ background: ws.accentColor }} />
+              <span className="ff-ws-tab__name">{ws.name}</span>
+            </button>
+          );
+        })}
+      </div>
+      {canScrollRight && (
+        <button className="ff-ws-scroll ff-ws-scroll--right" onClick={() => scroll(1)} aria-label="Scroll tabs right">
+          <Ico name="chevronRight" size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace }: {
+  workspaces: WorkspaceRecord[];
+  activeWorkspaceId: string;
+  onSwitchWorkspace: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const activeWs = workspaces.find(w => w.id === activeWorkspaceId);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="ff-ws-dropdown" ref={ref}>
+      <button className="ff-pill" onClick={() => setOpen(o => !o)} aria-haspopup="listbox" aria-expanded={open}>
+        {activeWs && <span className="ff-ws-tab__dot" style={{ background: activeWs.accentColor }} />}
+        <span>{activeWs?.name ?? 'Workspace'}</span>
+        <Ico name="chevronDown" size={12} />
+      </button>
+      {open && (
+        <ul className="ff-sort__panel" role="listbox">
+          {workspaces.map((ws, i) => (
+            <li
+              key={ws.id}
+              role="option"
+              aria-selected={ws.id === activeWorkspaceId}
+              className="ff-sort__option"
+              data-active={ws.id === activeWorkspaceId}
+              onClick={() => { onSwitchWorkspace(ws.id); setOpen(false); }}
+            >
+              <span className="ff-ws-tab__dot" style={{ background: ws.accentColor }} />
+              <span>{ws.name}</span>
+              {i < 9 && <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-4)' }}>{altShortcut(String(i + 1))}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onAddWorkspace, onAddFolder, path, onCrumb, sortValue, onSort, onOpenSettings, onAddBookmark }: TopNavProps) {
@@ -82,28 +212,19 @@ export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
       <div className="ff-nav__left" aria-hidden="true" />
       <div className="ff-nav__center">
         {path.length === 0 ? (
-          <div className="ff-ws-tabs" role="tablist">
-            {workspaces.map((ws, i) => {
-              const shortcut = i < 9 ? altShortcut(String(i + 1)) : null;
-              const title = shortcut ? `Switch to ${ws.name} (${shortcut})` : `Switch to ${ws.name}`;
-              return (
-                <button
-                  key={ws.id}
-                  role="tab"
-                  aria-selected={ws.id === activeWorkspaceId}
-                  className={`ff-ws-tab${ws.id === activeWorkspaceId ? ' is-active' : ''}`}
-                  onClick={() => onSwitchWorkspace(ws.id)}
-                  onContextMenu={e => { e.preventDefault(); onWorkspaceContextMenu(ws.id, e.clientX, e.clientY); }}
-                  data-drop-target="workspace"
-                  data-workspace-id={ws.id}
-                  title={title}
-                >
-                  <span className="ff-ws-tab__dot" style={{ background: ws.accentColor }} />
-                  <span className="ff-ws-tab__name">{ws.name}</span>
-                </button>
-              );
-            })}
-          </div>
+          <>
+            <WorkspaceTabs
+              workspaces={workspaces}
+              activeWorkspaceId={activeWorkspaceId}
+              onSwitchWorkspace={onSwitchWorkspace}
+              onWorkspaceContextMenu={onWorkspaceContextMenu}
+            />
+            <WorkspaceDropdown
+              workspaces={workspaces}
+              activeWorkspaceId={activeWorkspaceId}
+              onSwitchWorkspace={onSwitchWorkspace}
+            />
+          </>
         ) : (
           <div className="ff-crumb">
             <button className="ff-crumb__btn" onClick={() => onSwitchWorkspace(activeWorkspaceId)}>
@@ -123,35 +244,6 @@ export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
         )}
       </div>
       <div className="ff-nav__right">
-        <div className="ff-sort" ref={sortRef}>
-          <button
-            className="ff-pill"
-            aria-haspopup="listbox"
-            aria-expanded={sortOpen}
-            onClick={() => setSortOpen(o => !o)}
-          >
-            <Ico name="sort" size={14} />
-            <span>{sortLabel}</span>
-            <Ico name="chevronDown" size={12} />
-          </button>
-          {sortOpen && (
-            <ul className="ff-sort__panel" role="listbox">
-              {SORT_OPTIONS.map(o => (
-                <li
-                  key={o.value}
-                  role="option"
-                  aria-selected={o.value === sortValue}
-                  className="ff-sort__option"
-                  data-active={o.value === sortValue}
-                  onClick={() => { onSort(o); setSortOpen(false); }}
-                >
-                  <span>{o.label}</span>
-                  {o.value === sortValue && <Ico name="check" size={14} />}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
         <div className="ff-add-menu" ref={addRef}>
           <button
             className="ff-iconbtn ff-iconbtn--icon"
@@ -183,11 +275,41 @@ export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
               <li
                 role="menuitem"
                 className="ff-sort__option"
-                onClick={() => { onAddWorkspace(); setAddMenuOpen(false); }}
+                data-disabled={workspaces.length >= MAX_WORKSPACES}
+                onClick={() => { if (workspaces.length >= MAX_WORKSPACES) return; onAddWorkspace(); setAddMenuOpen(false); }}
               >
                 <Ico name="layers" size={14} />
-                <span>New workspace</span>
+                <span>New workspace{workspaces.length >= MAX_WORKSPACES ? ' (limit reached)' : ''}</span>
               </li>
+            </ul>
+          )}
+        </div>
+        <div className="ff-sort" ref={sortRef}>
+          <button
+            className="ff-pill"
+            aria-haspopup="listbox"
+            aria-expanded={sortOpen}
+            onClick={() => setSortOpen(o => !o)}
+          >
+            <Ico name="sort" size={14} />
+            <span>{sortLabel}</span>
+            <Ico name="chevronDown" size={12} />
+          </button>
+          {sortOpen && (
+            <ul className="ff-sort__panel" role="listbox">
+              {SORT_OPTIONS.map(o => (
+                <li
+                  key={o.value}
+                  role="option"
+                  aria-selected={o.value === sortValue}
+                  className="ff-sort__option"
+                  data-active={o.value === sortValue}
+                  onClick={() => { onSort(o); setSortOpen(false); }}
+                >
+                  <span>{o.label}</span>
+                  {o.value === sortValue && <Ico name="check" size={14} />}
+                </li>
+              ))}
             </ul>
           )}
         </div>
