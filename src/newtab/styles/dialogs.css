@@ -263,6 +263,11 @@
   padding-left: 10px;
 }
 .ff-drawer__navdivider { height: 1px; background: var(--line-1); margin: 4px 8px; }
+.ff-drawer__nav--footer {
+  flex: 0 0 auto;
+  padding-top: var(--s-2);
+  border-top: 1px solid var(--line-1);
+}
 .ff-drawer__content { padding: var(--s-6); overflow-y: auto; }
 
 /* Settings cards / rows / theme + accent pickers */

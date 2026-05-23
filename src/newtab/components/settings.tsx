@@ -106,28 +106,29 @@ export function SettingsDrawer({ settings, activeWorkspace, workspaceWallpaper, 
                   <DrawerNav id="navigation" label="Navigation" icon="command"    active={section} setActive={setSection} />
                   <DrawerNav id="dock"       label="Dock"       icon="layers"     active={section} setActive={setSection} />
                   <DrawerNav id="clock"      label="Clock"      icon="clock"      active={section} setActive={setSection} />
-                  <DrawerNav id="backup"     label="Backup"     icon="cloud"      active={section} setActive={setSection} />
-                  <div className="ff-drawer__navdivider" />
-                  <DrawerNav id="help"       label="Help"       icon="link"       active={section} setActive={setSection} />
                 </>
               )}
             </nav>
+            <nav className="ff-drawer__nav ff-drawer__nav--footer">
+              <DrawerNav id="backup" label="Backup" icon="cloud" active={section} setActive={setSection} />
+              <DrawerNav id="help"   label="Help"   icon="link"  active={section} setActive={setSection} />
+            </nav>
           </div>
           <div className="ff-drawer__content no-scrollbar">
-            {scopeTab === 'workspace' && (
+            {section === 'backup' && <BackupSection onAfterImport={onAfterImport} />}
+            {section === 'help'   && <HelpSection />}
+            {scopeTab === 'workspace' && section !== 'backup' && section !== 'help' && (
               <>
                 {section === 'appearance'       && <AppearanceSection workspace={activeWorkspace} workspaceWallpaper={workspaceWallpaper} onPatch={onPatchWorkspace} onSetWallpaper={onSetWorkspaceWallpaper} settings={settings} onPatchGlobal={onPatchGlobal} />}
                 {section === 'layout'           && <LayoutSection workspace={activeWorkspace} onPatch={onPatchWorkspace} />}
                 {section === 'workspace-manage' && <WorkspaceManageSection workspace={activeWorkspace} onPatch={onPatchWorkspace} onDeleteWorkspace={onDeleteWorkspace} isOnlyWorkspace={isOnlyWorkspace} />}
               </>
             )}
-            {scopeTab === 'global' && (
+            {scopeTab === 'global' && section !== 'backup' && section !== 'help' && (
               <>
                 {section === 'navigation' && <NavigationSection settings={settings} onPatch={onPatchGlobal} />}
                 {section === 'dock'       && <DockSection settings={settings} tree={tree} onPatch={onPatchGlobal} />}
                 {section === 'clock'      && <ClockSection settings={settings} onPatch={onPatchGlobal} />}
-                {section === 'backup'     && <BackupSection onAfterImport={onAfterImport} />}
-                {section === 'help'       && <HelpSection />}
               </>
             )}
           </div>
