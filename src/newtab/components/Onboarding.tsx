@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { MAX_WORKSPACES } from '../../shared/constants';
 import type { AppSettings, BookmarkNode, FolderMode, ThemeMode, WorkspaceRecord } from '../../shared/messages';
+import { formatFolderStats, scanFolders, type ScoredFolder } from '../lib/folder-scoring';
 import { altShortcut, IS_MAC, modShortcut } from '../lib/platform';
 import { topLevelFolders } from '../lib/tree';
 import { Ico } from './Ico';
@@ -132,17 +134,147 @@ function ThemeChoiceCard({ id, label, hint, active, onSelect, preview }: {
   );
 }
 
+function RecommendedFolderCard({
+  folder,
+  active,
+  onToggle,
+}: {
+  folder: ScoredFolder;
+  active: boolean;
+  onToggle: () => void;
+}) {
+  const statsLine = formatFolderStats(folder.stats);
+  return (
+    <button
+      onClick={onToggle}
+      className="ff-card"
+      style={{
+        textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'var(--fg-1)',
+        borderColor: active ? 'var(--accent)' : 'var(--line-1)',
+        background: active
+          ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))'
+          : 'var(--ink-2)',
+        boxShadow: active
+          ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)'
+          : 'none',
+        padding: '10px 14px',
+        display: 'flex', alignItems: 'center', gap: 10,
+      }}
+    >
+      <Ico name="folder" size={14} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>{folder.title}</div>
+        <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>{statsLine}</div>
+      </div>
+      {active && <Ico name="check" size={13} style={{ color: 'var(--accent)' }} />}
+    </button>
+  );
+}
+
+interface WorkspaceRecommendationsProps {
+  tree: BookmarkNode[];
+  preSelected: ScoredFolder[];
+  suggested: ScoredFolder[];
+  selectedIds: string[];
+  onToggle: (id: string) => void;
+}
+
+function WorkspaceRecommendations({
+  tree, preSelected, suggested, selectedIds, onToggle,
+}: WorkspaceRecommendationsProps) {
+  const hasRecommendations = preSelected.length > 0 || suggested.length > 0;
+  const [showManual, setShowManual] = useState(!hasRecommendations);
+
+  if (!hasRecommendations) {
+    return <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} />;
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      {preSelected.length > 0 && (
+        <div>
+          <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
+            Recommended based on your bookmarks
+          </div>
+          <div style={{ display: 'grid', gap: 4 }}>
+            {preSelected.map(f => (
+              <RecommendedFolderCard
+                key={f.id}
+                folder={f}
+                active={selectedIds.includes(f.id)}
+                onToggle={() => onToggle(f.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {suggested.length > 0 && (
+        <div>
+          <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
+            Other folders
+          </div>
+          <div style={{ display: 'grid', gap: 4 }}>
+            {suggested.map(f => (
+              <RecommendedFolderCard
+                key={f.id}
+                folder={f}
+                active={selectedIds.includes(f.id)}
+                onToggle={() => onToggle(f.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <button
+        className="ff-iconbtn"
+        type="button"
+        style={{ fontSize: 12, color: 'var(--fg-3)', justifySelf: 'start' }}
+        onClick={() => setShowManual(v => !v)}
+      >
+        {showManual ? 'Hide' : 'Browse'} all folders
+      </button>
+
+      {showManual && (
+        <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} />
+      )}
+    </div>
+  );
+}
+
 export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWorkspace, onCreateWorkspace, onFinish }: OnboardingProps) {
+  const scanResult = useMemo(() => scanFolders(tree), [tree]);
+
   const [step, setStep] = useState(0);
-  const [workspaceMode, setWorkspaceMode] = useState<'single' | 'multiple'>('single');
-  const [selectedWorkspaceFolderIds, setSelectedWorkspaceFolderIds] = useState<string[]>([]);
+  const [workspaceMode, setWorkspaceMode] = useState<'single' | 'multiple'>(
+    scanResult.preSelected.length >= 2 ? 'multiple' : 'single',
+  );
+  const [selectedWorkspaceFolderIds, setSelectedWorkspaceFolderIds] = useState<string[]>(
+    scanResult.preSelected.length >= 2 ? scanResult.preSelected.map(f => f.id) : [],
+  );
   const [finishing, setFinishing] = useState(false);
+
+  // Pre-fill root folder for single-mode when exactly 1 folder pre-selects.
+  const prefilledSingleRef = useRef(false);
+  useEffect(() => {
+    if (prefilledSingleRef.current) return;
+    if (scanResult.preSelected.length === 1 && activeWorkspace) {
+      prefilledSingleRef.current = true;
+      onPatchWorkspace({ rootFolderId: scanResult.preSelected[0].id });
+    }
+  }, [scanResult, activeWorkspace, onPatchWorkspace]);
+
+  const hasRecommendations = scanResult.preSelected.length > 0 || scanResult.suggested.length > 0;
+  const step3Desc = hasRecommendations
+    ? 'We found some folders that look like good workspaces. Adjust the selection, or browse all folders.'
+    : 'Pick a root folder, or create multiple workspaces — each with its own layout and theme.';
 
   const steps = [
     { title: "Welcome to Flipp's Favorites", desc: '' },
     { title: 'Choose your theme',           desc: 'Light or dark?' },
     { title: 'Pick your accent',            desc: 'Pick the accent that feels right.' },
-    { title: 'Set up your workspace',       desc: 'Pick a root folder, or create multiple workspaces — each with its own layout and theme.' },
+    { title: 'Set up your workspace',       desc: step3Desc },
     { title: 'How should folders look?',    desc: 'Folders can stay compact as tiles, or always show inline as sections.' },
     { title: "You're all set",              desc: 'Open Settings any time to tweak themes, layout, and the dock. Right-click anywhere for context actions.' },
   ];
@@ -300,11 +432,13 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
               {workspaceMode === 'multiple' && (
                 <div>
                   <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>Select folders to use as workspaces:</div>
-                  <FolderMultiPicker
+                  <WorkspaceRecommendations
                     tree={tree}
+                    preSelected={scanResult.preSelected}
+                    suggested={scanResult.suggested}
                     selectedIds={selectedWorkspaceFolderIds}
                     onToggle={id => setSelectedWorkspaceFolderIds(prev =>
-                      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id].slice(0, 5)
+                      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id].slice(0, MAX_WORKSPACES),
                     )}
                   />
                 </div>
