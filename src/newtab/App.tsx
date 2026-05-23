@@ -16,9 +16,11 @@ import { TopNav, type SortChoice } from './components/TopNav';
 import { SectionsView, TilesView, FolderPageView } from './components/views';
 import { useMarquee, type MarqueeSelection } from './interaction/useMarquee';
 import { useDrag } from './interaction/useDrag';
+import { useWorkspaceShortcut } from './interaction/useWorkspaceShortcut';
+import { useKeyboardNav, useDeleteShortcut } from './interaction/useKeyboardNav';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
 import { IS_MAC } from './lib/platform';
-import { getBookmarkTree, getBookmarkUsage, getSettings, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark, createWorkspace, patchWorkspace, deleteWorkspace } from './lib/messaging';
+import { getBookmarkTree, getBookmarkUsage, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark, createWorkspace, patchWorkspace, deleteWorkspace } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
 import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper, writeWorkspaceWallpaper } from '../shared/storage';
@@ -435,22 +437,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Alt+1-9 switches workspace (only when no modifier conflicts and no input is focused)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-      const active = document.activeElement;
-      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)) return;
-      const digit = parseInt(e.key, 10);
-      if (Number.isNaN(digit)) return;
-      if (digit >= 1 && digit <= 9 && digit <= workspaces.length) {
-        e.preventDefault();
-        handleSwitchWorkspace(workspaces[digit - 1].id);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [workspaces, handleSwitchWorkspace]);
+  useWorkspaceShortcut(workspaces, handleSwitchWorkspace);
 
   // Reset keyboard focus when navigation context changes (workspace switch, folder open/close).
   useEffect(() => {
@@ -633,84 +620,29 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     || newWorkspaceOpen || confirmDeleteFolder || confirmDeleteBatch || openFolderId || contextMenu,
   );
 
-  useEffect(() => {
-    if (anyOverlayOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      const active = document.activeElement;
-      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)) return;
-      if (navItems.length === 0) return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
+  useKeyboardNav({
+    enabled: !anyOverlayOpen,
+    navItems,
+    focusedTileId,
+    setFocusedTileId,
+    canvasEl,
+    onPickFolder: handlePickFolder,
+    onPickBookmark: handlePickBookmark,
+    buildContextMenuItems,
+    setContextMenu,
+  });
 
-      const idx = focusedTileId ? navItems.findIndex(n => n.id === focusedTileId) : -1;
-      const isArrow = e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'ArrowDown';
-
-      if (isArrow) {
-        e.preventDefault();
-        if (idx < 0) {
-          setFocusedTileId(navItems[0].id);
-          return;
-        }
-        // Column count read from the first .ff-grid inside the canvas — matches whatever
-        // layout the active view rendered (tiles or sections).
-        const grid = canvasEl?.querySelector<HTMLElement>('.ff-grid');
-        const cols = grid ? Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(' ').length) : 1;
-        let next = idx;
-        if (e.key === 'ArrowRight') next = Math.min(idx + 1, navItems.length - 1);
-        else if (e.key === 'ArrowLeft') next = Math.max(idx - 1, 0);
-        else if (e.key === 'ArrowDown') next = Math.min(idx + cols, navItems.length - 1);
-        else if (e.key === 'ArrowUp') next = Math.max(idx - cols, 0);
-        if (next !== idx) setFocusedTileId(navItems[next].id);
-        return;
-      }
-
-      if (idx < 0) return;
-      const item = navItems[idx];
-
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        if (isFolder(item)) handlePickFolder(item);
-        else handlePickBookmark(item, { metaKey: false, ctrlKey: false });
-        return;
-      }
-      if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
-        e.preventDefault();
-        const el = canvasEl?.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(item.id)}"]`);
-        if (el) {
-          const rect = el.getBoundingClientRect();
-          setContextMenu({ x: rect.left + rect.width / 2, y: rect.bottom, items: buildContextMenuItems(item) });
-        }
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [
-    navItems, focusedTileId, canvasEl, anyOverlayOpen,
-    handlePickBookmark, handlePickFolder, handleDeleteFocused, buildContextMenuItems,
-  ]);
-
-  useEffect(() => {
-    if (anyOverlayOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
-      const active = document.activeElement;
-      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)) return;
-      e.preventDefault();
-      if (selection.ids.size > 1) {
-        setConfirmDeleteBatch(Array.from(selection.ids));
-      } else if (selection.ids.size === 1) {
-        const id = Array.from(selection.ids)[0];
-        const item = navItems.find(n => n.id === id);
-        if (item) void handleDeleteFocused(item);
-      } else if (focusedTileId) {
-        const item = navItems.find(n => n.id === focusedTileId);
-        if (item) void handleDeleteFocused(item);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [anyOverlayOpen, selection, focusedTileId, navItems, handleDeleteFocused]);
+  useDeleteShortcut({
+    enabled: !anyOverlayOpen,
+    selection,
+    focusedTileId,
+    navItems,
+    onBatchDelete: (ids) => setConfirmDeleteBatch(ids),
+    onDeleteFocused: (item) => { void handleDeleteFocused(item); },
+  });
 
   const wallpaperBlobUrl = useBlobUrl(workspaceWallpaper);
+  const tileShape = activeWorkspace?.tileShape ?? 'squircle';
 
   const appStyle = useMemo(() => {
     const ws = activeWorkspace ?? (defaultWorkspaceSettings as WorkspaceRecord);
@@ -738,7 +670,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       ref={setAppEl}
       data-bg={activeWorkspace?.backgroundMode ?? 'gradient'}
       data-bg-style={activeWorkspace?.gradientStyle ?? 'top'}
-      data-tile-shape={activeWorkspace?.tileShape ?? 'squircle'}
+      data-tile-shape={tileShape}
       data-labels={String(activeWorkspace?.showTileLabels ?? true)}
       data-dock={dockMode}
       style={appStyle as CSSProperties}
@@ -770,7 +702,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
         {settings.showClock && <ClockGreeting hourFormat={settings.clockHourFormat} />}
         {settings.showSearchBar && (
           <HeroSearch
-            shape={activeWorkspace?.tileShape ?? 'squircle'}
+            shape={tileShape}
             index={searchIndex}
             usage={usage}
             onPickBookmark={onPickSearchBookmark}
@@ -783,7 +715,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
         {!isAtRoot && sortedCurrentFolder ? (
           <FolderPageView
             folder={sortedCurrentFolder}
-            shape={activeWorkspace?.tileShape ?? 'squircle'}
+            shape={tileShape}
             onPickFolder={handleTileClick}
             onPickItem={handleTileClick}
             selectedIds={selection.ids}
@@ -794,7 +726,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           <SectionsView
             tree={sortedRootChildren.filter(isFolder)}
             scopeFolderId={rootFolder?.id ?? ''}
-            shape={activeWorkspace?.tileShape ?? 'squircle'}
+            shape={tileShape}
             onPickFolder={handleTileClick}
             onPickItem={handleTileClick}
             onSectionMenu={(folder, event) => {
@@ -814,7 +746,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             tree={sortedRootChildren.filter(isFolder)}
             rootBookmarks={sortedRootChildren.filter(c => !isFolder(c))}
             scopeFolderId={rootFolder?.id ?? ''}
-            shape={activeWorkspace?.tileShape ?? 'squircle'}
+            shape={tileShape}
             onPickFolder={handleTileClick}
             onPickItem={handleTileClick}
             selectedIds={selection.ids}
@@ -844,7 +776,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       <Dock
         items={dockItems}
         mode={dockMode}
-        shape={activeWorkspace?.tileShape ?? 'squircle'}
+        shape={tileShape}
         dockFolderId={settings.dockFolderId || rootFolder?.id || ''}
         onItemClick={handlePickBookmark}
         onFolderClick={handlePickFolder}
@@ -855,7 +787,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
         <FolderOverlay
           folder={openFolder}
           rootFolderId={rootFolder?.id ?? ''}
-          shape={activeWorkspace?.tileShape ?? 'squircle'}
+          shape={tileShape}
           onClose={() => setOpenFolderId(null)}
           onPickBookmark={handlePickBookmark}
           onContextMenu={(target, e) => {

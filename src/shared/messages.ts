@@ -22,20 +22,12 @@ export const messageTypes = {
   deleteWorkspace: 'workspaces/delete',
 } as const;
 
-export type MessageType = (typeof messageTypes)[keyof typeof messageTypes];
-
-export type SettingsSectionId = 'general' | 'appearance' | 'backup' | 'help';
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type BackgroundFitMode = 'cover' | 'contain' | 'fill';
 export type BackgroundPositionMode = 'center' | 'top' | 'bottom';
 export type BookmarkSortMode = 'manual' | 'name' | 'lastUsed' | 'created';
 export type SortDirection = 'asc' | 'desc';
 export type LayoutPresetId = 'balanced' | 'compact' | 'spacious' | 'presentation' | 'custom';
-export type SearchScope = 'folder' | 'library';
-export type ClockStyle = 'minimal' | 'standard' | 'full' | 'compact';
-export type ClockPosition = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
-export type ClockSize = 'small' | 'medium' | 'large' | 'x-large';
-export type SearchBarPosition = 'left' | 'center' | 'right';
 export type ClockHourFormat = '12' | '24';
 export type FolderMode = 'tiles' | 'sections';
 export type FolderOpenMode = 'overlay' | 'page';
@@ -61,15 +53,11 @@ export interface WorkspaceRecord {
   backgroundPositionMode: BackgroundPositionMode;
   // Layout identity
   layoutPreset: LayoutPresetId;
-  favoritesColumns: number;
-  favoritesRows: number;
   favoritesColumnGap: number;
   favoritesRowGap: number;
   bookmarkTileWidth: number;
   bookmarkIconSize: number;
   tileShape: TileShape;
-  showBookmarkIconBackground: boolean;
-  showAccentBackground: boolean;
   showTileLabels: boolean;
 }
 
@@ -87,26 +75,14 @@ export interface AppSettings {
   // Sort
   bookmarkSortMode: BookmarkSortMode;
   bookmarkSortDirection: SortDirection;
-  searchScope: SearchScope;
   // Clock
   showClock: boolean;
-  clockStyle: ClockStyle;
-  clockPosition: ClockPosition;
-  clockSize: ClockSize;
   clockHourFormat: ClockHourFormat;
   // Search bar
   showSearchBar: boolean;
-  searchBarPosition: SearchBarPosition;
   // Folder behaviour (global)
   folderMode: FolderMode;
   folderOpenMode: FolderOpenMode;
-  // UI state
-  settingsSection: SettingsSectionId;
-}
-
-export interface BookmarkSearchResult {
-  node: BookmarkNode;
-  folderPath: BookmarkNode[];
 }
 
 export interface BookmarkNode {

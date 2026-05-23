@@ -3,9 +3,15 @@ import { extensionApi } from './browser';
 export type StorageAreaPreference = 'local' | 'sync-preferred';
 type ResolvedStorageAreaName = 'local' | 'sync';
 
+interface StorageAreaApi {
+  get(keys: string | string[] | null): Promise<Record<string, unknown>>;
+  set(items: Record<string, unknown>): Promise<void>;
+  remove?: (keys: string | string[]) => Promise<void>;
+}
+
 interface ResolvedStorageArea {
   name: ResolvedStorageAreaName;
-  api: any;
+  api: StorageAreaApi;
 }
 
 export interface CachedValueStore<T> {
@@ -45,7 +51,7 @@ export function createCachedValueStore<T>(args: {
 
   const getLocalArea = (): ResolvedStorageArea => ({
     name: 'local',
-    api: extensionApi.storage.local,
+    api: extensionApi.storage.local as unknown as StorageAreaApi,
   });
 
   function attachStorageChangeListener(areaName: ResolvedStorageAreaName): void {
@@ -81,7 +87,7 @@ export function createCachedValueStore<T>(args: {
           await syncArea.get(null);
           return {
             name: 'sync',
-            api: syncArea,
+            api: syncArea as unknown as StorageAreaApi,
           };
         } catch {
           return getLocalArea();
@@ -95,7 +101,7 @@ export function createCachedValueStore<T>(args: {
   }
 
   async function readStorageValue(storageArea: ResolvedStorageArea): Promise<unknown> {
-    const stored = await storageArea.api.get(storageKey) as Record<string, unknown>;
+    const stored = await storageArea.api.get(storageKey);
     return stored[storageKey];
   }
 

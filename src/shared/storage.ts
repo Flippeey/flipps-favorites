@@ -1,5 +1,5 @@
 import { extensionApi } from './browser';
-import type { AppSettings, BookmarkUsageRecord, ClockHourFormat, ClockPosition, ClockSize, ClockStyle, IconCacheRecord, IconOverrideRecord, SearchBarPosition, SearchScope, WorkspaceRecord } from './messages';
+import type { AppSettings, BookmarkUsageRecord, IconCacheRecord, IconOverrideRecord, WorkspaceRecord } from './messages';
 import { createCachedRecordStore, createCachedValueStore } from './storage-buckets';
 
 const storageKey = 'app-settings';
@@ -97,17 +97,11 @@ export const defaultSettings: AppSettings = {
   dockFolderId: '',
   bookmarkSortMode: 'manual',
   bookmarkSortDirection: 'asc',
-  searchScope: 'library',
   showClock: false,
-  clockStyle: 'standard',
-  clockPosition: 'bottom-right',
-  clockSize: 'medium',
   clockHourFormat: '24',
   showSearchBar: true,
-  searchBarPosition: 'center',
   folderMode: 'tiles',
   folderOpenMode: 'overlay',
-  settingsSection: 'general',
 };
 
 export const defaultWorkspaceSettings: Omit<WorkspaceRecord, 'id' | 'name' | 'rootFolderId'> = {
@@ -122,15 +116,11 @@ export const defaultWorkspaceSettings: Omit<WorkspaceRecord, 'id' | 'name' | 'ro
   backgroundFitMode: 'cover',
   backgroundPositionMode: 'center',
   layoutPreset: 'balanced',
-  favoritesColumns: 10,
-  favoritesRows: 0,
   favoritesColumnGap: 24,
   favoritesRowGap: 20,
   bookmarkTileWidth: 130,
   bookmarkIconSize: 75,
   tileShape: 'squircle',
-  showBookmarkIconBackground: false,
-  showAccentBackground: true,
   showTileLabels: true,
 };
 
@@ -167,26 +157,14 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
       ? settings.bookmarkSortMode : defaultSettings.bookmarkSortMode,
     bookmarkSortDirection: settings.bookmarkSortDirection === 'asc' || settings.bookmarkSortDirection === 'desc'
       ? settings.bookmarkSortDirection : defaultSettings.bookmarkSortDirection,
-    searchScope: settings.searchScope === 'folder' || settings.searchScope === 'library'
-      ? settings.searchScope : defaultSettings.searchScope,
     showClock: typeof settings.showClock === 'boolean' ? settings.showClock : defaultSettings.showClock,
-    clockStyle: (['minimal', 'standard', 'full', 'compact'] as const).includes(settings.clockStyle as ClockStyle)
-      ? (settings.clockStyle as ClockStyle) : defaultSettings.clockStyle,
-    clockPosition: (['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'] as const).includes(settings.clockPosition as ClockPosition)
-      ? (settings.clockPosition as ClockPosition) : defaultSettings.clockPosition,
-    clockSize: (['small', 'medium', 'large', 'x-large'] as const).includes(settings.clockSize as ClockSize)
-      ? (settings.clockSize as ClockSize) : defaultSettings.clockSize,
     clockHourFormat: settings.clockHourFormat === '12' || settings.clockHourFormat === '24'
       ? settings.clockHourFormat : defaultSettings.clockHourFormat,
     showSearchBar: typeof settings.showSearchBar === 'boolean' ? settings.showSearchBar : defaultSettings.showSearchBar,
-    searchBarPosition: settings.searchBarPosition === 'left' || settings.searchBarPosition === 'center' || settings.searchBarPosition === 'right'
-      ? (settings.searchBarPosition as SearchBarPosition) : defaultSettings.searchBarPosition,
     folderMode: settings.folderMode === 'tiles' || settings.folderMode === 'sections'
       ? settings.folderMode : defaultSettings.folderMode,
     folderOpenMode: settings.folderOpenMode === 'overlay' || settings.folderOpenMode === 'page'
       ? settings.folderOpenMode : defaultSettings.folderOpenMode,
-    settingsSection: settings.settingsSection === 'general' || settings.settingsSection === 'appearance' || settings.settingsSection === 'backup' || settings.settingsSection === 'help'
-      ? settings.settingsSection : defaultSettings.settingsSection,
   };
 }
 
@@ -233,10 +211,6 @@ export async function deleteIconOverrideRecord(bookmarkUrl: string): Promise<voi
 
 export async function readBookmarkUsageRecords(): Promise<Record<string, BookmarkUsageRecord>> {
   return bookmarkUsageStore.readAll();
-}
-
-export async function readBookmarkUsageRecord(bookmarkId: string): Promise<BookmarkUsageRecord | null> {
-  return bookmarkUsageStore.readOne(bookmarkId);
 }
 
 export async function writeBookmarkUsageRecord(record: BookmarkUsageRecord): Promise<void> {
@@ -299,17 +273,6 @@ export async function markOnboardingCompleted(): Promise<OnboardingState> {
     updatedAt: now,
     completedAt: now,
     skippedAt: null,
-  });
-}
-
-export async function markOnboardingSkipped(): Promise<OnboardingState> {
-  const now = Date.now();
-  return onboardingStateStore.write({
-    version: 1,
-    status: 'skipped',
-    updatedAt: now,
-    completedAt: null,
-    skippedAt: now,
   });
 }
 
@@ -446,8 +409,6 @@ export async function migrateToWorkspaces(): Promise<{ workspaceId: string } | n
     layoutPreset: (['balanced', 'compact', 'spacious', 'presentation', 'custom'] as const).includes(raw['layoutPreset'] as WorkspaceRecord['layoutPreset'])
       ? raw['layoutPreset'] as WorkspaceRecord['layoutPreset']
       : defaultWorkspaceSettings.layoutPreset,
-    favoritesColumns: typeof raw['favoritesColumns'] === 'number' && Number.isFinite(raw['favoritesColumns'] as number) ? raw['favoritesColumns'] as number : defaultWorkspaceSettings.favoritesColumns,
-    favoritesRows: typeof raw['favoritesRows'] === 'number' && Number.isFinite(raw['favoritesRows'] as number) ? raw['favoritesRows'] as number : defaultWorkspaceSettings.favoritesRows,
     favoritesColumnGap: typeof raw['favoritesColumnGap'] === 'number' && Number.isFinite(raw['favoritesColumnGap'] as number) ? raw['favoritesColumnGap'] as number : defaultWorkspaceSettings.favoritesColumnGap,
     favoritesRowGap: typeof raw['favoritesRowGap'] === 'number' && Number.isFinite(raw['favoritesRowGap'] as number) ? raw['favoritesRowGap'] as number : defaultWorkspaceSettings.favoritesRowGap,
     bookmarkTileWidth: typeof raw['bookmarkTileWidth'] === 'number' && Number.isFinite(raw['bookmarkTileWidth'] as number) ? raw['bookmarkTileWidth'] as number : defaultWorkspaceSettings.bookmarkTileWidth,
@@ -455,8 +416,6 @@ export async function migrateToWorkspaces(): Promise<{ workspaceId: string } | n
     tileShape: (['squircle', 'rounded', 'circle'] as const).includes(raw['tileShape'] as WorkspaceRecord['tileShape'])
       ? raw['tileShape'] as WorkspaceRecord['tileShape']
       : defaultWorkspaceSettings.tileShape,
-    showBookmarkIconBackground: typeof raw['showBookmarkIconBackground'] === 'boolean' ? raw['showBookmarkIconBackground'] as boolean : defaultWorkspaceSettings.showBookmarkIconBackground,
-    showAccentBackground: typeof raw['showAccentBackground'] === 'boolean' ? raw['showAccentBackground'] as boolean : defaultWorkspaceSettings.showAccentBackground,
     showTileLabels: typeof raw['showTileLabels'] === 'boolean' ? raw['showTileLabels'] as boolean : defaultWorkspaceSettings.showTileLabels,
   };
 

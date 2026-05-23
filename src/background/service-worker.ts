@@ -7,8 +7,6 @@ extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }
   const reason = details.reason ?? 'unknown';
   if (details.reason === 'install') {
     await markOnboardingPending();
-  }
-  if (details.reason === 'install') {
     await invalidateIcon();
   }
   void scheduleGeneratedRecordSweep();
@@ -170,10 +168,19 @@ async function getBookmarkTree(): Promise<BookmarkNode[]> {
   return normalizeBookmarkNodes(nodes);
 }
 
-function normalizeBookmarkNode(node: any): BookmarkNode {
+interface RawBookmarkNode {
+  id: string | number;
+  parentId?: string | number;
+  title?: string;
+  url?: string;
+  dateAdded?: number;
+  children?: RawBookmarkNode[];
+}
+
+function normalizeBookmarkNode(node: RawBookmarkNode): BookmarkNode {
   return {
     id: String(node.id),
-    parentId: node.parentId ? String(node.parentId) : undefined,
+    parentId: node.parentId !== undefined ? String(node.parentId) : undefined,
     title: node.title || 'Untitled',
     url: node.url,
     dateAdded: typeof node.dateAdded === 'number' ? node.dateAdded : undefined,
@@ -181,7 +188,7 @@ function normalizeBookmarkNode(node: any): BookmarkNode {
   };
 }
 
-function normalizeBookmarkNodes(nodes: any[]): BookmarkNode[] {
+function normalizeBookmarkNodes(nodes: RawBookmarkNode[]): BookmarkNode[] {
   return nodes.map(normalizeBookmarkNode);
 }
 
