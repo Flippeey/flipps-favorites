@@ -139,14 +139,14 @@ export function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSe
           </div>
         </div>
         <div className="ff-themegrid">
-          <div className="ff-themecard ff-themecard--light" data-active={settings.themeMode === 'light'} onClick={() => onPatchGlobal({ themeMode: 'light' })}>
+          <button type="button" className="ff-themecard ff-themecard--light" data-active={settings.themeMode === 'light'} onClick={() => onPatchGlobal({ themeMode: 'light' })}>
             <ThemeCardPreview light />
             <div className="ff-themecard__label">Light</div>
-          </div>
-          <div className="ff-themecard ff-themecard--dark" data-active={settings.themeMode === 'dark'} onClick={() => onPatchGlobal({ themeMode: 'dark' })}>
+          </button>
+          <button type="button" className="ff-themecard ff-themecard--dark" data-active={settings.themeMode === 'dark'} onClick={() => onPatchGlobal({ themeMode: 'dark' })}>
             <ThemeCardPreview />
             <div className="ff-themecard__label">Dark</div>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -191,7 +191,8 @@ export function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSe
         <p className="ff-set-section__desc">Solid, a soft accent gradient, or your own wallpaper.</p>
         <div className="ff-themegrid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
           {(['solid', 'gradient', 'wallpaper'] as BackgroundMode[]).map(opt => (
-            <div
+            <button
+              type="button"
               key={opt}
               className="ff-themecard"
               data-active={ws.backgroundMode === opt}
@@ -205,7 +206,7 @@ export function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSe
               }}
             >
               <div className="ff-themecard__label" style={{ color: 'var(--fg-1)', textTransform: 'capitalize' }}>{opt}</div>
-            </div>
+            </button>
           ))}
         </div>
 
@@ -320,7 +321,8 @@ function GradientPanel({ workspace, onPatch }: WorkspaceSectionProps) {
         <div className="ff-row__hint" style={{ marginBottom: 8 }}>Style</div>
         <div className="ff-themegrid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
           {GRADIENT_STYLES.map(g => (
-            <div
+            <button
+              type="button"
               key={g.id}
               className="ff-themecard"
               data-active={ws.gradientStyle === g.id}
@@ -328,7 +330,7 @@ function GradientPanel({ workspace, onPatch }: WorkspaceSectionProps) {
               style={{ gridColumn: 'auto', background: gradientPreviewBg(g.id, resolvedColor, ws.gradientIntensity) }}
             >
               <div className="ff-themecard__label" style={{ color: 'var(--fg-1)' }}>{g.label}</div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
@@ -811,7 +813,12 @@ export function BackupSection({ onAfterImport }: BackupSectionProps) {
 export function HelpSection() {
   const mod = MOD_KEY;
   const shortcuts: ReadonlyArray<readonly [string, string]> = [
-    [`${mod}+K  or  /`,           'Focus search'],
+    [`${mod}+K  or  S  or  /`,    'Focus search'],
+    ['A',                          'Add bookmark'],
+    ['F',                          'Add folder'],
+    ['W',                          'New workspace'],
+    ['E',                          'Edit selected item'],
+    ['?',                          'Open help & shortcuts'],
     ['Escape',                     'Close dialog, clear selection, blur search'],
     ['Alt+1-9',                    'Switch to workspace 1-9'],
     ['Arrow keys',                 'Navigate between bookmarks'],

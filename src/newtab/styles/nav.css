@@ -189,6 +189,7 @@
 }
 
 .ff-ws-tab {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -205,7 +206,7 @@
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
   white-space: nowrap;
   max-width: 160px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 [data-theme="light"] .ff-ws-tab {
@@ -237,6 +238,26 @@
   border-color: var(--accent-border);
   color: var(--accent);
 }
+
+.ff-ws-tab[data-dragging="true"] {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+
+.ff-ws-tab[data-drop-before="true"]::before,
+.ff-ws-tab[data-drop-after="true"]::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.ff-ws-tab[data-drop-before="true"]::before { left: -3px; }
+.ff-ws-tab[data-drop-after="true"]::after  { right: -3px; }
 
 .ff-ws-tab__dot {
   width: 7px;

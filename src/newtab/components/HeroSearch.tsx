@@ -163,13 +163,16 @@ export function HeroSearch({ shape, index, usage, onPickBookmark, onPickFolder }
         inputRef.current?.focus();
         return;
       }
-      // `/` as a fallback shortcut — common pattern (GitHub etc.) and not browser-reserved.
-      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !isTypingTarget(e.target)) {
+      // `/` and `S` focus search; `S` requires no shift so it doesn't intercept capital-S in inputs.
+      const isSlash = e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey;
+      const isBareS = e.key.toLowerCase() === 's' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey;
+      if ((isSlash || isBareS) && !isTypingTarget(e.target)) {
         e.preventDefault();
         inputRef.current?.focus();
         return;
       }
       if (e.key === 'Escape' && document.activeElement === inputRef.current) {
+        setValue('');
         inputRef.current?.blur();
       }
     };

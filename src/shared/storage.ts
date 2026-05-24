@@ -89,6 +89,7 @@ function workspaceWallpaperKey(workspaceId: string): string {
 
 export const defaultSettings: AppSettings = {
   activeWorkspaceId: '',
+  workspaceOrder: [],
   themeMode: 'system',
   rememberLastFolder: true,
   openLinksInNewTab: false,

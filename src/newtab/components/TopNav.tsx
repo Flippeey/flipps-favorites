@@ -24,6 +24,7 @@ interface TopNavProps {
   activeWorkspaceId: string;
   onSwitchWorkspace: (id: string) => void;
   onWorkspaceContextMenu: (id: string, x: number, y: number) => void;
+  onReorderWorkspaces: (ids: string[]) => void;
   onOpenAddMenu: (x: number, y: number) => void;
   path: BookmarkNode[];
   onCrumb: (index: number) => void;
@@ -38,12 +39,15 @@ interface WorkspaceTabsProps {
   activeWorkspaceId: string;
   onSwitchWorkspace: (id: string) => void;
   onWorkspaceContextMenu: (id: string, x: number, y: number) => void;
+  onReorderWorkspaces: (ids: string[]) => void;
 }
 
-function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu }: WorkspaceTabsProps) {
+function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onReorderWorkspaces }: WorkspaceTabsProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+  const [dragSrcId, setDragSrcId] = useState<string | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
 
   const updateArrows = useCallback(() => {
     const el = scrollRef.current;
@@ -72,6 +76,18 @@ function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
     if (el) el.scrollBy({ left: dir * 120, behavior: 'smooth' });
   };
 
+  const commitDrop = (insertAt: number) => {
+    if (!dragSrcId) return;
+    const ids = workspaces.map(w => w.id);
+    const from = ids.indexOf(dragSrcId);
+    if (from === -1) return;
+    const next = [...ids];
+    next.splice(from, 1);
+    const adjustedTo = insertAt > from ? insertAt - 1 : insertAt;
+    next.splice(adjustedTo, 0, dragSrcId);
+    onReorderWorkspaces(next);
+  };
+
   return (
     <div className="ff-ws-tabs-wrap">
       {canScrollLeft && (
@@ -79,7 +95,12 @@ function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
           <Ico name="chevronLeft" size={12} />
         </button>
       )}
-      <div className="ff-ws-tabs" ref={scrollRef} role="tablist">
+      <div
+        className="ff-ws-tabs"
+        ref={scrollRef}
+        role="tablist"
+        onDragLeave={e => { if (!scrollRef.current?.contains(e.relatedTarget as Node)) setDropIndex(null); }}
+      >
         {workspaces.map((ws, i) => {
           const shortcut = i < 9 ? altShortcut(String(i + 1)) : null;
           const title = shortcut ? `Switch to ${ws.name} (${shortcut})` : `Switch to ${ws.name}`;
@@ -89,8 +110,20 @@ function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
               role="tab"
               aria-selected={ws.id === activeWorkspaceId}
               className={`ff-ws-tab${ws.id === activeWorkspaceId ? ' is-active' : ''}`}
-              onClick={() => onSwitchWorkspace(ws.id)}
+              onClick={() => { if (!dragSrcId) onSwitchWorkspace(ws.id); }}
               onContextMenu={e => { e.preventDefault(); onWorkspaceContextMenu(ws.id, e.clientX, e.clientY); }}
+              draggable
+              onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDragSrcId(ws.id); }}
+              onDragOver={e => {
+                e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setDropIndex(e.clientX < rect.left + rect.width / 2 ? i : i + 1);
+              }}
+              onDrop={e => { e.preventDefault(); if (dropIndex !== null) commitDrop(dropIndex); setDropIndex(null); }}
+              onDragEnd={() => { setDragSrcId(null); setDropIndex(null); }}
+              data-dragging={dragSrcId === ws.id}
+              data-drop-before={dropIndex === i && dragSrcId !== null && ws.id !== dragSrcId}
+              data-drop-after={dropIndex === i + 1 && i === workspaces.length - 1 && dragSrcId !== null}
               data-drop-target="workspace"
               data-workspace-id={ws.id}
               title={title}
@@ -162,7 +195,7 @@ function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace }:
   );
 }
 
-export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onOpenAddMenu, path, onCrumb, sortValue, onSort, onOpenAppSettings, onOpenWorkspaceSettings }: TopNavProps) {
+export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onReorderWorkspaces, onOpenAddMenu, path, onCrumb, sortValue, onSort, onOpenAppSettings, onOpenWorkspaceSettings }: TopNavProps) {
   const [scrolled, setScrolled] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const sortRef = useRef<HTMLDivElement>(null);
@@ -200,6 +233,7 @@ export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
               activeWorkspaceId={activeWorkspaceId}
               onSwitchWorkspace={onSwitchWorkspace}
               onWorkspaceContextMenu={onWorkspaceContextMenu}
+              onReorderWorkspaces={onReorderWorkspaces}
             />
             <WorkspaceDropdown
               workspaces={workspaces}

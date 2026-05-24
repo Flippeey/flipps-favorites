@@ -278,6 +278,10 @@
   cursor: pointer;
   position: relative; overflow: hidden;
   transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-instant) var(--ease-press);
+  appearance: none;
+  background: transparent;
+  font: inherit;
+  text-align: left;
 }
 .ff-themecard[data-active="true"] {
   border-color: var(--accent);

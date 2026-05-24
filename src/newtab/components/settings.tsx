@@ -78,7 +78,7 @@ export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation
             </nav>
             <nav className="ff-drawer__nav ff-drawer__nav--footer">
               <DrawerNav id="backup" label="Backup" icon="cloud" active={section} setActive={setSection} />
-              <DrawerNav id="help"   label="Help"   icon="link"  active={section} setActive={setSection} />
+              <DrawerNav id="help"   label="Help"   icon="circleHelp"  active={section} setActive={setSection} />
             </nav>
           </div>
           <div className="ff-drawer__content no-scrollbar">

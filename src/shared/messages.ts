@@ -64,6 +64,7 @@ export interface WorkspaceRecord {
 export interface AppSettings {
   // Identity
   activeWorkspaceId: string;
+  workspaceOrder: string[];
   // Global behaviour
   themeMode: ThemeMode;
   rememberLastFolder: boolean;

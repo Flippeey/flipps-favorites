@@ -109,9 +109,9 @@ export function ConfirmDeleteWorkspaceDialog({ workspace, onClose, onConfirm }: 
       bodyStyle={{ gridTemplateColumns: '1fr', gap: 12 }}
     >
       <p className="ff-confirm__message">
-        Deleting removes this workspace from the tab bar. Your bookmarks stay in your browser and remain accessible through another workspace.
+        Deleting removes this workspace from the tab bar.
       </p>
-      <p className="ff-confirm__hint">This action cannot be undone.</p>
+      <p className="ff-confirm__hint">Your bookmarks stay in your browser and remain accessible through another workspace.</p>
       {error && <div className="ff-status" data-kind="error" role="alert">{error}</div>}
       <div className="ff-dialog__actions">
         <button type="button" className="ff-btn ff-btn--ghost" onClick={onClose} disabled={working}>

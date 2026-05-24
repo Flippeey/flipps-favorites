@@ -11,7 +11,7 @@ import { QuickAddDialog } from './components/QuickAddDialog';
 import { buildSearchIndex, ClockGreeting, HeroSearch, type FlatSearchResult } from './components/HeroSearch';
 import { Ico } from './components/Ico';
 import { Onboarding } from './components/Onboarding';
-import { AppSettingsDrawer, WorkspaceSettingsDrawer, type WorkspaceSectionId } from './components/settings';
+import { AppSettingsDrawer, WorkspaceSettingsDrawer, type AppSectionId, type WorkspaceSectionId } from './components/settings';
 import { ConfirmDeleteWorkspaceDialog, WorkspaceRenameDialog } from './components/WorkspaceLifecycleDialogs';
 import { TopNav, type SortChoice } from './components/TopNav';
 import { SectionsView, TilesView, FolderPageView } from './components/views';
@@ -50,6 +50,16 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     [workspaces, settings.activeWorkspaceId],
   );
 
+  const orderedWorkspaces = useMemo<WorkspaceRecord[]>(() => {
+    const order = settings.workspaceOrder;
+    if (!order || order.length === 0) return workspaces;
+    const map = new Map(workspaces.map(w => [w.id, w]));
+    const sorted = order.map(id => map.get(id)).filter((w): w is WorkspaceRecord => w != null);
+    const inOrder = new Set(order);
+    const rest = workspaces.filter(w => !inOrder.has(w.id));
+    return [...sorted, ...rest];
+  }, [workspaces, settings.workspaceOrder]);
+
   const [workspaceWallpaper, setWorkspaceWallpaper] = useState('');
 
   useEffect(() => {
@@ -72,6 +82,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const [appSettingsOpen, setAppSettingsOpen] = useState(false);
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false);
   const [workspaceSettingsInitialSection, setWorkspaceSettingsInitialSection] = useState<WorkspaceSectionId>('appearance');
+  const [appSettingsInitialSection, setAppSettingsInitialSection] = useState<AppSectionId>('navigation');
   const [renameWorkspaceTarget, setRenameWorkspaceTarget] = useState<WorkspaceRecord | null>(null);
   const [confirmDeleteWorkspace, setConfirmDeleteWorkspace] = useState<WorkspaceRecord | null>(null);
   const [onboardOpen, setOnboardOpen] = useState(initialOnboardOpen ?? false);
@@ -137,7 +148,9 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setSettings(prev => ({ ...prev, ...patch }));
     try {
       const next = await patchSettings(patch);
-      setSettings(next);
+      // Only merge back the fields we sent — don't clobber in-flight optimistic updates for other fields.
+      const keys = Object.keys(patch) as (keyof AppSettings)[];
+      setSettings(prev => ({ ...prev, ...Object.fromEntries(keys.map(k => [k, next[k]])) }));
     } catch {
       // keep optimistic value
     }
@@ -227,6 +240,11 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setNewWorkspaceOpen(true);
   }, []);
 
+  const handleReorderWorkspaces = useCallback(async (ids: string[]) => {
+    setSettings(prev => ({ ...prev, workspaceOrder: ids }));
+    try { await patchSettings({ workspaceOrder: ids }); } catch { /* keep optimistic */ }
+  }, []);
+
   const handleRenameWorkspace = useCallback(async (id: string, name: string): Promise<void> => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -239,8 +257,9 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     }
   }, []);
 
-  const openAppSettings = useCallback(() => {
+  const openAppSettings = useCallback((section: AppSectionId = 'navigation') => {
     setWorkspaceSettingsOpen(false);
+    setAppSettingsInitialSection(section);
     setAppSettingsOpen(true);
   }, []);
 
@@ -362,9 +381,9 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setContextMenu({
       x, y,
       items: [
-        { kind: 'item', icon: 'link',       label: 'Add bookmark',  onClick: () => handleNewBookmark() },
-        { kind: 'item', icon: 'folderPlus', label: 'Add folder',    onClick: () => handleNewFolder() },
-        { kind: 'item', icon: 'layers',     label: 'Add workspace', disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => handleAddWorkspace() },
+        { kind: 'item', icon: 'bookmark',    label: 'Add bookmark',  kbd: 'A', onClick: () => handleNewBookmark() },
+        { kind: 'item', icon: 'folderPlus', label: 'Add folder',    kbd: 'F', onClick: () => handleNewFolder() },
+        { kind: 'item', icon: 'folderTree', label: 'Add workspace', kbd: 'W', disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => handleAddWorkspace() },
       ],
     });
   }, [workspaces.length, handleNewBookmark, handleNewFolder, handleAddWorkspace]);
@@ -383,10 +402,10 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       const labelSuffix = sectionFolder ? ` in ${sectionFolder.title}` : '';
       const atMax = workspaces.length >= MAX_WORKSPACES;
       return [
-        { kind: 'item', icon: 'plus',       label: `Add bookmark${labelSuffix}`, onClick: () => handleNewBookmark(parentId, sectionFolder?.title) },
+        { kind: 'item', icon: 'bookmark',       label: `Add bookmark${labelSuffix}`, onClick: () => handleNewBookmark(parentId, sectionFolder?.title) },
         { kind: 'item', icon: 'folderPlus', label: `Add folder${labelSuffix}`,
           onClick: () => handleNewFolder(parentId, sectionFolder?.title) },
-        { kind: 'item', icon: 'layers',     label: 'Add workspace', disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => handleAddWorkspace() },
+        { kind: 'item', icon: 'folderTree', label: 'Add workspace', disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => handleAddWorkspace() },
         { kind: 'separator' },
         { kind: 'item', icon: 'settings',   label: 'Settings', onClick: () => openAppSettings() },
       ];
@@ -397,7 +416,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
         { kind: 'item', icon: 'pencil',     label: 'Rename',
           onClick: () => handleRenameFolder(target) },
         { kind: 'separator' },
-        { kind: 'item', icon: 'plus',       label: 'New bookmark inside',
+        { kind: 'item', icon: 'bookmark',       label: 'New bookmark inside',
           onClick: () => handleNewBookmark(target.id, target.title) },
         { kind: 'item', icon: 'folderPlus', label: 'New folder inside',
           onClick: () => handleNewFolder(target.id, target.title) },
@@ -452,7 +471,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     if (folder) handlePickFolder(folder);
   }, [tree, handlePickFolder]);
 
-  // ESC clears selection
+  // ESC clears selection (no overlay check — individual dialogs handle their own ESC)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && selectionRef.current.ids.size > 0) {
@@ -463,7 +482,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  useWorkspaceShortcut(workspaces, handleSwitchWorkspace);
+  useWorkspaceShortcut(orderedWorkspaces, handleSwitchWorkspace);
 
   // Reset keyboard focus when navigation context changes (workspace switch, folder open/close).
   useEffect(() => {
@@ -667,6 +686,60 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     onDeleteFocused: (item) => { void handleDeleteFocused(item); },
   });
 
+  // Single-key quick-add shortcuts — only when no overlay is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing || anyOverlayOpen) return;
+
+      const t = e.target as HTMLElement;
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) return;
+
+      const mod = e.ctrlKey || e.metaKey;
+
+      // Ctrl/Cmd+K or Ctrl/Cmd+S: focus search
+      if (!e.altKey && mod && (e.key.toLowerCase() === 'k' || e.key.toLowerCase() === 's')) {
+        e.preventDefault();
+        document.querySelector<HTMLInputElement>('.ff-search__input')?.focus();
+        return;
+      }
+
+      if (mod || e.altKey || e.shiftKey) return;
+
+      switch (e.key.toLowerCase()) {
+        case 'a':
+          e.preventDefault();
+          handleNewBookmark();
+          break;
+        case 'f':
+          e.preventDefault();
+          handleNewFolder();
+          break;
+        case 'w':
+          e.preventDefault();
+          setNewWorkspaceOpen(true);
+          break;
+        case 'e': {
+          if (selection.ids.size === 1) {
+            const id = [...selection.ids][0];
+            const node = findNode(tree, id);
+            if (node) {
+              if (isFolder(node)) handleRenameFolder(node);
+              else handleEditBookmark(node);
+            }
+          }
+          break;
+        }
+        case 's':
+        case '/':
+          e.preventDefault();
+          document.querySelector<HTMLInputElement>('.ff-search__input')?.focus();
+          break;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [anyOverlayOpen, selection, tree, handleNewBookmark, handleNewFolder, handleEditBookmark, handleRenameFolder, openAppSettings]);
+
   const wallpaperBlobUrl = useBlobUrl(workspaceWallpaper);
   const tileShape = activeWorkspace?.tileShape ?? 'squircle';
 
@@ -711,10 +784,11 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       )}
       <header>
         <TopNav
-          workspaces={workspaces}
+          workspaces={orderedWorkspaces}
           activeWorkspaceId={settings.activeWorkspaceId}
           onSwitchWorkspace={handleSwitchWorkspace}
           onWorkspaceContextMenu={handleWorkspaceContextMenu}
+          onReorderWorkspaces={handleReorderWorkspaces}
           onOpenAddMenu={handleOpenAddMenu}
           path={folderPath}
           onCrumb={handleGoToCrumb}
@@ -896,9 +970,10 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
         <AppSettingsDrawer
           settings={settings}
           tree={tree}
+          initialSection={appSettingsInitialSection}
           onPatchGlobal={handlePatch}
           onAfterImport={(next: AppSettings) => { setSettings(next); refreshTree(); }}
-          onClose={() => setAppSettingsOpen(false)}
+          onClose={() => { setAppSettingsOpen(false); setAppSettingsInitialSection('navigation'); }}
         />
       )}
 
