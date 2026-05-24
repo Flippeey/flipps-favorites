@@ -20,6 +20,7 @@ import { useDrag } from './interaction/useDrag';
 import { useWorkspaceShortcut } from './interaction/useWorkspaceShortcut';
 import { useKeyboardNav, useDeleteShortcut } from './interaction/useKeyboardNav';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
+import { extensionApi } from '../shared/browser';
 import { IS_MAC } from './lib/platform';
 import { getBookmarkTree, getBookmarkUsage, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark, createWorkspace, patchWorkspace, deleteWorkspace } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
@@ -37,6 +38,10 @@ interface AppProps {
 function settingsToSortValue(mode: BookmarkSortMode, direction: SortDirection): string {
   if (mode === 'manual') return 'manual';
   return `${mode}:${direction}`;
+}
+
+function normalizeBookmarkUrl(url: string): string {
+  return url.startsWith('http') ? url : `https://${url}`;
 }
 
 export function App({ initialSettings, initialTree, initialWorkspaces, initialOnboardOpen }: AppProps) {
@@ -349,7 +354,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     const usedAt = Date.now();
     setUsage(prev => ({ ...prev, [item.id]: usedAt }));
     recordBookmarkUse(item.id).catch(() => { /* ignore */ });
-    const url = item.url.startsWith('http') ? item.url : `https://${item.url}`;
+    const url = normalizeBookmarkUrl(item.url);
     const newTab = settings.openLinksInNewTab !== Boolean(event?.metaKey || event?.ctrlKey);
     if (newTab) window.open(url, '_blank', 'noopener');
     else window.location.href = url;
@@ -430,14 +435,30 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     const deleteAction = isInSelection
       ? () => setConfirmDeleteBatch(Array.from(selection.ids))
       : async () => { await removeBookmark(target.id); refreshTree(); };
+    const targetIds = isInSelection ? Array.from(selection.ids) : [target.id];
+    const bookmarkUrls = targetIds
+      .map(id => findNode(tree, id))
+      .filter((n): n is BookmarkNode => !!n?.url)
+      .map(n => normalizeBookmarkUrl(n.url!));
+    const multi = bookmarkUrls.length > 1;
+    const newTabLabel = multi ? `Open ${bookmarkUrls.length} in new tabs` : 'Open in new tab';
+    const newWindowLabel = multi ? `Open ${bookmarkUrls.length} in new window` : 'Open in new window';
+    const openInNewTabs = () => {
+      for (const url of bookmarkUrls) window.open(url, '_blank', 'noopener');
+    };
+    const openInNewWindow = () => {
+      if (bookmarkUrls.length === 0) return;
+      extensionApi.windows?.create?.({ url: bookmarkUrls.length === 1 ? bookmarkUrls[0] : bookmarkUrls });
+    };
     return [
-      { kind: 'item', icon: 'link',       label: 'Open',            kbd: '↵',  onClick: () => handlePickBookmark(target) },
-      { kind: 'item', icon: 'arrowRight', label: 'Open in new tab', kbd: IS_MAC ? '⌘↵' : 'Ctrl+↵', onClick: () => target.url && window.open(target.url.startsWith('http') ? target.url : `https://${target.url}`, '_blank', 'noopener') },
-      { kind: 'item', icon: 'copy',       label: 'Copy URL',                   onClick: () => target.url && navigator.clipboard?.writeText(target.url.startsWith('http') ? target.url : `https://${target.url}`) },
+      { kind: 'item', icon: 'link',         label: 'Open',            kbd: '↵',  onClick: () => handlePickBookmark(target) },
+      { kind: 'item', icon: 'arrowRight',   label: newTabLabel,       kbd: multi ? undefined : (IS_MAC ? '⌘↵' : 'Ctrl+↵'), onClick: openInNewTabs },
+      { kind: 'item', icon: 'externalLink', label: newWindowLabel,    onClick: openInNewWindow },
+      { kind: 'item', icon: 'copy',         label: 'Copy URL',        onClick: () => target.url && navigator.clipboard?.writeText(normalizeBookmarkUrl(target.url)) },
       { kind: 'separator' },
-      { kind: 'item', icon: 'pencil',     label: 'Edit…',           onClick: () => handleEditBookmark(target) },
+      { kind: 'item', icon: 'pencil',       label: 'Edit…',           onClick: () => handleEditBookmark(target) },
       { kind: 'separator' },
-      { kind: 'item', icon: 'trash',      label: deleteLabel,       kbd: IS_MAC ? '⌫' : 'Del', destructive: true,
+      { kind: 'item', icon: 'trash',        label: deleteLabel,       kbd: IS_MAC ? '⌫' : 'Del', destructive: true,
         onClick: deleteAction },
     ];
   }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, handleAddWorkspace, workspaces.length, selection, refreshTree]);

@@ -29,6 +29,7 @@ const UI_ICONS: Record<string, string> = {
   layers:       'M12 2l10 5-10 5L2 7l10-5zM2 12l10 5 10-5M2 17l10 5 10-5',
   palette:      'M12 22a10 10 0 1 1 10-10c0 2.5-2 4-4 4h-2a2 2 0 0 0-2 2v1a2 2 0 0 1-2 2zM7 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 7a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM17 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
   link:         'M10 13a5 5 0 0 0 7 0l3-3a5 5 0 1 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 1 0 7 7l1-1',
+  externalLink: 'M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6',
   zap:          'M13 2L4 14h7l-1 8 9-12h-7l1-8z',
   layoutGrid:   'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
   rows:         'M3 3h18v6H3zM3 15h18v6H3z',

@@ -74,6 +74,58 @@
 .ff-pill:hover { background: var(--ink-3); color: var(--accent); border-color: var(--accent-border); }
 .ff-pill:focus-visible { outline: none; border-color: var(--accent-border); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent); }
 
+/* Nav-right cluster — unify icon buttons + pills as frost chips so they read
+   consistently against the workspace canvas (esp. over wallpaper / light theme). */
+.ff-nav .ff-iconbtn,
+.ff-nav .ff-pill {
+  height: 32px;
+  border-radius: var(--r-full);
+  background: color-mix(in oklab, var(--frost-strong) 55%, transparent);
+  -webkit-backdrop-filter: var(--frost-blur);
+  backdrop-filter: var(--frost-blur);
+  border: 1px solid var(--line-2);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.ff-nav .ff-iconbtn--icon { width: 32px; }
+.ff-nav .ff-iconbtn:hover,
+.ff-nav .ff-pill:hover {
+  background: color-mix(in oklab, var(--frost-strong) 78%, transparent);
+  border-color: var(--accent-border);
+  color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 14%, transparent);
+}
+.ff-nav .ff-iconbtn--active {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+[data-theme="light"] .ff-nav .ff-iconbtn,
+[data-theme="light"] .ff-nav .ff-pill {
+  background: rgba(255, 255, 255, 0.70);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: var(--fg-1);
+}
+[data-theme="light"] .ff-nav .ff-iconbtn:hover,
+[data-theme="light"] .ff-nav .ff-pill:hover {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: var(--accent-border);
+  color: var(--accent-600, var(--accent));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 16%, transparent);
+}
+/* Higher-specificity override so the light+wallpaper combo can't fall back to
+   fg-1 on hover (the base.css wallpaper rule used to beat ours on tied specificity). */
+[data-theme="light"] .ff-app[data-bg="wallpaper"] .ff-nav .ff-iconbtn:hover,
+[data-theme="light"] .ff-app[data-bg="wallpaper"] .ff-nav .ff-pill:hover {
+  color: var(--accent-600, var(--accent));
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 16%, transparent);
+}
+
 .ff-sort { position: relative; }
 .ff-sort__panel, .ff-fpicker__panel {
   position: absolute;
@@ -203,7 +255,11 @@
   font-weight: 500;
   cursor: pointer;
   text-shadow: 0 1px 3px rgba(0,0,0,0.5);
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
   white-space: nowrap;
   max-width: 160px;
   overflow: visible;
@@ -220,17 +276,18 @@
 }
 
 .ff-ws-tab.is-active {
-  background: var(--ink-3);
+  background: var(--accent-soft);
   color: var(--accent);
   font-weight: 600;
-  border-color: var(--line-2);
-  border-bottom: 2px solid var(--accent);
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 12%, transparent);
 }
 
 [data-theme="light"] .ff-ws-tab.is-active {
   color: var(--accent-600, var(--accent));
-  background: color-mix(in oklab, var(--accent) 8%, var(--ink-1));
+  background: color-mix(in oklab, var(--accent) 10%, var(--ink-1));
   border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 14%, transparent);
 }
 
 .ff-ws-tab[data-drop-hover="true"] {

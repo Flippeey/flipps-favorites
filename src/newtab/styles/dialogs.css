@@ -224,17 +224,21 @@
   height: 36px; padding: 0 12px;
   border-radius: var(--r-md);
   background: transparent;
-  border: 0;
+  border: 1px solid transparent;
   color: var(--fg-2); font-size: 13px;
   cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 .ff-drawer__navitem:hover { background: var(--ink-2); color: var(--fg-1); }
 .ff-drawer__navitem[data-active="true"] {
   background: var(--accent-soft);
   color: var(--accent);
-  border-left: 2px solid var(--accent);
-  padding-left: 10px;
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 12%, transparent);
 }
 .ff-drawer__navdivider { height: 1px; background: var(--line-1); margin: 4px 8px; }
 .ff-drawer__nav--footer {
