@@ -97,16 +97,21 @@ export async function clickMenuItem(menu: Locator, label: string | RegExp): Prom
   await menu.getByRole('menuitem', { name: label }).click();
 }
 
+type SettingsSection = 'navigation' | 'appearance' | 'layout' | 'dock' | 'clock' | 'backup' | 'help';
+const APP_SECTIONS: ReadonlySet<SettingsSection> = new Set<SettingsSection>(['navigation', 'dock', 'clock', 'backup', 'help']);
+
 /**
- * Open the Settings drawer and switch to a named section (general, navigation,
- * appearance, layout, dock, clock, backup, help).
+ * Open the relevant settings drawer and switch to a named section. App-scoped
+ * sections (navigation, dock, clock, backup, help) open via the Settings gear;
+ * workspace-scoped sections (appearance, layout) open via the Customize palette.
  */
 export async function openSettingsSection(
   page: Page,
-  section: 'general' | 'navigation' | 'appearance' | 'layout' | 'dock' | 'clock' | 'backup' | 'help',
+  section: SettingsSection,
 ): Promise<void> {
+  const buttonName = APP_SECTIONS.has(section) ? 'Settings' : 'Customize';
   if (await page.locator('.ff-drawer').count() === 0) {
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('button', { name: buttonName, exact: true }).click();
     await page.waitForSelector('.ff-drawer', { timeout: 5_000 });
   }
   const label = section.charAt(0).toUpperCase() + section.slice(1);

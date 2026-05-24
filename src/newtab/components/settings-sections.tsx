@@ -597,65 +597,6 @@ export function LayoutSection({ workspace, onPatch }: WorkspaceSectionProps) {
   );
 }
 
-interface WorkspaceManageSectionProps {
-  workspace: WorkspaceRecord | null;
-  onPatch: (patch: Partial<WorkspaceRecord>) => void;
-  onDeleteWorkspace: (id: string) => void;
-  isOnlyWorkspace: boolean;
-}
-
-export function WorkspaceManageSection({ workspace, onPatch, onDeleteWorkspace, isOnlyWorkspace }: WorkspaceManageSectionProps) {
-  const [name, setName] = useState(workspace?.name ?? '');
-
-  useEffect(() => { setName(workspace?.name ?? ''); }, [workspace?.name]);
-
-  const saveName = () => {
-    const trimmed = name.trim();
-    if (trimmed && trimmed !== workspace?.name) onPatch({ name: trimmed });
-  };
-
-  return (
-    <div className="ff-set-section">
-      <h3 className="ff-set-section__title">Manage</h3>
-      <p className="ff-set-section__desc">Rename or delete this workspace.</p>
-
-      <div className="ff-card" style={{ marginBottom: 16 }}>
-        <div className="ff-field">
-          <label className="ff-field__label">Workspace name</label>
-          <input
-            className="ff-input"
-            style={{ width: '100%', boxSizing: 'border-box' }}
-            value={name}
-            onChange={e => setName(e.target.value)}
-            onBlur={saveName}
-            onKeyDown={e => { if (e.key === 'Enter') saveName(); }}
-          />
-        </div>
-      </div>
-
-      <div className="ff-card">
-        <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--fg-3)', lineHeight: 1.5 }}>
-          Deleting removes the workspace from the tab bar. Your bookmarks stay in your
-          browser and remain accessible through another workspace.
-        </p>
-        {isOnlyWorkspace ? (
-          <p style={{ margin: 0, fontSize: 12, color: 'var(--fg-3)' }}>
-            Create another workspace first before deleting this one.
-          </p>
-        ) : (
-          <button
-            className="ff-btn ff-btn--danger-ghost"
-            style={{ width: '100%' }}
-            onClick={() => workspace && onDeleteWorkspace(workspace.id)}
-          >
-            Delete workspace
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function DockSection({ settings, tree, onPatch }: SectionProps & { tree: BookmarkNode[] }) {
   const visibility: 'always' | 'hover' | 'hidden' =
     !settings.showDock ? 'hidden' : settings.autoHideDock ? 'hover' : 'always';

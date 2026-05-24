@@ -29,7 +29,8 @@ interface TopNavProps {
   onCrumb: (index: number) => void;
   sortValue: string;
   onSort: (choice: SortChoice) => void;
-  onOpenSettings: () => void;
+  onOpenAppSettings: () => void;
+  onOpenWorkspaceSettings: () => void;
 }
 
 interface WorkspaceTabsProps {
@@ -161,7 +162,7 @@ function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace }:
   );
 }
 
-export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onOpenAddMenu, path, onCrumb, sortValue, onSort, onOpenSettings }: TopNavProps) {
+export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onOpenAddMenu, path, onCrumb, sortValue, onSort, onOpenAppSettings, onOpenWorkspaceSettings }: TopNavProps) {
   const [scrolled, setScrolled] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const sortRef = useRef<HTMLDivElement>(null);
@@ -262,7 +263,11 @@ export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
             </ul>
           )}
         </div>
-        <button className="ff-iconbtn" onClick={onOpenSettings} aria-label="Settings">
+        <button className="ff-iconbtn" onClick={onOpenWorkspaceSettings} aria-label="Customize workspace">
+          <Ico name="palette" size={16} />
+          <span>Customize</span>
+        </button>
+        <button className="ff-iconbtn" onClick={onOpenAppSettings} aria-label="Settings">
           <Ico name="settings" size={16} />
           <span>Settings</span>
         </button>

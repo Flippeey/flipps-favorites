@@ -11,7 +11,8 @@ import { QuickAddDialog } from './components/QuickAddDialog';
 import { buildSearchIndex, ClockGreeting, HeroSearch, type FlatSearchResult } from './components/HeroSearch';
 import { Ico } from './components/Ico';
 import { Onboarding } from './components/Onboarding';
-import { SettingsDrawer } from './components/settings';
+import { AppSettingsDrawer, WorkspaceSettingsDrawer, type WorkspaceSectionId } from './components/settings';
+import { ConfirmDeleteWorkspaceDialog, WorkspaceRenameDialog } from './components/WorkspaceLifecycleDialogs';
 import { TopNav, type SortChoice } from './components/TopNav';
 import { SectionsView, TilesView, FolderPageView } from './components/views';
 import { useMarquee, type MarqueeSelection } from './interaction/useMarquee';
@@ -68,8 +69,11 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [quickAddTarget, setQuickAddTarget] = useState<{ parentId: string; parentTitle?: string } | null>(null);
   const [folderNameTarget, setFolderNameTarget] = useState<FolderNameDialogTarget | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsInitialSection, setSettingsInitialSection] = useState<'appearance' | 'workspace-manage'>('appearance');
+  const [appSettingsOpen, setAppSettingsOpen] = useState(false);
+  const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false);
+  const [workspaceSettingsInitialSection, setWorkspaceSettingsInitialSection] = useState<WorkspaceSectionId>('appearance');
+  const [renameWorkspaceTarget, setRenameWorkspaceTarget] = useState<WorkspaceRecord | null>(null);
+  const [confirmDeleteWorkspace, setConfirmDeleteWorkspace] = useState<WorkspaceRecord | null>(null);
   const [onboardOpen, setOnboardOpen] = useState(initialOnboardOpen ?? false);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   const [folderPath, setFolderPath] = useState<BookmarkNode[]>([]);
@@ -223,25 +227,47 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setNewWorkspaceOpen(true);
   }, []);
 
+  const handleRenameWorkspace = useCallback(async (id: string, name: string): Promise<void> => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setWorkspaces(prev => prev.map(w => w.id === id ? { ...w, name: trimmed } : w));
+    try {
+      const next = await patchWorkspace(id, { name: trimmed });
+      setWorkspaces(prev => prev.map(w => w.id === next.id ? next : w));
+    } catch {
+      // keep optimistic value
+    }
+  }, []);
+
+  const openAppSettings = useCallback(() => {
+    setWorkspaceSettingsOpen(false);
+    setAppSettingsOpen(true);
+  }, []);
+
+  const openWorkspaceSettings = useCallback((section: WorkspaceSectionId = 'appearance') => {
+    setAppSettingsOpen(false);
+    setWorkspaceSettingsInitialSection(section);
+    setWorkspaceSettingsOpen(true);
+  }, []);
+
   const handleWorkspaceContextMenu = useCallback((id: string, x: number, y: number) => {
+    const ws = workspaces.find(w => w.id === id);
+    if (!ws) return;
     const atMax = workspaces.length >= MAX_WORKSPACES;
+    const canDelete = workspaces.length > 1;
     setContextMenu({
       x, y,
       items: [
-        { kind: 'item', icon: 'palette', label: 'Appearance', onClick: () => {
-          setSettingsInitialSection('appearance');
-          setSettingsOpen(true);
-        }},
-        { kind: 'item', icon: 'copy', label: 'Duplicate', disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => {
-          void handleDuplicateWorkspace(id);
-        }},
-        { kind: 'item', icon: 'settings', label: 'Manage', onClick: () => {
-          setSettingsInitialSection('workspace-manage');
-          setSettingsOpen(true);
-        }},
+        { kind: 'item', icon: 'palette', label: 'Appearance', onClick: () => openWorkspaceSettings('appearance') },
+        { kind: 'item', icon: 'rows',    label: 'Layout',     onClick: () => openWorkspaceSettings('layout') },
+        { kind: 'separator' },
+        { kind: 'item', icon: 'pencil',  label: 'Rename…',    onClick: () => setRenameWorkspaceTarget(ws) },
+        { kind: 'item', icon: 'copy',    label: 'Duplicate',  disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => { void handleDuplicateWorkspace(id); } },
+        { kind: 'separator' },
+        { kind: 'item', icon: 'trash',   label: 'Delete…',    destructive: true, disabled: !canDelete, title: !canDelete ? 'Create another workspace first' : undefined, onClick: () => setConfirmDeleteWorkspace(ws) },
       ],
     });
-  }, [workspaces.length, handleDuplicateWorkspace]);
+  }, [workspaces, handleDuplicateWorkspace, openWorkspaceSettings]);
 
   const refreshTree = useCallback(async () => {
     try {
@@ -362,7 +388,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           onClick: () => handleNewFolder(parentId, sectionFolder?.title) },
         { kind: 'item', icon: 'layers',     label: 'Add workspace', disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => handleAddWorkspace() },
         { kind: 'separator' },
-        { kind: 'item', icon: 'settings',   label: 'Settings', onClick: () => setSettingsOpen(true) },
+        { kind: 'item', icon: 'settings',   label: 'Settings', onClick: () => openAppSettings() },
       ];
     }
     if (isFolder(target)) {
@@ -616,7 +642,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   // Arrow-key grid navigation. Active only when no dialog/overlay/input has focus —
   // otherwise we'd hijack typing or contend with active surfaces.
   const anyOverlayOpen = Boolean(
-    settingsOpen || editTarget || quickAddTarget || folderNameTarget || onboardOpen
+    appSettingsOpen || workspaceSettingsOpen || renameWorkspaceTarget || confirmDeleteWorkspace || editTarget || quickAddTarget || folderNameTarget || onboardOpen
     || newWorkspaceOpen || confirmDeleteFolder || confirmDeleteBatch || openFolderId || contextMenu,
   );
 
@@ -694,7 +720,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           onCrumb={handleGoToCrumb}
           sortValue={sortChoice}
           onSort={handleSortChange}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenAppSettings={openAppSettings}
+          onOpenWorkspaceSettings={() => openWorkspaceSettings('appearance')}
         />
       </header>
 
@@ -865,20 +892,46 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
         />
       )}
 
-      {settingsOpen && (
-        <SettingsDrawer
+      {appSettingsOpen && (
+        <AppSettingsDrawer
+          settings={settings}
+          tree={tree}
+          onPatchGlobal={handlePatch}
+          onAfterImport={(next: AppSettings) => { setSettings(next); refreshTree(); }}
+          onClose={() => setAppSettingsOpen(false)}
+        />
+      )}
+
+      {workspaceSettingsOpen && (
+        <WorkspaceSettingsDrawer
           settings={settings}
           activeWorkspace={activeWorkspace}
           workspaceWallpaper={workspaceWallpaper}
+          initialSection={workspaceSettingsInitialSection}
           onPatchGlobal={handlePatch}
           onPatchWorkspace={handlePatchWorkspace}
           onSetWorkspaceWallpaper={handleSetWorkspaceWallpaper}
-          onDeleteWorkspace={handleDeleteWorkspace}
-          isOnlyWorkspace={workspaces.length <= 1}
-          initialSection={settingsInitialSection}
-          tree={tree}
-          onClose={() => { setSettingsOpen(false); setSettingsInitialSection('appearance'); }}
-          onAfterImport={(next) => { setSettings(next); refreshTree(); }}
+          onClose={() => { setWorkspaceSettingsOpen(false); setWorkspaceSettingsInitialSection('appearance'); }}
+        />
+      )}
+
+      {renameWorkspaceTarget && (
+        <WorkspaceRenameDialog
+          workspace={renameWorkspaceTarget}
+          onRename={handleRenameWorkspace}
+          onSaved={() => setRenameWorkspaceTarget(null)}
+          onClose={() => setRenameWorkspaceTarget(null)}
+        />
+      )}
+
+      {confirmDeleteWorkspace && (
+        <ConfirmDeleteWorkspaceDialog
+          workspace={confirmDeleteWorkspace}
+          onClose={() => setConfirmDeleteWorkspace(null)}
+          onConfirm={async () => {
+            await handleDeleteWorkspace(confirmDeleteWorkspace.id);
+            setConfirmDeleteWorkspace(null);
+          }}
         />
       )}
 
