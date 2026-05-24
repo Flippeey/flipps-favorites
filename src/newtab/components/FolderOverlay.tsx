@@ -1,10 +1,12 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BookmarkNode, TileShape } from '../../shared/messages';
 import { findNode, isFolder } from '../lib/tree';
 import { TileFor } from './Tile';
 import { Ico } from './Ico';
+import type { ContextMenuItem } from './ContextMenu';
 import type { MarqueeRect } from '../interaction/useMarquee';
+import { useDeleteShortcut, useKeyboardNav } from '../interaction/useKeyboardNav';
 
 interface FolderOverlayProps {
   folder: BookmarkNode;
@@ -21,6 +23,12 @@ interface FolderOverlayProps {
   onTileSelect?: (item: BookmarkNode, event: ReactMouseEvent) => void;
   onClearSelection?: () => void;
   marqueeRect?: MarqueeRect | null;
+  onDeleteFocused?: (item: BookmarkNode) => void;
+  onBatchDelete?: (ids: string[]) => void;
+  onEditId?: (id: string) => void;
+  onNewWorkspace?: () => void;
+  buildContextMenuItems?: (target: BookmarkNode | null) => ContextMenuItem[];
+  setContextMenu?: (menu: { x: number; y: number; items: ContextMenuItem[] }) => void;
 }
 
 export function FolderOverlay({
@@ -38,11 +46,19 @@ export function FolderOverlay({
   onTileSelect,
   onClearSelection,
   marqueeRect,
+  onDeleteFocused,
+  onBatchDelete,
+  onEditId,
+  onNewWorkspace,
+  buildContextMenuItems,
+  setContextMenu,
 }: FolderOverlayProps) {
   const [stack, setStack] = useState<BookmarkNode[]>([folder]);
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
   const current = stack[stack.length - 1];
   const suppressCloseRef = useRef(false);
+  const [bodyEl, setBodyEl] = useState<HTMLElement | null>(null);
+  const [focusedTileId, setFocusedTileId] = useState<string | null>(null);
 
   useEffect(() => {
     const onSuppress = () => { suppressCloseRef.current = true; };
@@ -66,10 +82,21 @@ export function FolderOverlay({
     });
   }, [folder]);
 
+  // Reset focused tile when navigating between folders within the overlay.
+  useEffect(() => { setFocusedTileId(null); }, [current.id]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { onClose(); return; }
-      if (e.key === 'Backspace' || (e.key === 'ArrowLeft' && e.metaKey)) {
+      // Cmd/Ctrl+ArrowLeft always navigates back. Plain Backspace navigates back
+      // only when nothing is focused/selected so the delete shortcut can handle it otherwise.
+      const cmdBack = e.key === 'ArrowLeft' && (e.metaKey || e.ctrlKey);
+      const backspaceBack = e.key === 'Backspace'
+        && !focusedTileId
+        && (!selectedIds || selectedIds.size === 0);
+      if (cmdBack || backspaceBack) {
+        const active = document.activeElement;
+        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)) return;
         if (stack.length > 1) {
           setDirection('back');
           setStack(s => s.slice(0, -1));
@@ -80,7 +107,84 @@ export function FolderOverlay({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, stack.length]);
+  }, [onClose, stack.length, focusedTileId, selectedIds]);
+
+  const navItems = useMemo(() => current.children ?? [], [current]);
+
+  const handleArrowPickFolder = useCallback((sub: BookmarkNode) => {
+    setDirection('forward');
+    setStack(s => [...s, sub]);
+  }, []);
+
+  const handleArrowPickBookmark = useCallback((item: BookmarkNode, event?: { metaKey?: boolean; ctrlKey?: boolean }) => {
+    onClose();
+    onPickBookmark(item, event);
+  }, [onClose, onPickBookmark]);
+
+  const noopBuildMenu = useCallback<(target: BookmarkNode | null) => ContextMenuItem[]>(() => [], []);
+  const noopSetMenu = useCallback<(menu: { x: number; y: number; items: ContextMenuItem[] }) => void>(() => {}, []);
+
+  useKeyboardNav({
+    enabled: true,
+    navItems,
+    focusedTileId,
+    setFocusedTileId,
+    canvasEl: bodyEl,
+    onPickFolder: handleArrowPickFolder,
+    onPickBookmark: handleArrowPickBookmark,
+    buildContextMenuItems: buildContextMenuItems ?? noopBuildMenu,
+    setContextMenu: setContextMenu ?? noopSetMenu,
+  });
+
+  const selectionForHook = useMemo(
+    () => ({ ids: (selectedIds ?? new Set<string>()) as Set<string> }),
+    [selectedIds],
+  );
+  useDeleteShortcut({
+    enabled: true,
+    selection: selectionForHook,
+    focusedTileId,
+    navItems,
+    onBatchDelete: (ids) => onBatchDelete?.(ids),
+    onDeleteFocused: (item) => onDeleteFocused?.(item),
+  });
+
+  // Quick-add / edit shortcuts mirrored from App.tsx so the flow stays consistent
+  // when navigating inside the overlay.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing) return;
+      const t = e.target as HTMLElement;
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      switch (e.key.toLowerCase()) {
+        case 'a':
+          if (!onNewBookmark) return;
+          e.preventDefault();
+          onNewBookmark(current.id, current.title);
+          break;
+        case 'f':
+          if (!onNewFolder) return;
+          e.preventDefault();
+          onNewFolder(current.id, current.title);
+          break;
+        case 'w':
+          if (!onNewWorkspace) return;
+          e.preventDefault();
+          onNewWorkspace();
+          break;
+        case 'e': {
+          if (!onEditId || !selectedIds || selectedIds.size !== 1) return;
+          e.preventDefault();
+          const id = [...selectedIds][0];
+          onEditId(id);
+          break;
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [current.id, current.title, onNewBookmark, onNewFolder, onNewWorkspace, onEditId, selectedIds]);
 
   const handleItemClick = (item: BookmarkNode, event: ReactMouseEvent) => {
     if (event.shiftKey || event.metaKey || event.ctrlKey) {
@@ -174,7 +278,7 @@ export function FolderOverlay({
         </div>
         <div
           className="ff-folder-overlay__body"
-          ref={(el) => bodyRef?.(el)}
+          ref={(el) => { setBodyEl(el); bodyRef?.(el); }}
           key={current.id}
           data-dir={direction}
           data-scope-folder-id={current.id}
@@ -188,6 +292,7 @@ export function FolderOverlay({
                 scopeFolderId={current.id}
                 selectedIds={selectedIds}
                 selectionScopeFolderId={selectionScopeFolderId}
+                focusedTileId={focusedTileId}
                 onPickFolder={handleItemClick}
                 onPickItem={handleItemClick}
                 onContextMenu={onContextMenu}

@@ -903,6 +903,17 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           onTileSelect={handleTileClick}
           onClearSelection={() => setSelection({ ids: new Set(), scopeFolderId: '' })}
           marqueeRect={overlayMarqueeRect}
+          onDeleteFocused={(item) => { void handleDeleteFocused(item); }}
+          onBatchDelete={(ids) => setConfirmDeleteBatch(ids)}
+          onEditId={(id) => {
+            const node = findNode(tree, id);
+            if (!node) return;
+            if (isFolder(node)) handleRenameFolder(node);
+            else handleEditBookmark(node);
+          }}
+          onNewWorkspace={() => setNewWorkspaceOpen(true)}
+          buildContextMenuItems={buildContextMenuItems}
+          setContextMenu={setContextMenu}
         />
       )}
 
