@@ -794,7 +794,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           onCrumb={handleGoToCrumb}
           sortValue={sortChoice}
           onSort={handleSortChange}
-          onOpenAppSettings={openAppSettings}
+          onOpenAppSettings={() => openAppSettings()}
           onOpenWorkspaceSettings={() => openWorkspaceSettings('appearance')}
         />
       </header>

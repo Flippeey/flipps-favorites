@@ -266,17 +266,17 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
   }, [scanResult, activeWorkspace, onPatchWorkspace]);
 
   const hasRecommendations = scanResult.preSelected.length > 0 || scanResult.suggested.length > 0;
-  const step3Desc = hasRecommendations
+  const workspaceStepDesc = hasRecommendations
     ? 'We found some folders that look like good workspaces. Adjust the selection, or browse all folders.'
     : 'Pick a root folder, or create multiple workspaces — each with its own layout and theme.';
 
   const steps = [
     { title: "Welcome to Flipp's Favorites", desc: '' },
-    { title: 'Choose your theme',           desc: 'Light or dark?' },
-    { title: 'Pick your accent',            desc: 'Pick the accent that feels right.' },
-    { title: 'Set up your workspace',       desc: step3Desc },
-    { title: 'How should folders look?',    desc: 'Folders can stay compact as tiles, or always show inline as sections.' },
-    { title: "You're all set",              desc: 'Open Settings any time to tweak themes, layout, and the dock. Right-click anywhere for context actions.' },
+    { title: 'Set up your workspace',        desc: workspaceStepDesc },
+    { title: 'Choose your initial theme',    desc: 'Pick the starting theme for this workspace.' },
+    { title: 'Pick your initial accent',     desc: 'Choose an initial accent color for this workspace.' },
+    { title: 'How should folders look?',     desc: 'Folders can stay compact as tiles, or always show inline as sections.' },
+    { title: "You're all set",               desc: 'Open Settings any time to tweak themes, layout, and the dock. Right-click anywhere for context actions.' },
   ];
   const s = steps[step];
 
@@ -356,31 +356,6 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
           )}
 
           {step === 1 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 16 }}>
-              <ThemeChoiceCard id="system" label="System" hint="Follow OS preference."      active={settings.themeMode === 'system'} onSelect={(id) => onPatch({ themeMode: id })} preview="system" />
-              <ThemeChoiceCard id="light"  label="Light"  hint="Bright canvas, dark text."  active={settings.themeMode === 'light'}  onSelect={(id) => onPatch({ themeMode: id })} preview="light" />
-              <ThemeChoiceCard id="dark"   label="Dark"   hint="Dim canvas, light text."    active={settings.themeMode === 'dark'}   onSelect={(id) => onPatch({ themeMode: id })} preview="dark" />
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="ff-accents" style={{ margin: '24px auto', maxWidth: 420 }}>
-              {ACCENT_PRESETS.map(a => (
-                <button
-                  key={a.id}
-                  className="ff-accentchip"
-                  data-active={(activeWorkspace?.accentColor ?? '').toUpperCase() === a.value.toUpperCase()}
-                  onClick={() => onPatchWorkspace({ accentColor: a.value })}
-                  style={{ background: a.value, color: a.value }}
-                  aria-label={a.label}
-                >
-                  <span className="ff-accentchip__label">{a.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {step === 3 && (
             <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
               <WorkspaceTabPreview folders={previewFolders} />
               <p style={{ fontSize: 12, color: 'var(--fg-3)', textAlign: 'center', margin: '0 0 4px' }}>
@@ -443,6 +418,31 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
                   />
                 </div>
               )}
+            </div>
+          )}
+
+          {step === 2 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 16 }}>
+              <ThemeChoiceCard id="system" label="System" hint="Follow OS preference."      active={settings.themeMode === 'system'} onSelect={(id) => onPatch({ themeMode: id })} preview="system" />
+              <ThemeChoiceCard id="light"  label="Light"  hint="Bright canvas, dark text."  active={settings.themeMode === 'light'}  onSelect={(id) => onPatch({ themeMode: id })} preview="light" />
+              <ThemeChoiceCard id="dark"   label="Dark"   hint="Dim canvas, light text."    active={settings.themeMode === 'dark'}   onSelect={(id) => onPatch({ themeMode: id })} preview="dark" />
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="ff-accents" style={{ margin: '24px auto', maxWidth: 420 }}>
+              {ACCENT_PRESETS.map(a => (
+                <button
+                  key={a.id}
+                  className="ff-accentchip"
+                  data-active={(activeWorkspace?.accentColor ?? '').toUpperCase() === a.value.toUpperCase()}
+                  onClick={() => onPatchWorkspace({ accentColor: a.value })}
+                  style={{ background: a.value, color: a.value }}
+                  aria-label={a.label}
+                >
+                  <span className="ff-accentchip__label">{a.label}</span>
+                </button>
+              ))}
             </div>
           )}
 

@@ -50,6 +50,8 @@ interface AppSettingsDrawerProps {
 export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation', onPatchGlobal, onAfterImport, onClose }: AppSettingsDrawerProps) {
   const [section, setSection] = useState<AppSectionId>(initialSection);
 
+  useEffect(() => { setSection(initialSection); }, [initialSection]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -107,6 +109,8 @@ interface WorkspaceSettingsDrawerProps {
 
 export function WorkspaceSettingsDrawer({ settings, activeWorkspace, workspaceWallpaper, initialSection = 'appearance', onPatchGlobal, onPatchWorkspace, onSetWorkspaceWallpaper, onClose }: WorkspaceSettingsDrawerProps) {
   const [section, setSection] = useState<WorkspaceSectionId>(initialSection);
+
+  useEffect(() => { setSection(initialSection); }, [initialSection]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };

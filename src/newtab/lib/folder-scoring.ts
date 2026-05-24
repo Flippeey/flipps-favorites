@@ -46,10 +46,20 @@ const MAX_PRESELECTIONS = 3;
 const SUGGEST_SCORE_THRESHOLD = 35;
 const RECENT_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 
+// Browser-managed container folders that should never be recommended as workspaces.
+// Chrome: 1=Bookmarks bar, 2=Other bookmarks, 3=Mobile bookmarks
+// Firefox: toolbar_____, menu________, unfiled_____, mobile______
+const SYSTEM_FOLDER_IDS = new Set([
+  '1', '2', '3',
+  'toolbar_____', 'menu________', 'unfiled_____', 'mobile______',
+]);
+
 function collectCandidates(tree: BookmarkNode[]): { folder: BookmarkNode; depth: number }[] {
   const result: { folder: BookmarkNode; depth: number }[] = [];
   for (const root of topLevelFolders(tree)) {
-    result.push({ folder: root, depth: 0 });
+    if (!SYSTEM_FOLDER_IDS.has(root.id)) {
+      result.push({ folder: root, depth: 0 });
+    }
     if (root.children) {
       for (const child of root.children) {
         if (Array.isArray(child.children)) {
