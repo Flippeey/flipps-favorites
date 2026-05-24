@@ -147,6 +147,8 @@ async function doWriteSettings(patch: Partial<AppSettings>): Promise<AppSettings
 function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
   return {
     activeWorkspaceId: typeof settings.activeWorkspaceId === 'string' ? settings.activeWorkspaceId : defaultSettings.activeWorkspaceId,
+    workspaceOrder: Array.isArray(settings.workspaceOrder) && settings.workspaceOrder.every(id => typeof id === 'string')
+      ? settings.workspaceOrder : defaultSettings.workspaceOrder,
     themeMode: settings.themeMode === 'light' || settings.themeMode === 'dark' || settings.themeMode === 'system'
       ? settings.themeMode : defaultSettings.themeMode,
     rememberLastFolder: typeof settings.rememberLastFolder === 'boolean' ? settings.rememberLastFolder : defaultSettings.rememberLastFolder,
