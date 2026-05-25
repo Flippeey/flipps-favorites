@@ -30,6 +30,18 @@ function subscribeFaviconCache(url: string, listener: () => void): () => void {
   };
 }
 
+export function isFaviconCached(url: string): boolean {
+  return iconCache.has(url);
+}
+
+export async function prefetchFavicon(url: string, title?: string): Promise<void> {
+  try {
+    await fetchIcon(url, title);
+  } catch {
+    // ignore — prefetch is best-effort
+  }
+}
+
 function escapeSvgText(value: string): string {
   return value
     .replaceAll('&', '&amp;')

@@ -24,6 +24,7 @@ import { extensionApi } from '../shared/browser';
 import { IS_MAC } from './lib/platform';
 import { getBookmarkTree, getBookmarkUsage, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark, createWorkspace, patchWorkspace, deleteWorkspace } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
+import { prefetchAllIcons } from './lib/icon-prefetch';
 import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper, writeWorkspaceWallpaper } from '../shared/storage';
 import { MAX_WORKSPACES } from '../shared/constants';
@@ -148,6 +149,10 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     getBookmarkUsage().then(u => { if (!cancelled) setUsage(u); }).catch(() => { /* ignore */ });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    prefetchAllIcons(tree);
+  }, [tree]);
 
   const handlePatch = useCallback(async (patch: Partial<AppSettings>) => {
     setSettings(prev => ({ ...prev, ...patch }));

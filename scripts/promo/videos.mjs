@@ -534,19 +534,26 @@ export async function runVideos(filter) {
 
   console.log(`▶ Promo videos (${keys.join(', ')})`);
 
-  const { rm } = await import('node:fs/promises');
+  const { rm, readdir, unlink } = await import('node:fs/promises');
 
   for (const key of keys) {
     const { context, profileDir } = await launchContext({ withVideo: true });
     const origin = await discoverOrigin(context);
-    // Chrome auto-opens a new tab on launch — close it before the video starts
-    // so it doesn't produce a spurious UUID-named recording.
-    for (const p of context.pages()) await p.close().catch(() => undefined);
+    // Track pages Chrome auto-opened on launch. We can't close them yet —
+    // closing all tabs terminates Chrome and breaks context.newPage(). Instead
+    // we close them after the video function has opened and finished its own
+    // page, then scrub the UUID recording files they leave behind.
+    const preExisting = [...context.pages()];
     try {
       await VIDEOS[key](context, origin);
     } finally {
+      for (const p of preExisting) await p.close().catch(() => undefined);
       await context.close().catch(() => undefined);
       await rm(profileDir, { recursive: true, force: true }).catch(() => undefined);
+      // Remove UUID-named .webm files left by the auto-opened tab recordings.
+      const uuidRe = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\.webm$/i;
+      const files = await readdir(VIDEO_DIR).catch(() => []);
+      await Promise.all(files.filter(f => uuidRe.test(f)).map(f => unlink(join(VIDEO_DIR, f)).catch(() => undefined)));
     }
   }
 
