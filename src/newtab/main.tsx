@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './styles/index.css';
 import { App } from './App';
 import { getBookmarkTree, getSettings, getWorkspaces } from './lib/messaging';
-import { migrateToWorkspaces, readOnboardingState } from '../shared/storage';
+import { readOnboardingState } from '../shared/storage';
 
 async function bootstrap() {
   const container = document.getElementById('app');
@@ -13,7 +13,6 @@ async function bootstrap() {
   let initialWorkspaces;
   let initialOnboardOpen = false;
   try {
-    await migrateToWorkspaces();
     const [settings, tree, onboardingState, workspaces] = await Promise.all([
       getSettings(),
       getBookmarkTree(),

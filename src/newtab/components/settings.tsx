@@ -107,7 +107,7 @@ interface WorkspaceSettingsDrawerProps {
   onClose: () => void;
 }
 
-export function WorkspaceSettingsDrawer({ settings, activeWorkspace, workspaceWallpaper, initialSection = 'appearance', onPatchGlobal, onPatchWorkspace, onSetWorkspaceWallpaper, onClose }: WorkspaceSettingsDrawerProps) {
+export function WorkspaceSettingsDrawer({ settings, activeWorkspace, workspaceWallpaper, initialSection = 'appearance', onPatchWorkspace, onSetWorkspaceWallpaper, onClose }: WorkspaceSettingsDrawerProps) {
   const [section, setSection] = useState<WorkspaceSectionId>(initialSection);
 
   useEffect(() => { setSection(initialSection); }, [initialSection]);
@@ -139,7 +139,7 @@ export function WorkspaceSettingsDrawer({ settings, activeWorkspace, workspaceWa
             </nav>
           </div>
           <div className="ff-drawer__content no-scrollbar">
-            {section === 'appearance' && <AppearanceSection workspace={activeWorkspace} workspaceWallpaper={workspaceWallpaper} onPatch={onPatchWorkspace} onSetWallpaper={onSetWorkspaceWallpaper} settings={settings} onPatchGlobal={onPatchGlobal} />}
+            {section === 'appearance' && <AppearanceSection workspace={activeWorkspace} workspaceWallpaper={workspaceWallpaper} onPatch={onPatchWorkspace} onSetWallpaper={onSetWorkspaceWallpaper} settings={settings} />}
             {section === 'layout'     && <LayoutSection workspace={activeWorkspace} onPatch={onPatchWorkspace} />}
           </div>
         </div>

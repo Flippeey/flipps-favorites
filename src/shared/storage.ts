@@ -106,6 +106,7 @@ export const defaultSettings: AppSettings = {
 };
 
 export const defaultWorkspaceSettings: Omit<WorkspaceRecord, 'id' | 'name' | 'rootFolderId'> = {
+  themeMode: 'system',
   accentColor: '#3F72DC',
   backgroundMode: 'gradient',
   solidBackgroundColor: '',
@@ -359,79 +360,4 @@ function normalizeNullableTimestamp(value: unknown, fallback: number): number | 
   }
 
   return normalizeNonNegativeTimestamp(value, fallback);
-}
-
-export async function migrateToWorkspaces(): Promise<{ workspaceId: string } | null> {
-  // Already migrated if workspacesStore has records
-  const existing = await workspacesStore.readAll();
-  if (Object.keys(existing).length > 0) return null;
-
-  // Read raw settings from storage to get old per-workspace fields before they're stripped
-  const syncArea = extensionApi.storage?.sync;
-  const localArea = extensionApi.storage?.local;
-  if (!syncArea?.get || !localArea?.get) return null;
-
-  const [syncRaw, localRaw] = await Promise.all([
-    syncArea.get('app-settings'),
-    localArea.get(['app-settings', 'app-wallpaper']),
-  ]) as [Record<string, unknown>, Record<string, unknown>];
-
-  const raw = (syncRaw['app-settings'] ?? localRaw['app-settings'] ?? {}) as Record<string, unknown>;
-  const wallpaper = typeof localRaw['app-wallpaper'] === 'string' ? localRaw['app-wallpaper'] as string : '';
-
-  const id = crypto.randomUUID();
-
-  const record: WorkspaceRecord = {
-    id,
-    name: 'My workspace',
-    rootFolderId: typeof raw['rootFolderId'] === 'string' ? raw['rootFolderId'] as string : '',
-    accentColor: /^#[0-9a-fA-F]{6}$/.test(String(raw['accentColor'] ?? ''))
-      ? String(raw['accentColor']).toUpperCase()
-      : defaultWorkspaceSettings.accentColor,
-    backgroundMode: (['solid', 'gradient', 'wallpaper'] as const).includes(raw['backgroundMode'] as WorkspaceRecord['backgroundMode'])
-      ? raw['backgroundMode'] as WorkspaceRecord['backgroundMode']
-      : defaultWorkspaceSettings.backgroundMode,
-    solidBackgroundColor: typeof raw['solidBackgroundColor'] === 'string' ? raw['solidBackgroundColor'] as string : defaultWorkspaceSettings.solidBackgroundColor,
-    gradientStyle: (['top', 'top-bottom', 'bottom', 'aurora', 'mesh', 'vignette'] as const).includes(raw['gradientStyle'] as WorkspaceRecord['gradientStyle'])
-      ? raw['gradientStyle'] as WorkspaceRecord['gradientStyle']
-      : defaultWorkspaceSettings.gradientStyle,
-    gradientColorSource: raw['gradientColorSource'] === 'accent' || raw['gradientColorSource'] === 'custom'
-      ? raw['gradientColorSource'] as WorkspaceRecord['gradientColorSource']
-      : defaultWorkspaceSettings.gradientColorSource,
-    gradientCustomColor: /^#[0-9a-fA-F]{6}$/.test(String(raw['gradientCustomColor'] ?? ''))
-      ? String(raw['gradientCustomColor']).toUpperCase()
-      : defaultWorkspaceSettings.gradientCustomColor,
-    gradientIntensity: typeof raw['gradientIntensity'] === 'number' && Number.isFinite(raw['gradientIntensity'] as number) ? raw['gradientIntensity'] as number : defaultWorkspaceSettings.gradientIntensity,
-    backgroundOpacity: typeof raw['backgroundOpacity'] === 'number' && Number.isFinite(raw['backgroundOpacity'] as number) ? raw['backgroundOpacity'] as number : defaultWorkspaceSettings.backgroundOpacity,
-    backgroundFitMode: (['cover', 'contain', 'fill'] as const).includes(raw['backgroundFitMode'] as WorkspaceRecord['backgroundFitMode'])
-      ? raw['backgroundFitMode'] as WorkspaceRecord['backgroundFitMode']
-      : defaultWorkspaceSettings.backgroundFitMode,
-    backgroundPositionMode: (['center', 'top', 'bottom'] as const).includes(raw['backgroundPositionMode'] as WorkspaceRecord['backgroundPositionMode'])
-      ? raw['backgroundPositionMode'] as WorkspaceRecord['backgroundPositionMode']
-      : defaultWorkspaceSettings.backgroundPositionMode,
-    layoutPreset: (['balanced', 'compact', 'spacious', 'presentation', 'custom'] as const).includes(raw['layoutPreset'] as WorkspaceRecord['layoutPreset'])
-      ? raw['layoutPreset'] as WorkspaceRecord['layoutPreset']
-      : defaultWorkspaceSettings.layoutPreset,
-    favoritesColumnGap: typeof raw['favoritesColumnGap'] === 'number' && Number.isFinite(raw['favoritesColumnGap'] as number) ? raw['favoritesColumnGap'] as number : defaultWorkspaceSettings.favoritesColumnGap,
-    favoritesRowGap: typeof raw['favoritesRowGap'] === 'number' && Number.isFinite(raw['favoritesRowGap'] as number) ? raw['favoritesRowGap'] as number : defaultWorkspaceSettings.favoritesRowGap,
-    bookmarkTileWidth: typeof raw['bookmarkTileWidth'] === 'number' && Number.isFinite(raw['bookmarkTileWidth'] as number) ? raw['bookmarkTileWidth'] as number : defaultWorkspaceSettings.bookmarkTileWidth,
-    bookmarkIconSize: typeof raw['bookmarkIconSize'] === 'number' && Number.isFinite(raw['bookmarkIconSize'] as number) ? raw['bookmarkIconSize'] as number : defaultWorkspaceSettings.bookmarkIconSize,
-    tileShape: (['squircle', 'rounded', 'circle'] as const).includes(raw['tileShape'] as WorkspaceRecord['tileShape'])
-      ? raw['tileShape'] as WorkspaceRecord['tileShape']
-      : defaultWorkspaceSettings.tileShape,
-    showTileLabels: typeof raw['showTileLabels'] === 'boolean' ? raw['showTileLabels'] as boolean : defaultWorkspaceSettings.showTileLabels,
-  };
-
-  try {
-    if (wallpaper) {
-      await writeWorkspaceWallpaper(id, wallpaper);
-    }
-    await writeSettings({ activeWorkspaceId: id });
-    await writeWorkspace(record); // write last — this is the idempotency sentinel
-  } catch (error) {
-    console.warn('Failed to migrate settings to workspaces.', error);
-    return null;
-  }
-
-  return { workspaceId: id };
 }

@@ -41,6 +41,7 @@ export interface WorkspaceRecord {
   name: string;
   rootFolderId: string;
   // Visual identity
+  themeMode: ThemeMode;
   accentColor: string;
   backgroundMode: BackgroundMode;
   solidBackgroundColor: string;

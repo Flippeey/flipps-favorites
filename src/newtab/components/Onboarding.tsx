@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { MAX_WORKSPACES } from '../../shared/constants';
 import type { AppSettings, BookmarkNode, FolderMode, ThemeMode, WorkspaceRecord } from '../../shared/messages';
 import { formatFolderStats, scanFolders, type ScoredFolder } from '../lib/folder-scoring';
 import { altShortcut, IS_MAC, modShortcut } from '../lib/platform';
-import { topLevelFolders } from '../lib/tree';
+import { findFolder, topLevelFolders } from '../lib/tree';
 import { Ico } from './Ico';
 import { ACCENT_PRESETS, FolderPicker, ThemeCardPreview } from './settings';
 
@@ -12,7 +12,7 @@ interface OnboardingProps {
   activeWorkspace: WorkspaceRecord | null;
   tree: BookmarkNode[];
   onPatch: (patch: Partial<AppSettings>) => void;
-  onPatchWorkspace: (patch: Partial<WorkspaceRecord>) => void;
+  onPatchWorkspace: (patch: Partial<WorkspaceRecord>) => Promise<void>;
   onCreateWorkspace: (rootFolderId: string, name: string) => Promise<void>;
   onFinish: () => void;
 }
@@ -253,17 +253,10 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
   const [selectedWorkspaceFolderIds, setSelectedWorkspaceFolderIds] = useState<string[]>(
     scanResult.preSelected.length >= 2 ? scanResult.preSelected.map(f => f.id) : [],
   );
+  const [singleRootFolderId, setSingleRootFolderId] = useState<string>(
+    activeWorkspace?.rootFolderId ?? scanResult.preSelected[0]?.id ?? '',
+  );
   const [finishing, setFinishing] = useState(false);
-
-  // Pre-fill root folder for single-mode when exactly 1 folder pre-selects.
-  const prefilledSingleRef = useRef(false);
-  useEffect(() => {
-    if (prefilledSingleRef.current) return;
-    if (scanResult.preSelected.length === 1 && activeWorkspace) {
-      prefilledSingleRef.current = true;
-      onPatchWorkspace({ rootFolderId: scanResult.preSelected[0].id });
-    }
-  }, [scanResult, activeWorkspace, onPatchWorkspace]);
 
   const hasRecommendations = scanResult.preSelected.length > 0 || scanResult.suggested.length > 0;
   const workspaceStepDesc = hasRecommendations
@@ -298,10 +291,15 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
     if (finishing) return;
     setFinishing(true);
     try {
-      if (workspaceMode === 'multiple' && selectedWorkspaceFolderIds.length > 0) {
-        const folders = topLevelFolders(tree);
+      if (workspaceMode === 'single') {
+        if (activeWorkspace) {
+          await onPatchWorkspace({ rootFolderId: singleRootFolderId });
+        } else if (singleRootFolderId) {
+          await onCreateWorkspace(singleRootFolderId, 'My workspace');
+        }
+      } else if (workspaceMode === 'multiple' && selectedWorkspaceFolderIds.length > 0) {
         for (const id of selectedWorkspaceFolderIds) {
-          const folder = folders.find(f => f.id === id);
+          const folder = findFolder(tree, id);
           if (folder) {
             await onCreateWorkspace(id, folder.title);
           }

@@ -140,8 +140,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   ]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = resolveThemeAttr(settings.themeMode);
-  }, [settings.themeMode]);
+    document.documentElement.dataset.theme = resolveThemeAttr(activeWorkspace?.themeMode ?? settings.themeMode);
+  }, [activeWorkspace?.themeMode, settings.themeMode]);
 
   useEffect(() => {
     let cancelled = false;

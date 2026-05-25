@@ -116,11 +116,11 @@ interface AppearanceSectionProps {
   onPatch: (patch: Partial<WorkspaceRecord>) => void;
   onSetWallpaper: (dataUrl: string) => void;
   settings: AppSettings;
-  onPatchGlobal: (patch: Partial<AppSettings>) => void;
 }
 
-export function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSetWallpaper, settings, onPatchGlobal }: AppearanceSectionProps) {
+export function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSetWallpaper, settings }: AppearanceSectionProps) {
   const ws = workspace ?? FALLBACK_WORKSPACE;
+  const themeMode: ThemeMode = ws.themeMode ?? settings.themeMode;
   return (
     <>
       <div className="ff-set-section">
@@ -133,17 +133,17 @@ export function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSe
               <div className="ff-row__hint">The cards below reflect the active mode.</div>
             </div>
             <Toggle
-              on={settings.themeMode === 'system'}
-              onChange={(v) => onPatchGlobal({ themeMode: (v ? 'system' : 'dark') as ThemeMode })}
+              on={themeMode === 'system'}
+              onChange={(v) => onPatch({ themeMode: (v ? 'system' : 'dark') as ThemeMode })}
             />
           </div>
         </div>
         <div className="ff-themegrid">
-          <button type="button" className="ff-themecard ff-themecard--light" data-active={settings.themeMode === 'light'} onClick={() => onPatchGlobal({ themeMode: 'light' })}>
+          <button type="button" className="ff-themecard ff-themecard--light" data-active={themeMode === 'light'} onClick={() => onPatch({ themeMode: 'light' })}>
             <ThemeCardPreview light />
             <div className="ff-themecard__label">Light</div>
           </button>
-          <button type="button" className="ff-themecard ff-themecard--dark" data-active={settings.themeMode === 'dark'} onClick={() => onPatchGlobal({ themeMode: 'dark' })}>
+          <button type="button" className="ff-themecard ff-themecard--dark" data-active={themeMode === 'dark'} onClick={() => onPatch({ themeMode: 'dark' })}>
             <ThemeCardPreview />
             <div className="ff-themecard__label">Dark</div>
           </button>
