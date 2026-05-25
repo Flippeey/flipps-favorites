@@ -129,6 +129,7 @@ export function FolderPicker({ tree, value, onChange, placeholder = 'Select fold
   return (
     <div ref={rootRef} className="ff-fpicker">
       <button
+        type="button"
         className="ff-pill"
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -149,7 +150,7 @@ export function FolderPicker({ tree, value, onChange, placeholder = 'Select fold
               className="ff-fpicker__option"
               data-active={f.id === value}
               style={{ paddingLeft: 10 + f.depth * 16 }}
-              onClick={() => { onChange(f.id); setOpen(false); }}
+              onMouseDown={(e) => { e.preventDefault(); onChange(f.id); setOpen(false); }}
             >
               <Ico name="folder" size={14} />
               <span>{f.title}</span>

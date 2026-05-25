@@ -24,13 +24,13 @@ import { defaultWorkspaceSettings } from '../../shared/storage';
 import { MOD_KEY } from '../lib/platform';
 import { useBlobUrl } from '../lib/useBlobUrl';
 import { Ico } from './Ico';
+import { FolderMultiPicker } from './FolderMultiPicker';
 import {
   ACCENT_PRESETS,
   BgColorPicker,
   CUSTOM_LAYOUT_PRESET,
   CustomLayoutPreview,
   DensityPreview,
-  FolderPicker,
   GRADIENT_PRESETS,
   LAYOUT_PRESETS,
   Segmented,
@@ -623,15 +623,13 @@ export function DockSection({ settings, tree, onPatch }: SectionProps & { tree: 
             }}
           />
         </div>
-        <div className="ff-row">
-          <div>
-            <div className="ff-row__label">Source folder</div>
-            <div className="ff-row__hint">Show items from this folder.</div>
-          </div>
-          <FolderPicker
+        <div style={{ padding: 'var(--s-3) 0' }}>
+          <div className="ff-row__label" style={{ marginBottom: 4 }}>Source folder</div>
+          <div className="ff-row__hint" style={{ marginBottom: 8 }}>Show items from this folder.</div>
+          <FolderMultiPicker
             tree={tree}
-            value={settings.dockFolderId}
-            onChange={(id) => onPatch({ dockFolderId: id })}
+            selectedIds={settings.dockFolderId ? [settings.dockFolderId] : []}
+            onToggle={(id) => onPatch({ dockFolderId: id })}
           />
         </div>
       </div>

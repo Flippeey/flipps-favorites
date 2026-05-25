@@ -1,5 +1,5 @@
 import type { BookmarkNode } from '../../shared/messages';
-import { isFaviconCached, prefetchFavicon } from '../components/Favicon';
+import { isFaviconCached, prefetchFavicon } from './favicon-cache';
 
 const CONCURRENCY = 4;
 const prefetchedUrls = new Set<string>();

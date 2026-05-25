@@ -18,7 +18,7 @@ import {
   isValidBookmarkUrl,
   normalizeUploadedImage,
 } from '../lib/icon-helpers';
-import { invalidateFaviconCache } from './Favicon';
+import { invalidateFaviconCache } from '../lib/favicon-cache';
 import { Ico } from './Ico';
 import { ModalDialog } from './ModalDialog';
 
