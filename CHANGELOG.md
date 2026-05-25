@@ -4,8 +4,6 @@ All notable changes to Flipp's Favorites are documented in this file.
 
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Per-release notes (with the exact wording used in store listings) live under [`releases/<version>/CHANGELOG.md`](./releases). This file is the consolidated history.
-
 ## [Unreleased]
 
 ## [2.2.0] — Polish & shortcuts
