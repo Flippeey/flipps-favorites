@@ -112,18 +112,19 @@
 }
 [data-theme="light"] .ff-nav .ff-iconbtn:hover,
 [data-theme="light"] .ff-nav .ff-pill:hover {
-  background: rgba(255, 255, 255, 0.96);
-  border-color: var(--accent-border);
+  background: color-mix(in oklab, var(--accent) 14%, rgba(255, 255, 255, 0.96));
+  border-color: color-mix(in oklab, var(--accent) 55%, transparent);
   color: var(--accent-600, var(--accent));
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 16%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent);
 }
 /* Higher-specificity override so the light+wallpaper combo can't fall back to
    fg-1 on hover (the base.css wallpaper rule used to beat ours on tied specificity). */
 [data-theme="light"] .ff-app[data-bg="wallpaper"] .ff-nav .ff-iconbtn:hover,
 [data-theme="light"] .ff-app[data-bg="wallpaper"] .ff-nav .ff-pill:hover {
+  background: color-mix(in oklab, var(--accent) 14%, rgba(255, 255, 255, 0.96));
   color: var(--accent-600, var(--accent));
-  border-color: var(--accent-border);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 16%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent);
 }
 
 .ff-sort { position: relative; }
