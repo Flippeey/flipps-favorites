@@ -8,7 +8,7 @@ if (!target || !outDir) {
   throw new Error('Usage: node scripts/write-manifest.mjs <chrome|firefox> <outDir>');
 }
 
-const extensionVersion = process.env.EXTENSION_VERSION ?? '2.1.0';
+const extensionVersion = process.env.EXTENSION_VERSION ?? '2.2.0';
 const firefoxExtensionId = process.env.FIREFOX_EXTENSION_ID ?? 'com.flipps-favorites@flippflix.com';
 const firefoxStrictMinVersion = process.env.FIREFOX_STRICT_MIN_VERSION ?? '140.0';
 const firefoxAndroidStrictMinVersion = process.env.FIREFOX_ANDROID_STRICT_MIN_VERSION ?? '142.0';

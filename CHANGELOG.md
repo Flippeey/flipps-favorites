@@ -8,6 +8,19 @@ Per-release notes (with the exact wording used in store listings) live under [`r
 
 ## [Unreleased]
 
+## [2.2.0] — Polish & shortcuts
+
+### Added
+- Context menu and keyboard shortcuts for folder and workspace management inside the folder overlay.
+
+### Changed
+- Refined onboarding steps and workspace settings handling during first-run setup.
+- Hover styles for icon buttons and navigation pills in the light theme.
+- Updated navigation button styling for a cleaner look.
+
+### Fixed
+- Bookmark URL normalization improvements (more reliable matching, fewer duplicates).
+
 ## [2.1.0] — Workspaces
 
 ### Added
