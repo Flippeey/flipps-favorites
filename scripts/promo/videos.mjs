@@ -45,16 +45,13 @@ async function recordWorkspaceSwitch(context, origin) {
   await page.setViewportSize(VIEWPORT);
   page.on('console', () => {});
 
-  await skipOnboarding(page);
-  await clearAllBookmarks(page);
-  const { context: _, page: _p, ...setup } = { workspaceIds: null };
-  void _; void _p;
-
   await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.ff-app', { timeout: 15_000 });
+  await skipOnboarding(page);
+  await clearAllBookmarks(page);
 
   const { workspaceIds } = await seedPromoWorkspaces(page);
-  await reloadNewtab(page, 2500);
+  await reloadNewtab(page, 5000);
 
   // Start on Work (dark, blue, top gradient)
   await patchSettings(page, { activeWorkspaceId: workspaceIds.Work });
@@ -91,14 +88,13 @@ async function recordAddEditBookmark(context, origin) {
   const page = await context.newPage();
   await page.setViewportSize(VIEWPORT);
 
+  await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.ff-app', { timeout: 15_000 });
   await skipOnboarding(page);
   await clearAllBookmarks(page);
 
-  await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.ff-app', { timeout: 15_000 });
-
   const { workspaceIds } = await seedPromoWorkspaces(page);
-  await reloadNewtab(page, 2000);
+  await reloadNewtab(page, 4500);
 
   // Use Personal workspace (more items = better context)
   await patchSettings(page, { activeWorkspaceId: workspaceIds.Personal });
@@ -237,7 +233,7 @@ async function recordOnboarding(context, origin) {
     });
   });
 
-  await reloadNewtab(page, 1500);
+  await reloadNewtab(page, 4000);
 
   // Wait for onboarding to appear
   await page.waitForSelector('.ff-onboard', { timeout: 8000 }).catch(() => undefined);
@@ -247,7 +243,7 @@ async function recordOnboarding(context, origin) {
 
   // Beat 2: click Next to accent step
   const next = () => page.locator('.ff-onboard .ff-btn:has-text("Next")').first();
-  await (await next().boundingBox()).then(async (box) => {
+  await next().boundingBox().then(async (box) => {
     if (box) {
       await moveToBox(page, box, 400);
       await next().click();
@@ -313,30 +309,28 @@ async function recordAccentTheme(context, origin) {
   const page = await context.newPage();
   await page.setViewportSize(VIEWPORT);
 
+  await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.ff-app', { timeout: 15_000 });
   await skipOnboarding(page);
   await clearAllBookmarks(page);
 
-  await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.ff-app', { timeout: 15_000 });
-
   const { workspaceIds } = await seedPromoWorkspaces(page);
-  await reloadNewtab(page, 2000);
+  await reloadNewtab(page, 4500);
 
-  // Open settings → Appearance
-  const settingsBtn = page.getByRole('button', { name: 'Settings', exact: true });
-  if (await settingsBtn.count() > 0) {
-    const box = await settingsBtn.boundingBox();
+  // Beat 1: open Workspace > Appearance drawer (NOT app settings)
+  const customizeBtn = page.locator('[aria-label="Customize workspace"]').first();
+  if (await customizeBtn.count() > 0) {
+    const box = await customizeBtn.boundingBox();
     await moveToBox(page, box, 500);
-    await settingsBtn.click();
+    await customizeBtn.click();
     await page.waitForSelector('.ff-drawer', { timeout: 3000 });
     await page.waitForTimeout(600);
   }
 
-  // Beat 2: cycle through accent chips
+  // Beat 2: cycle through accent chips — Blue(0)→Teal(1)→Green(2)→Orange(5)→Purple(9)
   const accentChips = page.locator('.ff-accentchip');
-  const count = await accentChips.count();
-  const indicesToCycle = [1, 2, 4, 5, 7]; // skip first (already active Blue), pick Teal, Green, Orange, Red, Purple
-  for (const idx of indicesToCycle.slice(0, Math.min(5, count - 1))) {
+  const indicesToCycle = [1, 2, 5, 9]; // already on Blue(0); Teal, Green, Orange, Purple
+  for (const idx of indicesToCycle) {
     const chip = accentChips.nth(idx);
     if (await chip.count() > 0) {
       const box = await chip.boundingBox();
@@ -355,8 +349,9 @@ async function recordAccentTheme(context, origin) {
     await page.waitForTimeout(1200);
   }
 
-  // Beat 4: cycle gradient styles
-  const gradientBtns = page.locator('.ff-themegrid .ff-themecard');
+  // Beat 4: cycle gradient styles — target only the style grid inside .ff-bg-row
+  // (distinct from the theme mode grid and background mode grid)
+  const gradientBtns = page.locator('.ff-bg-row .ff-themegrid .ff-themecard');
   const gradCount = await gradientBtns.count();
   if (gradCount > 0) {
     for (let i = 0; i < Math.min(4, gradCount); i++) {
@@ -396,14 +391,13 @@ async function recordSearch(context, origin) {
   const page = await context.newPage();
   await page.setViewportSize(VIEWPORT);
 
+  await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.ff-app', { timeout: 15_000 });
   await skipOnboarding(page);
   await clearAllBookmarks(page);
 
-  await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.ff-app', { timeout: 15_000 });
-
   const { workspaceIds } = await seedPromoWorkspaces(page);
-  await reloadNewtab(page, 2000);
+  await reloadNewtab(page, 4500);
 
   // Beat 1: focus search bar
   const searchInput = page.locator('.ff-search__input, .ff-search input').first();
@@ -438,14 +432,13 @@ async function recordDragReorder(context, origin) {
   const page = await context.newPage();
   await page.setViewportSize(VIEWPORT);
 
+  await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.ff-app', { timeout: 15_000 });
   await skipOnboarding(page);
   await clearAllBookmarks(page);
 
-  await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.ff-app', { timeout: 15_000 });
-
   const { workspaceIds } = await seedPromoWorkspaces(page);
-  await reloadNewtab(page, 2000);
+  await reloadNewtab(page, 4500);
 
   // Beat 1: drag a single tile to a new position
   const tiles = page.locator('.ff-tile[data-item-kind="bookmark"]');
@@ -501,6 +494,17 @@ async function recordDragReorder(context, origin) {
     await page.waitForTimeout(500);
     await page.mouse.up();
     await page.waitForTimeout(1500);
+
+    // Beat 3b: open the folder to reveal the moved items
+    const refreshedFolder = page.locator('.ff-tile[data-item-kind="folder"]').first();
+    if (await refreshedFolder.count() > 0) {
+      const fb = await refreshedFolder.boundingBox();
+      if (fb) {
+        await moveToBox(page, fb, 600);
+        await refreshedFolder.click();
+        await page.waitForTimeout(1500);
+      }
+    }
   }
 
   await saveVideo(page, '06-drag-reorder');
@@ -535,6 +539,9 @@ export async function runVideos(filter) {
   for (const key of keys) {
     const { context, profileDir } = await launchContext({ withVideo: true });
     const origin = await discoverOrigin(context);
+    // Chrome auto-opens a new tab on launch — close it before the video starts
+    // so it doesn't produce a spurious UUID-named recording.
+    for (const p of context.pages()) await p.close().catch(() => undefined);
     try {
       await VIDEOS[key](context, origin);
     } finally {

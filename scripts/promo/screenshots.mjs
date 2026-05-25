@@ -60,9 +60,15 @@ async function captureScene(page, name, workspaceId, setupFn) {
     for (const res of RESOLUTIONS) {
       await capture(page, theme, name, res);
     }
-    // Close any open UI (dialogs, drawers, overlays) between passes
+    // Close any open UI between passes.
+    // Onboarding modal doesn't close on Escape — click Skip if present.
+    const onboardSkip = page.locator('.ff-onboard button:has-text("Skip")').first();
+    if (await onboardSkip.count() > 0) {
+      await onboardSkip.click();
+      await page.waitForSelector('.ff-modal-scrim', { state: 'detached', timeout: 2000 }).catch(() => {});
+    }
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(300);
   }
 }
 
@@ -231,8 +237,8 @@ async function scene12_onboardingWorkspaces(page, workspaceIds) {
     if (await replayBtn.count() > 0) {
       await replayBtn.click();
       await p.waitForSelector('.ff-onboard', { timeout: 3000 });
-      // Navigate to workspace step (step 4)
-      for (let i = 0; i < 3; i++) {
+      // Navigate to workspace step (step index 1 — one Next click from welcome)
+      for (let i = 0; i < 1; i++) {
         const nextBtn = p.locator('.ff-onboard .ff-btn:has-text("Next")').first();
         if (await nextBtn.count() > 0) {
           await nextBtn.click();
