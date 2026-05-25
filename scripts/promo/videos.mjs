@@ -40,7 +40,7 @@ import {
 // ─── Video 1: Workspace switching ────────────────────────────────────────────
 
 async function recordWorkspaceSwitch(context, origin) {
-  console.log('\n── Video 01: workspace-switch (~12s)');
+  console.log('\n── Video 01: workspace-switch (~16s)');
   const page = await context.newPage();
   await page.setViewportSize(VIEWPORT);
   page.on('console', () => {});
@@ -57,21 +57,28 @@ async function recordWorkspaceSwitch(context, origin) {
   await patchSettings(page, { activeWorkspaceId: workspaceIds.Work });
   await page.waitForTimeout(2000);
 
-  // Beat 2: switch to Personal (dark, teal, aurora)
-  const personalTab = page.locator(`.ff-ws-tab[title="Personal"], .ff-ws-tab:has-text("Personal")`).first();
-  const personalBox = await personalTab.boundingBox();
-  await moveToBox(page, personalBox, 800);
-  await page.mouse.click(personalBox.x + personalBox.width / 2, personalBox.y + personalBox.height / 2);
+  // Beat 2: switch to AI (dark, purple, aurora gradient)
+  const aiTab = page.locator(`.ff-ws-tab[title="AI"], .ff-ws-tab:has-text("AI")`).first();
+  const aiBox = await aiTab.boundingBox();
+  await moveToBox(page, aiBox, 800);
+  await page.mouse.click(aiBox.x + aiBox.width / 2, aiBox.y + aiBox.height / 2);
   await page.waitForTimeout(2200);
 
-  // Beat 3: switch to Creative (light, orange, wallpaper)
-  const creativeTab = page.locator(`.ff-ws-tab[title="Creative"], .ff-ws-tab:has-text("Creative")`).first();
-  const creativeBox = await creativeTab.boundingBox();
-  await moveToBox(page, creativeBox, 600);
-  await page.mouse.click(creativeBox.x + creativeBox.width / 2, creativeBox.y + creativeBox.height / 2);
+  // Beat 3: switch to Design (light, orange, top gradient)
+  const designTab = page.locator(`.ff-ws-tab[title="Design"], .ff-ws-tab:has-text("Design")`).first();
+  const designBox = await designTab.boundingBox();
+  await moveToBox(page, designBox, 600);
+  await page.mouse.click(designBox.x + designBox.width / 2, designBox.y + designBox.height / 2);
+  await page.waitForTimeout(2200);
+
+  // Beat 4: switch to Gaming (dark, red, top gradient)
+  const gamingTab = page.locator(`.ff-ws-tab[title="Gaming"], .ff-ws-tab:has-text("Gaming")`).first();
+  const gamingBox = await gamingTab.boundingBox();
+  await moveToBox(page, gamingBox, 600);
+  await page.mouse.click(gamingBox.x + gamingBox.width / 2, gamingBox.y + gamingBox.height / 2);
   await page.waitForTimeout(3000);
 
-  // Beat 4: return to Work
+  // Beat 5: return to Work
   const workTab = page.locator(`.ff-ws-tab[title="Work"], .ff-ws-tab:has-text("Work")`).first();
   const workBox = await workTab.boundingBox();
   await moveToBox(page, workBox, 600);
