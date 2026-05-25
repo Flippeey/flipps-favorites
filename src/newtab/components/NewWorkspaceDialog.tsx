@@ -1,26 +1,49 @@
-import { useRef, useState } from 'react';
-import type { BookmarkNode } from '../../shared/messages';
-import { topLevelFolders } from '../lib/tree';
-import { FolderPicker } from './settings';
+import { useMemo, useRef, useState } from 'react';
+import type { BookmarkNode, WorkspaceRecord } from '../../shared/messages';
+import { scanFolders } from '../lib/folder-scoring';
+import { findFolder, topLevelFolders } from '../lib/tree';
 import { ModalDialog } from './ModalDialog';
+import { WorkspaceRecommendations } from './Onboarding';
 
 interface NewWorkspaceDialogProps {
   tree: BookmarkNode[];
+  workspaces: WorkspaceRecord[];
   onConfirm: (rootFolderId: string, name: string) => Promise<void>;
   onClose: () => void;
 }
 
-export function NewWorkspaceDialog({ tree, onConfirm, onClose }: NewWorkspaceDialogProps) {
-  const topLevel = topLevelFolders(tree);
-  const [selectedId, setSelectedId] = useState(topLevel[0]?.id ?? '');
-  const [name, setName] = useState(topLevel[0]?.title ?? '');
+export function NewWorkspaceDialog({ tree, workspaces, onConfirm, onClose }: NewWorkspaceDialogProps) {
+  const excludeIds = useMemo(
+    () => new Set(workspaces.map(w => w.rootFolderId)),
+    [workspaces],
+  );
+
+  const scanResult = useMemo(() => scanFolders(tree), [tree]);
+
+  const filteredPreSelected = useMemo(
+    () => scanResult.preSelected.filter(f => !excludeIds.has(f.id)),
+    [scanResult, excludeIds],
+  );
+  const filteredSuggested = useMemo(
+    () => scanResult.suggested.filter(f => !excludeIds.has(f.id)),
+    [scanResult, excludeIds],
+  );
+
+  const defaultId = useMemo(() => (
+    filteredPreSelected[0]?.id
+    ?? filteredSuggested[0]?.id
+    ?? topLevelFolders(tree).find(f => !excludeIds.has(f.id))?.id
+    ?? ''
+  ), [filteredPreSelected, filteredSuggested, tree, excludeIds]);
+
+  const [selectedId, setSelectedId] = useState(defaultId);
+  const [name, setName] = useState(() => findFolder(tree, defaultId)?.title ?? '');
   const nameEditedRef = useRef(false);
 
-  const handleFolderChange = (id: string) => {
+  const handleFolderSelect = (id: string) => {
     setSelectedId(id);
     if (!nameEditedRef.current) {
-      const folder = topLevel.find(f => f.id === id);
-      setName(folder?.title ?? '');
+      setName(findFolder(tree, id)?.title ?? '');
     }
   };
 
@@ -31,27 +54,41 @@ export function NewWorkspaceDialog({ tree, onConfirm, onClose }: NewWorkspaceDia
 
   const handleConfirm = async () => {
     if (!selectedId) return;
-    const folder = topLevel.find(f => f.id === selectedId);
+    const folder = findFolder(tree, selectedId);
     await onConfirm(selectedId, name.trim() || folder?.title || 'Workspace');
     onClose();
   };
 
   return (
-    <ModalDialog icon="layers" eyebrow="Workspaces" title="New workspace" onClose={onClose}>
-      <div className="ff-field" style={{ marginBottom: 16 }}>
-        <label className="ff-field__label">Root folder</label>
-        <FolderPicker tree={tree} value={selectedId} onChange={handleFolderChange} />
+    <ModalDialog
+      icon="layers"
+      eyebrow="Workspaces"
+      title="New workspace"
+      onClose={onClose}
+      bodyStyle={{ gridTemplateColumns: '1fr' }}
+    >
+      <div>
+        <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 12 }}>
+          Select a folder to use as the workspace root:
+        </div>
+        <WorkspaceRecommendations
+          tree={tree}
+          preSelected={filteredPreSelected}
+          suggested={filteredSuggested}
+          selectedIds={selectedId ? [selectedId] : []}
+          excludeIds={excludeIds}
+          onToggle={handleFolderSelect}
+        />
       </div>
-      <div className="ff-field" style={{ marginBottom: 24 }}>
+      <div className="ff-field" style={{ marginTop: 8 }}>
         <label className="ff-field__label">Name (optional)</label>
         <input
           className="ff-input"
           type="text"
           value={name}
-          placeholder={topLevel.find(f => f.id === selectedId)?.title ?? 'Workspace'}
+          placeholder={findFolder(tree, selectedId)?.title ?? 'Workspace'}
           onChange={handleNameChange}
           onKeyDown={e => { if (e.key === 'Enter') handleConfirm(); }}
-          autoFocus
         />
       </div>
       <div className="ff-dialog__actions">

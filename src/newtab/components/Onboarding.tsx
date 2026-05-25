@@ -21,9 +21,10 @@ interface FolderMultiPickerProps {
   tree: BookmarkNode[];
   selectedIds: string[];
   onToggle: (id: string) => void;
+  excludeIds?: Set<string>;
 }
 
-function twoLevelFolders(tree: BookmarkNode[]): { id: string; title: string; depth: number }[] {
+export function twoLevelFolders(tree: BookmarkNode[]): { id: string; title: string; depth: number }[] {
   const result: { id: string; title: string; depth: number }[] = [];
   for (const f of topLevelFolders(tree)) {
     result.push({ id: f.id, title: f.title, depth: 0 });
@@ -38,8 +39,8 @@ function twoLevelFolders(tree: BookmarkNode[]): { id: string; title: string; dep
   return result;
 }
 
-function FolderMultiPicker({ tree, selectedIds, onToggle }: FolderMultiPickerProps) {
-  const folders = twoLevelFolders(tree);
+function FolderMultiPicker({ tree, selectedIds, onToggle, excludeIds }: FolderMultiPickerProps) {
+  const folders = twoLevelFolders(tree).filter(f => !excludeIds?.has(f.id));
   return (
     <div style={{ display: 'grid', gap: 4, maxHeight: 240, overflowY: 'auto', paddingRight: 2 }}>
       {folders.map(f => {
@@ -171,22 +172,23 @@ function RecommendedFolderCard({
   );
 }
 
-interface WorkspaceRecommendationsProps {
+export interface WorkspaceRecommendationsProps {
   tree: BookmarkNode[];
   preSelected: ScoredFolder[];
   suggested: ScoredFolder[];
   selectedIds: string[];
   onToggle: (id: string) => void;
+  excludeIds?: Set<string>;
 }
 
-function WorkspaceRecommendations({
-  tree, preSelected, suggested, selectedIds, onToggle,
+export function WorkspaceRecommendations({
+  tree, preSelected, suggested, selectedIds, onToggle, excludeIds,
 }: WorkspaceRecommendationsProps) {
   const hasRecommendations = preSelected.length > 0 || suggested.length > 0;
   const [showManual, setShowManual] = useState(!hasRecommendations);
 
   if (!hasRecommendations) {
-    return <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} />;
+    return <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} excludeIds={excludeIds} />;
   }
 
   return (
@@ -237,7 +239,7 @@ function WorkspaceRecommendations({
       </button>
 
       {showManual && (
-        <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} />
+        <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} excludeIds={excludeIds} />
       )}
     </div>
   );

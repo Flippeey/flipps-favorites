@@ -966,6 +966,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       {newWorkspaceOpen && (
         <NewWorkspaceDialog
           tree={tree}
+          workspaces={workspaces}
           onConfirm={handleCreateWorkspace}
           onClose={() => setNewWorkspaceOpen(false)}
         />
