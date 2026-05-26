@@ -29,6 +29,9 @@ function clearDropAttrs({ includeSource }: { includeSource: boolean }): void {
   document.querySelectorAll<HTMLElement>('[data-item-id][data-drop-position]').forEach(el => {
     delete el.dataset.dropPosition;
   });
+  document.querySelectorAll<HTMLElement>('section[data-drop-position]').forEach(el => {
+    delete el.dataset.dropPosition;
+  });
   if (includeSource) {
     document.querySelectorAll<HTMLElement>('[data-item-id][data-drag-source]').forEach(el => {
       delete el.dataset.dragSource;
@@ -72,6 +75,7 @@ export function useDrag({
     startX: number;
     startY: number;
     dragIds: string[];
+    dragKind: string;
     scopeId: string;
     dropTarget: DropTarget | null;
     dropOnBackdrop: boolean;
@@ -118,6 +122,7 @@ export function useDrag({
         startX: event.clientX,
         startY: event.clientY,
         dragIds,
+        dragKind: tileEl.dataset.itemKind ?? '',
         scopeId,
         dropTarget: null,
         dropOnBackdrop: false,
@@ -202,12 +207,64 @@ export function useDrag({
         }
       }
 
-      let hoverTile = elementUnder?.closest<HTMLElement>('[data-item-id]') ?? null;
+      if (drag.dragKind === 'section') {
+        const sectionEls = Array.from(
+          canvas.querySelectorAll<HTMLElement>('section[data-scope-folder-id]')
+        );
+        let targetSectionId: string | null = null;
+        let placeAfter = false;
+
+        for (const sec of sectionEls) {
+          const id = sec.dataset.scopeFolderId ?? '';
+          if (dragSet.has(id)) continue;
+          const r = sec.getBoundingClientRect();
+          if (event.clientY >= r.top && event.clientY <= r.bottom) {
+            targetSectionId = id;
+            placeAfter = event.clientY > r.top + r.height / 2;
+            break;
+          }
+        }
+
+        if (!targetSectionId) {
+          let best: { id: string; dy: number; placeAfter: boolean } | null = null;
+          for (const sec of sectionEls) {
+            const id = sec.dataset.scopeFolderId ?? '';
+            if (dragSet.has(id)) continue;
+            const r = sec.getBoundingClientRect();
+            const dy = Math.abs(event.clientY - (r.top + r.height / 2));
+            if (!best || dy < best.dy) best = { id, dy, placeAfter: event.clientY > r.top + r.height / 2 };
+          }
+          if (best) { targetSectionId = best.id; placeAfter = best.placeAfter; }
+        }
+
+        if (!targetSectionId) {
+          const ordered = getOrderedChildrenRef.current(rootFolderIdRef.current).filter(c => !dragSet.has(c.id));
+          drag.dropTarget = { kind: 'reorder', parentId: rootFolderIdRef.current, index: ordered.length };
+          return;
+        }
+
+        const ordered = getOrderedChildrenRef.current(rootFolderIdRef.current).filter(c => !dragSet.has(c.id));
+        const idx = ordered.findIndex(c => c.id === targetSectionId);
+        const dropIndex = idx === -1 ? ordered.length : idx + (placeAfter ? 1 : 0);
+
+        if (drag.dragIds.length === 1) {
+          const unfiltered = getOrderedChildrenRef.current(rootFolderIdRef.current);
+          const origIdx = unfiltered.findIndex(c => c.id === drag.dragIds[0]);
+          if (origIdx !== -1 && dropIndex === origIdx) { drag.dropTarget = null; return; }
+        }
+
+        const targetSec = canvas.querySelector<HTMLElement>(`section[data-scope-folder-id="${targetSectionId}"]`);
+        if (targetSec) targetSec.dataset.dropPosition = placeAfter ? 'after' : 'before';
+        drag.dropTarget = { kind: 'reorder', parentId: rootFolderIdRef.current, index: dropIndex };
+        return;
+      }
+
+      let hoverTile = elementUnder?.closest<HTMLElement>('[data-item-id]:not([data-item-kind="section"])') ?? null;
       let directHit = Boolean(hoverTile);
       if (!hoverTile) {
         // Expand hit zone: pick nearest tile in the same row band so gaps between
         // tiles still register as a "before/after neighbor" drop target.
-        const tiles = canvas.querySelectorAll<HTMLElement>('[data-item-id]');
+        const tiles = canvas.querySelectorAll<HTMLElement>('[data-item-id]:not([data-item-kind="section"])');
         let best: { tile: HTMLElement; dx: number } | null = null;
         for (const t of tiles) {
           const id = t.dataset.itemId ?? '';

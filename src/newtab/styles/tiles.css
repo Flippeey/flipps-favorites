@@ -193,6 +193,18 @@
 }
 .ff-section__menu:hover { background: var(--ink-3); color: var(--accent); }
 .ff-section__menu:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ff-section__drag-handle {
+  width: 24px; height: 24px;
+  display: grid; place-items: center;
+  cursor: grab;
+  color: var(--fg-4);
+  border-radius: var(--r-sm);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+  flex-shrink: 0;
+}
+.ff-section__header:hover .ff-section__drag-handle { opacity: 1; }
+.ff-section__drag-handle:active { cursor: grabbing; }
 .ff-section__rule {
   height: 1px;
   background: linear-gradient(90deg,

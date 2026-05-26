@@ -47,6 +47,24 @@
   transition: background var(--dur-fast) var(--ease-out);
 }
 
+/* Section drag source — dim entire section */
+section:has(.ff-section__drag-handle[data-drag-source="true"]) { opacity: 0.35; }
+
+/* Section drop indicator — horizontal accent line */
+section { position: relative; }
+section[data-drop-position="before"]::before,
+section[data-drop-position="after"]::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  box-shadow: 0 0 8px color-mix(in oklab, var(--accent) 60%, transparent);
+}
+section[data-drop-position="before"]::before { top: -5px; }
+section[data-drop-position="after"]::after  { bottom: -5px; }
+
 /* Floating preview chip that follows the cursor while dragging */
 .ff-drag-preview {
   position: fixed;

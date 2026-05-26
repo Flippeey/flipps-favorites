@@ -23,6 +23,10 @@ interface TilesViewProps extends Omit<TreeViewProps, 'onSectionMenu'> {
   rootBookmarks?: BookmarkNode[];
 }
 
+interface SectionsViewProps extends TreeViewProps {
+  dragEnabled?: boolean;
+}
+
 function isSelectedIn(scope: string, containerScope: string, ids: ReadonlySet<string> | undefined, itemId: string): boolean {
   if (!ids || ids.size === 0) return false;
   if (scope !== containerScope) return false;
@@ -58,12 +62,12 @@ export function TilesView({ tree, rootBookmarks, shape, scopeFolderId, onPickFol
   );
 }
 
-export function SectionsView({ tree, shape, scopeFolderId, onPickFolder, onPickItem, onSectionMenu, onContextMenu, selectedIds, selectionScopeFolderId, focusedTileId }: TreeViewProps) {
+export function SectionsView({ tree, shape, scopeFolderId, dragEnabled, onPickFolder, onPickItem, onSectionMenu, onContextMenu, selectedIds, selectionScopeFolderId, focusedTileId }: SectionsViewProps) {
   return (
     <div className="ff-sections" data-scope-folder-id={scopeFolderId}>
       {tree.map(folder => (
         <section key={folder.id} data-scope-folder-id={folder.id}>
-          <SectionHeader folder={folder} onMenu={onSectionMenu} />
+          <SectionHeader folder={folder} onMenu={onSectionMenu} rootFolderId={scopeFolderId} dragEnabled={dragEnabled} />
           <div className="ff-section__rule" aria-hidden="true" />
           <div className="ff-grid">
             {(folder.children ?? []).map(item => (

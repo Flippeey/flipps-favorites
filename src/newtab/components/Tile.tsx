@@ -114,13 +114,26 @@ export function TileFor({
 
 interface SectionHeaderProps {
   folder: BookmarkNode;
+  rootFolderId?: string;
+  dragEnabled?: boolean;
   onMenu?: (folder: BookmarkNode, event: MouseEvent) => void;
 }
 
-export function SectionHeader({ folder, onMenu }: SectionHeaderProps) {
+export function SectionHeader({ folder, rootFolderId, dragEnabled, onMenu }: SectionHeaderProps) {
   const count = folder.children?.length ?? 0;
   return (
     <header className="ff-section__header">
+      {dragEnabled && rootFolderId && (
+        <div
+          className="ff-section__drag-handle"
+          data-item-id={folder.id}
+          data-item-kind="section"
+          data-scope-folder-id={rootFolderId}
+          aria-label={`Drag to reorder ${folder.title}`}
+        >
+          <Ico name="gripVertical" size={14} />
+        </div>
+      )}
       <div className="ff-section__icon-folder">
         <Ico name="folder" size={16} />
       </div>

@@ -854,6 +854,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             tree={sortedRootChildren.filter(isFolder)}
             scopeFolderId={rootFolder?.id ?? ''}
             shape={tileShape}
+            dragEnabled={dragEnabled}
             onPickFolder={handleTileClick}
             onPickItem={handleTileClick}
             onSectionMenu={(folder, event) => {
