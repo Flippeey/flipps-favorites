@@ -64,6 +64,7 @@ export function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) =
 interface SegmentedOption<T extends string> {
   id: T;
   label: string;
+  icon?: string;
 }
 
 export function Segmented<T extends string>({ options, value, onChange }: {
@@ -81,7 +82,7 @@ export function Segmented<T extends string>({ options, value, onChange }: {
           data-active={value === o.id}
           onClick={() => onChange(o.id)}
         >
-          {o.label}
+          {o.icon && <Ico name={o.icon} size={14} />}{o.label}
         </button>
       ))}
     </div>

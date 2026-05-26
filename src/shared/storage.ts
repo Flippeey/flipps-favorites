@@ -101,7 +101,7 @@ export const defaultSettings: AppSettings = {
   showClock: false,
   clockHourFormat: '24',
   showSearchBar: true,
-  folderMode: 'tiles',
+  folderMode: 'grid',
   folderOpenMode: 'overlay',
 };
 
@@ -165,7 +165,7 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     clockHourFormat: settings.clockHourFormat === '12' || settings.clockHourFormat === '24'
       ? settings.clockHourFormat : defaultSettings.clockHourFormat,
     showSearchBar: typeof settings.showSearchBar === 'boolean' ? settings.showSearchBar : defaultSettings.showSearchBar,
-    folderMode: settings.folderMode === 'tiles' || settings.folderMode === 'sections'
+    folderMode: settings.folderMode === 'grid' || settings.folderMode === 'list'
       ? settings.folderMode : defaultSettings.folderMode,
     folderOpenMode: settings.folderOpenMode === 'overlay' || settings.folderOpenMode === 'page'
       ? settings.folderOpenMode : defaultSettings.folderOpenMode,

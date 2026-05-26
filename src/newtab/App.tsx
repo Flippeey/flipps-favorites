@@ -322,7 +322,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   // Sections view flattens across all section grids; folder-page view uses current folder.
   const navItems = useMemo<BookmarkNode[]>(() => {
     if (!isAtRoot && sortedCurrentFolder) return sortedCurrentFolder.children ?? [];
-    if (settings.folderMode === 'sections') {
+    if (settings.folderMode === 'list') {
       const out: BookmarkNode[] = [];
       for (const folder of sortedRootChildren.filter(isFolder)) {
         for (const child of folder.children ?? []) out.push(child);
@@ -849,9 +849,10 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             selectionScopeFolderId={selection.scopeFolderId}
             focusedTileId={focusedTileId}
           />
-        ) : settings.folderMode === 'sections' ? (
+        ) : settings.folderMode === 'list' ? (
           <SectionsView
             tree={sortedRootChildren.filter(isFolder)}
+            rootBookmarks={sortedRootChildren.filter(c => !isFolder(c))}
             scopeFolderId={rootFolder?.id ?? ''}
             shape={tileShape}
             dragEnabled={dragEnabled}

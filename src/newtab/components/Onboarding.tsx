@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { MAX_WORKSPACES } from '../../shared/constants';
-import type { AppSettings, BookmarkNode, FolderMode, ThemeMode, WorkspaceRecord } from '../../shared/messages';
+import type { AppSettings, BookmarkNode, ViewMode, ThemeMode, WorkspaceRecord } from '../../shared/messages';
 import { formatFolderStats, scanFolders, type ScoredFolder } from '../lib/folder-scoring';
 import { altShortcut, IS_MAC, modShortcut } from '../lib/platform';
 import { findFolder, topLevelFolders } from '../lib/tree';
@@ -398,9 +398,9 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
             <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
                 {([
-                  { id: 'tiles',    label: 'Tiles',    desc: 'Folders shown as one-click tiles. Keeps the top view tidy.' },
-                  { id: 'sections', label: 'Sections', desc: 'Every folder unfolded inline. See everything at a glance.' },
-                ] as { id: FolderMode; label: string; desc: string }[]).map(m => {
+                  { id: 'grid', label: 'Grid', desc: 'Folders shown as compact tiles. Keeps the view tidy.' },
+                  { id: 'list', label: 'List', desc: 'Every folder unfolded inline. See everything at a glance.' },
+                ] as { id: ViewMode; label: string; desc: string }[]).map(m => {
                   const active = settings.folderMode === m.id;
                   return (
                     <button

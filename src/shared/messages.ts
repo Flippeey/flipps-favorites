@@ -29,7 +29,7 @@ export type BookmarkSortMode = 'manual' | 'name' | 'lastUsed' | 'created';
 export type SortDirection = 'asc' | 'desc';
 export type LayoutPresetId = 'balanced' | 'compact' | 'spacious' | 'presentation' | 'custom';
 export type ClockHourFormat = '12' | '24';
-export type FolderMode = 'tiles' | 'sections';
+export type ViewMode = 'grid' | 'list';
 export type FolderOpenMode = 'overlay' | 'page';
 export type TileShape = 'squircle' | 'rounded' | 'circle';
 export type BackgroundMode = 'solid' | 'gradient' | 'wallpaper';
@@ -83,7 +83,7 @@ export interface AppSettings {
   // Search bar
   showSearchBar: boolean;
   // Folder behaviour (global)
-  folderMode: FolderMode;
+  folderMode: ViewMode;
   folderOpenMode: FolderOpenMode;
 }
 

@@ -6,7 +6,7 @@ import type {
   BackgroundMode,
   BackgroundPositionMode,
   BookmarkNode,
-  FolderMode,
+  ViewMode,
   FolderOpenMode,
   GradientStyle,
   TileShape,
@@ -78,11 +78,11 @@ export function NavigationSection({ settings, onPatch }: SectionProps) {
         </div>
         <div className="ff-row">
           <div>
-            <div className="ff-row__label">Folder mode</div>
-            <div className="ff-row__hint">Tiles keep folders compact; sections show every folder inline.</div>
+            <div className="ff-row__label">View</div>
+            <div className="ff-row__hint">Grid shows folders as compact tiles; List unfolds every folder inline.</div>
           </div>
-          <Segmented<FolderMode>
-            options={[{ id: 'tiles', label: 'Tiles' }, { id: 'sections', label: 'Sections' }]}
+          <Segmented<ViewMode>
+            options={[{ id: 'grid', label: 'Grid' }, { id: 'list', label: 'List' }]}
             value={settings.folderMode}
             onChange={(v) => onPatch({ folderMode: v })}
           />
