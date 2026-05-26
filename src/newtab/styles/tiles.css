@@ -18,6 +18,10 @@
   margin: 0 auto;
 }
 
+.ff-sections .ff-grid {
+  justify-content: start;
+}
+
 .ff-tile {
   display: flex; flex-direction: column; align-items: center;
   gap: 10px; padding: 8px 4px; width: 100%;
@@ -203,6 +207,15 @@
     var(--line-1) 30%,
     transparent 100%);
   margin: 0 4px var(--s-5);
+}
+.ff-section__empty-hint {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--fg-4);
+  text-align: center;
+  padding: var(--s-5) 0 var(--s-3);
+  margin: 0;
+  pointer-events: none;
 }
 
 /* Empty state (folder page with no items) */

@@ -4,9 +4,8 @@ node_modules/
 releases/
 docs/*
 
-# Claude Code & claude-flow (config, agents, runtime data)
+# Claude Code (config, agents, runtime data)
 .claude/
-.claude-flow/
 CLAUDE.md
 .mcp.json
 

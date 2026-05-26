@@ -65,6 +65,13 @@ section[data-drop-position="after"]::after {
 section[data-drop-position="before"]::before { top: -5px; }
 section[data-drop-position="after"]::after  { bottom: -5px; }
 
+section[data-drop-position="inside"] .ff-section__header {
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
 /* Floating preview chip that follows the cursor while dragging */
 .ff-drag-preview {
   position: fixed;

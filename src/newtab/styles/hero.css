@@ -1,17 +1,91 @@
-/* Hero header (clock + greeting) and search bar — including focus-expand,
-   keyboard hint, and the typeahead results panel that drops underneath. */
+/* Hero header (clock + greeting). Search moved to overlay (Ctrl+K / / / S). */
 
 .ff-hero {
-  position: relative; z-index: 5;
   padding: var(--s-12) var(--s-6) var(--s-10);
   display: flex; flex-direction: column; align-items: center; gap: var(--s-5);
 }
 .ff-hero__clock {
   text-align: center; font-family: var(--font-display);
   letter-spacing: var(--tr-tight); color: var(--fg-1);
+  max-height: 200px; overflow: hidden;
+  transition:
+    max-height 220ms var(--ease-out),
+    opacity 180ms var(--ease-out);
+}
+.ff-hero {
+  transition: gap 220ms var(--ease-out);
+}
+.ff-app:has(.ff-nav.is-scrolled) .ff-hero__clock {
+  max-height: 0;
+  opacity: 0;
+}
+.ff-app:has(.ff-nav.is-scrolled) .ff-hero {
+  gap: 0;
 }
 .ff-hero__clock-time { font-size: clamp(40px, 5vw, 64px); font-weight: 700; line-height: 1; }
 .ff-hero__clock-date { font-size: 14px; color: var(--fg-3); margin-top: 6px; font-weight: 500; }
+
+/* Compact clock pill — fixed top-right, fades in when page is scrolled */
+.ff-clock-mini {
+  position: fixed;
+  top: calc(var(--nav-h) + var(--s-2));
+  right: var(--s-5);
+  z-index: 20;
+  padding: 6px 16px;
+  border-radius: var(--r-full);
+  background: color-mix(in oklab, var(--frost-strong) 70%, transparent);
+  -webkit-backdrop-filter: var(--frost-blur);
+  backdrop-filter: var(--frost-blur);
+  border: 1px solid var(--line-1);
+  color: var(--fg-1);
+  font-size: 15px; font-weight: 600;
+  font-family: var(--font-display);
+  letter-spacing: var(--tr-tight);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
+}
+.ff-app:has(.ff-nav.is-scrolled) .ff-clock-mini {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Search command-palette overlay — triggered by Ctrl+K / / / S */
+.ff-search-modal {
+  position: fixed; inset: 0;
+  z-index: 200;
+  display: flex; flex-direction: column; align-items: center;
+  padding-top: calc(var(--nav-h) + var(--s-16));
+  background: color-mix(in oklab, var(--ink-0) 55%, transparent);
+  -webkit-backdrop-filter: blur(10px) saturate(0.8);
+  backdrop-filter: blur(10px) saturate(0.8);
+  animation: ffModalFadeIn 140ms var(--ease-out);
+}
+@keyframes ffModalFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.ff-search-modal .ff-search-wrap {
+  width: min(580px, 88vw);
+  align-items: stretch;
+}
+.ff-search-modal .ff-search {
+  width: 100%;
+  height: 56px;
+  background: var(--ink-1);
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 14%, transparent), var(--shadow-xl);
+}
+.ff-search-modal .ff-search:focus-within { width: 100%; height: 56px; }
+.ff-search-modal .ff-search input { font-size: 15px; }
+.ff-search-modal .ff-kbd { display: none; }
+.ff-search-modal .ff-results {
+  left: 0;
+  transform: none;
+  width: 100%;
+  max-height: 480px;
+  animation: none;
+}
 
 .ff-search {
   width: min(480px, 78vw);

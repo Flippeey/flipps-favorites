@@ -42,6 +42,7 @@ interface HeroSearchProps {
   usage?: Record<string, number>;
   onPickBookmark: (item: FlatSearchResult) => void;
   onPickFolder: (item: FlatSearchResult) => void;
+  overlayMode?: boolean;
 }
 
 function isTypingTarget(el: EventTarget | null): boolean {
@@ -148,27 +149,38 @@ function scoreResult(result: FlatSearchResult, query: string, usage: Record<stri
   return score;
 }
 
-export function HeroSearch({ shape, index, usage, onPickBookmark, onPickFolder }: HeroSearchProps) {
+export function HeroSearch({ shape, index, usage, onPickBookmark, onPickFolder, overlayMode }: HeroSearchProps) {
   const [value, setValue] = useState('');
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [overlayOpen, setOverlayOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
+    if (!overlayOpen) setValue('');
+  }, [overlayOpen]);
+
+  useEffect(() => {
+    if (overlayMode && overlayOpen) {
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  }, [overlayMode, overlayOpen]);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        inputRef.current?.focus();
-        return;
-      }
-      // `/` and `S` focus search; `S` requires no shift so it doesn't intercept capital-S in inputs.
+      const isCtrlK = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k';
       const isSlash = e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey;
       const isBareS = e.key.toLowerCase() === 's' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey;
-      if ((isSlash || isBareS) && !isTypingTarget(e.target)) {
+      if (isCtrlK || ((isSlash || isBareS) && !isTypingTarget(e.target))) {
         e.preventDefault();
-        inputRef.current?.focus();
+        if (overlayMode) setOverlayOpen(true);
+        else inputRef.current?.focus();
+        return;
+      }
+      if (e.key === 'Escape' && overlayMode && overlayOpen) {
+        setOverlayOpen(false);
         return;
       }
       if (e.key === 'Escape' && document.activeElement === inputRef.current) {
@@ -178,7 +190,7 @@ export function HeroSearch({ shape, index, usage, onPickBookmark, onPickFolder }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [overlayMode, overlayOpen]);
 
   useEffect(() => {
     const onPointerDown = (e: PointerEvent) => {
@@ -187,10 +199,11 @@ export function HeroSearch({ shape, index, usage, onPickBookmark, onPickFolder }
       if (wrapRef.current?.contains(target)) return;
       setFocused(false);
       if (document.activeElement === inputRef.current) inputRef.current?.blur();
+      if (overlayMode) setOverlayOpen(false);
     };
     document.addEventListener('pointerdown', onPointerDown);
     return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, []);
+  }, [overlayMode]);
 
   const visible = useMemo<FlatSearchResult[]>(() => {
     const q = value.trim();
@@ -235,7 +248,7 @@ export function HeroSearch({ shape, index, usage, onPickBookmark, onPickFolder }
     }
   };
 
-  return (
+  const searchContent = (
     <div className="ff-search-wrap" ref={wrapRef}>
       <label className="ff-search">
         <span className="ff-search__icon"><Ico name="search" size={18} /></span>
@@ -328,6 +341,16 @@ export function HeroSearch({ shape, index, usage, onPickBookmark, onPickFolder }
       )}
     </div>
   );
+
+  if (overlayMode) {
+    if (!overlayOpen) return null;
+    return (
+      <div className="ff-search-modal" role="dialog" aria-modal="true" aria-label="Search">
+        {searchContent}
+      </div>
+    );
+  }
+  return searchContent;
 }
 
 interface ClockGreetingProps {
@@ -349,6 +372,26 @@ export function ClockGreeting({ hourFormat }: ClockGreetingProps) {
     <div className="ff-hero__clock">
       <div className="ff-hero__clock-time">{time}</div>
       <div className="ff-hero__clock-date">{date}</div>
+    </div>
+  );
+}
+
+interface ClockMiniProps {
+  hourFormat: ClockHourFormat;
+}
+
+export function ClockMini({ hourFormat }: ClockMiniProps) {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const formatter = hourFormat === '12'
+    ? new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', hour12: true })
+    : new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+  return (
+    <div className="ff-clock-mini" aria-hidden="true">
+      {formatter.format(now)}
     </div>
   );
 }

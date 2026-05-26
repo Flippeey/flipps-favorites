@@ -8,7 +8,7 @@ import { FolderNameDialog, type FolderNameDialogTarget } from './components/Fold
 import { FolderOverlay } from './components/FolderOverlay';
 import { NewWorkspaceDialog } from './components/NewWorkspaceDialog';
 import { QuickAddDialog } from './components/QuickAddDialog';
-import { buildSearchIndex, ClockGreeting, HeroSearch, type FlatSearchResult } from './components/HeroSearch';
+import { buildSearchIndex, ClockGreeting, ClockMini, HeroSearch, type FlatSearchResult } from './components/HeroSearch';
 import { Ico } from './components/Ico';
 import { Onboarding } from './components/Onboarding';
 import { AppSettingsDrawer, WorkspaceSettingsDrawer, type AppSectionId, type WorkspaceSectionId } from './components/settings';
@@ -722,13 +722,6 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
 
       const mod = e.ctrlKey || e.metaKey;
 
-      // Ctrl/Cmd+K or Ctrl/Cmd+S: focus search
-      if (!e.altKey && mod && (e.key.toLowerCase() === 'k' || e.key.toLowerCase() === 's')) {
-        e.preventDefault();
-        document.querySelector<HTMLInputElement>('.ff-search__input')?.focus();
-        return;
-      }
-
       if (mod || e.altKey || e.shiftKey) return;
 
       switch (e.key.toLowerCase()) {
@@ -755,11 +748,6 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           }
           break;
         }
-        case 's':
-        case '/':
-          e.preventDefault();
-          document.querySelector<HTMLInputElement>('.ff-search__input')?.focus();
-          break;
       }
     };
     window.addEventListener('keydown', onKey);
@@ -825,18 +813,20 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
         />
       </header>
 
-      <section className="ff-hero">
-        {settings.showClock && <ClockGreeting hourFormat={settings.clockHourFormat} />}
-        {settings.showSearchBar && (
-          <HeroSearch
-            shape={tileShape}
-            index={searchIndex}
-            usage={usage}
-            onPickBookmark={onPickSearchBookmark}
-            onPickFolder={onPickSearchFolder}
-          />
-        )}
-      </section>
+      {(settings.showClock || settings.showSearchBar) && (
+        <section className="ff-hero">
+          {settings.showClock && <ClockGreeting hourFormat={settings.clockHourFormat} />}
+          {settings.showSearchBar && (
+            <HeroSearch
+              shape={tileShape}
+              index={searchIndex}
+              usage={usage}
+              onPickBookmark={onPickSearchBookmark}
+              onPickFolder={onPickSearchFolder}
+            />
+          )}
+        </section>
+      )}
 
       <main className="ff-canvas" ref={(el) => { canvasRef.current = el; setCanvasEl(el); }}>
         {!isAtRoot && sortedCurrentFolder ? (
@@ -1080,6 +1070,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       >
         <Ico name="zap" size={16} />
       </button>
+
+      {settings.showClock && <ClockMini hourFormat={settings.clockHourFormat} />}
     </div>
   );
 }

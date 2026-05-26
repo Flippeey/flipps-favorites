@@ -282,6 +282,15 @@ export function useDrag({
       }
 
       if (!hoverTile) {
+        const sectionEl = elementUnder?.closest<HTMLElement>('section[data-scope-folder-id]');
+        if (sectionEl && drag.dragKind !== 'section') {
+          const folderId = sectionEl.dataset.scopeFolderId ?? '';
+          if (folderId && !dragSet.has(folderId)) {
+            sectionEl.dataset.dropPosition = 'inside';
+            drag.dropTarget = { kind: 'folder', folderId };
+            return;
+          }
+        }
         const ordered = getOrderedChildrenRef.current(drag.scopeId).filter(c => !dragSet.has(c.id));
         drag.dropTarget = { kind: 'reorder', parentId: drag.scopeId, index: ordered.length };
         return;

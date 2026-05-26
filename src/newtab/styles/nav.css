@@ -2,10 +2,14 @@
    and context menu (right-click popover). All chrome that sits above the
    canvas surface. */
 
-.ff-nav {
+/* Sticky is on <header> so the nav doesn't try to stick within a same-height parent (0px range). */
+.ff-app > header {
   position: sticky;
   top: 0;
   z-index: 30;
+}
+
+.ff-nav {
   height: var(--nav-h);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);

@@ -89,6 +89,9 @@ export function SectionsView({ tree, rootBookmarks, shape, scopeFolderId, dragEn
           <SectionHeader folder={folder} onMenu={onSectionMenu} rootFolderId={scopeFolderId} dragEnabled={dragEnabled} />
           <div className="ff-section__rule" aria-hidden="true" />
           <div className="ff-grid">
+            {(folder.children ?? []).length === 0 && (
+              <p className="ff-section__empty-hint" aria-hidden="true">Empty folder</p>
+            )}
             {(folder.children ?? []).map(item => (
               <TileFor
                 key={item.id}
