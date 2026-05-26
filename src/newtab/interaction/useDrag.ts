@@ -46,6 +46,9 @@ function clearDropAttrs({ includeSource }: { includeSource: boolean }): void {
   document.querySelectorAll<HTMLElement>('.ff-folder-overlay[data-drop-target]').forEach(el => {
     delete el.dataset.dropTarget;
   });
+  document.querySelectorAll<HTMLElement>('.ff-sections[data-drop-target]').forEach(el => {
+    delete el.dataset.dropTarget;
+  });
   document.querySelectorAll<HTMLElement>('[data-workspace-id][data-drop-hover]').forEach(el => {
     delete el.dataset.dropHover;
   });
@@ -291,6 +294,15 @@ export function useDrag({
             return;
           }
         }
+        // Sections-view backdrop: outside all tiles/sections → append to root
+        // (mirrors folder-overlay backdrop behaviour)
+        const sectionsEl = canvas?.querySelector<HTMLElement>('.ff-sections');
+        if (sectionsEl && drag.dragKind !== 'section') {
+          sectionsEl.dataset.dropTarget = 'true';
+          const ordered = getOrderedChildrenRef.current(rootFolderIdRef.current).filter(c => !dragSet.has(c.id));
+          drag.dropTarget = { kind: 'reorder', parentId: rootFolderIdRef.current, index: ordered.length };
+          return;
+        }
         const ordered = getOrderedChildrenRef.current(drag.scopeId).filter(c => !dragSet.has(c.id));
         drag.dropTarget = { kind: 'reorder', parentId: drag.scopeId, index: ordered.length };
         return;
@@ -347,7 +359,7 @@ export function useDrag({
       clearDropAttrs({ includeSource: true });
       setPreview(null);
       stateRef.current = null;
-      if (dragEngagedRef) queueMicrotask(() => { dragEngagedRef.current = false; });
+      if (dragEngagedRef) setTimeout(() => { dragEngagedRef.current = false; });
       if (engaged && target) {
         if (dropOnBackdrop) {
           window.dispatchEvent(new CustomEvent('ff-suppress-overlay-close'));

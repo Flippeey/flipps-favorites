@@ -46,6 +46,11 @@
   background: rgba(0, 0, 0, 0.55);
   transition: background var(--dur-fast) var(--ease-out);
 }
+.ff-sections[data-drop-target="true"] {
+  outline: 2px dashed color-mix(in oklab, var(--accent) 45%, transparent);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
 
 /* Section drag source — dim entire section */
 section:has(.ff-section__header[data-drag-source="true"]) { opacity: 0.35; }

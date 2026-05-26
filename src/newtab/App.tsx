@@ -827,6 +827,16 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           )}
         </section>
       )}
+      {!settings.showSearchBar && (
+        <HeroSearch
+          shape={tileShape}
+          index={searchIndex}
+          usage={usage}
+          onPickBookmark={onPickSearchBookmark}
+          onPickFolder={onPickSearchFolder}
+          overlayMode
+        />
+      )}
 
       <main className="ff-canvas" ref={(el) => { canvasRef.current = el; setCanvasEl(el); }}>
         {!isAtRoot && sortedCurrentFolder ? (
