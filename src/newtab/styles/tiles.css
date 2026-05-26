@@ -15,7 +15,6 @@
   justify-content: center;
   gap: var(--grid-gap-y) var(--grid-gap-x);
   max-width: var(--content-max);
-  margin: 0 auto;
 }
 
 .ff-sections .ff-grid {
