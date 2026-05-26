@@ -115,6 +115,9 @@ export function useDrag({
         ? Array.from(sel.ids)
         : [tileId];
 
+      // Prevent browser text selection when dragging non-button elements (e.g. section headers)
+      if (tileEl.tagName !== 'BUTTON') event.preventDefault();
+
       stateRef.current = {
         active: true,
         engaged: false,

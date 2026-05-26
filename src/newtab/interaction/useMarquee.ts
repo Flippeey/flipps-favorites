@@ -57,6 +57,7 @@ export function useMarquee({ surface, container, rootFolderId, enabled, selectio
       const target = event.target as HTMLElement;
       if (
         target.closest('.ff-tile') ||
+        target.closest('.ff-section__header') ||
         target.closest('button') ||
         target.closest('input') ||
         target.closest('select') ||

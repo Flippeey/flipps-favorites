@@ -48,7 +48,7 @@
 }
 
 /* Section drag source — dim entire section */
-section:has(.ff-section__drag-handle[data-drag-source="true"]) { opacity: 0.35; }
+section:has(.ff-section__header[data-drag-source="true"]) { opacity: 0.35; }
 
 /* Section drop indicator — horizontal accent line */
 section { position: relative; }
