@@ -212,6 +212,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
 
   const handleCreateWorkspace = useCallback(async (rootFolderId: string, name: string) => {
     if (workspaces.length >= MAX_WORKSPACES) return;
+    if (workspaces.some(w => w.rootFolderId === rootFolderId)) return;
     const workspace: WorkspaceRecord = {
       id: crypto.randomUUID(),
       name,
@@ -225,7 +226,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     } catch {
       // creation failed — leave UI unchanged
     }
-  }, [handlePatch]);
+  }, [workspaces, handlePatch]);
 
   const handleDeleteWorkspace = useCallback(async (id: string) => {
     if (workspaces.length <= 1) return;
