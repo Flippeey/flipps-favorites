@@ -2,6 +2,7 @@ import type { GetIconRequest, IconCacheRecord, IconOverrideRecord, IconSearchCan
 import { IconFetchError } from '../../shared/messages';
 import { extensionApi } from '../../shared/browser';
 import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRecord, readIconCacheRecord, readIconCacheRecords, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideRecord } from '../../shared/storage';
+import { evictExpiredCachedIcons } from '../../shared/icon-idb';
 import { extractBrandInfo } from '../../shared/url-brand';
 
 const iconPipelineVersion = 'bookmark-icons-v7';
@@ -275,6 +276,7 @@ function scheduleBackgroundRefresh(request: GetIconRequest, cacheKey: string): v
 }
 
 export async function sweepGeneratedRecords(): Promise<void> {
+  await evictExpiredCachedIcons().catch(() => { /* non-fatal */ });
   const records = await readIconCacheRecords().catch(() => ({}));
   const generated = Object.values(records).filter(record => record.sourceKind === 'generated');
   if (!generated.length) return;

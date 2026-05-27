@@ -9,6 +9,11 @@ extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }
     await markOnboardingPending();
     await invalidateIcon();
   }
+  // Free chrome.storage.local quota that was used by icon cache/overrides (now in IndexedDB).
+  const local = extensionApi.storage?.local;
+  if (local?.remove) {
+    await (local.remove as (keys: string[]) => Promise<void>)(['icon-cache-records', 'icon-override-records']).catch(() => { /* non-fatal */ });
+  }
   void scheduleGeneratedRecordSweep();
   console.info(`Flipp's Favorites install event reason: ${reason}`);
   console.info('Flipp\'s Favorites - Bookmarks & more installed');
