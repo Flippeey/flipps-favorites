@@ -19,9 +19,14 @@
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-xl), var(--shadow-inset-hairline);
   display: flex; flex-direction: column;
-  animation: ffPop 240ms var(--ease-out);
+  animation: ffScaleIn 240ms var(--ease-out);
   overflow: hidden;
 }
+@keyframes ffScaleIn { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
+@keyframes ffScaleOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.85); } }
+@keyframes ffFadeOut { from { opacity: 1; } to { opacity: 0; } }
+.ff-modal-scrim[data-closing="true"] { animation: ffFadeOut 180ms var(--ease-out) forwards; }
+.ff-dialog[data-closing="true"] { animation: ffScaleOut 200ms var(--ease-out) forwards; }
 .ff-dialog__head {
   display: flex; align-items: center; gap: var(--s-3);
   padding: var(--s-5) var(--s-6);
@@ -193,6 +198,8 @@
   animation: ffSlide 280ms var(--ease-out);
 }
 @keyframes ffSlide { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes ffSlideOut { from { transform: translateX(0); } to { transform: translateX(100%); } }
+.ff-drawer[data-closing="true"] { animation: ffSlideOut 200ms var(--ease-out) forwards; }
 .ff-drawer__head {
   padding: var(--s-4) var(--s-5);
   display: flex; align-items: center; justify-content: space-between;
@@ -412,13 +419,16 @@
 /* Onboarding wizard (multi-step modal shown on first launch + replay) */
 .ff-onboard {
   width: min(720px, 100%);
+  max-height: min(85vh, 680px);
   background: var(--ink-1);
   border: 1px solid var(--line-2);
   border-radius: var(--r-2xl);
   box-shadow: var(--shadow-xl), var(--shadow-inset-hairline);
   overflow: hidden;
   display: flex; flex-direction: column;
+  animation: ffScaleIn 240ms var(--ease-out);
 }
+.ff-onboard[data-closing="true"] { animation: ffScaleOut 200ms var(--ease-out) forwards; }
 .ff-onboard__hero {
   position: relative;
   padding: var(--s-8) var(--s-8) var(--s-5);
@@ -455,10 +465,67 @@
   line-height: 1.55;
   max-width: 480px; margin: 0 auto;
 }
-.ff-onboard__body { padding: var(--s-6) var(--s-8); }
+.ff-onboard__body {
+  padding: var(--s-6) var(--s-8);
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  scrollbar-gutter: stable;
+}
 .ff-onboard__foot {
   display: flex; align-items: center; justify-content: space-between;
   padding: var(--s-4) var(--s-6);
   border-top: 1px solid var(--line-1);
   background: var(--ink-0);
+}
+
+/* Tips carousel (onboarding step 5) */
+.ff-onboard__tips {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-4) 0;
+}
+.ff-onboard__tips > button {
+  flex-shrink: 0;
+}
+.ff-onboard__tip {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  padding: var(--s-5);
+  background: var(--ink-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-lg);
+}
+.ff-onboard__tip[data-dir="forward"] { animation: ffSlideInRight 220ms var(--ease-out); }
+.ff-onboard__tip[data-dir="back"]    { animation: ffSlideInLeft 220ms var(--ease-out); }
+.ff-onboard__tip-icon {
+  width: 40px; height: 40px;
+  margin: 0 auto var(--s-3);
+  display: grid; place-items: center;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.ff-onboard__tip-headline {
+  font-size: 15px; font-weight: 600;
+  margin-bottom: var(--s-2);
+}
+.ff-onboard__tip-body {
+  font-size: 13px; color: var(--fg-2); line-height: 1.5;
+}
+.ff-onboard__tip-dots {
+  display: flex; justify-content: center;
+  gap: 6px; padding-top: var(--s-3);
+}
+.ff-onboard__tip-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ink-4);
+  border: 0; padding: 0; cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.ff-onboard__tip-dot[data-active="true"] {
+  background: var(--accent);
 }

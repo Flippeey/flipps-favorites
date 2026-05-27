@@ -93,6 +93,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const [confirmDeleteWorkspace, setConfirmDeleteWorkspace] = useState<WorkspaceRecord | null>(null);
   const [onboardOpen, setOnboardOpen] = useState(initialOnboardOpen ?? false);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
   const [folderPath, setFolderPath] = useState<BookmarkNode[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<BookmarkNode | null>(null);
@@ -167,10 +168,18 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   }, []);
 
   const handleSwitchWorkspace = useCallback(async (id: string) => {
+    setIsSwitching(true);
+    await new Promise(r => setTimeout(r, 130));
     setFolderPath([]);
     setSelection({ ids: new Set(), scopeFolderId: '' });
     await handlePatch({ activeWorkspaceId: id });
+    requestAnimationFrame(() => setIsSwitching(false));
   }, [handlePatch]);
+
+  const handleToggleViewMode = useCallback(() => {
+    const next = settings.folderMode === 'grid' ? 'list' : 'grid';
+    handlePatch({ folderMode: next });
+  }, [settings.folderMode, handlePatch]);
 
   const handlePatchWorkspace = useCallback(async (patch: Partial<WorkspaceRecord>) => {
     if (!activeWorkspace) return;
@@ -786,6 +795,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       data-tile-shape={tileShape}
       data-labels={String(activeWorkspace?.showTileLabels ?? true)}
       data-dock={dockMode}
+      data-switching={isSwitching || undefined}
       style={appStyle as CSSProperties}
       onContextMenu={handleCanvasContextMenu}
     >
@@ -808,6 +818,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           onCrumb={handleGoToCrumb}
           sortValue={sortChoice}
           onSort={handleSortChange}
+          folderMode={settings.folderMode}
+          onToggleViewMode={handleToggleViewMode}
           onOpenAppSettings={() => openAppSettings()}
           onOpenWorkspaceSettings={() => openWorkspaceSettings('appearance')}
         />

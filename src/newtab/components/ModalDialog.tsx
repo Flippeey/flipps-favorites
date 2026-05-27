@@ -1,4 +1,4 @@
-import type { CSSProperties, FormEvent, MouseEvent, ReactNode } from 'react';
+import { useCallback, useState, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { useEscapeKey } from '../interaction/useEscapeKey';
 import { Ico } from './Ico';
 
@@ -25,10 +25,18 @@ export function ModalDialog({
   onSubmit,
   children,
 }: ModalDialogProps) {
-  useEscapeKey(onClose);
+  const [closing, setClosing] = useState(false);
+
+  const handleClose = useCallback(() => {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(() => onClose(), 200);
+  }, [closing, onClose]);
+
+  useEscapeKey(handleClose);
 
   const onScrimMouseDown = (e: MouseEvent) => {
-    if (e.target === e.currentTarget) onClose();
+    if (e.target === e.currentTarget) handleClose();
   };
 
   const head = (
@@ -46,7 +54,7 @@ export function ModalDialog({
         type="button"
         className="ff-iconbtn ff-iconbtn--icon"
         aria-label="Close"
-        onClick={onClose}
+        onClick={handleClose}
       >
         <Ico name="close" size={16} />
       </button>
@@ -57,14 +65,14 @@ export function ModalDialog({
   const dialogStyle: CSSProperties | undefined = width ? { width } : undefined;
 
   return (
-    <div className="ff-modal-scrim" onMouseDown={onScrimMouseDown}>
+    <div className="ff-modal-scrim" data-closing={closing || undefined} onMouseDown={onScrimMouseDown}>
       {as === 'form' ? (
-        <form className="ff-dialog" style={dialogStyle} onSubmit={onSubmit}>
+        <form className="ff-dialog" data-closing={closing || undefined} style={dialogStyle} onSubmit={onSubmit}>
           {head}
           {body}
         </form>
       ) : (
-        <div className="ff-dialog" style={dialogStyle}>
+        <div className="ff-dialog" data-closing={closing || undefined} style={dialogStyle}>
           {head}
           {body}
         </div>

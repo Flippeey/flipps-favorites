@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { AppSettings, BookmarkNode, WorkspaceRecord } from '../../shared/messages';
 import { Ico } from './Ico';
 import {
@@ -49,25 +49,32 @@ interface AppSettingsDrawerProps {
 
 export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation', onPatchGlobal, onAfterImport, onClose }: AppSettingsDrawerProps) {
   const [section, setSection] = useState<AppSectionId>(initialSection);
+  const [closing, setClosing] = useState(false);
+
+  const handleClose = useCallback(() => {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(() => onClose(), 200);
+  }, [closing, onClose]);
 
   useEffect(() => { setSection(initialSection); }, [initialSection]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [handleClose]);
 
   return (
     <>
-      <div className="ff-modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ background: 'rgba(0,0,0,0.35)' }} />
-      <aside className="ff-drawer" role="dialog" aria-label="App settings">
+      <div className="ff-modal-scrim" data-closing={closing || undefined} onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }} style={{ background: 'rgba(0,0,0,0.35)' }} />
+      <aside className="ff-drawer" data-closing={closing || undefined} role="dialog" aria-label="App settings">
         <header className="ff-drawer__head">
           <div>
             <div className="ff-dialog__eyebrow">Settings</div>
             <div className="ff-dialog__title">{APP_SECTION_TITLES[section]}</div>
           </div>
-          <button className="ff-iconbtn ff-iconbtn--icon" aria-label="Close" onClick={onClose}>
+          <button className="ff-iconbtn ff-iconbtn--icon" aria-label="Close" onClick={handleClose}>
             <Ico name="close" size={16} />
           </button>
         </header>
@@ -109,25 +116,32 @@ interface WorkspaceSettingsDrawerProps {
 
 export function WorkspaceSettingsDrawer({ settings, activeWorkspace, workspaceWallpaper, initialSection = 'appearance', onPatchWorkspace, onSetWorkspaceWallpaper, onClose }: WorkspaceSettingsDrawerProps) {
   const [section, setSection] = useState<WorkspaceSectionId>(initialSection);
+  const [closing, setClosing] = useState(false);
+
+  const handleClose = useCallback(() => {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(() => onClose(), 200);
+  }, [closing, onClose]);
 
   useEffect(() => { setSection(initialSection); }, [initialSection]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [handleClose]);
 
   return (
     <>
-      <div className="ff-modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ background: 'rgba(0,0,0,0.35)' }} />
-      <aside className="ff-drawer" role="dialog" aria-label="Workspace settings">
+      <div className="ff-modal-scrim" data-closing={closing || undefined} onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }} style={{ background: 'rgba(0,0,0,0.35)' }} />
+      <aside className="ff-drawer" data-closing={closing || undefined} role="dialog" aria-label="Workspace settings">
         <header className="ff-drawer__head">
           <div>
             <div className="ff-dialog__eyebrow">Workspace{activeWorkspace ? ` · ${activeWorkspace.name}` : ''}</div>
             <div className="ff-dialog__title">{WORKSPACE_SECTION_TITLES[section]}</div>
           </div>
-          <button className="ff-iconbtn ff-iconbtn--icon" aria-label="Close" onClick={onClose}>
+          <button className="ff-iconbtn ff-iconbtn--icon" aria-label="Close" onClick={handleClose}>
             <Ico name="close" size={16} />
           </button>
         </header>

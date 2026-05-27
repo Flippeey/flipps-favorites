@@ -6,6 +6,13 @@
   position: relative; z-index: 4;
   flex: 1 1 auto;
   padding: 0 max(var(--s-8), 5vw) calc(var(--s-16) + 80px);
+  transition: opacity 200ms var(--ease-out);
+}
+.ff-app[data-switching="true"] .ff-canvas,
+.ff-app[data-switching="true"] .ff-hero,
+.ff-app[data-switching="true"] .ff-dock {
+  opacity: 0;
+  transition-duration: 120ms;
 }
 .ff-app[data-dock="hidden"] .ff-canvas { padding-bottom: var(--s-16); }
 

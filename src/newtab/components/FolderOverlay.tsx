@@ -55,10 +55,17 @@ export function FolderOverlay({
 }: FolderOverlayProps) {
   const [stack, setStack] = useState<BookmarkNode[]>([folder]);
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
+  const [closing, setClosing] = useState(false);
   const current = stack[stack.length - 1];
   const suppressCloseRef = useRef(false);
   const [bodyEl, setBodyEl] = useState<HTMLElement | null>(null);
   const [focusedTileId, setFocusedTileId] = useState<string | null>(null);
+
+  const handleClose = useCallback(() => {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(() => onClose(), 200);
+  }, [closing, onClose]);
 
   useEffect(() => {
     const onSuppress = () => { suppressCloseRef.current = true; };
@@ -87,9 +94,7 @@ export function FolderOverlay({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { onClose(); return; }
-      // Cmd/Ctrl+ArrowLeft always navigates back. Plain Backspace navigates back
-      // only when nothing is focused/selected so the delete shortcut can handle it otherwise.
+      if (e.key === 'Escape') { handleClose(); return; }
       const cmdBack = e.key === 'ArrowLeft' && (e.metaKey || e.ctrlKey);
       const backspaceBack = e.key === 'Backspace'
         && !focusedTileId
@@ -101,13 +106,13 @@ export function FolderOverlay({
           setDirection('back');
           setStack(s => s.slice(0, -1));
         } else {
-          onClose();
+          handleClose();
         }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, stack.length, focusedTileId, selectedIds]);
+  }, [handleClose, stack.length, focusedTileId, selectedIds]);
 
   const navItems = useMemo(() => current.children ?? [], [current]);
 
@@ -117,7 +122,7 @@ export function FolderOverlay({
   }, []);
 
   const handleArrowPickBookmark = useCallback((item: BookmarkNode, event?: { metaKey?: boolean; ctrlKey?: boolean }) => {
-    onClose();
+    onClose(); // immediate — no animation needed when navigating away
     onPickBookmark(item, event);
   }, [onClose, onPickBookmark]);
 
@@ -196,7 +201,7 @@ export function FolderOverlay({
       setDirection('forward');
       setStack(s => [...s, item]);
     } else {
-      onClose();
+      onClose(); // immediate — navigating to a bookmark
       onPickBookmark(item, event);
     }
   };
@@ -216,10 +221,11 @@ export function FolderOverlay({
     <div
       className="ff-folder-overlay"
       data-overlay-root-id={rootFolderId}
+      data-closing={closing || undefined}
       onClick={(e) => {
         if (e.target !== e.currentTarget) return;
         if (suppressCloseRef.current) { suppressCloseRef.current = false; return; }
-        onClose();
+        handleClose();
       }}
     >
       <div className="ff-folder-overlay__card" onClick={(e) => e.stopPropagation()}>
@@ -272,7 +278,7 @@ export function FolderOverlay({
               <Ico name="folderPlus" size={16} />
             </button>
           )}
-          <button className="ff-iconbtn ff-iconbtn--icon" onClick={onClose} aria-label="Close overlay">
+          <button className="ff-iconbtn ff-iconbtn--icon" onClick={handleClose} aria-label="Close overlay">
             <Ico name="close" size={16} />
           </button>
         </div>

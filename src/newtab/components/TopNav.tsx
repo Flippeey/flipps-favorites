@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { BookmarkNode, BookmarkSortMode, SortDirection, WorkspaceRecord } from '../../shared/messages';
+import type { BookmarkNode, BookmarkSortMode, SortDirection, ViewMode, WorkspaceRecord } from '../../shared/messages';
 import { altShortcut } from '../lib/platform';
 import { Ico } from './Ico';
 
@@ -30,6 +30,8 @@ interface TopNavProps {
   onCrumb: (index: number) => void;
   sortValue: string;
   onSort: (choice: SortChoice) => void;
+  folderMode: ViewMode;
+  onToggleViewMode: () => void;
   onOpenAppSettings: () => void;
   onOpenWorkspaceSettings: () => void;
 }
@@ -195,7 +197,7 @@ function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace }:
   );
 }
 
-export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onReorderWorkspaces, onOpenAddMenu, path, onCrumb, sortValue, onSort, onOpenAppSettings, onOpenWorkspaceSettings }: TopNavProps) {
+export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onReorderWorkspaces, onOpenAddMenu, path, onCrumb, sortValue, onSort, folderMode, onToggleViewMode, onOpenAppSettings, onOpenWorkspaceSettings }: TopNavProps) {
   const [scrolled, setScrolled] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const sortRef = useRef<HTMLDivElement>(null);
@@ -267,6 +269,14 @@ export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
           onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); onOpenAddMenu(r.left, r.bottom + 6); }}
         >
           <Ico name="plus" size={16} />
+        </button>
+        <button
+          className="ff-iconbtn ff-iconbtn--icon"
+          aria-label={folderMode === 'grid' ? 'Switch to List view' : 'Switch to Grid view'}
+          title={folderMode === 'grid' ? 'Switch to List view' : 'Switch to Grid view'}
+          onClick={onToggleViewMode}
+        >
+          <Ico name={folderMode === 'grid' ? 'rows' : 'layoutGrid'} size={16} />
         </button>
         <div className="ff-sort" ref={sortRef}>
           <button

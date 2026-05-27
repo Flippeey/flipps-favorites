@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { MAX_WORKSPACES } from '../../shared/constants';
 import type { AppSettings, BookmarkNode, ViewMode, ThemeMode, WorkspaceRecord } from '../../shared/messages';
 import { formatFolderStats, scanFolders, type ScoredFolder } from '../lib/folder-scoring';
-import { altShortcut, IS_MAC, modShortcut } from '../lib/platform';
+import { altShortcut, modShortcut } from '../lib/platform';
 import { findFolder, topLevelFolders } from '../lib/tree';
 import { Ico } from './Ico';
 import { FolderMultiPicker, twoLevelFolders } from './FolderMultiPicker';
@@ -140,55 +140,140 @@ export function WorkspaceRecommendations({
   }
 
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      {preSelected.length > 0 && (
-        <div>
-          <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
-            Recommended based on your bookmarks
+    <div style={{ maxHeight: 380, overflowY: 'auto', paddingRight: 2 }}>
+      <div style={{ display: 'grid', gap: 16 }}>
+        {preSelected.length > 0 && (
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
+              Recommended based on your bookmarks
+            </div>
+            <div style={{ display: 'grid', gap: 4 }}>
+              {preSelected.map(f => (
+                <RecommendedFolderCard
+                  key={f.id}
+                  folder={f}
+                  active={selectedIds.includes(f.id)}
+                  onToggle={() => onToggle(f.id)}
+                />
+              ))}
+            </div>
           </div>
-          <div style={{ display: 'grid', gap: 4 }}>
-            {preSelected.map(f => (
-              <RecommendedFolderCard
-                key={f.id}
-                folder={f}
-                active={selectedIds.includes(f.id)}
-                onToggle={() => onToggle(f.id)}
-              />
-            ))}
+        )}
+
+        {suggested.length > 0 && (
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
+              Other folders
+            </div>
+            <div style={{ display: 'grid', gap: 4 }}>
+              {suggested.map(f => (
+                <RecommendedFolderCard
+                  key={f.id}
+                  folder={f}
+                  active={selectedIds.includes(f.id)}
+                  onToggle={() => onToggle(f.id)}
+                />
+              ))}
+            </div>
           </div>
+        )}
+
+        <button
+          className="ff-iconbtn"
+          type="button"
+          style={{ fontSize: 12, color: 'var(--fg-3)', justifySelf: 'start' }}
+          onClick={() => setShowManual(v => !v)}
+        >
+          {showManual ? 'Hide' : 'Browse'} all folders
+        </button>
+
+        {showManual && (
+          <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} excludeIds={excludeIds} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+const TIPS: { headline: string; body: string; icon: string }[] = [
+  {
+    headline: 'Right-click for everything',
+    body: 'Right-click any bookmark, folder, or empty space to edit, move, delete, or add new items.',
+    icon: 'moreVertical',
+  },
+  {
+    headline: 'Search across everything',
+    body: `Press S or ${modShortcut('K')} to search all your bookmarks and folders across every workspace.`,
+    icon: 'search',
+  },
+  {
+    headline: 'Make each workspace yours',
+    body: 'Each workspace has its own theme, accent, background, and layout. Click Customize to personalize.',
+    icon: 'palette',
+  },
+  {
+    headline: 'Add and edit bookmarks',
+    body: 'Press A to add a bookmark, or use the + button. Change any title, URL, or icon after adding.',
+    icon: 'plus',
+  },
+  {
+    headline: 'Switch workspaces fast',
+    body: `Click tabs at the top, or press ${altShortcut('1')}–${altShortcut('9')} to jump with the keyboard.`,
+    icon: 'layers',
+  },
+  {
+    headline: 'Sort your way',
+    body: 'Use the sort dropdown to arrange by name, date, or last used — or switch to Manual and drag to reorder.',
+    icon: 'sort',
+  },
+];
+
+function TipsCarousel() {
+  const [tipIdx, setTipIdx] = useState(0);
+  const [tipDir, setTipDir] = useState<'forward' | 'back'>('forward');
+  const tip = TIPS[tipIdx];
+
+  return (
+    <div style={{ padding: '12px 0' }}>
+      <div className="ff-onboard__tips">
+        <button
+          className="ff-iconbtn ff-iconbtn--icon"
+          onClick={() => { setTipDir('back'); setTipIdx(i => Math.max(0, i - 1)); }}
+          disabled={tipIdx === 0}
+          aria-label="Previous tip"
+        >
+          <Ico name="chevronLeft" size={16} />
+        </button>
+
+        <div className="ff-onboard__tip" key={tipIdx} data-dir={tipDir}>
+          <div className="ff-onboard__tip-icon">
+            <Ico name={tip.icon} size={20} />
+          </div>
+          <div className="ff-onboard__tip-headline">{tip.headline}</div>
+          <div className="ff-onboard__tip-body">{tip.body}</div>
         </div>
-      )}
 
-      {suggested.length > 0 && (
-        <div>
-          <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
-            Other folders
-          </div>
-          <div style={{ display: 'grid', gap: 4 }}>
-            {suggested.map(f => (
-              <RecommendedFolderCard
-                key={f.id}
-                folder={f}
-                active={selectedIds.includes(f.id)}
-                onToggle={() => onToggle(f.id)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+        <button
+          className="ff-iconbtn ff-iconbtn--icon"
+          onClick={() => { setTipDir('forward'); setTipIdx(i => Math.min(TIPS.length - 1, i + 1)); }}
+          disabled={tipIdx === TIPS.length - 1}
+          aria-label="Next tip"
+        >
+          <Ico name="chevronRight" size={16} />
+        </button>
+      </div>
 
-      <button
-        className="ff-iconbtn"
-        type="button"
-        style={{ fontSize: 12, color: 'var(--fg-3)', justifySelf: 'start' }}
-        onClick={() => setShowManual(v => !v)}
-      >
-        {showManual ? 'Hide' : 'Browse'} all folders
-      </button>
-
-      {showManual && (
-        <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} excludeIds={excludeIds} />
-      )}
+      <div className="ff-onboard__tip-dots">
+        {TIPS.map((_, i) => (
+          <button
+            key={i}
+            className="ff-onboard__tip-dot"
+            data-active={i === tipIdx}
+            onClick={() => { setTipDir(i > tipIdx ? 'forward' : 'back'); setTipIdx(i); }}
+            aria-label={`Tip ${i + 1}`}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -207,6 +292,13 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
     activeWorkspace?.rootFolderId ?? scanResult.preSelected[0]?.id ?? '',
   );
   const [finishing, setFinishing] = useState(false);
+  const [closing, setClosing] = useState(false);
+
+  const handleClose = useCallback(() => {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(() => onFinish(), 200);
+  }, [closing, onFinish]);
 
   const hasRecommendations = scanResult.preSelected.length > 0 || scanResult.suggested.length > 0;
   const workspaceStepDesc = hasRecommendations
@@ -218,8 +310,8 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
     { title: 'Set up your workspace',        desc: workspaceStepDesc },
     { title: 'Choose your initial theme',    desc: 'Pick the starting theme for this workspace.' },
     { title: 'Pick your initial accent',     desc: 'Choose an initial accent color for this workspace.' },
-    { title: 'How should folders look?',     desc: 'Folders can stay compact as tiles, or always show inline as sections.' },
-    { title: "You're all set",               desc: 'Open Settings any time to tweak themes, layout, and the dock. Right-click anywhere for context actions.' },
+    { title: 'How do you want to browse?',    desc: 'Choose the layout that fits how you think about your bookmarks.' },
+    { title: "You're all set — here are a few tips", desc: 'A few things that will make your experience even better.' },
   ];
   const s = steps[step];
 
@@ -258,13 +350,13 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
     } catch {
       // workspace creation failed — proceed to finish anyway
     } finally {
-      onFinish();
+      handleClose();
     }
   };
 
   return (
-    <div className="ff-modal-scrim">
-      <div className="ff-onboard" onClick={(e) => e.stopPropagation()}>
+    <div className="ff-modal-scrim" data-closing={closing || undefined}>
+      <div className="ff-onboard" data-closing={closing || undefined} onClick={(e) => e.stopPropagation()}>
         <div className="ff-onboard__hero">
           <div className="ff-onboard__steps" aria-label={`Step ${step + 1} of ${steps.length}`}>
             {steps.map((_, i) => (
@@ -398,8 +490,8 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
             <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
                 {([
-                  { id: 'grid', label: 'Grid', desc: 'Folders shown as compact tiles. Keeps the view tidy.' },
-                  { id: 'list', label: 'List', desc: 'Every folder unfolded inline. See everything at a glance.' },
+                  { id: 'grid', label: 'Grid', desc: 'Folders appear as tiles. Tap one to open it — best when you like to focus on one folder at a time.' },
+                  { id: 'list', label: 'List', desc: 'Folders expand into sections with all their bookmarks visible — best when you want everything at a glance.' },
                 ] as { id: ViewMode; label: string; desc: string }[]).map(m => {
                   const active = settings.folderMode === m.id;
                   return (
@@ -424,37 +516,10 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
             </div>
           )}
 
-          {step === 5 && (
-            <div style={{ display: 'grid', placeItems: 'center', padding: '24px 0', fontSize: 13, color: 'var(--fg-3)' }}>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
-                {([
-                  [modShortcut('K'),    'Search'],
-                  ['Right-click',       'Edit & organize'],
-                  [altShortcut('1-9'),  'Switch workspace'],
-                ] as const).map(([k, v]) => (
-                  <div key={k} style={{
-                    padding: '12px 16px',
-                    border: '1px solid var(--line-1)',
-                    borderRadius: 12,
-                    background: 'var(--ink-2)',
-                    display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center',
-                    minWidth: 110,
-                  }}>
-                    <span className="ff-kbd">{k}</span>
-                    <span>{v}</span>
-                  </div>
-                ))}
-              </div>
-              {IS_MAC && (
-                <p style={{ marginTop: 16, fontSize: 11, color: 'var(--fg-4)' }}>
-                  Showing Mac shortcuts. Use ⌘ where Ctrl is shown on other platforms.
-                </p>
-              )}
-            </div>
-          )}
+          {step === 5 && <TipsCarousel />}
         </div>
         <footer className="ff-onboard__foot">
-          <button className="ff-iconbtn" onClick={onFinish}>Skip</button>
+          <button className="ff-iconbtn" onClick={handleClose}>Skip</button>
           <div style={{ display: 'flex', gap: 8 }}>
             {step > 0 && (
               <button className="ff-btn ff-btn--ghost" onClick={() => setStep(step - 1)}>
