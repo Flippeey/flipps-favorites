@@ -463,9 +463,9 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
 
           {step === 2 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 16 }}>
-              <ThemeChoiceCard id="system" label="System" hint="Follow OS preference."      active={settings.themeMode === 'system'} onSelect={(id) => onPatch({ themeMode: id })} preview="system" />
-              <ThemeChoiceCard id="light"  label="Light"  hint="Bright canvas, dark text."  active={settings.themeMode === 'light'}  onSelect={(id) => onPatch({ themeMode: id })} preview="light" />
-              <ThemeChoiceCard id="dark"   label="Dark"   hint="Dim canvas, light text."    active={settings.themeMode === 'dark'}   onSelect={(id) => onPatch({ themeMode: id })} preview="dark" />
+              <ThemeChoiceCard id="system" label="System" hint="Follow OS preference."      active={settings.themeMode === 'system'} onSelect={(id) => { onPatch({ themeMode: id }); void onPatchWorkspace({ themeMode: id }); }} preview="system" />
+              <ThemeChoiceCard id="light"  label="Light"  hint="Bright canvas, dark text."  active={settings.themeMode === 'light'}  onSelect={(id) => { onPatch({ themeMode: id }); void onPatchWorkspace({ themeMode: id }); }} preview="light" />
+              <ThemeChoiceCard id="dark"   label="Dark"   hint="Dim canvas, light text."    active={settings.themeMode === 'dark'}   onSelect={(id) => { onPatch({ themeMode: id }); void onPatchWorkspace({ themeMode: id }); }} preview="dark" />
             </div>
           )}
 
