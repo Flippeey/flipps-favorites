@@ -29,6 +29,7 @@ import {
   patchSettings,
   patchWorkspace,
   reloadNewtab,
+  resetCursor,
   saveVideo,
   seedPromoWorkspaces,
   seedTree,
@@ -57,6 +58,7 @@ async function recordWorkspaceSwitch(context, origin) {
   // Start on Work (dark, blue, top gradient)
   await patchSettings(page, { activeWorkspaceId: workspaceIds.Work });
   await page.waitForTimeout(2000);
+  resetCursor();
 
   // Beat 2: switch to AI (dark, purple, aurora gradient)
   const aiTab = page.locator(`.ff-ws-tab[title="AI"], .ff-ws-tab:has-text("AI")`).first();
@@ -107,6 +109,7 @@ async function recordAddEditBookmark(context, origin) {
   // Use Personal workspace (more items = better context)
   await patchSettings(page, { activeWorkspaceId: workspaceIds.Personal });
   await page.waitForTimeout(1500);
+  resetCursor();
 
   // Beat 2: open quick-add — click + button in top nav
   const addBtn = page.locator('[aria-label="Add bookmark"], .ff-addmenu, button:has-text("+")').first();
@@ -243,6 +246,7 @@ async function recordOnboarding(context, origin) {
 
   await reloadNewtab(page, 4000);
   await page.waitForSelector('.ff-onboard', { timeout: 8000 }).catch(() => undefined);
+  resetCursor();
 
   const next = () => page.locator('.ff-onboard .ff-btn:has-text("Next")').first();
 
@@ -342,6 +346,7 @@ async function recordAccentTheme(context, origin) {
 
   const { workspaceIds } = await seedPromoWorkspaces(page);
   await reloadNewtab(page, 4500);
+  resetCursor();
 
   // Beat 1: open Workspace > Appearance drawer (NOT app settings)
   const customizeBtn = page.locator('[aria-label="Customize workspace"]').first();
@@ -425,6 +430,8 @@ async function recordSearch(context, origin) {
   const { workspaceIds } = await seedPromoWorkspaces(page);
   await reloadNewtab(page, 4500);
 
+  resetCursor();
+
   // Beat 1: focus search bar
   const searchInput = page.locator('.ff-search__input, .ff-search input').first();
   if (await searchInput.count() > 0) {
@@ -466,6 +473,8 @@ async function recordDragReorder(context, origin) {
   const { workspaceIds } = await seedPromoWorkspaces(page);
   await reloadNewtab(page, 4500);
 
+  resetCursor();
+
   // Beat 1: drag a single tile to a new position
   const tiles = page.locator('.ff-tile[data-item-kind="bookmark"]');
   const tileCount = await tiles.count();
@@ -477,14 +486,14 @@ async function recordDragReorder(context, origin) {
 
     if (srcBox && dstBox) {
       await page.mouse.move(srcBox.x + srcBox.width / 2, srcBox.y + srcBox.height / 2);
-      await page.waitForTimeout(300);
+      await page.waitForTimeout(80);
       await page.mouse.down();
-      await page.waitForTimeout(400);
+      await page.waitForTimeout(120);
       await smoothMove(page, srcBox.x + srcBox.width / 2, srcBox.y + srcBox.height / 2,
-        dstBox.x + dstBox.width / 2, dstBox.y + dstBox.height / 2, 1000);
-      await page.waitForTimeout(400);
+        dstBox.x + dstBox.width / 2, dstBox.y + dstBox.height / 2, 550);
+      await page.waitForTimeout(200);
       await page.mouse.up();
-      await page.waitForTimeout(1200);
+      await page.waitForTimeout(1000);
     }
   }
 
@@ -498,10 +507,10 @@ async function recordDragReorder(context, origin) {
         await page.keyboard.down(modKey);
         await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
         await page.keyboard.up(modKey);
-        await page.waitForTimeout(400);
+        await page.waitForTimeout(250);
       }
     }
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(500);
   }
 
   // Beat 3: drag selection into a folder
@@ -512,12 +521,12 @@ async function recordDragReorder(context, origin) {
 
   if (selBox && folderBox) {
     await page.mouse.move(selBox.x + selBox.width / 2, selBox.y + selBox.height / 2);
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(80);
     await page.mouse.down();
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(120);
     await smoothMove(page, selBox.x + selBox.width / 2, selBox.y + selBox.height / 2,
-      folderBox.x + folderBox.width / 2, folderBox.y + folderBox.height / 2, 1200);
-    await page.waitForTimeout(500);
+      folderBox.x + folderBox.width / 2, folderBox.y + folderBox.height / 2, 650);
+    await page.waitForTimeout(200);
     await page.mouse.up();
     await page.waitForTimeout(1500);
 
@@ -553,6 +562,7 @@ async function recordViewModeSwitch(context, origin) {
   // Start on Personal workspace in Grid view, then reload to settle
   await patchSettings(page, { activeWorkspaceId: workspaceIds.Personal, folderMode: 'grid' });
   await reloadNewtab(page, 3000);
+  resetCursor();
 
   // Beat 1: Grid view established — hold 2s
   await page.waitForTimeout(2000);

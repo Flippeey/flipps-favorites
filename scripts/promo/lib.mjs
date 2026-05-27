@@ -526,11 +526,6 @@ export async function discoverOrigin(context) {
 
 // ─── Storage + settings ─────────────────────────────────────────────────────
 
-function api() {
-  // Runs inside the page. Chrome MV3 exposes both globals.
-  return (globalThis.browser ?? globalThis.chrome);
-}
-
 /** Skip onboarding by writing the storage value directly. */
 export async function skipOnboarding(page) {
   await page.evaluate(() => {
@@ -751,25 +746,79 @@ export async function reloadNewtab(page, settleMs = 1800) {
 
 // ─── Motion helpers ─────────────────────────────────────────────────────────
 
-/** Eased mouse move so demo videos feel intentional rather than teleporting. */
-export async function smoothMove(page, fromX, fromY, toX, toY, durationMs = 600) {
-  const steps = Math.max(8, Math.round(durationMs / 16));
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-    await page.mouse.move(
-      Math.round(fromX + (toX - fromX) * ease),
-      Math.round(fromY + (toY - fromY) * ease),
-    );
-    await page.waitForTimeout(16);
-  }
+// ─── Cursor tracking ────────────────────────────────────────────────────────
+// Track cursor position across calls so movements start from the last known
+// position instead of always teleporting from screen center.
+let cursorX = VIEWPORT.width / 2;
+let cursorY = VIEWPORT.height / 2;
+
+/** Reset tracking (call at start of each video after page load). */
+export function resetCursor(x = VIEWPORT.width / 2, y = VIEWPORT.height / 2) {
+  cursorX = x; cursorY = y;
 }
 
-export async function moveToBox(page, box, durationMs = 600) {
+/** Cubic ease-in-out — accelerates then decelerates, feels more intentional than quadratic. */
+function cubicEase(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+/**
+ * Move cursor from current tracked position to (toX, toY).
+ * Adds a slight perpendicular wobble for a human-like arc (not a laser-straight line).
+ * Step count is distance-based so actual timing is closer to durationMs regardless
+ * of path length. CDP roundtrip ~25-35ms per waitForTimeout call; we budget for that.
+ */
+export async function moveTo(page, toX, toY, durationMs = 420) {
+  const fromX = cursorX;
+  const fromY = cursorY;
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 2) { cursorX = toX; cursorY = toY; return; }
+
+  // ~8-20 steps: enough for visual smoothness, not so many that timing inflates.
+  const steps = Math.max(8, Math.min(20, Math.round(dist / 35)));
+  const msPerStep = Math.max(12, Math.round(durationMs / steps));
+
+  // Perpendicular unit vector for the arc wobble.
+  const px = -dy / dist;
+  const py = dx / dist;
+  const wobbleAmp = Math.min(dist * 0.045, 14); // caps at 14px — visible but subtle
+
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const e = cubicEase(t);
+    const w = wobbleAmp * Math.sin(Math.PI * t); // bell curve: 0 at start/end, peak at mid
+    await page.mouse.move(
+      Math.round(fromX + dx * e + px * w),
+      Math.round(fromY + dy * e + py * w),
+    );
+    if (i < steps) await page.waitForTimeout(msPerStep);
+  }
+  cursorX = toX;
+  cursorY = toY;
+}
+
+/**
+ * Move to approximately the center of box.
+ * Slight random offset (±5px x, ±4px y) avoids perfect-center robot precision.
+ * Starts from last known cursor position — no more teleporting from screen center.
+ */
+export async function moveToBox(page, box, durationMs = 420) {
   if (!box) return;
-  const cx = box.x + box.width / 2;
-  const cy = box.y + box.height / 2;
-  await smoothMove(page, VIEWPORT.width / 2, VIEWPORT.height / 2, cx, cy, durationMs);
+  const ox = (Math.random() - 0.5) * 10;
+  const oy = (Math.random() - 0.5) * 8;
+  await moveTo(page, box.x + box.width / 2 + ox, box.y + box.height / 2 + oy, durationMs);
+}
+
+/**
+ * Explicit from→to move (legacy API, still used for drag operations where the
+ * caller controls the exact drag origin). Syncs cursor tracking to fromX/fromY
+ * first so moveTo continues from the right position.
+ */
+export async function smoothMove(page, fromX, fromY, toX, toY, durationMs = 500) {
+  cursorX = fromX; cursorY = fromY;
+  await moveTo(page, toX, toY, durationMs);
 }
 
 export async function typeSlowly(locator, text, perCharDelayMs = 90) {
