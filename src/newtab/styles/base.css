@@ -175,6 +175,18 @@ html {
   text-shadow: var(--text-halo);
 }
 
+/* Big clock needs heavier shadow on wallpaper — --text-halo in dark mode is a thin dark
+   drop-shadow suited for dark text on light backgrounds. Near-white clock text against a
+   bright photo needs a much stronger layered glow. */
+.ff-app[data-bg="wallpaper"] .ff-hero__clock-time,
+.ff-app[data-bg="wallpaper"] .ff-hero__clock-date {
+  text-shadow:
+    0 0 2px rgba(0, 0, 0, 0.95),
+    0 2px 8px rgba(0, 0, 0, 0.85),
+    0 0 24px rgba(0, 0, 0, 0.65),
+    0 0 48px rgba(0, 0, 0, 0.45);
+}
+
 /* Force max-contrast foreground on wallpaper for elements that normally use muted fg-2/fg-3. */
 .ff-app[data-bg="wallpaper"] .ff-tile__label,
 .ff-app[data-bg="wallpaper"] .ff-section__count,
