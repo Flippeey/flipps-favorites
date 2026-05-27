@@ -295,6 +295,14 @@
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 14%, transparent);
 }
 
+[data-bg="wallpaper"] .ff-ws-tab.is-active {
+  background: color-mix(in oklab, var(--frost-strong) 70%, transparent);
+  color: var(--fg-1);
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: none;
+  text-shadow: var(--text-halo);
+}
+
 .ff-ws-tab[data-drop-hover="true"] {
   background: var(--accent-soft);
   border-color: var(--accent-border);
