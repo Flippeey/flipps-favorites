@@ -1,4 +1,16 @@
 import { extensionApi } from './browser';
+import {
+  clearCachedIcons,
+  clearIconOverrides,
+  deleteCachedIcon,
+  deleteIconOverride,
+  readAllCachedIcons,
+  readAllIconOverrides,
+  readCachedIcon,
+  readIconOverride,
+  writeIconOverride,
+  writeCachedIcon,
+} from './icon-idb';
 import type { AppSettings, BookmarkUsageRecord, IconCacheRecord, IconOverrideRecord, WorkspaceRecord } from './messages';
 import { createCachedRecordStore, createCachedValueStore } from './storage-buckets';
 
@@ -174,43 +186,39 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
 
 
 export async function readIconCacheRecords(): Promise<Record<string, IconCacheRecord>> {
-  return iconCacheStore.readAll();
+  return readAllCachedIcons();
 }
 
 export async function readIconCacheRecord(cacheKey: string): Promise<IconCacheRecord | null> {
-  return iconCacheStore.readOne(cacheKey);
+  return readCachedIcon(cacheKey);
 }
 
 export async function writeIconCacheRecord(record: IconCacheRecord): Promise<void> {
-  await iconCacheStore.writeOne(record.cacheKey, record);
+  await writeCachedIcon(record);
 }
 
 export async function deleteIconCacheRecord(cacheKeyValue: string): Promise<void> {
-  await iconCacheStore.deleteOne(cacheKeyValue);
+  await deleteCachedIcon(cacheKeyValue);
 }
 
 export async function deleteAllIconCacheRecords(): Promise<void> {
-  await iconCacheStore.clearAll();
+  await clearCachedIcons();
 }
 
 export async function readIconOverrideRecords(): Promise<Record<string, IconOverrideRecord>> {
-  await ensureIconOverrideRecordsMigratedToLocal();
-  return iconOverrideStore.readAll();
+  return readAllIconOverrides();
 }
 
 export async function readIconOverrideRecord(bookmarkUrl: string): Promise<IconOverrideRecord | null> {
-  await ensureIconOverrideRecordsMigratedToLocal();
-  return iconOverrideStore.readOne(bookmarkUrl);
+  return readIconOverride(bookmarkUrl);
 }
 
 export async function writeIconOverrideRecord(record: IconOverrideRecord): Promise<void> {
-  await ensureIconOverrideRecordsMigratedToLocal();
-  await iconOverrideStore.writeOne(record.bookmarkUrl, record);
+  await writeIconOverride(record);
 }
 
 export async function deleteIconOverrideRecord(bookmarkUrl: string): Promise<void> {
-  await ensureIconOverrideRecordsMigratedToLocal();
-  await iconOverrideStore.deleteOne(bookmarkUrl);
+  await deleteIconOverride(bookmarkUrl);
 }
 
 export async function readBookmarkUsageRecords(): Promise<Record<string, BookmarkUsageRecord>> {
