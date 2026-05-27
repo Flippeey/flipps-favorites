@@ -1,5 +1,5 @@
 /**
- * Promo video pipeline — 6 dark-mode recordings at 1920×1080.
+ * Promo video pipeline — 7 dark-mode recordings at 1920×1080.
  *
  *   node scripts/promo/videos.mjs
  *   node scripts/promo/videos.mjs --only=workspace-switch,add-bookmark
@@ -8,12 +8,13 @@
  * Requires: `npm run build:chrome` first.
  *
  * Output (promo/videos/):
- *   01-workspace-switch.webm   ~12s  — 3 workspaces: dark/blue → dark/teal → light/orange → dark/blue
+ *   01-workspace-switch.webm   ~16s  — 4 workspaces cycling: blue → purple → orange → red → blue
  *   02-add-edit-bookmark.webm  ~16s  — add spotify.com then edit it
- *   03-onboarding.webm         ~18s  — onboarding wizard with folder-based workspace setup
+ *   03-onboarding.webm         ~20s  — onboarding wizard: workspace → theme → accent → browse mode → tips
  *   04-accent-theme.webm       ~14s  — rapid accent + theme + gradient cycling
  *   05-search.webm             ~10s  — instant search filtering
  *   06-drag-reorder.webm       ~12s  — single + multi-select drag into folder
+ *   07-view-mode-switch.webm   ~10s  — one-click toggle: Grid → List → Grid
  */
 
 import { join } from 'node:path';
@@ -184,14 +185,14 @@ async function recordAddEditBookmark(context, origin) {
 }
 
 // ─── Video 3: Onboarding flow ────────────────────────────────────────────────
+// Step order: Welcome(0) → Workspace(1) → Theme(2) → Accent(3) → Browse mode(4) → Tips(5)
 
 async function recordOnboarding(context, origin) {
-  console.log('\n── Video 03: onboarding (~18s)');
+  console.log('\n── Video 03: onboarding (~20s)');
   const page = await context.newPage();
   await page.setViewportSize(VIEWPORT);
 
-  // For onboarding video: seed bookmark folders only (no workspaces),
-  // then trigger fresh onboarding so the wizard shows folder recommendations.
+  // Seed bookmark folders, then trigger fresh onboarding so wizard shows recommendations.
   await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.ff-app', { timeout: 15_000 });
   await skipOnboarding(page);
@@ -241,43 +242,21 @@ async function recordOnboarding(context, origin) {
   });
 
   await reloadNewtab(page, 4000);
-
-  // Wait for onboarding to appear
   await page.waitForSelector('.ff-onboard', { timeout: 8000 }).catch(() => undefined);
+
+  const next = () => page.locator('.ff-onboard .ff-btn:has-text("Next")').first();
 
   // Beat 1: welcome — hold 2s
   await page.waitForTimeout(2000);
 
-  // Beat 2: click Next to accent step
-  const next = () => page.locator('.ff-onboard .ff-btn:has-text("Next")').first();
-  await next().boundingBox().then(async (box) => {
-    if (box) {
-      await moveToBox(page, box, 400);
-      await next().click();
-      await page.waitForTimeout(400);
-    }
-  }).catch(() => next().click().catch(() => undefined));
-  await page.waitForTimeout(600);
-
-  // Beat 2: pick blue accent
-  const blueChip = page.locator('.ff-accentchip[aria-label="Blue"], .ff-accentchip').first();
-  if (await blueChip.count() > 0) {
-    await blueChip.click();
-    await page.waitForTimeout(800);
-  }
+  // Beat 2: workspace step — select Multiple workspaces, pick all 3 folders (wow moment)
   await next().click().catch(() => undefined);
   await page.waitForTimeout(600);
 
-  // Beat 3: layout — click Balanced, then Next
-  const balanced = page.locator('.ff-card:has-text("Balanced"), [data-preset="balanced"]').first();
-  if (await balanced.count() > 0) await balanced.click();
-  await page.waitForTimeout(500);
-  await next().click().catch(() => undefined);
-  await page.waitForTimeout(600);
-
-  // Beat 4: workspace step — select Multiple workspaces then pick all 3 folders
   const multiWs = page.locator('.ff-card:has-text("Multiple workspaces")').first();
   if (await multiWs.count() > 0) {
+    const box = await multiWs.boundingBox();
+    if (box) await moveToBox(page, box, 400);
     await multiWs.click();
     await page.waitForTimeout(800);
   }
@@ -288,20 +267,60 @@ async function recordOnboarding(context, origin) {
       await page.waitForTimeout(500);
     }
   }
-  // Hold on this state — the wow moment
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(2000); // hold — workspace preview wow moment
+
+  // Beat 3: theme step — pick Dark
   await next().click().catch(() => undefined);
   await page.waitForTimeout(600);
+  const darkCard = page.locator('.ff-onboard__body .ff-card:has-text("Dark")').first();
+  if (await darkCard.count() > 0) {
+    const box = await darkCard.boundingBox();
+    if (box) await moveToBox(page, box, 400);
+    await darkCard.click();
+    await page.waitForTimeout(800);
+  }
 
-  // Beat 5: navigation preference — keep defaults, click Next
+  // Beat 4: accent step — pick Blue
   await next().click().catch(() => undefined);
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(600);
+  const blueChip = page.locator('.ff-accentchip[aria-label="Blue"], .ff-accentchip').first();
+  if (await blueChip.count() > 0) {
+    const box = await blueChip.boundingBox();
+    if (box) await moveToBox(page, box, 400);
+    await blueChip.click();
+    await page.waitForTimeout(800);
+  }
 
-  // Beat 6: finish screen — click Get started
-  const finishBtn = page.locator('.ff-onboard .ff-btn:has-text("Get started"), .ff-onboard .ff-btn--accent').first();
+  // Beat 5: browse mode — click Grid, hold to show the choice
+  await next().click().catch(() => undefined);
+  await page.waitForTimeout(600);
+  const gridCard = page.locator('.ff-onboard__body .ff-card:has-text("Grid")').first();
+  if (await gridCard.count() > 0) {
+    const box = await gridCard.boundingBox();
+    if (box) await moveToBox(page, box, 400);
+    await gridCard.click();
+    await page.waitForTimeout(1200);
+  }
+
+  // Beat 6: tips carousel — advance through 2 tips
+  await next().click().catch(() => undefined);
+  await page.waitForTimeout(800);
+  for (let i = 0; i < 2; i++) {
+    const nextTip = page.locator('[aria-label="Next tip"]').first();
+    if (await nextTip.count() > 0) {
+      const box = await nextTip.boundingBox();
+      if (box) await moveToBox(page, box, 300);
+      await nextTip.click();
+      await page.waitForTimeout(700);
+    }
+  }
+  await page.waitForTimeout(600);
+
+  // Beat 7: finish
+  const finishBtn = page.locator('.ff-onboard .ff-btn:has-text("Get started")').first();
   if (await finishBtn.count() > 0) {
     const finishBox = await finishBtn.boundingBox();
-    await moveToBox(page, finishBox, 400);
+    if (finishBox) await moveToBox(page, finishBox, 400);
     await finishBtn.click();
     await page.waitForTimeout(2000);
   }
@@ -517,15 +536,65 @@ async function recordDragReorder(context, origin) {
   await saveVideo(page, '06-drag-reorder');
 }
 
+// ─── Video 7: View mode switching ────────────────────────────────────────────
+
+async function recordViewModeSwitch(context, origin) {
+  console.log('\n── Video 07: view-mode-switch (~10s)');
+  const page = await context.newPage();
+  await page.setViewportSize(VIEWPORT);
+
+  await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.ff-app', { timeout: 15_000 });
+  await skipOnboarding(page);
+  await clearAllBookmarks(page);
+
+  const { workspaceIds } = await seedPromoWorkspaces(page);
+
+  // Start on Personal workspace in Grid view, then reload to settle
+  await patchSettings(page, { activeWorkspaceId: workspaceIds.Personal, folderMode: 'grid' });
+  await reloadNewtab(page, 3000);
+
+  // Beat 1: Grid view established — hold 2s
+  await page.waitForTimeout(2000);
+
+  // Beat 2: move to view toggle button (between + and sort), click → List view
+  const gridToggle = page.locator('[aria-label="Switch to List view"]').first();
+  if (await gridToggle.count() > 0) {
+    const box = await gridToggle.boundingBox();
+    await moveToBox(page, box, 800);
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForTimeout(1000); // hold — watch tiles unfold into sections
+  }
+
+  // Beat 3: scroll down to reveal depth of List view
+  await page.evaluate(() => window.scrollBy({ top: 320, behavior: 'smooth' }));
+  await page.waitForTimeout(2000); // hold showing multiple section headers + inline bookmarks
+
+  // Beat 4: scroll back up, click toggle to return to Grid
+  await page.evaluate(() => window.scrollBy({ top: -320, behavior: 'smooth' }));
+  await page.waitForTimeout(400);
+
+  const listToggle = page.locator('[aria-label="Switch to Grid view"]').first();
+  if (await listToggle.count() > 0) {
+    const box = await listToggle.boundingBox();
+    await moveToBox(page, box, 600);
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForTimeout(1500); // hold — snap back to Grid is the payoff
+  }
+
+  await saveVideo(page, '07-view-mode-switch');
+}
+
 // ─── All scenarios map ────────────────────────────────────────────────────────
 
 const VIDEOS = {
-  'workspace-switch': recordWorkspaceSwitch,
-  'add-bookmark':     recordAddEditBookmark,
-  'onboarding':       recordOnboarding,
-  'accent-theme':     recordAccentTheme,
-  'search':           recordSearch,
-  'drag-reorder':     recordDragReorder,
+  'workspace-switch':  recordWorkspaceSwitch,
+  'add-bookmark':      recordAddEditBookmark,
+  'onboarding':        recordOnboarding,
+  'accent-theme':      recordAccentTheme,
+  'search':            recordSearch,
+  'drag-reorder':      recordDragReorder,
+  'view-mode-switch':  recordViewModeSwitch,
 };
 
 // ─── Main ─────────────────────────────────────────────────────────────────────

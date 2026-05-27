@@ -127,9 +127,9 @@ async function scene05_settingsAppearance(page, workspaceIds) {
   await patchSettings(page, { activeWorkspaceId: workspaceIds.Personal });
   await reloadNewtab(page, 1500);
   await captureScene(page, '05-settings-appearance', workspaceIds.Personal, async (p) => {
-    const settingsBtn = p.getByRole('button', { name: 'Settings', exact: true });
-    if (await settingsBtn.count() > 0) {
-      await settingsBtn.click();
+    const customizeBtn = p.locator('[aria-label="Customize workspace"]').first();
+    if (await customizeBtn.count() > 0) {
+      await customizeBtn.click();
       await p.waitForSelector('.ff-drawer', { timeout: 3000 });
       await p.waitForTimeout(400);
     }
@@ -143,9 +143,9 @@ async function scene06_settingsLayout(page, workspaceIds) {
   await patchSettings(page, { activeWorkspaceId: workspaceIds.Work });
   await reloadNewtab(page, 1500);
   await captureScene(page, '06-settings-layout', workspaceIds.Work, async (p) => {
-    const settingsBtn = p.getByRole('button', { name: 'Settings', exact: true });
-    if (await settingsBtn.count() > 0) {
-      await settingsBtn.click();
+    const customizeBtn = p.locator('[aria-label="Customize workspace"]').first();
+    if (await customizeBtn.count() > 0) {
+      await customizeBtn.click();
       await p.waitForSelector('.ff-drawer', { timeout: 3000 });
       // Navigate to Layout section
       const layoutNav = p.locator('.ff-drawer__navitem:has-text("Layout")').first();
@@ -257,6 +257,30 @@ async function scene12_onboardingWorkspaces(page, workspaceIds) {
   await page.waitForTimeout(300);
 }
 
+async function scene13_listHero(page, workspaceIds) {
+  console.log('\n── Scene 13: list-hero');
+  await patchSettings(page, { activeWorkspaceId: workspaceIds.Personal, folderMode: 'list' });
+  await reloadNewtab(page, 1500);
+  await captureScene(page, '13-list-hero', workspaceIds.Personal);
+  await patchSettings(page, { folderMode: 'grid' });
+}
+
+async function scene14_listWork(page, workspaceIds) {
+  console.log('\n── Scene 14: list-work');
+  await patchSettings(page, { activeWorkspaceId: workspaceIds.Work, folderMode: 'list' });
+  await reloadNewtab(page, 1500);
+  await captureScene(page, '14-list-work', workspaceIds.Work);
+  await patchSettings(page, { folderMode: 'grid' });
+}
+
+async function scene15_listDesign(page, workspaceIds) {
+  console.log('\n── Scene 15: list-design (light theme)');
+  await patchSettings(page, { activeWorkspaceId: workspaceIds.Design, folderMode: 'list' });
+  await reloadNewtab(page, 1500);
+  await captureScene(page, '15-list-design', workspaceIds.Design);
+  await patchSettings(page, { folderMode: 'grid' });
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 export async function runScreenshots() {
@@ -286,6 +310,9 @@ export async function runScreenshots() {
   await scene10_creativeWallpaper(page, workspaceIds);
   await scene11_onboardingWelcome(page, workspaceIds);
   await scene12_onboardingWorkspaces(page, workspaceIds);
+  await scene13_listHero(page, workspaceIds);
+  await scene14_listWork(page, workspaceIds);
+  await scene15_listDesign(page, workspaceIds);
 
   await context.close();
 
@@ -294,8 +321,8 @@ export async function runScreenshots() {
   await rm(profileDir, { recursive: true, force: true }).catch(() => undefined);
 
   console.log('\n✓ Screenshots complete.');
-  console.log(`  light/: ${12 * RESOLUTIONS.length} PNGs`);
-  console.log(`  dark/:  ${12 * RESOLUTIONS.length} PNGs`);
+  console.log(`  light/: ${15 * RESOLUTIONS.length} PNGs`);
+  console.log(`  dark/:  ${15 * RESOLUTIONS.length} PNGs`);
 }
 
 if (process.argv[1].endsWith('screenshots.mjs')) {
