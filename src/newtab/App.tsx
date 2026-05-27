@@ -210,21 +210,27 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     }
   }, [activeWorkspace]);
 
-  const handleCreateWorkspace = useCallback(async (rootFolderId: string, name: string) => {
-    if (workspaces.length >= MAX_WORKSPACES) return;
-    if (workspaces.some(w => w.rootFolderId === rootFolderId)) return;
+  const handleCreateWorkspace = useCallback(async (
+    rootFolderId: string,
+    name: string,
+    overrides?: Partial<Omit<WorkspaceRecord, 'id' | 'name' | 'rootFolderId'>>,
+  ): Promise<string | undefined> => {
+    if (workspaces.length >= MAX_WORKSPACES) return undefined;
+    if (workspaces.some(w => w.rootFolderId === rootFolderId)) return undefined;
     const workspace: WorkspaceRecord = {
       id: crypto.randomUUID(),
       name,
       rootFolderId,
       ...defaultWorkspaceSettings,
+      ...(overrides ?? {}),
     };
     try {
       const created = await createWorkspace(workspace);
       setWorkspaces(prev => [...prev, created]);
       await handlePatch({ activeWorkspaceId: created.id });
+      return created.id;
     } catch {
-      // creation failed — leave UI unchanged
+      return undefined;
     }
   }, [workspaces, handlePatch]);
 

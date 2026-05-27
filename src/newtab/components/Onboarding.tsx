@@ -14,7 +14,7 @@ interface OnboardingProps {
   tree: BookmarkNode[];
   onPatch: (patch: Partial<AppSettings>) => void;
   onPatchWorkspace: (patch: Partial<WorkspaceRecord>) => Promise<void>;
-  onCreateWorkspace: (rootFolderId: string, name: string) => Promise<void>;
+  onCreateWorkspace: (rootFolderId: string, name: string, overrides?: Partial<WorkspaceRecord>) => Promise<string | undefined>;
   onFinish: () => void;
 }
 
@@ -291,6 +291,9 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
   const [singleRootFolderId, setSingleRootFolderId] = useState<string>(
     activeWorkspace?.rootFolderId ?? scanResult.preSelected[0]?.id ?? '',
   );
+  const [pendingAccentColor, setPendingAccentColor] = useState(
+    activeWorkspace?.accentColor ?? ACCENT_PRESETS[0].value,
+  );
   const [finishing, setFinishing] = useState(false);
   const [closing, setClosing] = useState(false);
 
@@ -475,8 +478,8 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
                 <button
                   key={a.id}
                   className="ff-accentchip"
-                  data-active={(activeWorkspace?.accentColor ?? '').toUpperCase() === a.value.toUpperCase()}
-                  onClick={() => onPatchWorkspace({ accentColor: a.value })}
+                  data-active={pendingAccentColor.toUpperCase() === a.value.toUpperCase()}
+                  onClick={() => { setPendingAccentColor(a.value); void onPatchWorkspace({ accentColor: a.value }); }}
                   style={{ background: a.value, color: a.value }}
                   aria-label={a.label}
                 >

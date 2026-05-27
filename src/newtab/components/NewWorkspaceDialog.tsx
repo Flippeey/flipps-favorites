@@ -8,7 +8,7 @@ import { WorkspaceRecommendations } from './Onboarding';
 interface NewWorkspaceDialogProps {
   tree: BookmarkNode[];
   workspaces: WorkspaceRecord[];
-  onConfirm: (rootFolderId: string, name: string) => Promise<void>;
+  onConfirm: (rootFolderId: string, name: string) => Promise<string | undefined>;
   onClose: () => void;
 }
 
