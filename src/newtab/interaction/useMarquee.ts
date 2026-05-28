@@ -62,7 +62,10 @@ export function useMarquee({ surface, container, rootFolderId, enabled, selectio
         target.closest('input') ||
         target.closest('select') ||
         target.closest('textarea') ||
-        target.closest('label')
+        target.closest('label') ||
+        target.closest('.ff-nav') ||
+        target.closest('[role="listbox"]') ||
+        target.closest('[role="menu"]')
       ) return;
       const scopeId = closestScopeId(target, rootFolderIdRef.current);
       const additive = event.shiftKey;
