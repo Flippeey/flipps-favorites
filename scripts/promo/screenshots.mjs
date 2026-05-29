@@ -294,7 +294,7 @@ export async function runScreenshots() {
   await clearAllBookmarks(page);
   await reloadNewtab(page, 1000);
 
-  console.log('\n● Seeding 3-workspace promo data…');
+  console.log('\n● Seeding promo workspaces…');
   const { workspaceIds } = await seedPromoWorkspaces(page);
   await reloadNewtab(page, 2000);
 

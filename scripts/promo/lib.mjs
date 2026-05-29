@@ -45,12 +45,14 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Single source of truth lives in src/shared/seed-data.ts (typed against the
 // shared models). Re-exported here so existing promo scripts keep importing
 // from lib.mjs. Node ≥22.18 strips the TS types on import.
-export {
+import {
   ROOT_BOOKMARKS,
   FOLDERS,
   DOCK_BOOKMARKS,
   PROMO_WORKSPACES,
 } from '../../src/shared/seed-data.ts';
+
+export { ROOT_BOOKMARKS, FOLDERS, DOCK_BOOKMARKS, PROMO_WORKSPACES };
 
 
 // ─── Launch + discovery ─────────────────────────────────────────────────────
@@ -212,11 +214,11 @@ export async function seedTree(page) {
 }
 
 /**
- * Seed the 3-workspace promo tree.
+ * Seed the promo workspaces (one per PROMO_WORKSPACES persona).
  * Creates bookmark folders for each workspace under "Other bookmarks" (id "2"),
  * then creates workspace records pointing to each root folder.
- * Also creates the shared dock folder.
- * Returns { workspaceIds: { Work, Personal, Creative }, dockId }.
+ * Also creates the shared dock folder. Work is the active workspace.
+ * Returns { workspaceIds: Record<personaName, id>, dockId }.
  */
 export async function seedPromoWorkspaces(page) {
   // 1. Create bookmark folders for each workspace
@@ -282,7 +284,7 @@ export async function seedPromoWorkspaces(page) {
   // 4. Activate Work workspace and configure dock
   await patchSettings(page, {
     activeWorkspaceId: workspaceIds.Work,
-    workspaceOrder: [workspaceIds.Work, workspaceIds.Personal, workspaceIds.Creative],
+    workspaceOrder: PROMO_WORKSPACES.map((ws) => workspaceIds[ws.name]),
     dockFolderId: dockId,
     showDock: true,
   });
