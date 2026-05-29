@@ -35,6 +35,7 @@ function parseArgs() {
     width: 800,
     fps: 18,
     maxSeconds: 15,
+    trimStart: 0,
     ffmpeg: null,
     dither: 'bayer:bayer_scale=5',
   };
@@ -43,6 +44,7 @@ function parseArgs() {
     else if (a.startsWith('--width=')) flags.width = parseInt(a.slice(8), 10);
     else if (a.startsWith('--fps='))   flags.fps   = parseInt(a.slice(6), 10);
     else if (a.startsWith('--max='))   flags.maxSeconds = parseFloat(a.slice(6));
+    else if (a.startsWith('--trim-start=')) flags.trimStart = parseFloat(a.slice(13));
     else if (a.startsWith('--ffmpeg='))flags.ffmpeg = a.slice(9);
     else if (a.startsWith('--dither='))flags.dither = a.slice(9);
   }
@@ -73,12 +75,16 @@ function run(cmd, args) {
   });
 }
 
-async function convert(ffmpeg, src, dest, { width, fps, maxSeconds, dither }) {
+async function convert(ffmpeg, src, dest, { width, fps, maxSeconds, dither, trimStart }) {
+  // Lead-trim (fast input seek before -i) drops the brief about:blank frame
+  // captured at page creation, so the GIF opens on the ready dashboard.
+  const ss = trimStart > 0 ? ['-ss', String(trimStart)] : [];
   // Pass 1: generate palette from a representative slice.
   const paletteFile = dest.replace(/\.gif$/, '.palette.png');
   const vf = `fps=${fps},scale=${width}:-2:flags=lanczos`;
   await run(ffmpeg, [
     '-y',
+    ...ss,
     '-t', String(maxSeconds),
     '-i', src,
     '-vf', `${vf},palettegen=max_colors=192:stats_mode=full`,
@@ -87,6 +93,7 @@ async function convert(ffmpeg, src, dest, { width, fps, maxSeconds, dither }) {
   // Pass 2: encode using palette.
   await run(ffmpeg, [
     '-y',
+    ...ss,
     '-t', String(maxSeconds),
     '-i', src,
     '-i', paletteFile,
@@ -108,7 +115,7 @@ async function main() {
   const flags = parseArgs();
   if (!existsSync(VIDEO_DIR)) {
     console.error(`No videos directory: ${VIDEO_DIR}`);
-    console.error('Run `node scripts/promo/record.mjs` first.');
+    console.error('Run `node scripts/promo/videos.mjs` first.');
     process.exit(1);
   }
   await mkdir(GIF_DIR, { recursive: true });

@@ -1,5 +1,5 @@
 /**
- * Promo video pipeline — 7 dark-mode recordings at 1920×1080.
+ * Promo video pipeline — 7 dark/light recordings at 1920×1080.
  *
  *   node scripts/promo/videos.mjs
  *   node scripts/promo/videos.mjs --only=workspace-switch,add-bookmark
@@ -7,538 +7,362 @@
  *
  * Requires: `npm run build:chrome` first.
  *
+ * Architecture (refactored): ONE persistent browser context for the whole run.
+ * Bookmarks are seeded once and the icon cache is warmed once, on a shared
+ * "control" page. Each clip then opens a cheap new page in that warm context,
+ * so the first frame is already clean — dark app background (no white flash),
+ * bookmarks present, icons served from cache (identical across every clip).
+ * Mirrors the single-context pattern in tests/fixtures/extension-context.ts.
+ *
  * Output (promo/videos/):
- *   01-workspace-switch.webm   ~16s  — 4 workspaces cycling: blue → purple → orange → red → blue
- *   02-add-edit-bookmark.webm  ~16s  — add spotify.com then edit it
- *   03-onboarding.webm         ~20s  — onboarding wizard: workspace → theme → accent → browse mode → tips
- *   04-accent-theme.webm       ~14s  — rapid accent + theme + gradient cycling
- *   05-search.webm             ~10s  — instant search filtering
- *   06-drag-reorder.webm       ~12s  — single + multi-select drag into folder
- *   07-view-mode-switch.webm   ~10s  — one-click toggle: Grid → List → Grid
+ *   01-workspace-switch.webm   — Work → AI → Design → Gaming → Work + dock peek
+ *   02-add-edit-bookmark.webm  — edit a tile, search a new icon, apply it
+ *   03-onboarding.webm         — welcome → Multiple workspaces → pick 2 → done
+ *   04-accent-theme.webm       — 2 accents, light↔dark, one gradient
+ *   05-search.webm             — query with folder-path label, then a multi-hit query
+ *   06-drag-reorder.webm       — single drag, multi-select 3, drop into a folder, reveal
+ *   07-view-mode-switch.webm   — grid → list (scroll) → grid
  */
 
 import { join } from 'node:path';
 import {
+  HOLD,
   VIDEO_DIR,
   VIEWPORT,
   clearAllBookmarks,
   discoverOrigin,
+  hold,
   launchContext,
   moveToBox,
   openNewtab,
   patchSettings,
-  patchWorkspace,
-  reloadNewtab,
   resetCursor,
   saveVideo,
   seedPromoWorkspaces,
-  seedTree,
   skipOnboarding,
-  sleep,
   smoothMove,
   typeSlowly,
+  waitForReady,
+  warmIcons,
 } from './lib.mjs';
+
+// ─── Shared helpers ───────────────────────────────────────────────────────────
+
+/** Open a fresh recording page in the (already warm) shared context. */
+async function openRecordingPage(context, origin) {
+  const page = await context.newPage();
+  await page.setViewportSize(VIEWPORT);
+  await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.ff-app', { timeout: 15_000 });
+  return page;
+}
+
+/** Click a workspace tab by name and let the switch settle. */
+async function switchWorkspace(page, name, ms = 2200) {
+  const tab = page.locator(`.ff-ws-tab[title="${name}"], .ff-ws-tab:has-text("${name}")`).first();
+  const box = await tab.boundingBox();
+  if (!box) return;
+  await moveToBox(page, box, 700);
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await hold(page, ms);
+}
 
 // ─── Video 1: Workspace switching ────────────────────────────────────────────
 
-async function recordWorkspaceSwitch(context, origin) {
-  console.log('\n── Video 01: workspace-switch (~16s)');
-  const page = await context.newPage();
-  await page.setViewportSize(VIEWPORT);
-  page.on('console', () => {});
+async function recordWorkspaceSwitch(context, origin, workspaceIds, control) {
+  console.log('\n── Video 01: workspace-switch');
+  await patchSettings(control, { activeWorkspaceId: workspaceIds.Work });
 
-  await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.ff-app', { timeout: 15_000 });
-  await skipOnboarding(page);
-  await clearAllBookmarks(page);
-
-  const { workspaceIds } = await seedPromoWorkspaces(page);
-  await reloadNewtab(page, 5000);
-
-  // Start on Work (dark, blue, top gradient)
-  await patchSettings(page, { activeWorkspaceId: workspaceIds.Work });
-  await page.waitForTimeout(2000);
+  const page = await openRecordingPage(context, origin);
+  await waitForReady(page);
   resetCursor();
+  await hold(page, HOLD.intro); // clean opening frame: Work, blue, dock visible
 
-  // Beat 2: switch to AI (dark, purple, aurora gradient)
-  const aiTab = page.locator(`.ff-ws-tab[title="AI"], .ff-ws-tab:has-text("AI")`).first();
-  const aiBox = await aiTab.boundingBox();
-  await moveToBox(page, aiBox, 800);
-  await page.mouse.click(aiBox.x + aiBox.width / 2, aiBox.y + aiBox.height / 2);
-  await page.waitForTimeout(2200);
+  await switchWorkspace(page, 'AI', HOLD.settle + 1100);     // purple, aurora
+  await switchWorkspace(page, 'Design', HOLD.settle + 1100); // orange, LIGHT — biggest visual jump
+  await switchWorkspace(page, 'Gaming', HOLD.settle + 1300); // red
 
-  // Beat 3: switch to Design (light, orange, top gradient)
-  const designTab = page.locator(`.ff-ws-tab[title="Design"], .ff-ws-tab:has-text("Design")`).first();
-  const designBox = await designTab.boundingBox();
-  await moveToBox(page, designBox, 600);
-  await page.mouse.click(designBox.x + designBox.width / 2, designBox.y + designBox.height / 2);
-  await page.waitForTimeout(2200);
+  // Peek the dock on Gaming to show each space keeps its own shortcuts.
+  const dockItem = page.locator('.ff-dock__item').first();
+  const db = await dockItem.boundingBox();
+  if (db) {
+    await moveToBox(page, db, 800);
+    await hold(page, HOLD.beat);
+  }
 
-  // Beat 4: switch to Gaming (dark, red, top gradient)
-  const gamingTab = page.locator(`.ff-ws-tab[title="Gaming"], .ff-ws-tab:has-text("Gaming")`).first();
-  const gamingBox = await gamingTab.boundingBox();
-  await moveToBox(page, gamingBox, 600);
-  await page.mouse.click(gamingBox.x + gamingBox.width / 2, gamingBox.y + gamingBox.height / 2);
-  await page.waitForTimeout(3000);
-
-  // Beat 5: return to Work
-  const workTab = page.locator(`.ff-ws-tab[title="Work"], .ff-ws-tab:has-text("Work")`).first();
-  const workBox = await workTab.boundingBox();
-  await moveToBox(page, workBox, 600);
-  await page.mouse.click(workBox.x + workBox.width / 2, workBox.y + workBox.height / 2);
-  await page.waitForTimeout(1800);
+  await switchWorkspace(page, 'Work', HOLD.outro); // home again
 
   await saveVideo(page, '01-workspace-switch');
 }
 
-// ─── Video 2: Add + edit a bookmark ─────────────────────────────────────────
+// ─── Video 2: Edit a bookmark + custom icon search ───────────────────────────
 
-async function recordAddEditBookmark(context, origin) {
-  console.log('\n── Video 02: add-edit-bookmark (~16s)');
-  const page = await context.newPage();
-  await page.setViewportSize(VIEWPORT);
+async function recordAddEditBookmark(context, origin, workspaceIds, control) {
+  console.log('\n── Video 02: add-edit-bookmark (custom icon search)');
+  await patchSettings(control, { activeWorkspaceId: workspaceIds.Work });
 
-  await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.ff-app', { timeout: 15_000 });
-  await skipOnboarding(page);
-  await clearAllBookmarks(page);
-
-  const { workspaceIds } = await seedPromoWorkspaces(page);
-  await reloadNewtab(page, 4500);
-
-  // Use Personal workspace (more items = better context)
-  await patchSettings(page, { activeWorkspaceId: workspaceIds.Personal });
-  await page.waitForTimeout(1500);
+  const page = await openRecordingPage(context, origin);
+  await waitForReady(page);
   resetCursor();
+  await hold(page, HOLD.intro);
 
-  // Beat 2: open quick-add — click + button in top nav
-  const addBtn = page.locator('[aria-label="Add bookmark"], .ff-addmenu, button:has-text("+")').first();
-  if (await addBtn.count() > 0) {
-    const addBox = await addBtn.boundingBox();
-    await moveToBox(page, addBox, 600);
-    await page.mouse.click(addBox.x + addBox.width / 2, addBox.y + addBox.height / 2);
-    await page.waitForTimeout(400);
-    // If dropdown appears, pick "Add bookmark"
-    const addBmItem = page.locator('.ff-sort__option:has-text("bookmark"), [role="menuitem"]:has-text("bookmark")').first();
-    if (await addBmItem.count() > 0) {
-      await addBmItem.click();
-      await page.waitForTimeout(400);
-    }
-  }
-
-  // Beat 3: type URL
-  const urlInput = page.locator('.ff-dialog input[name="url"], .ff-dialog input[type="url"], .ff-dialog input').first();
-  await page.waitForSelector('.ff-dialog', { timeout: 3000 }).catch(() => undefined);
-  if (await urlInput.count() > 0) {
-    await urlInput.click();
-    await typeSlowly(urlInput, 'www.spotify.com');
-    await page.waitForTimeout(1500); // let favicon fetch
-  }
-
-  // Beat 4: save
-  const saveBtn = page.locator('.ff-dialog .ff-btn--accent, .ff-dialog button[type="submit"]').first();
-  if (await saveBtn.count() > 0) {
-    const saveBox = await saveBtn.boundingBox();
-    await moveToBox(page, saveBox, 500);
-    await saveBtn.click();
-    await page.waitForTimeout(1200);
-  }
-
-  // Beat 5: right-click the new Spotify tile
-  const spotifyTile = page.locator('.ff-tile:has-text("Spotify")').last();
-  if (await spotifyTile.count() > 0) {
-    const tileBox = await spotifyTile.boundingBox();
-    await moveToBox(page, tileBox, 600);
-    await page.mouse.click(tileBox.x + tileBox.width / 2, tileBox.y + tileBox.height / 2, { button: 'right' });
+  // Right-click the GitHub tile → Edit.
+  const tile = page.locator('.ff-tile[data-item-kind="bookmark"]:has-text("GitHub")').first();
+  const tb = await tile.boundingBox();
+  if (tb) {
+    await moveToBox(page, tb, 700);
+    await page.mouse.click(tb.x + tb.width / 2, tb.y + tb.height / 2, { button: 'right' });
     await page.waitForSelector('.ff-ctx', { timeout: 2000 });
-    await page.waitForTimeout(400);
+    await hold(page, HOLD.beat);
 
-    // Beat 5: click Edit
-    const editItem = page.locator('.ff-ctx li:has-text("Edit"), .ff-ctx [data-action="edit"]').first();
-    if (await editItem.count() > 0) {
-      const editBox = await editItem.boundingBox();
-      await moveToBox(page, editBox, 400);
+    const editItem = page.locator('.ff-ctx__item:has-text("Edit"), .ff-ctx [role="menuitem"]:has-text("Edit")').first();
+    const eb = await editItem.boundingBox();
+    if (eb) {
+      await moveToBox(page, eb, 400);
       await editItem.click();
-      await page.waitForSelector('.ff-dialog', { timeout: 2000 });
-      await page.waitForTimeout(600);
-    }
+      await page.waitForSelector('.ff-dialog', { timeout: 3000 });
+      // Icon search auto-runs for an existing bookmark; wait for results.
+      await page.waitForSelector('.ff-icongrid__cell', { state: 'visible', timeout: 8000 }).catch(() => undefined);
+      await hold(page, HOLD.settle); // let the grid fill — this is the highlight
 
-    // Beat 6: edit title
-    const titleInput = page.locator('.ff-dialog input[name="title"], .ff-dialog input[placeholder*="itle"]').first();
-    if (await titleInput.count() > 0) {
-      const titleBox = await titleInput.boundingBox();
-      await moveToBox(page, titleBox, 400);
-      await titleInput.click({ clickCount: 3 });
-      await page.waitForTimeout(200);
-      await typeSlowly(titleInput, 'Spotify — Music');
-      await page.waitForTimeout(800);
-    }
+      // Pick a distinctive icon candidate to show the swap.
+      const candidate = page.locator('.ff-icongrid__cell:visible').nth(3);
+      const cb = await candidate.boundingBox();
+      if (cb) {
+        await moveToBox(page, cb, 600);
+        await candidate.click();
+        await hold(page, HOLD.settle); // preview updates
+      }
 
-    // Beat 7: save
-    const saveEditBtn = page.locator('.ff-dialog .ff-btn--accent, .ff-dialog button[type="submit"]').first();
-    if (await saveEditBtn.count() > 0) {
-      const saveBtnBox = await saveEditBtn.boundingBox();
-      await moveToBox(page, saveBtnBox, 400);
-      await saveEditBtn.click();
-      await page.waitForTimeout(1500);
+      // Save.
+      const save = page.locator('.ff-dialog .ff-btn--accent, .ff-dialog button[type="submit"], .ff-dialog button:has-text("Save")').first();
+      const sb = await save.boundingBox();
+      if (sb) {
+        await moveToBox(page, sb, 500);
+        await save.click();
+        await hold(page, HOLD.outro); // back on the grid with the new icon
+      }
     }
   }
 
   await saveVideo(page, '02-add-edit-bookmark');
 }
 
-// ─── Video 3: Onboarding flow ────────────────────────────────────────────────
-// Step order: Welcome(0) → Workspace(1) → Theme(2) → Accent(3) → Browse mode(4) → Tips(5)
+// ─── Video 3: Onboarding (tight cut) ─────────────────────────────────────────
 
-async function recordOnboarding(context, origin) {
-  console.log('\n── Video 03: onboarding (~20s)');
-  const page = await context.newPage();
-  await page.setViewportSize(VIEWPORT);
-
-  // Seed bookmark folders, then trigger fresh onboarding so wizard shows recommendations.
-  await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.ff-app', { timeout: 15_000 });
-  await skipOnboarding(page);
-  await clearAllBookmarks(page);
-
-  // Seed 3 named folders that the onboarding wizard will suggest as workspaces
-  await page.evaluate(async () => {
-    const a = (globalThis.browser ?? globalThis.chrome);
-    const workNames = ['Work', 'Personal', 'Creative'];
-    const bms = {
-      Work: [
-        { title: 'GitHub', url: 'https://github.com' },
-        { title: 'Linear', url: 'https://linear.app' },
-        { title: 'Slack',  url: 'https://slack.com' },
-      ],
-      Personal: [
-        { title: 'YouTube', url: 'https://www.youtube.com' },
-        { title: 'Reddit',  url: 'https://www.reddit.com' },
-        { title: 'Spotify', url: 'https://open.spotify.com' },
-      ],
-      Creative: [
-        { title: 'Dribbble', url: 'https://dribbble.com' },
-        { title: 'Figma',    url: 'https://figma.com' },
-        { title: 'Unsplash', url: 'https://unsplash.com' },
-      ],
-    };
-    for (const name of workNames) {
-      const folder = await a.bookmarks.create({ parentId: '1', title: name });
-      for (const bm of bms[name]) {
-        await a.bookmarks.create({ parentId: folder.id, title: bm.title, url: bm.url });
-      }
-    }
-  });
-
-  // Trigger fresh onboarding
-  await page.evaluate(async () => {
-    const a = (globalThis.browser ?? globalThis.chrome);
+async function recordOnboarding(context, origin, workspaceIds, control) {
+  console.log('\n── Video 03: onboarding (tight)');
+  await patchSettings(control, { activeWorkspaceId: workspaceIds.Work });
+  // Trigger a fresh wizard for the recording page.
+  await control.evaluate(async () => {
+    const a = globalThis.browser ?? globalThis.chrome;
     await a.storage.local.set({
-      'onboarding-state': {
-        version: 1,
-        status: 'pending',
-        updatedAt: Date.now(),
-        completedAt: null,
-        skippedAt: null,
-      },
+      'onboarding-state': { version: 1, status: 'pending', updatedAt: Date.now(), completedAt: null, skippedAt: null },
     });
   });
 
-  await reloadNewtab(page, 4000);
+  const page = await openRecordingPage(context, origin);
   await page.waitForSelector('.ff-onboard', { timeout: 8000 }).catch(() => undefined);
   resetCursor();
+  await hold(page, HOLD.intro); // welcome
 
   const next = () => page.locator('.ff-onboard .ff-btn:has-text("Next")').first();
 
-  // Beat 1: welcome — hold 2s
-  await page.waitForTimeout(2000);
-
-  // Beat 2: workspace step — select Multiple workspaces, pick all 3 folders (wow moment)
+  // Welcome → workspace step.
   await next().click().catch(() => undefined);
-  await page.waitForTimeout(600);
+  await hold(page, HOLD.beat);
 
-  const multiWs = page.locator('.ff-card:has-text("Multiple workspaces")').first();
-  if (await multiWs.count() > 0) {
-    const box = await multiWs.boundingBox();
-    if (box) await moveToBox(page, box, 400);
-    await multiWs.click();
-    await page.waitForTimeout(800);
+  // The wow moment: choose Multiple workspaces, pick two suggested folders.
+  const multi = page.locator('.ff-card:has-text("Multiple workspaces")').first();
+  const mb = await multi.boundingBox();
+  if (mb) { await moveToBox(page, mb, 500); await multi.click(); await hold(page, HOLD.beat); }
+  for (const name of ['Work', 'Personal']) {
+    const card = page.locator(`.ff-card:has-text("${name}")`).first();
+    if (await card.count()) { await card.click(); await hold(page, HOLD.beat); }
   }
-  for (const name of ['Work', 'Personal', 'Creative']) {
-    const folderCard = page.locator(`.ff-card:has-text("${name}")`).first();
-    if (await folderCard.count() > 0) {
-      await folderCard.click();
-      await page.waitForTimeout(500);
-    }
-  }
-  await page.waitForTimeout(2000); // hold — workspace preview wow moment
+  await hold(page, HOLD.settle); // hold on the populated picker
 
-  // Beat 3: theme step — pick Dark
-  await next().click().catch(() => undefined);
-  await page.waitForTimeout(600);
-  const darkCard = page.locator('.ff-onboard__body .ff-card:has-text("Dark")').first();
-  if (await darkCard.count() > 0) {
-    const box = await darkCard.boundingBox();
-    if (box) await moveToBox(page, box, 400);
-    await darkCard.click();
-    await page.waitForTimeout(800);
+  // Skip straight to finish — keep the web cut short.
+  const finish = page.locator('.ff-onboard .ff-btn:has-text("Get started"), .ff-onboard .ff-btn:has-text("Finish")').first();
+  for (let i = 0; i < 5 && !(await finish.count()); i++) {
+    await next().click().catch(() => undefined);
+    await hold(page, 350);
   }
-
-  // Beat 4: accent step — pick Blue
-  await next().click().catch(() => undefined);
-  await page.waitForTimeout(600);
-  const blueChip = page.locator('.ff-accentchip[aria-label="Blue"], .ff-accentchip').first();
-  if (await blueChip.count() > 0) {
-    const box = await blueChip.boundingBox();
-    if (box) await moveToBox(page, box, 400);
-    await blueChip.click();
-    await page.waitForTimeout(800);
-  }
-
-  // Beat 5: browse mode — click Grid, hold to show the choice
-  await next().click().catch(() => undefined);
-  await page.waitForTimeout(600);
-  const gridCard = page.locator('.ff-onboard__body .ff-card:has-text("Grid")').first();
-  if (await gridCard.count() > 0) {
-    const box = await gridCard.boundingBox();
-    if (box) await moveToBox(page, box, 400);
-    await gridCard.click();
-    await page.waitForTimeout(1200);
-  }
-
-  // Beat 6: tips carousel — advance through 2 tips
-  await next().click().catch(() => undefined);
-  await page.waitForTimeout(800);
-  for (let i = 0; i < 2; i++) {
-    const nextTip = page.locator('[aria-label="Next tip"]').first();
-    if (await nextTip.count() > 0) {
-      const box = await nextTip.boundingBox();
-      if (box) await moveToBox(page, box, 300);
-      await nextTip.click();
-      await page.waitForTimeout(700);
-    }
-  }
-  await page.waitForTimeout(600);
-
-  // Beat 7: finish
-  const finishBtn = page.locator('.ff-onboard .ff-btn:has-text("Get started")').first();
-  if (await finishBtn.count() > 0) {
-    const finishBox = await finishBtn.boundingBox();
-    if (finishBox) await moveToBox(page, finishBox, 400);
-    await finishBtn.click();
-    await page.waitForTimeout(2000);
+  if (await finish.count()) {
+    const fb = await finish.boundingBox();
+    if (fb) await moveToBox(page, fb, 400);
+    await finish.click();
+    await page.waitForSelector('.ff-onboard', { state: 'detached', timeout: 5000 }).catch(() => undefined);
+    await hold(page, HOLD.outro);
   }
 
   await saveVideo(page, '03-onboarding');
+
+  // Reset so later clips don't show the wizard.
+  await control.evaluate(async () => {
+    const a = globalThis.browser ?? globalThis.chrome;
+    await a.storage.local.set({
+      'onboarding-state': { version: 1, status: 'completed', updatedAt: Date.now(), completedAt: Date.now(), skippedAt: null },
+    });
+  });
 }
 
-// ─── Video 4: Accent + theme cycling ─────────────────────────────────────────
+// ─── Video 4: Accent + theme (simplified) ────────────────────────────────────
 
-async function recordAccentTheme(context, origin) {
-  console.log('\n── Video 04: accent-theme (~14s)');
-  const page = await context.newPage();
-  await page.setViewportSize(VIEWPORT);
+async function recordAccentTheme(context, origin, workspaceIds, control) {
+  console.log('\n── Video 04: accent-theme (simplified)');
+  await patchSettings(control, { activeWorkspaceId: workspaceIds.Work });
 
-  await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.ff-app', { timeout: 15_000 });
-  await skipOnboarding(page);
-  await clearAllBookmarks(page);
-
-  const { workspaceIds } = await seedPromoWorkspaces(page);
-  await reloadNewtab(page, 4500);
+  const page = await openRecordingPage(context, origin);
+  await waitForReady(page);
   resetCursor();
+  await hold(page, HOLD.intro);
 
-  // Beat 1: open Workspace > Appearance drawer (NOT app settings)
-  const customizeBtn = page.locator('[aria-label="Customize workspace"]').first();
-  if (await customizeBtn.count() > 0) {
-    const box = await customizeBtn.boundingBox();
-    await moveToBox(page, box, 500);
-    await customizeBtn.click();
+  // Open the Workspace appearance drawer.
+  const customize = page.locator('[aria-label="Customize workspace"]').first();
+  const cb = await customize.boundingBox();
+  if (cb) {
+    await moveToBox(page, cb, 600);
+    await customize.click();
     await page.waitForSelector('.ff-drawer', { timeout: 3000 });
-    await page.waitForTimeout(600);
+    await hold(page, HOLD.beat);
   }
 
-  // Beat 2: cycle through accent chips — Blue(0)→Teal(1)→Green(2)→Orange(5)→Purple(9)
-  const accentChips = page.locator('.ff-accentchip');
-  const indicesToCycle = [1, 2, 5, 9]; // already on Blue(0); Teal, Green, Orange, Purple
-  for (const idx of indicesToCycle) {
-    const chip = accentChips.nth(idx);
-    if (await chip.count() > 0) {
-      const box = await chip.boundingBox();
-      await moveToBox(page, box, 300);
-      await chip.click();
-      await page.waitForTimeout(700);
-    }
+  // Two accents only (Teal, Purple) — restrained, reads as "polished".
+  const chips = page.locator('.ff-accentchip');
+  for (const idx of [1 /* Teal */, 9 /* Purple */]) {
+    const chip = chips.nth(idx);
+    const b = await chip.boundingBox();
+    if (b) { await moveToBox(page, b, 350); await chip.click(); await hold(page, HOLD.beat); }
   }
 
-  // Beat 3: switch to light theme
-  const lightCard = page.locator('.ff-themecard--light').first();
-  if (await lightCard.count() > 0) {
-    const box = await lightCard.boundingBox();
-    await moveToBox(page, box, 400);
-    await lightCard.click();
-    await page.waitForTimeout(1200);
+  // One light flip, then back to dark.
+  const light = page.locator('.ff-themecard--light').first();
+  if (await light.count()) {
+    const b = await light.boundingBox();
+    if (b) await moveToBox(page, b, 400);
+    await light.click();
+    await hold(page, HOLD.settle);
+  }
+  const dark = page.locator('.ff-themecard--dark').first();
+  if (await dark.count()) { await dark.click(); await hold(page, HOLD.beat); }
+
+  // One gradient style change for flavour.
+  const grad = page.locator('.ff-bg-row .ff-themegrid .ff-themecard').nth(2);
+  if (await grad.count()) {
+    const b = await grad.boundingBox();
+    if (b) { await moveToBox(page, b, 350); await grad.click(); await hold(page, HOLD.settle); }
   }
 
-  // Beat 4: cycle gradient styles — target only the style grid inside .ff-bg-row
-  // (distinct from the theme mode grid and background mode grid)
-  const gradientBtns = page.locator('.ff-bg-row .ff-themegrid .ff-themecard');
-  const gradCount = await gradientBtns.count();
-  if (gradCount > 0) {
-    for (let i = 0; i < Math.min(4, gradCount); i++) {
-      const btn = gradientBtns.nth(i);
-      const box = await btn.boundingBox();
-      if (box) {
-        await moveToBox(page, box, 300);
-        await btn.click();
-        await page.waitForTimeout(700);
-      }
-    }
-  }
-
-  // Beat 5: close settings, switch back to dark
-  const darkCard = page.locator('.ff-themecard--dark').first();
-  if (await darkCard.count() > 0) await darkCard.click();
-  await page.waitForTimeout(400);
-
-  const closeBtn = page.locator('.ff-drawer [aria-label="Close"], .ff-drawer__close').first();
-  if (await closeBtn.count() > 0) {
-    const box = await closeBtn.boundingBox();
-    await moveToBox(page, box, 500);
-    await closeBtn.click();
-    await page.waitForTimeout(1800);
+  // Close drawer to land on the restyled workspace.
+  const close = page.locator('.ff-drawer [aria-label="Close"], .ff-drawer__close').first();
+  if (await close.count()) {
+    const b = await close.boundingBox();
+    if (b) await moveToBox(page, b, 500);
+    await close.click();
   } else {
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(1800);
   }
+  await hold(page, HOLD.outro);
 
   await saveVideo(page, '04-accent-theme');
 }
 
-// ─── Video 5: Search ─────────────────────────────────────────────────────────
+// ─── Video 5: Search (with folder-path payoff) ───────────────────────────────
 
-async function recordSearch(context, origin) {
-  console.log('\n── Video 05: search (~10s)');
-  const page = await context.newPage();
-  await page.setViewportSize(VIEWPORT);
+async function recordSearch(context, origin, workspaceIds, control) {
+  console.log('\n── Video 05: search');
+  await patchSettings(control, { activeWorkspaceId: workspaceIds.Work });
 
-  await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.ff-app', { timeout: 15_000 });
-  await skipOnboarding(page);
-  await clearAllBookmarks(page);
-
-  const { workspaceIds } = await seedPromoWorkspaces(page);
-  await reloadNewtab(page, 4500);
-
+  const page = await openRecordingPage(context, origin);
+  await waitForReady(page);
   resetCursor();
+  await hold(page, HOLD.intro);
 
-  // Beat 1: focus search bar
-  const searchInput = page.locator('.ff-search__input, .ff-search input').first();
-  if (await searchInput.count() > 0) {
-    const box = await searchInput.boundingBox();
-    await moveToBox(page, box, 600);
-    await searchInput.click();
-    await page.waitForTimeout(600);
+  const input = page.locator('.ff-search__input, .ff-search input').first();
+  const b = await input.boundingBox();
+  if (b) { await moveToBox(page, b, 600); await input.click(); await hold(page, HOLD.beat); }
 
-    // Beat 2: type "gith" — character by character
-    await typeSlowly(searchInput, 'gith');
-    await page.waitForTimeout(1200);
+  // Query 1: "react" → React.dev, nested in the Documentation folder.
+  // The result row shows its folder path — proof of "know where it lives".
+  await typeSlowly(input, 'react', 95);
+  await hold(page, HOLD.settle + 400);
 
-    // Beat 3: clear, type "cook"
-    await searchInput.fill('');
-    await page.waitForTimeout(300);
-    await typeSlowly(searchInput, 'cook');
-    await page.waitForTimeout(1200);
+  // Query 2: "git" → GitHub (root) + Repository (Project Apollo) — multiple hits.
+  await input.fill('');
+  await hold(page, 300);
+  await typeSlowly(input, 'git', 95);
+  await hold(page, HOLD.settle + 400);
 
-    // Beat 4: escape
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(1200);
-  }
+  await page.keyboard.press('Escape');
+  await hold(page, HOLD.outro);
 
   await saveVideo(page, '05-search');
 }
 
-// ─── Video 6: Drag and reorder ───────────────────────────────────────────────
+// ─── Video 6: Drag + reorder + multi-select into folder ──────────────────────
 
-async function recordDragReorder(context, origin) {
-  console.log('\n── Video 06: drag-reorder (~12s)');
-  const page = await context.newPage();
-  await page.setViewportSize(VIEWPORT);
+async function recordDragReorder(context, origin, workspaceIds, control) {
+  console.log('\n── Video 06: drag-reorder');
+  await patchSettings(control, { activeWorkspaceId: workspaceIds.Work });
 
-  await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.ff-app', { timeout: 15_000 });
-  await skipOnboarding(page);
-  await clearAllBookmarks(page);
-
-  const { workspaceIds } = await seedPromoWorkspaces(page);
-  await reloadNewtab(page, 4500);
-
+  const page = await openRecordingPage(context, origin);
+  await waitForReady(page);
   resetCursor();
+  await hold(page, HOLD.intro);
 
-  // Beat 1: drag a single tile to a new position
   const tiles = page.locator('.ff-tile[data-item-kind="bookmark"]');
-  const tileCount = await tiles.count();
-  if (tileCount >= 2) {
-    const src = tiles.nth(0);
-    const dst = tiles.nth(3);
-    const srcBox = await src.boundingBox();
-    const dstBox = await dst.boundingBox();
+  const count = await tiles.count();
 
-    if (srcBox && dstBox) {
-      await page.mouse.move(srcBox.x + srcBox.width / 2, srcBox.y + srcBox.height / 2);
-      await page.waitForTimeout(80);
+  // Beat 1: single-tile reorder.
+  if (count >= 4) {
+    const src = await tiles.nth(0).boundingBox();
+    const dst = await tiles.nth(3).boundingBox();
+    if (src && dst) {
+      await page.mouse.move(src.x + src.width / 2, src.y + src.height / 2);
       await page.mouse.down();
-      await page.waitForTimeout(120);
-      await smoothMove(page, srcBox.x + srcBox.width / 2, srcBox.y + srcBox.height / 2,
-        dstBox.x + dstBox.width / 2, dstBox.y + dstBox.height / 2, 550);
-      await page.waitForTimeout(200);
+      await hold(page, 120);
+      await smoothMove(page, src.x + src.width / 2, src.y + src.height / 2, dst.x + dst.width / 2, dst.y + dst.height / 2, 600);
+      await hold(page, 200);
       await page.mouse.up();
-      await page.waitForTimeout(1000);
+      await hold(page, HOLD.beat);
     }
   }
 
-  // Beat 2: multi-select 3 tiles (Cmd/Ctrl+click)
-  const modKey = process.platform === 'darwin' ? 'Meta' : 'Control';
-  if (tileCount >= 4) {
+  // Beat 2: multi-select 3 tiles (Ctrl/Cmd+click).
+  const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
+  if (count >= 4) {
     for (let i = 1; i <= 3; i++) {
-      const tile = tiles.nth(i);
-      const box = await tile.boundingBox();
-      if (box) {
-        await page.keyboard.down(modKey);
-        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-        await page.keyboard.up(modKey);
-        await page.waitForTimeout(250);
+      const tb = await tiles.nth(i).boundingBox();
+      if (tb) {
+        await page.keyboard.down(mod);
+        await page.mouse.click(tb.x + tb.width / 2, tb.y + tb.height / 2);
+        await page.keyboard.up(mod);
+        await hold(page, 220);
       }
     }
-    await page.waitForTimeout(500);
+    await hold(page, HOLD.beat);
   }
 
-  // Beat 3: drag selection into a folder
-  const folderTile = page.locator('.ff-tile[data-item-kind="folder"]').first();
-  const selectedTile = tiles.nth(1);
-  const selBox = await selectedTile.boundingBox().catch(() => null);
-  const folderBox = await folderTile.boundingBox().catch(() => null);
-
+  // Beat 3: drag the selection into a folder, then open it (payoff).
+  const folder = page.locator('.ff-tile[data-item-kind="folder"]').first();
+  const selBox = await tiles.nth(1).boundingBox().catch(() => null);
+  const folderBox = await folder.boundingBox().catch(() => null);
   if (selBox && folderBox) {
     await page.mouse.move(selBox.x + selBox.width / 2, selBox.y + selBox.height / 2);
-    await page.waitForTimeout(80);
     await page.mouse.down();
-    await page.waitForTimeout(120);
-    await smoothMove(page, selBox.x + selBox.width / 2, selBox.y + selBox.height / 2,
-      folderBox.x + folderBox.width / 2, folderBox.y + folderBox.height / 2, 650);
-    await page.waitForTimeout(200);
+    await hold(page, 120);
+    await smoothMove(page, selBox.x + selBox.width / 2, selBox.y + selBox.height / 2, folderBox.x + folderBox.width / 2, folderBox.y + folderBox.height / 2, 700);
+    await hold(page, 200);
     await page.mouse.up();
-    await page.waitForTimeout(1500);
+    await hold(page, HOLD.settle);
 
-    // Beat 3b: open the folder to reveal the moved items
-    const refreshedFolder = page.locator('.ff-tile[data-item-kind="folder"]').first();
-    if (await refreshedFolder.count() > 0) {
-      const fb = await refreshedFolder.boundingBox();
-      if (fb) {
-        await moveToBox(page, fb, 600);
-        await refreshedFolder.click();
-        await page.waitForTimeout(1500);
-      }
+    const refreshed = page.locator('.ff-tile[data-item-kind="folder"]').first();
+    const rb = await refreshed.boundingBox().catch(() => null);
+    if (rb) {
+      await moveToBox(page, rb, 600);
+      await refreshed.click();
+      await hold(page, HOLD.outro);
     }
   }
 
@@ -547,71 +371,58 @@ async function recordDragReorder(context, origin) {
 
 // ─── Video 7: View mode switching ────────────────────────────────────────────
 
-async function recordViewModeSwitch(context, origin) {
-  console.log('\n── Video 07: view-mode-switch (~10s)');
-  const page = await context.newPage();
-  await page.setViewportSize(VIEWPORT);
+async function recordViewModeSwitch(context, origin, workspaceIds, control) {
+  console.log('\n── Video 07: view-mode-switch');
+  await patchSettings(control, { activeWorkspaceId: workspaceIds.Personal, folderMode: 'grid' });
 
-  await page.goto(`${origin}/newtab.html`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.ff-app', { timeout: 15_000 });
-  await skipOnboarding(page);
-  await clearAllBookmarks(page);
-
-  const { workspaceIds } = await seedPromoWorkspaces(page);
-
-  // Start on Personal workspace in Grid view, then reload to settle
-  await patchSettings(page, { activeWorkspaceId: workspaceIds.Personal, folderMode: 'grid' });
-  await reloadNewtab(page, 3000);
+  const page = await openRecordingPage(context, origin);
+  await waitForReady(page);
   resetCursor();
+  await hold(page, HOLD.intro); // grid established
 
-  // Beat 1: Grid view established — hold 2s
-  await page.waitForTimeout(2000);
-
-  // Beat 2: move to view toggle button (between + and sort), click → List view
-  const gridToggle = page.locator('[aria-label="Switch to List view"]').first();
-  if (await gridToggle.count() > 0) {
-    const box = await gridToggle.boundingBox();
-    await moveToBox(page, box, 800);
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-    await page.waitForTimeout(1000); // hold — watch tiles unfold into sections
+  const toList = page.locator('[aria-label="Switch to List view"]').first();
+  const tb = await toList.boundingBox();
+  if (tb) {
+    await moveToBox(page, tb, 800);
+    await page.mouse.click(tb.x + tb.width / 2, tb.y + tb.height / 2);
+    await hold(page, HOLD.settle); // tiles unfold into list
   }
 
-  // Beat 3: scroll down to reveal depth of List view
+  // Scroll to reveal list density.
   await page.evaluate(() => window.scrollBy({ top: 320, behavior: 'smooth' }));
-  await page.waitForTimeout(2000); // hold showing multiple section headers + inline bookmarks
-
-  // Beat 4: scroll back up, click toggle to return to Grid
+  await hold(page, HOLD.settle + 600);
   await page.evaluate(() => window.scrollBy({ top: -320, behavior: 'smooth' }));
-  await page.waitForTimeout(400);
+  await hold(page, 400);
 
-  const listToggle = page.locator('[aria-label="Switch to Grid view"]').first();
-  if (await listToggle.count() > 0) {
-    const box = await listToggle.boundingBox();
-    await moveToBox(page, box, 600);
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-    await page.waitForTimeout(1500); // hold — snap back to Grid is the payoff
+  const toGrid = page.locator('[aria-label="Switch to Grid view"]').first();
+  const gb = await toGrid.boundingBox();
+  if (gb) {
+    await moveToBox(page, gb, 600);
+    await page.mouse.click(gb.x + gb.width / 2, gb.y + gb.height / 2);
+    await hold(page, HOLD.outro); // snap back to grid
   }
 
   await saveVideo(page, '07-view-mode-switch');
+  await patchSettings(control, { folderMode: 'grid' });
 }
 
-// ─── All scenarios map ────────────────────────────────────────────────────────
+// ─── Scenario map ───────────────────────────────────────────────────────────
 
 const VIDEOS = {
-  'workspace-switch':  recordWorkspaceSwitch,
-  'add-bookmark':      recordAddEditBookmark,
-  'onboarding':        recordOnboarding,
-  'accent-theme':      recordAccentTheme,
-  'search':            recordSearch,
-  'drag-reorder':      recordDragReorder,
-  'view-mode-switch':  recordViewModeSwitch,
+  'workspace-switch': recordWorkspaceSwitch,
+  'add-bookmark':     recordAddEditBookmark,
+  'onboarding':       recordOnboarding,
+  'accent-theme':     recordAccentTheme,
+  'search':           recordSearch,
+  'drag-reorder':     recordDragReorder,
+  'view-mode-switch': recordViewModeSwitch,
 };
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export async function runVideos(filter) {
-  const keys = filter ? filter.split(',').map(s => s.trim()) : Object.keys(VIDEOS);
-  const invalid = keys.filter(k => !VIDEOS[k]);
+  const keys = filter ? filter.split(',').map((s) => s.trim()) : Object.keys(VIDEOS);
+  const invalid = keys.filter((k) => !VIDEOS[k]);
   if (invalid.length) {
     console.error(`Unknown video(s): ${invalid.join(', ')}`);
     console.error(`Available: ${Object.keys(VIDEOS).join(', ')}`);
@@ -622,25 +433,38 @@ export async function runVideos(filter) {
 
   const { rm, readdir, unlink } = await import('node:fs/promises');
 
-  for (const key of keys) {
-    const { context, profileDir } = await launchContext({ withVideo: true });
-    const origin = await discoverOrigin(context);
-    // Track pages Chrome auto-opened on launch. We can't close them yet —
-    // closing all tabs terminates Chrome and breaks context.newPage(). Instead
-    // we close them after the video function has opened and finished its own
-    // page, then scrub the UUID recording files they leave behind.
-    const preExisting = [...context.pages()];
-    try {
-      await VIDEOS[key](context, origin);
-    } finally {
-      for (const p of preExisting) await p.close().catch(() => undefined);
-      await context.close().catch(() => undefined);
-      await rm(profileDir, { recursive: true, force: true }).catch(() => undefined);
-      // Remove UUID-named .webm files left by the auto-opened tab recordings.
-      const uuidRe = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\.webm$/i;
-      const files = await readdir(VIDEO_DIR).catch(() => []);
-      await Promise.all(files.filter(f => uuidRe.test(f)).map(f => unlink(join(VIDEO_DIR, f)).catch(() => undefined)));
+  // ── One context for the whole run: seed once, warm icons once. ──
+  const { context, profileDir } = await launchContext({ withVideo: true });
+  const origin = await discoverOrigin(context);
+
+  const control = await openNewtab(context, origin);
+  await skipOnboarding(control);
+  await clearAllBookmarks(control);
+  console.log('● Seeding promo workspaces…');
+  const { workspaceIds } = await seedPromoWorkspaces(control);
+  console.log('● Warming icon cache…');
+  await warmIcons(control, workspaceIds);
+
+  try {
+    for (const key of keys) {
+      await VIDEOS[key](context, origin, workspaceIds, control);
     }
+  } finally {
+    await control.close().catch(() => undefined);
+    await context.close().catch(() => undefined);
+    await rm(profileDir, { recursive: true, force: true }).catch(() => undefined);
+
+    // Keep only the named scene clips; scrub control/auto-tab recordings.
+    const valid = new Set([
+      '01-workspace-switch', '02-add-edit-bookmark', '03-onboarding',
+      '04-accent-theme', '05-search', '06-drag-reorder', '07-view-mode-switch',
+    ].map((n) => `${n}.webm`));
+    const files = await readdir(VIDEO_DIR).catch(() => []);
+    await Promise.all(
+      files
+        .filter((f) => f.endsWith('.webm') && !valid.has(f))
+        .map((f) => unlink(join(VIDEO_DIR, f)).catch(() => undefined)),
+    );
   }
 
   console.log('\n✓ Videos complete.');
@@ -654,7 +478,7 @@ if (process.argv[1].endsWith('videos.mjs')) {
     console.log('Available videos:', Object.keys(VIDEOS).join(', '));
     process.exit(0);
   }
-  const onlyArg = args.find(a => a.startsWith('--only='));
+  const onlyArg = args.find((a) => a.startsWith('--only='));
   const filter = onlyArg ? onlyArg.split('=')[1] : null;
   runVideos(filter).catch((err) => { console.error(err); process.exit(1); });
 }

@@ -54,8 +54,10 @@ async function capture(page, theme, name, resolution) {
  */
 async function captureScene(page, name, workspaceId, setupFn) {
   for (const theme of ['light', 'dark']) {
+    // themeMode is read from the workspace record at load time, so a live patch
+    // alone doesn't restyle the page — reload to actually apply the theme.
     await patchWorkspace(page, workspaceId, { themeMode: theme });
-    await page.waitForTimeout(400);
+    await reloadNewtab(page, 1000);
     if (setupFn) await setupFn(page, theme);
     for (const res of RESOLUTIONS) {
       await capture(page, theme, name, res);
@@ -90,14 +92,15 @@ async function scene02_workspaces(page, workspaceIds) {
 
 async function scene03_folderOpen(page, workspaceIds) {
   console.log('\n── Scene 03: folder-open');
-  await patchSettings(page, { activeWorkspaceId: workspaceIds.Personal });
+  await patchSettings(page, { activeWorkspaceId: workspaceIds.Personal, folderOpenMode: 'overlay' });
   await reloadNewtab(page, 1500);
   await captureScene(page, '03-folder-open', workspaceIds.Personal, async (p) => {
-    // Open the "Cooking" folder overlay
-    const cookingTile = p.locator('.ff-tile:has-text("Cooking")').first();
-    if (await cookingTile.count() > 0) {
-      await cookingTile.click();
-      await p.waitForTimeout(400);
+    // Open the "Travel" folder overlay (a real folder in the Personal workspace).
+    const folderTile = p.locator('.ff-tile[data-item-kind="folder"]:has-text("Travel")').first();
+    if (await folderTile.count() > 0) {
+      await folderTile.click();
+      await p.waitForSelector('.ff-folder-overlay', { timeout: 4000 }).catch(() => undefined);
+      await p.waitForTimeout(500); // let overlay + icons settle
     }
   });
   // Ensure overlay closed after both passes
@@ -265,11 +268,13 @@ async function scene13_listHero(page, workspaceIds) {
   await patchSettings(page, { folderMode: 'grid' });
 }
 
-async function scene14_listWork(page, workspaceIds) {
-  console.log('\n── Scene 14: list-work');
-  await patchSettings(page, { activeWorkspaceId: workspaceIds.Work, folderMode: 'list' });
+async function scene14_listGaming(page, workspaceIds) {
+  console.log('\n── Scene 14: list-gaming');
+  // Gaming has few root bookmarks but many small folders — best showcase of
+  // list view's grouped sections.
+  await patchSettings(page, { activeWorkspaceId: workspaceIds.Gaming, folderMode: 'list' });
   await reloadNewtab(page, 1500);
-  await captureScene(page, '14-list-work', workspaceIds.Work);
+  await captureScene(page, '14-list-gaming', workspaceIds.Gaming);
   await patchSettings(page, { folderMode: 'grid' });
 }
 
@@ -281,10 +286,57 @@ async function scene15_listDesign(page, workspaceIds) {
   await patchSettings(page, { folderMode: 'grid' });
 }
 
+async function scene16_iconPicker(page, workspaceIds) {
+  console.log('\n── Scene 16: icon-picker');
+  await patchSettings(page, { activeWorkspaceId: workspaceIds.Work });
+  await reloadNewtab(page, 1500);
+  await captureScene(page, '16-icon-picker', workspaceIds.Work, async (p) => {
+    // Right-click the first bookmark → Edit → icon search auto-runs for an
+    // existing bookmark, so the result grid populates on its own.
+    const tile = p.locator('.ff-tile[data-item-kind="bookmark"]').first();
+    if (await tile.count() > 0) {
+      await tile.click({ button: 'right' });
+      await p.waitForSelector('.ff-ctx', { timeout: 2000 });
+      const editItem = p.locator('.ff-ctx__item:has-text("Edit"), .ff-ctx [role="menuitem"]:has-text("Edit")').first();
+      if (await editItem.count() > 0) {
+        await editItem.click();
+        await p.waitForSelector('.ff-dialog', { timeout: 3000 });
+        // Wait for at least one validated (visible) icon result to render.
+        await p.waitForSelector('.ff-icongrid__cell', { state: 'visible', timeout: 8000 }).catch(() => {});
+        await p.waitForTimeout(2200); // let more previews validate + settle
+      }
+    }
+  });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+}
+
+// ─── Scene registry ────────────────────────────────────────────────────────────
+
+const SCENES = [
+  ['01-hero', scene01_hero],
+  ['02-workspaces', scene02_workspaces],
+  ['03-folder-open', scene03_folderOpen],
+  ['04-search-results', scene04_searchResults],
+  ['05-settings-appearance', scene05_settingsAppearance],
+  ['06-settings-layout', scene06_settingsLayout],
+  ['07-context-menu', scene07_contextMenu],
+  ['08-gradient-aurora', scene08_gradientAurora],
+  ['09-gradient-mesh', scene09_gradientMesh],
+  ['10-creative-wallpaper', scene10_creativeWallpaper],
+  ['11-onboarding-welcome', scene11_onboardingWelcome],
+  ['12-onboarding-workspaces', scene12_onboardingWorkspaces],
+  ['13-list-hero', scene13_listHero],
+  ['14-list-gaming', scene14_listGaming],
+  ['15-list-design', scene15_listDesign],
+  ['16-icon-picker', scene16_iconPicker],
+];
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-export async function runScreenshots() {
+export async function runScreenshots(only = null) {
   console.log('▶ Promo screenshots — light + dark, 1280x800 + 1920x1080');
+  const filter = only ? (Array.isArray(only) ? only : [only]) : null;
 
   const { context, profileDir } = await launchContext();
   const origin = await discoverOrigin(context);
@@ -298,21 +350,10 @@ export async function runScreenshots() {
   const { workspaceIds } = await seedPromoWorkspaces(page);
   await reloadNewtab(page, 2000);
 
-  await scene01_hero(page, workspaceIds);
-  await scene02_workspaces(page, workspaceIds);
-  await scene03_folderOpen(page, workspaceIds);
-  await scene04_searchResults(page, workspaceIds);
-  await scene05_settingsAppearance(page, workspaceIds);
-  await scene06_settingsLayout(page, workspaceIds);
-  await scene07_contextMenu(page, workspaceIds);
-  await scene08_gradientAurora(page, workspaceIds);
-  await scene09_gradientMesh(page, workspaceIds);
-  await scene10_creativeWallpaper(page, workspaceIds);
-  await scene11_onboardingWelcome(page, workspaceIds);
-  await scene12_onboardingWorkspaces(page, workspaceIds);
-  await scene13_listHero(page, workspaceIds);
-  await scene14_listWork(page, workspaceIds);
-  await scene15_listDesign(page, workspaceIds);
+  for (const [name, fn] of SCENES) {
+    if (filter && !filter.some((f) => name.includes(f))) continue;
+    await fn(page, workspaceIds);
+  }
 
   await context.close();
 
@@ -326,5 +367,7 @@ export async function runScreenshots() {
 }
 
 if (process.argv[1].endsWith('screenshots.mjs')) {
-  runScreenshots().catch((err) => { console.error(err); process.exit(1); });
+  const onlyArg = process.argv.slice(2).find((a) => a.startsWith('--only='));
+  const only = onlyArg ? onlyArg.split('=')[1].split(',').map((s) => s.trim()) : null;
+  runScreenshots(only).catch((err) => { console.error(err); process.exit(1); });
 }

@@ -1,6 +1,6 @@
 {
   "extensionName": {
-    "message": "Flipp's Favorites - Bookmarks & more"
+    "message": "Flipp's Favorites - New Tab Workspaces"
   },
   "extensionShortName": {
     "message": "Flipp's Favorites"
@@ -9,6 +9,6 @@
     "message": "Turns your new tab into a fast, visual bookmark workspace — folder navigation, search, custom icons, themes, and a dock."
   },
   "actionTitle": {
-    "message": "Flipp's Favorites - Bookmarks & more"
+    "message": "Flipp's Favorites - New Tab Workspaces"
   }
 }

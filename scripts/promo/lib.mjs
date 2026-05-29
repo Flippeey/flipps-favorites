@@ -37,7 +37,6 @@ export const SHOT_DIR = join(OUT_DIR, 'screenshots');
 export const GIF_DIR = join(OUT_DIR, 'gifs');
 
 export const VIEWPORT = { width: 1920, height: 1080 };
-export const ACCENT_ORANGE = '#F57C00';
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -46,13 +45,11 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // shared models). Re-exported here so existing promo scripts keep importing
 // from lib.mjs. Node ≥22.18 strips the TS types on import.
 import {
-  ROOT_BOOKMARKS,
-  FOLDERS,
   DOCK_BOOKMARKS,
   PROMO_WORKSPACES,
 } from '../../src/shared/seed-data.ts';
 
-export { ROOT_BOOKMARKS, FOLDERS, DOCK_BOOKMARKS, PROMO_WORKSPACES };
+export { DOCK_BOOKMARKS, PROMO_WORKSPACES };
 
 
 // ─── Launch + discovery ─────────────────────────────────────────────────────
@@ -174,45 +171,6 @@ export async function clearAllBookmarks(page) {
 
 // ─── Seeding ───────────────────────────────────────────────────────────────
 
-/** Create the full ~100-bookmark tree under a new root folder. Returns IDs. */
-export async function seedTree(page) {
-  const ids = await page.evaluate(async ({ rootBookmarks, folders, dock }) => {
-    const a = (globalThis.browser ?? globalThis.chrome);
-    async function create(parentId, title, url) {
-      const node = await a.bookmarks.create({ parentId, title, ...(url ? { url } : {}) });
-      return node.id;
-    }
-    // Parent in Other Bookmarks (id "2").
-    const rootId = await create('2', "Flipp's Favorites");
-
-    // Individual root bookmarks first so they appear above subfolders in manual order.
-    for (const bm of rootBookmarks) await create(rootId, bm.title, bm.url);
-
-    const folderIds = {};
-    for (const f of folders) {
-      const fid = await create(rootId, f.title);
-      folderIds[f.title] = fid;
-      const subIds = {};
-      if (f.bookmarks) for (const bm of f.bookmarks) await create(fid, bm.title, bm.url);
-      if (f.subfolders) {
-        for (const sf of f.subfolders) {
-          const sfid = await create(fid, sf.title);
-          subIds[sf.title] = sfid;
-          for (const bm of sf.bookmarks) await create(sfid, bm.title, bm.url);
-        }
-      }
-      folderIds[f.title + ':sub'] = subIds;
-    }
-
-    const dockId = await create('2', '📌 Dock');
-    for (const bm of dock) await create(dockId, bm.title, bm.url);
-
-    return { rootId, dockId, folderIds };
-  }, { rootBookmarks: ROOT_BOOKMARKS, folders: FOLDERS, dock: DOCK_BOOKMARKS });
-
-  return ids;
-}
-
 /**
  * Seed the promo workspaces (one per PROMO_WORKSPACES persona).
  * Creates bookmark folders for each workspace under "Other bookmarks" (id "2"),
@@ -308,6 +266,49 @@ export async function reloadNewtab(page, settleMs = 1800) {
   await page.waitForTimeout(settleMs); // let icons resolve
 }
 
+// ─── Readiness + pacing (promo recording) ───────────────────────────────────
+
+/**
+ * Intentional, uniform pacing for marketing clips. Tune here, not per-scene.
+ *   intro  — clean opening hold on the ready first frame
+ *   beat   — between discrete interactions
+ *   settle — let an animation/transition finish
+ *   outro  — final hold on the payoff before the page closes
+ */
+export const HOLD = { intro: 900, beat: 650, settle: 1100, outro: 1300 };
+export const hold = (page, ms) => page.waitForTimeout(ms);
+
+/**
+ * Block until the grid is fully painted: tiles mounted and every tile/dock
+ * icon decoded (no placeholder→real pop-in on camera). Two rAFs flush layout.
+ * Safe to call when no tiles exist (e.g. onboarding) — it just falls through.
+ */
+export async function waitForReady(page) {
+  await page.waitForSelector('.ff-tile', { timeout: 8_000 }).catch(() => undefined);
+  await page
+    .waitForFunction(() => {
+      const imgs = [...document.querySelectorAll('.ff-tile img, .ff-dock__item img')];
+      return imgs.every((i) => i.complete && i.naturalWidth > 0);
+    }, { timeout: 8_000 })
+    .catch(() => undefined);
+  await page.evaluate(
+    () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+  );
+}
+
+/**
+ * Prime the IndexedDB icon cache for every workspace once, on a shared context,
+ * so all later recordings serve icons from cache — instant and identical across
+ * clips (kills the cold-cache icon inconsistency).
+ */
+export async function warmIcons(page, workspaceIds) {
+  for (const id of Object.values(workspaceIds)) {
+    await patchSettings(page, { activeWorkspaceId: id });
+    await reloadNewtab(page, 1200);
+    await waitForReady(page);
+  }
+}
+
 // ─── Motion helpers ─────────────────────────────────────────────────────────
 
 // ─── Cursor tracking ────────────────────────────────────────────────────────
@@ -397,18 +398,9 @@ export async function saveVideo(page, basename) {
   // Windows holds a brief lock after close.
   await sleep(1500);
   const dest = join(VIDEO_DIR, `${basename}.webm`);
+  // rename fails on Windows if dest exists — clear a prior run's clip first.
+  await rm(dest, { force: true }).catch(() => undefined);
   await rename(src, dest);
   console.log(`  ✓ video: videos/${basename}.webm`);
 }
 
-export async function shot(page, scenario, name) {
-  const dir = join(SHOT_DIR, scenario);
-  await mkdir(dir, { recursive: true });
-  const file = join(dir, `${name}.png`);
-  await page.screenshot({ path: file });
-  console.log(`  ✓ shot: screenshots/${scenario}/${name}.png`);
-}
-
-export async function cleanupProfile(profileDir) {
-  await rm(profileDir, { recursive: true, force: true }).catch(() => undefined);
-}

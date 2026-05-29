@@ -15,29 +15,31 @@
  * ffmpeg-static package, then `ffmpeg` on PATH.
  */
 
-import { spawn } from ‘node:child_process’;
-import { readdir, mkdir, stat } from ‘node:fs/promises’;
-import { existsSync } from ‘node:fs’;
-import { join, basename, extname, dirname, resolve } from ‘node:path’;
-import { fileURLToPath } from ‘node:url’;
+import { spawn } from 'node:child_process';
+import { readdir, mkdir, stat } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { join, basename, extname, dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT_DIR = resolve(__dirname, ‘..’, ‘..’);
+const ROOT_DIR = resolve(__dirname, '..', '..');
 
 // ─── CLI ────────────────────────────────────────────────────────────────────
 
 function parseArgs() {
   const flags = {
     only: null,
-    src: join(ROOT_DIR, ‘promo’, ‘videos’),
-    out: join(ROOT_DIR, ‘promo’, ‘mp4’),
+    src: join(ROOT_DIR, 'promo', 'videos'),
+    out: join(ROOT_DIR, 'promo', 'mp4'),
+    trimStart: 0,
     ffmpeg: null,
   };
   for (const a of process.argv.slice(2)) {
-    if (a.startsWith(‘--only=’))        flags.only = a.slice(7).split(‘,’).map((s) => s.trim());
-    else if (a.startsWith(‘--src=’))    flags.src = resolve(a.slice(6));
-    else if (a.startsWith(‘--out=’))    flags.out = resolve(a.slice(6));
-    else if (a.startsWith(‘--ffmpeg=’)) flags.ffmpeg = a.slice(9);
+    if (a.startsWith('--only='))        flags.only = a.slice(7).split(',').map((s) => s.trim());
+    else if (a.startsWith('--src='))    flags.src = resolve(a.slice(6));
+    else if (a.startsWith('--out='))    flags.out = resolve(a.slice(6));
+    else if (a.startsWith('--trim-start=')) flags.trimStart = parseFloat(a.slice(13));
+    else if (a.startsWith('--ffmpeg=')) flags.ffmpeg = a.slice(9);
   }
   return flags;
 }
@@ -68,9 +70,10 @@ function run(cmd, args) {
 
 // ─── Conversion ─────────────────────────────────────────────────────────────
 
-async function convert(ffmpeg, src, dest) {
+async function convert(ffmpeg, src, dest, trimStart = 0) {
   await run(ffmpeg, [
     '-y',
+    ...(trimStart > 0 ? ['-ss', String(trimStart)] : []),
     '-i', src,
     '-vf', 'scale=1280:720:flags=lanczos',
     '-c:v', 'libx264',
@@ -121,7 +124,7 @@ async function main() {
     const dest = join(flags.out, name + '.mp4');
     process.stdout.write(`▶ ${f} → ${basename(dest)} … `);
     try {
-      await convert(ffmpeg, src, dest);
+      await convert(ffmpeg, src, dest, flags.trimStart);
       const { size } = await stat(dest);
       console.log(`${(size / 1024 / 1024).toFixed(2)} MB`);
     } catch (err) {
