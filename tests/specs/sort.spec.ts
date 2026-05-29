@@ -17,7 +17,7 @@
  *     introduce ordering non-determinism).
  */
 import { test, expect } from '../fixtures/world.js';
-import { resetStorage, seedMinimal } from '../fixtures/seeding.js';
+import { resetStorage, seedMinimal, waitForSettings } from '../fixtures/seeding.js';
 import { sortPill, sortOption, tilesInScope } from '../fixtures/selectors.js';
 
 // ─── typed shim used at page.evaluate boundaries ─────────────────────────────
@@ -396,6 +396,11 @@ test.describe('sort modes', () => {
     // Set Name A→Z, then reload — App reads settings from service worker on boot.
     await applySort(newtabPage, 'name', 'asc');
 
+    // Gate the reload on the committed write so we don't read a stale sort.
+    await waitForSettings(
+      newtabPage,
+      (s) => s.bookmarkSortMode === 'name' && s.bookmarkSortDirection === 'asc',
+    );
     await newtabPage.reload();
     await newtabPage.waitForSelector('.ff-app');
 

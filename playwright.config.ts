@@ -10,12 +10,12 @@ export default defineConfig({
   // from doing ~95 sequential reseeds, which degrades a long-lived context.
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
-  // A handful of interaction/reload tests are timing-flaky under parallel CPU
-  // contention (optimistic UI + the 130ms workspace-switch delay); one retry
-  // absorbs them. Playwright still reports the flaky count, so flake stays
-  // visible rather than hidden. Root-cause sweep is Phase 4.3.
+  // A few "persists after reload" tests are intermittently flaky under the
+  // parallel, reseed-heavy load (~4 per run, rotating; each passes alone and
+  // on retry). One retry absorbs the residual environmental flake; Playwright
+  // still reports the flaky count so it stays visible rather than hidden.
   retries: 1,
-  workers: process.env.CI ? 2 : 4,
+  workers: process.env.CI ? 2 : 3,
   reporter: process.env.CI ? 'github' : 'list',
   globalSetup: './tests/global-setup.ts',
 
