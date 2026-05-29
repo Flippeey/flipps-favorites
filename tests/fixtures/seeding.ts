@@ -67,6 +67,16 @@ export async function resetStorage(page: Page): Promise<void> {
     } catch {
       await api.storage.local.remove([keys.appSettings, keys.workspaces]);
     }
+    // Purge the bookmark tree too. Seeders create folders under the bookmarks
+    // bar ('1') and other-bookmarks ('2'); without this, every reseed stacks
+    // duplicate folders in the same worker profile, making count/search
+    // assertions accumulate across tests.
+    for (const rootId of ['1', '2']) {
+      const children = await api.bookmarks.getChildren(rootId);
+      for (const child of children) {
+        await api.bookmarks.removeTree(child.id);
+      }
+    }
   }, STORAGE_KEYS);
 }
 
@@ -99,6 +109,37 @@ export async function createWorkspace(page: Page, workspace: WorkspaceRecord): P
       ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
     await api.runtime.sendMessage({ type: 'workspaces/create', workspace: ws });
   }, workspace);
+}
+
+/** Read the settings the service worker currently holds (committed state). */
+export async function getSettings(page: Page): Promise<AppSettings> {
+  return page.evaluate(async () => {
+    const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
+      ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
+    const res = (await api.runtime.sendMessage({ type: 'settings/get' })) as {
+      settings: AppSettings;
+    };
+    return res.settings;
+  });
+}
+
+/**
+ * Poll the service worker's committed settings until `predicate` holds, so a
+ * test can reload without racing the async `settings/patch` write. Throws after
+ * ~4s if the change never commits (fail loud rather than reload stale state).
+ */
+export async function waitForSettings(
+  page: Page,
+  predicate: (settings: AppSettings) => boolean,
+): Promise<void> {
+  const deadline = Date.now() + 4000;
+  for (;;) {
+    if (predicate(await getSettings(page))) return;
+    if (Date.now() > deadline) {
+      throw new Error('Timed out waiting for settings to commit');
+    }
+    await page.waitForTimeout(50);
+  }
 }
 
 /** Read all workspace records the service worker currently holds. */
