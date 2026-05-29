@@ -10,10 +10,14 @@ export default defineConfig({
   // from doing ~95 sequential reseeds, which degrades a long-lived context.
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
-  // A few "persists after reload" tests are intermittently flaky under the
-  // parallel, reseed-heavy load (~4 per run, rotating; each passes alone and
-  // on retry). One retry absorbs the residual environmental flake; Playwright
-  // still reports the flaky count so it stays visible rather than hidden.
+  // A few "persists after reload" tests are intermittently flaky (~4 per run,
+  // rotating; each passes alone and on retry). Root cause: settings/workspaces
+  // use chrome.storage.sync (sync-preferred), whose writes flush asynchronously.
+  // The app re-reads sync on reload-boot, so under parallel reseed-heavy load a
+  // mutate->reload can read stale state. Gating reloads on the persisted value
+  // is not viable — sync read-back itself lags past any sane timeout here. One
+  // retry absorbs it; Playwright reports the flaky count so it stays visible.
+  // A true fix would force chrome.storage.local under test (build flag).
   retries: 1,
   workers: process.env.CI ? 2 : 3,
   reporter: process.env.CI ? 'github' : 'list',
