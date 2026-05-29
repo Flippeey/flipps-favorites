@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Bookmark CRUD via dialogs + context menu.
  */
 import { test, expect } from '../fixtures/extension-context.js';
@@ -12,7 +12,7 @@ import {
   patchSettings,
   reloadNewtab,
   removeBookmarkTree,
-  setRootFolderId,
+  setupDefaultWorkspace,
   tileById,
 } from '../fixtures/bookmark-helpers.js';
 
@@ -21,9 +21,9 @@ let rootId: string;
 test.beforeEach(async ({ newtabPage }) => {
   await clearExtensionStorage(newtabPage);
   rootId = await createTestFolder(newtabPage, 'BM Root');
-  await setRootFolderId(newtabPage, rootId);
-  // Use tiles mode so root bookmarks render at the top level.
-  await patchSettings(newtabPage, { folderMode: 'tiles' });
+  await setupDefaultWorkspace(newtabPage, rootId);
+  // Use grid mode so root bookmarks render at the top level.
+  await patchSettings(newtabPage, { folderMode: 'grid' });
   await reloadNewtab(newtabPage);
 });
 
@@ -31,8 +31,9 @@ test.afterEach(async ({ newtabPage }) => {
   await removeBookmarkTree(newtabPage, rootId);
 });
 
-test('QuickAdd from TopNav saves a new bookmark', async ({ newtabPage }) => {
-  await newtabPage.getByRole('button', { name: 'Add bookmark', exact: true }).click();
+test('QuickAdd via TopNav Add menu saves a new bookmark', async ({ newtabPage }) => {
+  await newtabPage.getByRole('button', { name: 'Add', exact: true }).click();
+  await newtabPage.locator('.ff-ctx').getByRole('menuitem', { name: /Add bookmark/i }).click();
   const dialog = newtabPage.locator('.ff-dialog');
   await expect(dialog).toBeVisible();
 
@@ -46,7 +47,8 @@ test('QuickAdd from TopNav saves a new bookmark', async ({ newtabPage }) => {
 });
 
 test('QuickAdd rejects an empty URL with an error message', async ({ newtabPage }) => {
-  await newtabPage.getByRole('button', { name: 'Add bookmark', exact: true }).click();
+  await newtabPage.getByRole('button', { name: 'Add', exact: true }).click();
+  await newtabPage.locator('.ff-ctx').getByRole('menuitem', { name: /Add bookmark/i }).click();
   const dialog = newtabPage.locator('.ff-dialog');
   const urlInput = dialog.locator('input[type="url"]');
   await urlInput.fill('');
@@ -55,15 +57,15 @@ test('QuickAdd rejects an empty URL with an error message', async ({ newtabPage 
   await expect(dialog.locator('.ff-status[data-kind="error"]')).toContainText(/URL|enter/i);
 });
 
-test('right-click empty canvas surfaces New bookmark + New folder', async ({ newtabPage }) => {
+test('right-click empty canvas surfaces Add bookmark + Add folder', async ({ newtabPage }) => {
   const menu = await openContextMenu(newtabPage, newtabPage.locator('.ff-canvas'));
-  await expect(menu.getByRole('menuitem', { name: /New bookmark/i })).toBeVisible();
-  await expect(menu.getByRole('menuitem', { name: /New folder/i })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: /Add bookmark/i })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: /Add folder/i })).toBeVisible();
 });
 
-test('context menu New bookmark adds a tile via QuickAdd', async ({ newtabPage }) => {
+test('context menu Add bookmark adds a tile via QuickAdd', async ({ newtabPage }) => {
   const menu = await openContextMenu(newtabPage, newtabPage.locator('.ff-canvas'));
-  await clickMenuItem(menu, /New bookmark/i);
+  await clickMenuItem(menu, /Add bookmark/i);
 
   const dialog = newtabPage.locator('.ff-dialog');
   await expect(dialog).toBeVisible();

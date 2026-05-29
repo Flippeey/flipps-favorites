@@ -1,14 +1,17 @@
 import type { Locator, Page } from '@playwright/test';
-import { STORAGE_KEYS } from './test-data.js';
+import type { WorkspaceRecord } from '../../src/shared/models';
+import { DEFAULT_WORKSPACE_SETTINGS, STORAGE_KEYS } from './test-data.js';
 
 export async function clearExtensionStorage(page: Page): Promise<void> {
   await page.evaluate(async (keys) => {
     const api = (globalThis as any).browser || (globalThis as any).chrome;
     await api.storage.local.remove(Object.values(keys));
+    // Settings + workspaces use sync-preferred storage; clear both so state
+    // never leaks between tests.
     try {
-      await api.storage.sync.remove(keys.appSettings);
+      await api.storage.sync.remove([keys.appSettings, keys.workspaces]);
     } catch {
-      await api.storage.local.remove(keys.appSettings);
+      await api.storage.local.remove([keys.appSettings, keys.workspaces]);
     }
   }, STORAGE_KEYS);
 }
@@ -71,8 +74,50 @@ export async function patchSettings(
   }, patch);
 }
 
-export async function setRootFolderId(page: Page, folderId: string): Promise<void> {
-  await patchSettings(page, { rootFolderId: folderId, rememberLastFolder: false });
+/**
+ * Seed a working active workspace pointing at `rootFolderId` and make it
+ * active. Every spec calls this in `beforeEach` instead of the removed
+ * `setRootFolderId` — `AppSettings` no longer has `rootFolderId`; the app
+ * derives its root folder from `activeWorkspace.rootFolderId`. Caller must
+ * reload the newtab page to see the change.
+ */
+export async function setupDefaultWorkspace(
+  page: Page,
+  rootFolderId: string,
+  id = 'ws-default',
+): Promise<WorkspaceRecord> {
+  const workspace: WorkspaceRecord = {
+    ...DEFAULT_WORKSPACE_SETTINGS,
+    id,
+    name: 'Test',
+    rootFolderId,
+  };
+  await page.evaluate(async (ws) => {
+    const api = (globalThis as any).browser || (globalThis as any).chrome;
+    await api.runtime.sendMessage({ type: 'workspaces/create', workspace: ws });
+    await api.runtime.sendMessage({
+      type: 'settings/patch',
+      patch: { activeWorkspaceId: ws.id, workspaceOrder: [ws.id], rememberLastFolder: false },
+    });
+  }, workspace);
+  return workspace;
+}
+
+/**
+ * Patch a workspace's visual/layout fields via the runtime message pipeline.
+ * Workspace-only settings (tileShape, layoutPreset, accentColor, gradients…)
+ * live on WorkspaceRecord, not AppSettings — use this, not patchSettings, for
+ * those. Defaults to the id seeded by setupDefaultWorkspace. Caller must reload.
+ */
+export async function patchWorkspace(
+  page: Page,
+  patch: Partial<WorkspaceRecord>,
+  id = 'ws-default',
+): Promise<void> {
+  await page.evaluate(async (args) => {
+    const api = (globalThis as any).browser || (globalThis as any).chrome;
+    await api.runtime.sendMessage({ type: 'workspaces/patch', id: args.id, patch: args.patch });
+  }, { id, patch });
 }
 
 export async function reloadNewtab(page: Page): Promise<void> {
@@ -109,7 +154,7 @@ export async function openSettingsSection(
   page: Page,
   section: SettingsSection,
 ): Promise<void> {
-  const buttonName = APP_SECTIONS.has(section) ? 'Settings' : 'Customize';
+  const buttonName = APP_SECTIONS.has(section) ? 'Settings' : 'Customize workspace';
   if (await page.locator('.ff-drawer').count() === 0) {
     await page.getByRole('button', { name: buttonName, exact: true }).click();
     await page.waitForSelector('.ff-drawer', { timeout: 5_000 });

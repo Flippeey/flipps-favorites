@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Icon pipeline + Firefox MV3 manifest assertion.
  */
 import { test, expect } from '../fixtures/extension-context.js';
@@ -9,7 +9,7 @@ import {
   createTestFolder,
   reloadNewtab,
   removeBookmarkTree,
-  setRootFolderId,
+  setupDefaultWorkspace,
 } from '../fixtures/bookmark-helpers.js';
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -42,7 +42,7 @@ test.describe('icon pipeline', () => {
     await clearExtensionStorage(newtabPage);
     rootId = await createTestFolder(newtabPage, 'Icon Root');
     await createTestBookmark(newtabPage, rootId, 'Example Site', 'https://example.com');
-    await setRootFolderId(newtabPage, rootId);
+    await setupDefaultWorkspace(newtabPage, rootId);
   });
 
   test.afterEach(async ({ newtabPage }) => {
@@ -75,7 +75,7 @@ test.describe('icon pipeline', () => {
     expect(src).toMatch(/^data:image\/png/);
   });
 
-  test('all external icon fetches failing → fallback letter renders', async ({ context, newtabPage }) => {
+  test('all external icon fetches failing â†’ fallback letter renders', async ({ context, newtabPage }) => {
     await context.route('https://www.google.com/s2/favicons**', (route) => route.abort('failed'));
     await context.route('https://duckduckgo.com/**', (route) => route.abort('failed'));
     await reloadNewtab(newtabPage);
@@ -83,7 +83,7 @@ test.describe('icon pipeline', () => {
     const tile = newtabPage.locator('.ff-tile[data-item-kind="bookmark"]').first();
     await expect(tile).toBeVisible();
     // Either an <img> with a generated fallback dataUrl, or the inline fallback letter span.
-    // We can't distinguish "generated SVG" from "S2 success" via DOM alone — but absence of
+    // We can't distinguish "generated SVG" from "S2 success" via DOM alone â€” but absence of
     // CORS errors and presence of *something* (img OR letter span) is the signal.
     await newtabPage.waitForTimeout(2_000);
     const hasImg = (await tile.locator('.ff-favicon img').count()) > 0;

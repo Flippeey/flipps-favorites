@@ -1,4 +1,4 @@
-/**
+﻿/**
  * App boot and shell rendering.
  */
 import { test, expect } from '../fixtures/extension-context.js';
@@ -7,9 +7,10 @@ import {
   createTestFolder,
   createTestBookmark,
   patchSettings,
+  patchWorkspace,
   reloadNewtab,
   removeBookmarkTree,
-  setRootFolderId,
+  setupDefaultWorkspace,
 } from '../fixtures/bookmark-helpers.js';
 
 let folderId: string;
@@ -18,7 +19,7 @@ test.beforeEach(async ({ newtabPage }) => {
   await clearExtensionStorage(newtabPage);
   folderId = await createTestFolder(newtabPage, 'Boot Test');
   await createTestBookmark(newtabPage, folderId, 'Example', 'https://example.com');
-  await setRootFolderId(newtabPage, folderId);
+  await setupDefaultWorkspace(newtabPage, folderId);
   await reloadNewtab(newtabPage);
 });
 
@@ -38,7 +39,7 @@ test('shell mounts without console errors', async ({ newtabPage }) => {
 
 test('data-tile-shape reflects settings', async ({ newtabPage }) => {
   await expect(newtabPage.locator('.ff-app')).toHaveAttribute('data-tile-shape', 'squircle');
-  await patchSettings(newtabPage, { tileShape: 'circle' });
+  await patchWorkspace(newtabPage, { tileShape: 'circle' });
   await reloadNewtab(newtabPage);
   await expect(newtabPage.locator('.ff-app')).toHaveAttribute('data-tile-shape', 'circle');
 });

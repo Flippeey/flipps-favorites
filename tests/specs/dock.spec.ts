@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Dock rendering + interaction.
  */
 import { test, expect } from '../fixtures/extension-context.js';
@@ -9,7 +9,7 @@ import {
   patchSettings,
   reloadNewtab,
   removeBookmarkTree,
-  setRootFolderId,
+  setupDefaultWorkspace,
 } from '../fixtures/bookmark-helpers.js';
 
 let rootId: string;
@@ -20,7 +20,7 @@ test.beforeEach(async ({ newtabPage }) => {
   for (let i = 0; i < 3; i++) {
     await createTestBookmark(newtabPage, rootId, `BM ${i}`, `https://bm${i}.example.com`);
   }
-  await setRootFolderId(newtabPage, rootId);
+  await setupDefaultWorkspace(newtabPage, rootId);
   await patchSettings(newtabPage, {
     showDock: true,
     autoHideDock: false,

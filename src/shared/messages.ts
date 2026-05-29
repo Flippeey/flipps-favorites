@@ -22,150 +22,17 @@ export const messageTypes = {
   deleteWorkspace: 'workspaces/delete',
 } as const;
 
-export type ThemeMode = 'light' | 'dark' | 'system';
-export type BackgroundFitMode = 'cover' | 'contain' | 'fill';
-export type BackgroundPositionMode = 'center' | 'top' | 'bottom';
-export type BookmarkSortMode = 'manual' | 'name' | 'lastUsed' | 'created';
-export type SortDirection = 'asc' | 'desc';
-export type LayoutPresetId = 'balanced' | 'compact' | 'spacious' | 'presentation' | 'custom';
-export type ClockHourFormat = '12' | '24';
-export type ViewMode = 'grid' | 'list';
-export type FolderOpenMode = 'overlay' | 'page';
-export type TileShape = 'squircle' | 'rounded' | 'circle';
-export type BackgroundMode = 'solid' | 'gradient' | 'wallpaper';
-export type GradientStyle = 'top' | 'top-bottom' | 'bottom' | 'aurora' | 'mesh' | 'vignette';
-export type BackgroundColorSource = 'accent' | 'custom';
+// Domain models + unions now live in models.ts. Re-export so existing
+// `import { … } from './messages'` call sites keep working unchanged.
+export * from './models';
 
-export interface WorkspaceRecord {
-  id: string;
-  name: string;
-  rootFolderId: string;
-  // Visual identity
-  themeMode: ThemeMode;
-  accentColor: string;
-  backgroundMode: BackgroundMode;
-  solidBackgroundColor: string;
-  gradientStyle: GradientStyle;
-  gradientColorSource: BackgroundColorSource;
-  gradientCustomColor: string;
-  gradientIntensity: number;
-  backgroundOpacity: number;
-  backgroundFitMode: BackgroundFitMode;
-  backgroundPositionMode: BackgroundPositionMode;
-  // Layout identity
-  layoutPreset: LayoutPresetId;
-  favoritesColumnGap: number;
-  favoritesRowGap: number;
-  bookmarkTileWidth: number;
-  bookmarkIconSize: number;
-  tileShape: TileShape;
-  showTileLabels: boolean;
-}
-
-export interface AppSettings {
-  // Identity
-  activeWorkspaceId: string;
-  workspaceOrder: string[];
-  // Global behaviour
-  themeMode: ThemeMode;
-  rememberLastFolder: boolean;
-  openLinksInNewTab: boolean;
-  // Dock
-  showDock: boolean;
-  autoHideDock: boolean;
-  dockFolderId: string;
-  // Sort
-  bookmarkSortMode: BookmarkSortMode;
-  bookmarkSortDirection: SortDirection;
-  // Clock
-  showClock: boolean;
-  clockHourFormat: ClockHourFormat;
-  // Search bar
-  showSearchBar: boolean;
-  // Folder behaviour (global)
-  folderMode: ViewMode;
-  folderOpenMode: FolderOpenMode;
-}
-
-export interface BookmarkNode {
-  id: string;
-  parentId?: string;
-  title: string;
-  url?: string;
-  dateAdded?: number;
-  children?: BookmarkNode[];
-}
-
-export interface BookmarkUsageRecord {
-  bookmarkId: string;
-  usedAt: number;
-}
-
-export type IconSourceKind = 'override' | 'origin' | 'iconhorse' | 'favicon' | 'search' | 'generated';
-
-export type IconFetchErrorKind =
-  | 'network'
-  | 'http-status'
-  | 'not-image'
-  | 'too-small'
-  | 'decode-fail'
-  | 'unknown';
-
-export class IconFetchError extends Error {
-  readonly kind: IconFetchErrorKind;
-  readonly httpStatus?: number;
-
-  constructor(kind: IconFetchErrorKind, message: string, httpStatus?: number) {
-    super(message);
-    this.name = 'IconFetchError';
-    this.kind = kind;
-    this.httpStatus = httpStatus;
-  }
-}
-
-export interface AppErrorResponse {
-  __error: {
-    kind: IconFetchErrorKind;
-    message: string;
-    httpStatus?: number;
-  };
-}
-
-export interface ResolvedIcon {
-  cacheKey: string;
-  sourceKind: IconSourceKind;
-  dataUrl: string;
-  lastUpdated: number;
-  isFallback: boolean;
-}
-
-export interface IconCacheRecord {
-  cacheKey: string;
-  bookmarkUrl: string;
-  sourceKind: Exclude<IconSourceKind, 'override'>;
-  dataUrl: string;
-  mimeType: string;
-  updatedAt: number;
-  expiresAt?: number;
-  pipelineVersion: string;
-}
-
-export interface IconOverrideRecord {
-  overrideKey: string;
-  bookmarkUrl: string;
-  dataUrl: string;
-  fileName: string;
-  mimeType: string;
-  updatedAt: number;
-}
-
-export interface IconSearchCandidate {
-  imageUrl: string;
-  previewUrl: string;
-  label: string;
-  sourceKind: 'favicon' | 'search';
-  sourcePageUrl?: string;
-}
+import type {
+  AppSettings,
+  BookmarkNode,
+  IconSearchCandidate,
+  ResolvedIcon,
+  WorkspaceRecord,
+} from './models';
 
 export interface PingRequest {
   type: typeof messageTypes.ping;

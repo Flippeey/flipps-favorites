@@ -1,6 +1,6 @@
-/**
+﻿/**
  * Custom wallpaper: preview thumbnail, background rendering, and persistence
- * across reload — including images large enough that:
+ * across reload â€” including images large enough that:
  *   - the data URL exceeds chrome.storage.sync's 8KB per-item quota
  *   - the inline CSS url(data:...) would exceed Chromium's silent inline-style
  *     size limit and never reach the DOM
@@ -14,27 +14,30 @@
  *      Chromium, so the background never rendered for large images.
  */
 import { test, expect } from '../fixtures/extension-context.js';
-import { STORAGE_KEYS } from '../fixtures/test-data.js';
 import {
   clearExtensionStorage,
   createTestFolder,
   openSettingsSection,
   reloadNewtab,
   removeBookmarkTree,
-  setRootFolderId,
+  setupDefaultWorkspace,
 } from '../fixtures/bookmark-helpers.js';
+
+// Wallpapers are stored per workspace in storage.local under this key
+// (workspaceWallpaperKey('ws-default') in src/shared/storage.ts).
+const WALLPAPER_KEY = 'app-wallpaper-ws-default';
 
 let rootId: string;
 
 test.beforeEach(async ({ newtabPage }) => {
   await clearExtensionStorage(newtabPage);
   rootId = await createTestFolder(newtabPage, 'Wallpaper Root');
-  await setRootFolderId(newtabPage, rootId);
+  await setupDefaultWorkspace(newtabPage, rootId);
   // Also clear any wallpaper from a prior test run.
   await newtabPage.evaluate(async (key) => {
     const api = (globalThis as any).browser || (globalThis as any).chrome;
     await api.storage.local.remove(key);
-  }, STORAGE_KEYS.appWallpaper);
+  }, WALLPAPER_KEY);
   await reloadNewtab(newtabPage);
 });
 
@@ -44,8 +47,8 @@ test.afterEach(async ({ newtabPage }) => {
 
 async function uploadWallpaperFromCanvas(page: import('@playwright/test').Page, size: number): Promise<number> {
   // Build a noisy PNG of the requested size in-page, then push it through the
-  // hidden <input type=file> so the full UI flow exercises (FileReader → patch
-  // → optimistic state → SW write → render).
+  // hidden <input type=file> so the full UI flow exercises (FileReader â†’ patch
+  // â†’ optimistic state â†’ SW write â†’ render).
   return page.evaluate((px) => {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = px;
@@ -84,7 +87,7 @@ test('uploading a large wallpaper renders the background, preview, and survives 
   });
   await expect(newtabPage.locator('.ff-row__label', { hasText: /no wallpaper selected/i })).toBeVisible();
 
-  // 1000×1000 noise PNG → ~3-4MB data URL, well past both the sync quota and
+  // 1000Ã—1000 noise PNG â†’ ~3-4MB data URL, well past both the sync quota and
   // the inline-style size limit.
   const fileSize = await uploadWallpaperFromCanvas(newtabPage, 1000);
   expect(fileSize).toBeGreaterThan(100_000);
@@ -92,9 +95,13 @@ test('uploading a large wallpaper renders the background, preview, and survives 
   // Wait for the upload to settle into state (label flips, blob URL resolves,
   // CSS variable lands on the root element).
   await expect(newtabPage.locator('.ff-row__label', { hasText: /custom wallpaper/i })).toBeVisible();
+
+  // The wallpaper paints on a dedicated .ff-bg-wallpaper layer (activated when
+  // backgroundMode is "wallpaper"), not on .ff-app itself.
+  await expect(newtabPage.locator('.ff-bg-wallpaper')).toHaveAttribute('data-active', 'true');
   await newtabPage.waitForFunction(() => {
-    const app = document.querySelector('.ff-app') as HTMLElement | null;
-    return !!app && getComputedStyle(app).backgroundImage.startsWith('url(');
+    const el = document.querySelector('.ff-bg-wallpaper') as HTMLElement | null;
+    return !!el && getComputedStyle(el).backgroundImage.startsWith('url(');
   }, undefined, { timeout: 5_000 });
 
   // Preview thumbnail renders the image via a blob URL.
@@ -107,40 +114,43 @@ test('uploading a large wallpaper renders the background, preview, and survives 
   });
   expect(previewBgImage).toMatch(/^url\("?blob:/);
 
-  // The .ff-app background-image also resolves to a blob URL (not "none").
-  const appBgImage = await newtabPage.evaluate(() => {
-    const app = document.querySelector('.ff-app') as HTMLElement;
-    return getComputedStyle(app).backgroundImage;
+  // The wallpaper layer's background-image resolves to a blob URL (not "none").
+  const layerBgImage = await newtabPage.evaluate(() => {
+    const el = document.querySelector('.ff-bg-wallpaper') as HTMLElement;
+    return getComputedStyle(el).backgroundImage;
   });
-  expect(appBgImage).toMatch(/^url\("?blob:/);
+  expect(layerBgImage).toMatch(/^url\("?blob:/);
 
-  // Storage placement: wallpaper lives in local under its own key; sync
-  // settings stays small (no embedded data URL).
-  const storage = await newtabPage.evaluate(async (keys) => {
+  // .ff-app advertises wallpaper mode via data-bg.
+  await expect(newtabPage.locator('.ff-app')).toHaveAttribute('data-bg', 'wallpaper');
+
+  // Storage placement: wallpaper lives in local under the per-workspace key;
+  // synced settings stay small (no embedded multi-MB data URL).
+  const storage = await newtabPage.evaluate(async (key) => {
     const api = (globalThis as any).browser || (globalThis as any).chrome;
-    const sync = await api.storage.sync.get(keys.appSettings);
-    const local = await api.storage.local.get(keys.appWallpaper);
+    const sync = await api.storage.sync.get('app-settings');
+    const local = await api.storage.local.get(key);
     return {
-      syncImageLen: sync?.[keys.appSettings]?.customBackgroundImage?.length ?? 0,
-      localWallpaperLen: local?.[keys.appWallpaper]?.length ?? 0,
+      syncLen: JSON.stringify(sync?.['app-settings'] ?? {}).length,
+      localWallpaperLen: typeof local?.[key] === 'string' ? local[key].length : 0,
     };
-  }, STORAGE_KEYS);
-  expect(storage.syncImageLen).toBe(0);
+  }, WALLPAPER_KEY);
+  expect(storage.syncLen).toBeLessThan(5_000);
   expect(storage.localWallpaperLen).toBeGreaterThan(100_000);
 
   // Persistence: reload the new tab and the wallpaper still renders.
   await reloadNewtab(newtabPage);
   await newtabPage.waitForFunction(() => {
-    const app = document.querySelector('.ff-app') as HTMLElement | null;
-    if (!app) return false;
-    return getComputedStyle(app).backgroundImage.startsWith('url(');
+    const el = document.querySelector('.ff-bg-wallpaper') as HTMLElement | null;
+    return !!el && getComputedStyle(el).backgroundImage.startsWith('url(');
   }, undefined, { timeout: 5_000 });
 
   const afterReload = await newtabPage.evaluate(() => {
     const app = document.querySelector('.ff-app') as HTMLElement;
+    const layer = document.querySelector('.ff-bg-wallpaper') as HTMLElement;
     return {
       dataBg: app.getAttribute('data-bg'),
-      backgroundImage: getComputedStyle(app).backgroundImage,
+      backgroundImage: getComputedStyle(layer).backgroundImage,
     };
   });
   expect(afterReload.dataBg).toBe('wallpaper');
@@ -155,7 +165,7 @@ test('clearing the wallpaper removes it from local storage and the background', 
     (wallpaper?.parentElement as HTMLElement | undefined)?.click();
   });
   await uploadWallpaperFromCanvas(newtabPage, 500);
-  // Wait until the upload settles — otherwise the trash button hasn't rendered.
+  // Wait until the upload settles â€” otherwise the trash button hasn't rendered.
   await expect(newtabPage.locator('.ff-row__label', { hasText: /custom wallpaper/i })).toBeVisible();
 
   // Trash button removes the wallpaper.
@@ -176,5 +186,5 @@ test('clearing the wallpaper removes it from local storage and the background', 
     const api = (globalThis as any).browser || (globalThis as any).chrome;
     const got = await api.storage.local.get(key);
     return !got?.[key];
-  }, STORAGE_KEYS.appWallpaper, { timeout: 5_000 });
+  }, WALLPAPER_KEY, { timeout: 5_000 });
 });

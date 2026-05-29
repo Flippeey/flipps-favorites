@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Multi-select via shift/ctrl click; Esc clears selection; scope isolation.
  */
 import { test, expect } from '../fixtures/extension-context.js';
@@ -10,7 +10,7 @@ import {
   patchSettings,
   reloadNewtab,
   removeBookmarkTree,
-  setRootFolderId,
+  setupDefaultWorkspace,
   tileById,
 } from '../fixtures/bookmark-helpers.js';
 
@@ -29,9 +29,9 @@ test.beforeEach(async ({ newtabPage }) => {
   c = await createTestBookmark(newtabPage, rootId, 'Gamma', 'https://gamma.example.com');
   sectionId = await createSubFolder(newtabPage, rootId, 'Section');
   inSection = await createTestBookmark(newtabPage, sectionId, 'Section BM', 'https://section.example.com');
-  await setRootFolderId(newtabPage, rootId);
-  // Sections mode so the subfolder's bookmark renders alongside root bookmarks with a different scope.
-  await patchSettings(newtabPage, { folderMode: 'sections' });
+  await setupDefaultWorkspace(newtabPage, rootId);
+  // List mode so the subfolder's bookmark renders alongside root bookmarks with a different scope.
+  await patchSettings(newtabPage, { folderMode: 'list' });
   await reloadNewtab(newtabPage);
 });
 
@@ -40,10 +40,9 @@ test.afterEach(async ({ newtabPage }) => {
 });
 
 test('shift-click two tiles in the same scope marks both selected', async ({ newtabPage }) => {
-  // In sections mode root bookmarks render in the TilesView when there are sections AND root items.
-  // Here root items are mixed into a TilesView when folderMode is 'tiles'; in 'sections' they don't show inline.
-  // Switch to tiles mode for predictable scoping in this test.
-  await patchSettings(newtabPage, { folderMode: 'tiles' });
+  // Grid mode gives predictable scoping: root bookmarks render in a single
+  // TilesView scope, rather than split across section scopes in list mode.
+  await patchSettings(newtabPage, { folderMode: 'grid' });
   await reloadNewtab(newtabPage);
 
   const ta = tileById(newtabPage, a);
@@ -55,7 +54,7 @@ test('shift-click two tiles in the same scope marks both selected', async ({ new
 });
 
 test('ctrl-click toggles selection of an individual tile', async ({ newtabPage }) => {
-  await patchSettings(newtabPage, { folderMode: 'tiles' });
+  await patchSettings(newtabPage, { folderMode: 'grid' });
   await reloadNewtab(newtabPage);
 
   const ta = tileById(newtabPage, a);
@@ -79,7 +78,7 @@ test('selecting in a section scopes the selection to that section', async ({ new
 });
 
 test('Escape clears the selection', async ({ newtabPage }) => {
-  await patchSettings(newtabPage, { folderMode: 'tiles' });
+  await patchSettings(newtabPage, { folderMode: 'grid' });
   await reloadNewtab(newtabPage);
 
   const ta = tileById(newtabPage, a);

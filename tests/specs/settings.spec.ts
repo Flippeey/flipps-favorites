@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Settings drawer: open/close, section navigation, theme + accent persistence,
  * dock visibility, layout preset.
  */
@@ -9,9 +9,10 @@ import {
   createTestFolder,
   openSettingsSection,
   patchSettings,
+  patchWorkspace,
   reloadNewtab,
   removeBookmarkTree,
-  setRootFolderId,
+  setupDefaultWorkspace,
 } from '../fixtures/bookmark-helpers.js';
 
 let rootId: string;
@@ -19,7 +20,7 @@ let rootId: string;
 test.beforeEach(async ({ newtabPage }) => {
   await clearExtensionStorage(newtabPage);
   rootId = await createTestFolder(newtabPage, 'Settings Root');
-  await setRootFolderId(newtabPage, rootId);
+  await setupDefaultWorkspace(newtabPage, rootId);
   await reloadNewtab(newtabPage);
 });
 
@@ -41,10 +42,11 @@ test('settings drawer opens, closes via button + ESC + scrim', async ({ newtabPa
   await newtabPage.keyboard.press('Escape');
   await expect(drawer).toHaveCount(0);
 
-  // Scrim click closes
+  // Scrim mousedown closes (the scrim handler fires on mousedown when the
+  // target is the scrim itself, not a child).
   await newtabPage.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(drawer).toBeVisible();
-  await newtabPage.locator('.ff-modal-scrim').click({ position: { x: 10, y: 10 } });
+  await newtabPage.locator('.ff-modal-scrim').dispatchEvent('mousedown');
   await expect(drawer).toHaveCount(0);
 });
 
@@ -113,7 +115,7 @@ test('dock visibility: hidden hides .ff-dock-wrap; hover sets data-mode=hover', 
 });
 
 test('layout preset persists after reload', async ({ newtabPage }) => {
-  await patchSettings(newtabPage, { layoutPreset: 'compact' });
+  await patchWorkspace(newtabPage, { layoutPreset: 'compact' });
   await reloadNewtab(newtabPage);
   const tileSize = await newtabPage.evaluate(() =>
     document.documentElement.style.getPropertyValue('--tile-size'),

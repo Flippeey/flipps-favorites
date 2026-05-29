@@ -1,4 +1,5 @@
 import { deflateSync } from 'node:zlib';
+import type { WorkspaceRecord } from '../../src/shared/models';
 
 /**
  * Create a solid-color PNG of the given dimensions.
@@ -46,11 +47,38 @@ export const MOCK_FAVICON_PNG = createSolidPng(64, 64, 0, 128, 0);
 /** Storage key constants mirroring src/shared/storage.ts */
 export const STORAGE_KEYS = {
   appSettings: 'app-settings',
+  workspaces: 'workspaces',
   onboardingState: 'onboarding-state',
   iconCacheRecords: 'icon-cache-records',
   iconOverrideRecords: 'icon-override-records',
   appWallpaper: 'app-wallpaper',
 } as const;
+
+/**
+ * Default workspace visual/layout settings, mirroring
+ * `defaultWorkspaceSettings` in src/shared/storage.ts. Kept typed against the
+ * shared WorkspaceRecord so a model change surfaces here at compile time.
+ */
+export const DEFAULT_WORKSPACE_SETTINGS: Omit<WorkspaceRecord, 'id' | 'name' | 'rootFolderId'> = {
+  themeMode: 'system',
+  accentColor: '#3F72DC',
+  backgroundMode: 'gradient',
+  solidBackgroundColor: '',
+  gradientStyle: 'top',
+  gradientColorSource: 'accent',
+  gradientCustomColor: '#3F72DC',
+  gradientIntensity: 100,
+  backgroundOpacity: 70,
+  backgroundFitMode: 'cover',
+  backgroundPositionMode: 'center',
+  layoutPreset: 'balanced',
+  favoritesColumnGap: 24,
+  favoritesRowGap: 20,
+  bookmarkTileWidth: 130,
+  bookmarkIconSize: 75,
+  tileShape: 'squircle',
+  showTileLabels: true,
+};
 
 /** Preset accent colors from src/settings/config/options.ts */
 export const ACCENT_PRESETS = {

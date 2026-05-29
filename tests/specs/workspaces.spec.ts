@@ -8,34 +8,23 @@ import {
   reloadNewtab,
   removeBookmarkTree,
 } from '../fixtures/bookmark-helpers.js';
+import { DEFAULT_WORKSPACE_SETTINGS } from '../fixtures/test-data.js';
+import type { WorkspaceRecord } from '../../src/shared/models';
 
-/** Minimal workspace record matching the WorkspaceRecord shape. */
-function makeWorkspace(id: string, name: string, rootFolderId: string, accentColor: string) {
+/** Build a full, correctly-typed WorkspaceRecord with a custom accent. */
+function makeWorkspace(
+  id: string,
+  name: string,
+  rootFolderId: string,
+  accentColor: string,
+): WorkspaceRecord {
   return {
+    ...DEFAULT_WORKSPACE_SETTINGS,
     id,
     name,
     rootFolderId,
     accentColor,
-    backgroundMode: 'gradient',
-    solidBackgroundColor: '',
-    gradientStyle: 'top',
-    gradientColorSource: 'accent',
     gradientCustomColor: accentColor,
-    gradientIntensity: 100,
-    backgroundOpacity: 70,
-    backgroundFitMode: 'cover',
-    backgroundPositionMode: 'center',
-    layoutPreset: 'balanced',
-    favoritesColumns: 10,
-    favoritesRows: 0,
-    favoritesColumnGap: 24,
-    favoritesRowGap: 20,
-    bookmarkTileWidth: 130,
-    bookmarkIconSize: 75,
-    tileShape: 'squircle',
-    showBookmarkIconBackground: false,
-    showAccentBackground: true,
-    showTileLabels: true,
   };
 }
 
@@ -47,27 +36,12 @@ async function sendMessage(page: import('@playwright/test').Page, msg: unknown):
   }, msg);
 }
 
-/** Clear all extension storage (sync + local) so each test starts clean. */
-async function clearAllStorage(page: import('@playwright/test').Page): Promise<void> {
-  await clearExtensionStorage(page);
-  // clearExtensionStorage only removes 'app-settings' from sync, not the 'workspaces' key.
-  // Clear it explicitly so workspace records from prior test runs don't persist.
-  await page.evaluate(async () => {
-    const api = (globalThis as any).browser || (globalThis as any).chrome;
-    try {
-      await api.storage.sync.remove('workspaces');
-    } catch {
-      // Firefox / unavailable sync: ignore
-    }
-  });
-}
-
 // ─── Shared state ────────────────────────────────────────────────────────────
 
 let rootId: string;
 
 test.beforeEach(async ({ newtabPage }) => {
-  await clearAllStorage(newtabPage);
+  await clearExtensionStorage(newtabPage);
 
   // Create a bookmark folder to serve as the default workspace's root.
   rootId = await createTestFolder(newtabPage, 'Default Root');

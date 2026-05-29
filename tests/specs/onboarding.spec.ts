@@ -1,5 +1,5 @@
-/**
- * Onboarding wizard — replay button opens it; stepping through closes it
+﻿/**
+ * Onboarding wizard â€” replay button opens it; stepping through closes it
  * and applied choices persist.
  */
 import { test, expect } from '../fixtures/extension-context.js';
@@ -9,7 +9,7 @@ import {
   createTestFolder,
   reloadNewtab,
   removeBookmarkTree,
-  setRootFolderId,
+  setupDefaultWorkspace,
 } from '../fixtures/bookmark-helpers.js';
 
 let rootId: string;
@@ -17,7 +17,7 @@ let rootId: string;
 test.beforeEach(async ({ newtabPage }) => {
   await clearExtensionStorage(newtabPage);
   rootId = await createTestFolder(newtabPage, 'Onboard Root');
-  await setRootFolderId(newtabPage, rootId);
+  await setupDefaultWorkspace(newtabPage, rootId);
   await reloadNewtab(newtabPage);
 });
 
@@ -38,15 +38,16 @@ test('Next through all steps reaches "Get started" and chosen accent persists', 
   const onboard = newtabPage.locator('.ff-onboard');
   await expect(onboard).toBeVisible();
 
-  // Step 0 → 1 (accent picker).
-  await onboard.getByRole('button', { name: /Next/i }).click();
+  // Advance to the accent picker (step 3).
+  await onboard.getByRole('button', { name: /Next/i }).click(); // -> workspace mode
+  await onboard.getByRole('button', { name: /Next/i }).click(); // -> theme
+  await onboard.getByRole('button', { name: /Next/i }).click(); // -> accent
   // Pick "Red" accent (preset chip with aria-label "Red").
   await onboard.getByRole('button', { name: 'Red', exact: true }).click();
 
-  // Advance through remaining steps.
-  await onboard.getByRole('button', { name: /Next/i }).click(); // → layout
-  await onboard.getByRole('button', { name: /Next/i }).click(); // → folder mode
-  await onboard.getByRole('button', { name: /Next/i }).click(); // → final
+  // Advance through remaining steps to the finish.
+  await onboard.getByRole('button', { name: /Next/i }).click(); // -> theme cards
+  await onboard.getByRole('button', { name: /Next/i }).click(); // -> tips
 
   await onboard.getByRole('button', { name: /Get started/i }).click();
   await expect(onboard).toHaveCount(0);

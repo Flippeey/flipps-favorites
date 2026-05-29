@@ -1,5 +1,5 @@
-/**
- * Hero search — dropdown filter, keyboard shortcuts, empty state.
+﻿/**
+ * Hero search â€” dropdown filter, keyboard shortcuts, empty state.
  */
 import { test, expect } from '../fixtures/extension-context.js';
 import {
@@ -9,7 +9,7 @@ import {
   createTestFolder,
   reloadNewtab,
   removeBookmarkTree,
-  setRootFolderId,
+  setupDefaultWorkspace,
 } from '../fixtures/bookmark-helpers.js';
 
 let rootId: string;
@@ -21,7 +21,7 @@ test.beforeEach(async ({ newtabPage }) => {
   await createTestBookmark(newtabPage, rootId, 'GitLab', 'https://gitlab.com');
   await createTestBookmark(newtabPage, rootId, 'OpenAI', 'https://openai.com');
   await createSubFolder(newtabPage, rootId, 'Reading');
-  await setRootFolderId(newtabPage, rootId);
+  await setupDefaultWorkspace(newtabPage, rootId);
   await reloadNewtab(newtabPage);
 });
 
@@ -63,7 +63,7 @@ test('Enter on a folder result navigates into the folder', async ({ newtabPage }
   await input.fill('Reading');
   await expect(newtabPage.locator('#ff-search-results .ff-results__item')).toHaveCount(1);
   await input.press('Enter');
-  // Default folderOpenMode=overlay → overlay opens; or page mode → page view.
+  // Default folderOpenMode=overlay â†’ overlay opens; or page mode â†’ page view.
   // Either way, the search dropdown should close (value cleared).
   await expect(newtabPage.locator('#ff-search-results')).toHaveCount(0);
 });

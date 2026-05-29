@@ -1,5 +1,5 @@
-/**
- * Folder navigation — overlay mode (default) and page mode.
+﻿/**
+ * Folder navigation â€” overlay mode (default) and page mode.
  */
 import { test, expect } from '../fixtures/extension-context.js';
 import {
@@ -10,7 +10,7 @@ import {
   patchSettings,
   reloadNewtab,
   removeBookmarkTree,
-  setRootFolderId,
+  setupDefaultWorkspace,
   tileById,
 } from '../fixtures/bookmark-helpers.js';
 
@@ -24,7 +24,7 @@ test.beforeEach(async ({ newtabPage }) => {
   childId = await createSubFolder(newtabPage, rootId, 'Child');
   grandId = await createSubFolder(newtabPage, childId, 'Grand');
   await createTestBookmark(newtabPage, childId, 'Child BM', 'https://child.example.com');
-  await setRootFolderId(newtabPage, rootId);
+  await setupDefaultWorkspace(newtabPage, rootId);
 });
 
 test.afterEach(async ({ newtabPage }) => {
@@ -86,14 +86,16 @@ test('page mode: clicking a folder pushes the path and shows breadcrumb', async 
   await expect(newtabPage.locator('.ff-crumb__here')).toHaveText('Child');
 });
 
-test('page mode: Home button returns to root', async ({ newtabPage }) => {
+test('page mode: workspace crumb returns to root', async ({ newtabPage }) => {
   await patchSettings(newtabPage, { folderOpenMode: 'page' });
   await reloadNewtab(newtabPage);
 
   await tileById(newtabPage, childId).click();
   await expect(newtabPage.locator('.ff-page-view')).toBeVisible();
 
-  await newtabPage.getByRole('button', { name: 'Home', exact: true }).click();
+  // The first breadcrumb button is the workspace root; clicking it returns home.
+  await newtabPage.locator('.ff-crumb__btn').first().click();
   await expect(newtabPage.locator('.ff-page-view')).toHaveCount(0);
-  await expect(newtabPage.locator('.ff-crumb__here')).toHaveText('Nav Root');
+  // At root the trailing "here" crumb is gone (only the workspace button remains).
+  await expect(newtabPage.locator('.ff-crumb__here')).toHaveCount(0);
 });
