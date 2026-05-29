@@ -22,8 +22,9 @@ tests/.firefox-profile/
 test-results/
 playwright-report/
 
-# Ignore GitHub workflows and actions
+# Ignore GitHub metadata, but keep CI workflows tracked
 .github/*
+!.github/workflows/
 
 # Ignore editor settings
 .vscode
