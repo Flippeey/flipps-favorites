@@ -1,34 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { TileShape } from '../../shared/messages';
 import { fetchIcon, iconCache, subscribeFaviconCache } from '../lib/favicon-cache';
-
-function escapeSvgText(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
-function makeFallbackSvg(title?: string): string {
-  const label = title?.trim() || '?';
-  const initials = label.slice(0, 2).toUpperCase();
-  const seed = Array.from(label).reduce((sum, c) => sum + c.charCodeAt(0), 0);
-  const hue = seed % 360;
-  const svg = [
-    '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">',
-    '<defs>',
-    `<linearGradient id="g" x1="0" y1="0" x2="1" y2="1">`,
-    `<stop offset="0%" stop-color="hsl(${String(hue)},70%,58%)"/>`,
-    `<stop offset="100%" stop-color="hsl(${String((hue + 36) % 360)},68%,40%)"/>`,
-    '</linearGradient></defs>',
-    '<rect width="96" height="96" rx="24" fill="url(#g)"/>',
-    `<text x="48" y="54" text-anchor="middle" font-family="system-ui,sans-serif" font-size="32" font-weight="700" fill="#FFF">${escapeSvgText(initials)}</text>`,
-    '</svg>',
-  ].join('');
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-}
+import { buildFallbackSvgDataUrl } from '../../shared/icon-fallback';
 
 function radiusForShape(shape: TileShape): string {
   switch (shape) {
@@ -74,7 +47,7 @@ export function Favicon({ url, title, shape = 'squircle' }: FaviconProps) {
     }
     fetchIcon(url, title)
       .then(dataUrl => { if (mounted.current) setSrc(dataUrl); })
-      .catch(() => { if (mounted.current) setSrc(makeFallbackSvg(title)); });
+      .catch(() => { if (mounted.current) setSrc(buildFallbackSvgDataUrl(title?.trim() || '?')); });
   }, [url, title, version]);
 
   const radius = radiusForShape(shape);

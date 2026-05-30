@@ -4,6 +4,7 @@ import { extensionApi } from '../../shared/browser';
 import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRecord, readIconCacheRecord, readIconCacheRecords, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideRecord } from '../../shared/storage';
 import { evictExpiredCachedIcons } from '../../shared/icon-idb';
 import { extractBrandInfo } from '../../shared/url-brand';
+import { buildFallbackSvgDataUrl } from '../../shared/icon-fallback';
 
 const iconPipelineVersion = 'bookmark-icons-v7';
 const faviconProviderUrl = 'https://www.google.com/s2/favicons';
@@ -319,19 +320,7 @@ async function fetchS2Favicon(bookmarkUrl: string, cacheKey: string): Promise<Ic
 
 function createGeneratedRecord(bookmarkUrl: string, bookmarkTitle: string | undefined, cacheKey: string): IconCacheRecord {
   const label = getIconLabel(bookmarkTitle, bookmarkUrl);
-  const initials = label.slice(0, 2).toUpperCase();
-  const background = getColorFromLabel(label);
-  const svg = [
-    '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-hidden="true">',
-    '<defs>',
-    `<linearGradient id="bookmark-gradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${background.start}" /><stop offset="100%" stop-color="${background.end}" /></linearGradient>`,
-    '</defs>',
-    '<rect width="96" height="96" rx="24" fill="url(#bookmark-gradient)" />',
-    `<text x="48" y="54" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="32" font-weight="700" fill="#FFFFFF">${escapeSvgText(initials || '•')}</text>`,
-    '</svg>',
-  ].join('');
-  const dataUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-
+  const dataUrl = buildFallbackSvgDataUrl(label);
   return {
     cacheKey,
     bookmarkUrl,
@@ -431,24 +420,6 @@ function buildSearchQueryFromBookmark(bookmarkUrl?: string): string {
   const parts = hostname.split('.');
   const core = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0];
   return `${core} logo`.trim();
-}
-
-function getColorFromLabel(label: string): { start: string; end: string } {
-  const seed = Array.from(label).reduce((total, character) => total + character.charCodeAt(0), 0);
-  const hue = seed % 360;
-  return {
-    start: `hsl(${String(hue)} 70% 58%)`,
-    end: `hsl(${String((hue + 36) % 360)} 68% 40%)`,
-  };
-}
-
-function escapeSvgText(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
 }
 
 function isDataUrl(value: string): boolean {
