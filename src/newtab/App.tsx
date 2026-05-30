@@ -22,13 +22,13 @@ import { useKeyboardNav, useDeleteShortcut } from './interaction/useKeyboardNav'
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
 import { extensionApi } from '../shared/browser';
 import { IS_MAC } from './lib/platform';
-import { getBookmarkTree, getBookmarkUsage, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark, createWorkspace, patchWorkspace, deleteWorkspace } from './lib/messaging';
+import { getBookmarkTree, getBookmarkUsage, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
 import { prefetchAllIcons } from './lib/icon-prefetch';
 import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
-import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper, writeWorkspaceWallpaper } from '../shared/storage';
-import { runOptimistic } from './state/useOptimisticPatch';
+import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper } from '../shared/storage';
 import { MAX_WORKSPACES } from '../shared/constants';
+import { useWorkspaceActions } from './state/useWorkspaceActions';
 
 interface AppProps {
   initialSettings: AppSettings;
@@ -175,118 +175,34 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     }
   }, []);
 
-  const handleSwitchWorkspace = useCallback(async (id: string) => {
-    setIsSwitching(true);
-    await new Promise(r => setTimeout(r, 130));
-    setFolderPath([]);
-    setSelection({ ids: new Set(), scopeFolderId: '' });
-    await handlePatch({ activeWorkspaceId: id });
-    requestAnimationFrame(() => setIsSwitching(false));
-  }, [handlePatch]);
+  const {
+    handleSwitchWorkspace,
+    handlePatchWorkspace,
+    handleSetWorkspaceWallpaper,
+    handleCreateWorkspace,
+    handleDeleteWorkspace,
+    handleDuplicateWorkspace,
+    handleAddWorkspace,
+    handleReorderWorkspaces,
+    handleRenameWorkspace,
+  } = useWorkspaceActions({
+    workspaces,
+    setWorkspaces,
+    activeWorkspace,
+    settings,
+    setSettings,
+    setNewWorkspaceOpen,
+    setWorkspaceWallpaper,
+    setIsSwitching,
+    setFolderPath,
+    setSelection,
+    handlePatch,
+  });
 
   const handleToggleViewMode = useCallback(() => {
     const next = settings.folderMode === 'grid' ? 'list' : 'grid';
     handlePatch({ folderMode: next });
   }, [settings.folderMode, handlePatch]);
-
-  const handlePatchWorkspace = useCallback(async (patch: Partial<WorkspaceRecord>) => {
-    if (!activeWorkspace) return;
-    await runOptimistic<WorkspaceRecord>({
-      optimistic: { ...activeWorkspace, ...patch },
-      apply: (ws) => setWorkspaces(prev => prev.map(w => w.id === ws.id ? ws : w)),
-      persist: () => patchWorkspace(activeWorkspace.id, patch),
-    });
-  }, [activeWorkspace]);
-
-  const handleSetWorkspaceWallpaper = useCallback(async (dataUrl: string) => {
-    if (!activeWorkspace) return;
-    setWorkspaceWallpaper(dataUrl);
-    try {
-      await writeWorkspaceWallpaper(activeWorkspace.id, dataUrl);
-    } catch {
-      // keep optimistic value
-    }
-  }, [activeWorkspace]);
-
-  const handleCreateWorkspace = useCallback(async (
-    rootFolderId: string,
-    name: string,
-    overrides?: Partial<Omit<WorkspaceRecord, 'id' | 'name' | 'rootFolderId'>>,
-  ): Promise<string | undefined> => {
-    if (workspaces.length >= MAX_WORKSPACES) return undefined;
-    if (workspaces.some(w => w.rootFolderId === rootFolderId)) return undefined;
-    const workspace: WorkspaceRecord = {
-      id: crypto.randomUUID(),
-      name,
-      rootFolderId,
-      ...defaultWorkspaceSettings,
-      ...(overrides ?? {}),
-    };
-    try {
-      const created = await createWorkspace(workspace);
-      setWorkspaces(prev => [...prev, created]);
-      await handlePatch({ activeWorkspaceId: created.id });
-      return created.id;
-    } catch {
-      return undefined;
-    }
-  }, [workspaces, handlePatch]);
-
-  const handleDeleteWorkspace = useCallback(async (id: string) => {
-    if (workspaces.length <= 1) return;
-    try {
-      await deleteWorkspace(id);
-    } catch {
-      return;
-    }
-    const remaining = workspaces.filter(w => w.id !== id);
-    const nextActiveId = settings.activeWorkspaceId === id ? remaining[0]?.id : undefined;
-    setWorkspaces(remaining);
-    if (nextActiveId) await handlePatch({ activeWorkspaceId: nextActiveId });
-  }, [workspaces, settings.activeWorkspaceId, handlePatch]);
-
-  const handleDuplicateWorkspace = useCallback(async (id: string) => {
-    if (workspaces.length >= MAX_WORKSPACES) return;
-    const source = workspaces.find(w => w.id === id);
-    if (!source) return;
-    const duplicate: WorkspaceRecord = {
-      ...source,
-      id: crypto.randomUUID(),
-      name: `Copy of ${source.name}`,
-    };
-    try {
-      const created = await createWorkspace(duplicate);
-      if (source.backgroundMode === 'wallpaper') {
-        const wallpaper = await readWorkspaceWallpaper(source.id);
-        if (wallpaper) await writeWorkspaceWallpaper(created.id, wallpaper);
-      }
-      setWorkspaces(prev => [...prev, created]);
-      await handlePatch({ activeWorkspaceId: created.id });
-    } catch {
-      // creation failed — leave UI unchanged
-    }
-  }, [workspaces, handlePatch]);
-
-  const handleAddWorkspace = useCallback(() => {
-    setNewWorkspaceOpen(true);
-  }, []);
-
-  const handleReorderWorkspaces = useCallback(async (ids: string[]) => {
-    setSettings(prev => ({ ...prev, workspaceOrder: ids }));
-    try { await patchSettings({ workspaceOrder: ids }); } catch { /* keep optimistic */ }
-  }, []);
-
-  const handleRenameWorkspace = useCallback(async (id: string, name: string): Promise<void> => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    setWorkspaces(prev => prev.map(w => w.id === id ? { ...w, name: trimmed } : w));
-    try {
-      const next = await patchWorkspace(id, { name: trimmed });
-      setWorkspaces(prev => prev.map(w => w.id === next.id ? next : w));
-    } catch {
-      // keep optimistic value
-    }
-  }, []);
 
   const openAppSettings = useCallback((section: AppSectionId = 'navigation') => {
     setWorkspaceSettingsOpen(false);
