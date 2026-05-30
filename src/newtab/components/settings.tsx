@@ -9,7 +9,7 @@ import {
   HelpSection,
   LayoutSection,
   NavigationSection,
-} from './settings-sections';
+} from './settings/index';
 
 // Re-export controls/presets used by sibling components (Onboarding, NewWorkspaceDialog).
 export {
