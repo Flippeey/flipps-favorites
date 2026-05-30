@@ -15,7 +15,7 @@ import { AppSettingsDrawer, WorkspaceSettingsDrawer, type AppSectionId, type Wor
 import { ConfirmDeleteWorkspaceDialog, WorkspaceRenameDialog } from './components/WorkspaceLifecycleDialogs';
 import { TopNav, type SortChoice } from './components/TopNav';
 import { SectionsView, TilesView, FolderPageView } from './components/views';
-import { useMarquee, type MarqueeSelection } from './interaction/useMarquee';
+import { useMarquee } from './interaction/useMarquee';
 import { useDrag } from './interaction/useDrag';
 import { useWorkspaceShortcut } from './interaction/useWorkspaceShortcut';
 import { useKeyboardNav, useDeleteShortcut } from './interaction/useKeyboardNav';
@@ -29,6 +29,7 @@ import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from 
 import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper } from '../shared/storage';
 import { MAX_WORKSPACES } from '../shared/constants';
 import { useWorkspaceActions } from './state/useWorkspaceActions';
+import { useSelection } from './state/useSelection';
 
 interface AppProps {
   initialSettings: AppSettings;
@@ -101,17 +102,12 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<BookmarkNode | null>(null);
   const [confirmDeleteBatch, setConfirmDeleteBatch] = useState<string[] | null>(null);
 
-  const [selection, setSelection] = useState<MarqueeSelection>({ ids: new Set(), scopeFolderId: '' });
-  const selectionRef = useRef(selection);
-  selectionRef.current = selection;
-
   // Keyboard navigation: tracks which tile is currently focused via arrow keys.
   // Null = no keyboard focus (focus model resumes from real :focus or :focus-visible).
   const [focusedTileId, setFocusedTileId] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLElement | null>(null);
   const dragEngagedRef = useRef(false);
-  const lastClickedRef = useRef<string | null>(null);
   const [canvasEl, setCanvasEl] = useState<HTMLElement | null>(null);
   const [appEl, setAppEl] = useState<HTMLElement | null>(null);
   const [overlayBodyEl, setOverlayBodyEl] = useState<HTMLElement | null>(null);
@@ -175,30 +171,6 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     }
   }, []);
 
-  const {
-    handleSwitchWorkspace,
-    handlePatchWorkspace,
-    handleSetWorkspaceWallpaper,
-    handleCreateWorkspace,
-    handleDeleteWorkspace,
-    handleDuplicateWorkspace,
-    handleAddWorkspace,
-    handleReorderWorkspaces,
-    handleRenameWorkspace,
-  } = useWorkspaceActions({
-    workspaces,
-    setWorkspaces,
-    activeWorkspace,
-    settings,
-    setSettings,
-    setNewWorkspaceOpen,
-    setWorkspaceWallpaper,
-    setIsSwitching,
-    setFolderPath,
-    setSelection,
-    handlePatch,
-  });
-
   const handleToggleViewMode = useCallback(() => {
     const next = settings.folderMode === 'grid' ? 'list' : 'grid';
     handlePatch({ folderMode: next });
@@ -215,25 +187,6 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setWorkspaceSettingsInitialSection(section);
     setWorkspaceSettingsOpen(true);
   }, []);
-
-  const handleWorkspaceContextMenu = useCallback((id: string, x: number, y: number) => {
-    const ws = workspaces.find(w => w.id === id);
-    if (!ws) return;
-    const atMax = workspaces.length >= MAX_WORKSPACES;
-    const canDelete = workspaces.length > 1;
-    setContextMenu({
-      x, y,
-      items: [
-        { kind: 'item', icon: 'palette', label: 'Appearance', onClick: () => openWorkspaceSettings('appearance') },
-        { kind: 'item', icon: 'rows',    label: 'Layout',     onClick: () => openWorkspaceSettings('layout') },
-        { kind: 'separator' },
-        { kind: 'item', icon: 'pencil',  label: 'Rename…',    onClick: () => setRenameWorkspaceTarget(ws) },
-        { kind: 'item', icon: 'copy',    label: 'Duplicate',  disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => { void handleDuplicateWorkspace(id); } },
-        { kind: 'separator' },
-        { kind: 'item', icon: 'trash',   label: 'Delete…',    destructive: true, disabled: !canDelete, title: !canDelete ? 'Create another workspace first' : undefined, onClick: () => setConfirmDeleteWorkspace(ws) },
-      ],
-    });
-  }, [workspaces, handleDuplicateWorkspace, openWorkspaceSettings]);
 
   const refreshTree = useCallback(async () => {
     try {
@@ -301,6 +254,57 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     if (newTab) window.open(url, '_blank', 'noopener');
     else window.location.href = url;
   }, [settings.openLinksInNewTab]);
+
+  const { selection, setSelection, selectionRef, lastClickedRef, handleTileClick } = useSelection({
+    navItems,
+    rootFolder,
+    dragEngagedRef,
+    handlePickFolder,
+    handlePickBookmark,
+  });
+
+  const {
+    handleSwitchWorkspace,
+    handlePatchWorkspace,
+    handleSetWorkspaceWallpaper,
+    handleCreateWorkspace,
+    handleDeleteWorkspace,
+    handleDuplicateWorkspace,
+    handleAddWorkspace,
+    handleReorderWorkspaces,
+    handleRenameWorkspace,
+  } = useWorkspaceActions({
+    workspaces,
+    setWorkspaces,
+    activeWorkspace,
+    settings,
+    setSettings,
+    setNewWorkspaceOpen,
+    setWorkspaceWallpaper,
+    setIsSwitching,
+    setFolderPath,
+    setSelection,
+    handlePatch,
+  });
+
+  const handleWorkspaceContextMenu = useCallback((id: string, x: number, y: number) => {
+    const ws = workspaces.find(w => w.id === id);
+    if (!ws) return;
+    const atMax = workspaces.length >= MAX_WORKSPACES;
+    const canDelete = workspaces.length > 1;
+    setContextMenu({
+      x, y,
+      items: [
+        { kind: 'item', icon: 'palette', label: 'Appearance', onClick: () => openWorkspaceSettings('appearance') },
+        { kind: 'item', icon: 'rows',    label: 'Layout',     onClick: () => openWorkspaceSettings('layout') },
+        { kind: 'separator' },
+        { kind: 'item', icon: 'pencil',  label: 'Rename…',    onClick: () => setRenameWorkspaceTarget(ws) },
+        { kind: 'item', icon: 'copy',    label: 'Duplicate',  disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => { void handleDuplicateWorkspace(id); } },
+        { kind: 'separator' },
+        { kind: 'item', icon: 'trash',   label: 'Delete…',    destructive: true, disabled: !canDelete, title: !canDelete ? 'Create another workspace first' : undefined, onClick: () => setConfirmDeleteWorkspace(ws) },
+      ],
+    });
+  }, [workspaces, handleDuplicateWorkspace, openWorkspaceSettings]);
 
   const handleGoToCrumb = useCallback((idx: number) => setFolderPath(p => p.slice(0, idx)), []);
 
@@ -434,17 +438,6 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     if (folder) handlePickFolder(folder);
   }, [tree, handlePickFolder]);
 
-  // ESC clears selection (no overlay check — individual dialogs handle their own ESC)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && selectionRef.current.ids.size > 0) {
-        setSelection({ ids: new Set(), scopeFolderId: '' });
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
   useWorkspaceShortcut(orderedWorkspaces, handleSwitchWorkspace);
 
   // Reset keyboard focus when navigation context changes (workspace switch, folder open/close).
@@ -553,60 +546,6 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     dragEngagedRef,
   });
   const dragPreview = canvasDragPreview ?? overlayDragPreview ?? dockDragPreview;
-
-  const handleTileClick = useCallback((item: BookmarkNode, event: React.MouseEvent) => {
-    if (dragEngagedRef.current) {
-      dragEngagedRef.current = false;
-      return;
-    }
-    const scope = (event.currentTarget as HTMLElement | null)?.closest<HTMLElement>('[data-scope-folder-id]')?.dataset.scopeFolderId ?? rootFolder?.id ?? '';
-
-    if (event.metaKey || event.ctrlKey) {
-      setSelection(prev => {
-        const sameScope = prev.scopeFolderId === scope;
-        const ids = sameScope ? new Set(prev.ids) : new Set<string>();
-        if (ids.has(item.id)) ids.delete(item.id);
-        else ids.add(item.id);
-        return { ids, scopeFolderId: scope };
-      });
-      lastClickedRef.current = item.id;
-      return;
-    }
-
-    if (event.shiftKey) {
-      const anchor = lastClickedRef.current;
-      if (anchor && navItems.length > 0) {
-        const anchorIdx = navItems.findIndex(n => n.id === anchor);
-        const clickIdx = navItems.findIndex(n => n.id === item.id);
-        if (anchorIdx >= 0 && clickIdx >= 0) {
-          const from = Math.min(anchorIdx, clickIdx);
-          const to = Math.max(anchorIdx, clickIdx);
-          setSelection(prev => {
-            const ids = prev.scopeFolderId === scope ? new Set(prev.ids) : new Set<string>();
-            for (let i = from; i <= to; i++) ids.add(navItems[i].id);
-            return { ids, scopeFolderId: scope };
-          });
-          return;
-        }
-      }
-      // Fallback: no anchor — treat like Ctrl+Click
-      setSelection(prev => {
-        const ids = prev.scopeFolderId === scope ? new Set(prev.ids) : new Set<string>();
-        ids.add(item.id);
-        return { ids, scopeFolderId: scope };
-      });
-      lastClickedRef.current = item.id;
-      return;
-    }
-
-    // Plain click — clear selection. Folder/bookmark open behavior handled by caller.
-    if (selectionRef.current.ids.size > 0) {
-      setSelection({ ids: new Set(), scopeFolderId: '' });
-    }
-    lastClickedRef.current = item.id;
-    if (isFolder(item)) handlePickFolder(item);
-    else handlePickBookmark(item, event);
-  }, [handlePickBookmark, handlePickFolder, rootFolder, navItems]);
 
   const handleDeleteFocused = useCallback(async (item: BookmarkNode) => {
     if (isFolder(item)) {
