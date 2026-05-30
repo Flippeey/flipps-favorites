@@ -24,7 +24,10 @@ async function bootstrap() {
     initialWorkspaces = workspaces;
     initialOnboardOpen = onboardingState.status === 'pending';
   } catch {
-    container.innerHTML = '<div style="padding:24px;color:#B8B3AC;font-family:system-ui">Unable to reach extension background. Try reloading the new tab page.</div>';
+    const fallback = document.createElement('div');
+    fallback.style.cssText = 'padding:24px;color:#B8B3AC;font-family:system-ui';
+    fallback.textContent = 'Unable to reach extension background. Try reloading the new tab page.';
+    container.replaceChildren(fallback);
     return;
   }
   createRoot(container).render(
