@@ -27,6 +27,7 @@ import { useBlobUrl } from './lib/useBlobUrl';
 import { prefetchAllIcons } from './lib/icon-prefetch';
 import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper, writeWorkspaceWallpaper } from '../shared/storage';
+import { runOptimistic } from './state/useOptimisticPatch';
 import { MAX_WORKSPACES } from '../shared/constants';
 
 interface AppProps {
@@ -190,14 +191,11 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
 
   const handlePatchWorkspace = useCallback(async (patch: Partial<WorkspaceRecord>) => {
     if (!activeWorkspace) return;
-    const optimistic = { ...activeWorkspace, ...patch };
-    setWorkspaces(prev => prev.map(w => w.id === optimistic.id ? optimistic : w));
-    try {
-      const next = await patchWorkspace(activeWorkspace.id, patch);
-      setWorkspaces(prev => prev.map(w => w.id === next.id ? next : w));
-    } catch {
-      // keep optimistic value
-    }
+    await runOptimistic<WorkspaceRecord>({
+      optimistic: { ...activeWorkspace, ...patch },
+      apply: (ws) => setWorkspaces(prev => prev.map(w => w.id === ws.id ? ws : w)),
+      persist: () => patchWorkspace(activeWorkspace.id, patch),
+    });
   }, [activeWorkspace]);
 
   const handleSetWorkspaceWallpaper = useCallback(async (dataUrl: string) => {
