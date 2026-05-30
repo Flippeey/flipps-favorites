@@ -82,6 +82,7 @@ export function useDrag({
     scopeId: string;
     dropTarget: DropTarget | null;
     dropOnBackdrop: boolean;
+    tiles: HTMLElement[] | null;
   } | null>(null);
   const rootFolderIdRef = useRef(rootFolderId);
   rootFolderIdRef.current = rootFolderId;
@@ -132,6 +133,7 @@ export function useDrag({
         scopeId,
         dropTarget: null,
         dropOnBackdrop: false,
+        tiles: null,
       };
     };
 
@@ -150,6 +152,9 @@ export function useDrag({
           const el = canvas.querySelector<HTMLElement>(`[data-item-id="${id}"]`);
           if (el) el.dataset.dragSource = 'true';
         }
+        // Cache candidate tile list once per drag session (DOM is stable at engage time).
+        // Reused by the gap-snap fallback on every pointermove to avoid repeated querySelectorAll.
+        drag.tiles = Array.from(canvas.querySelectorAll<HTMLElement>('[data-item-id]:not([data-item-kind="section"])'));
       }
 
       setPreview({ ids: drag.dragIds, x: event.clientX, y: event.clientY });
@@ -270,7 +275,9 @@ export function useDrag({
       if (!hoverTile) {
         // Expand hit zone: pick nearest tile in the same row band so gaps between
         // tiles still register as a "before/after neighbor" drop target.
-        const tiles = canvas.querySelectorAll<HTMLElement>('[data-item-id]:not([data-item-kind="section"])');
+        // Use the per-session cached tile list (populated at engage time) to avoid
+        // repeated querySelectorAll on every pointermove.
+        const tiles = drag.tiles ?? [];
         let best: { tile: HTMLElement; dx: number } | null = null;
         for (const t of tiles) {
           const id = t.dataset.itemId ?? '';
