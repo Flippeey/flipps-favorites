@@ -1,0 +1,80 @@
+/* Settings drawer — right-side slide-in panel with side-nav */
+.ff-drawer {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: min(680px, 92vw);
+  z-index: 70;
+  background: var(--ink-1);
+  border-left: 1px solid var(--line-2);
+  box-shadow: var(--shadow-xl);
+  display: flex; flex-direction: column;
+  animation: ffSlide 280ms var(--ease-out);
+}
+@keyframes ffSlide { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes ffSlideOut { from { transform: translateX(0); } to { transform: translateX(100%); } }
+.ff-drawer[data-closing="true"] { animation: ffSlideOut 200ms var(--ease-out) forwards; }
+.ff-drawer__head {
+  padding: var(--s-4) var(--s-5);
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--line-1);
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--accent) 14%, var(--ink-2)) 0%,
+    color-mix(in oklab, var(--accent) 4%, var(--ink-1)) 100%);
+  position: relative;
+}
+.ff-drawer__head::after {
+  content: ''; position: absolute;
+  left: 0; right: 0; bottom: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-border), transparent);
+}
+.ff-drawer__body { flex: 1; display: grid; grid-template-columns: 200px 1fr; overflow: hidden; }
+.ff-drawer__sidebar {
+  display: flex; flex-direction: column;
+  border-right: 1px solid var(--line-1);
+  background: var(--ink-0);
+  overflow-y: auto;
+}
+.ff-drawer__nav {
+  padding: var(--s-3);
+  display: flex; flex-direction: column; gap: 2px;
+  flex: 1;
+}
+.ff-drawer__navitem {
+  display: flex; align-items: center; gap: var(--s-3);
+  height: 36px; padding: 0 12px;
+  border-radius: var(--r-md);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--fg-2); font-size: 13px;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.ff-drawer__navitem:hover { background: var(--ink-2); color: var(--fg-1); }
+.ff-drawer__navitem[data-active="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 12%, transparent);
+}
+.ff-drawer__navdivider { height: 1px; background: var(--line-1); margin: 4px 8px; }
+.ff-drawer__nav--footer {
+  flex: 0 0 auto;
+  padding-top: var(--s-2);
+  border-top: 1px solid var(--line-1);
+}
+.ff-drawer__content { padding: var(--s-6); overflow-y: auto; }
+
+/* Settings cards / rows / theme + accent pickers */
+.ff-set-section { margin-bottom: var(--s-8); }
+.ff-set-section__title {
+  font-family: var(--font-display);
+  font-size: 18px; font-weight: 600;
+  margin: 0 0 4px;
+}
+.ff-set-section__desc {
+  font-size: 13px; color: var(--fg-3); margin: 0 0 var(--s-4);
+}

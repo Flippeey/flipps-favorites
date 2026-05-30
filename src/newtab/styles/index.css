@@ -10,5 +10,7 @@
 @import url('./overlay.css');
 @import url('./dock.css');
 @import url('./dialogs.css');
+@import url('./settings-drawer.css');
+@import url('./onboarding.css');
 @import url('./interactions.css');
 @import url('./responsive.css');
