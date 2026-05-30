@@ -20,16 +20,15 @@ import { useDrag } from './interaction/useDrag';
 import { useWorkspaceShortcut } from './interaction/useWorkspaceShortcut';
 import { useKeyboardNav, useDeleteShortcut } from './interaction/useKeyboardNav';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
-import { extensionApi } from '../shared/browser';
-import { IS_MAC } from './lib/platform';
 import { getBookmarkTree, getBookmarkUsage, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
+import { normalizeBookmarkUrl } from './lib/url';
 import { prefetchAllIcons } from './lib/icon-prefetch';
 import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper } from '../shared/storage';
-import { MAX_WORKSPACES } from '../shared/constants';
 import { useWorkspaceActions } from './state/useWorkspaceActions';
 import { useSelection } from './state/useSelection';
+import { useContextMenuBuilder } from './state/useContextMenuBuilder';
 
 interface AppProps {
   initialSettings: AppSettings;
@@ -41,10 +40,6 @@ interface AppProps {
 function settingsToSortValue(mode: BookmarkSortMode, direction: SortDirection): string {
   if (mode === 'manual') return 'manual';
   return `${mode}:${direction}`;
-}
-
-function normalizeBookmarkUrl(url: string): string {
-  return url.startsWith('http') ? url : `https://${url}`;
 }
 
 export function App({ initialSettings, initialTree, initialWorkspaces, initialOnboardOpen }: AppProps) {
@@ -255,7 +250,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     else window.location.href = url;
   }, [settings.openLinksInNewTab]);
 
-  const { selection, setSelection, selectionRef, lastClickedRef, handleTileClick } = useSelection({
+  const { selection, setSelection, selectionRef, handleTileClick } = useSelection({
     navItems,
     rootFolder,
     dragEngagedRef,
@@ -287,24 +282,6 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     handlePatch,
   });
 
-  const handleWorkspaceContextMenu = useCallback((id: string, x: number, y: number) => {
-    const ws = workspaces.find(w => w.id === id);
-    if (!ws) return;
-    const atMax = workspaces.length >= MAX_WORKSPACES;
-    const canDelete = workspaces.length > 1;
-    setContextMenu({
-      x, y,
-      items: [
-        { kind: 'item', icon: 'palette', label: 'Appearance', onClick: () => openWorkspaceSettings('appearance') },
-        { kind: 'item', icon: 'rows',    label: 'Layout',     onClick: () => openWorkspaceSettings('layout') },
-        { kind: 'separator' },
-        { kind: 'item', icon: 'pencil',  label: 'Rename…',    onClick: () => setRenameWorkspaceTarget(ws) },
-        { kind: 'item', icon: 'copy',    label: 'Duplicate',  disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => { void handleDuplicateWorkspace(id); } },
-        { kind: 'separator' },
-        { kind: 'item', icon: 'trash',   label: 'Delete…',    destructive: true, disabled: !canDelete, title: !canDelete ? 'Create another workspace first' : undefined, onClick: () => setConfirmDeleteWorkspace(ws) },
-      ],
-    });
-  }, [workspaces, handleDuplicateWorkspace, openWorkspaceSettings]);
 
   const handleGoToCrumb = useCallback((idx: number) => setFolderPath(p => p.slice(0, idx)), []);
 
@@ -327,17 +304,6 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setFolderNameTarget({ mode: 'create', parentId: parentId ?? defaultParentId(), parentTitle });
   }, [defaultParentId]);
 
-  const handleOpenAddMenu = useCallback((x: number, y: number) => {
-    const atMax = workspaces.length >= MAX_WORKSPACES;
-    setContextMenu({
-      x, y,
-      items: [
-        { kind: 'item', icon: 'bookmark',    label: 'Add bookmark',  kbd: 'A', onClick: () => handleNewBookmark() },
-        { kind: 'item', icon: 'folderPlus', label: 'Add folder',    kbd: 'F', onClick: () => handleNewFolder() },
-        { kind: 'item', icon: 'folderTree', label: 'Add workspace', kbd: 'W', disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => handleAddWorkspace() },
-      ],
-    });
-  }, [workspaces.length, handleNewBookmark, handleNewFolder, handleAddWorkspace]);
 
   const handleRenameFolder = useCallback((folder: BookmarkNode) => {
     setFolderNameTarget({ mode: 'rename', id: folder.id, title: folder.title });
@@ -347,84 +313,29 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setEditTarget({ id: item.id, parentId: item.parentId, title: item.title, url: item.url ?? '' });
   }, []);
 
-  const buildContextMenuItems = useCallback((target: BookmarkNode | null, sectionFolder: BookmarkNode | null = null): ContextMenuItem[] => {
-    if (target == null) {
-      const parentId = sectionFolder?.id ?? defaultParentId();
-      const labelSuffix = sectionFolder ? ` in ${sectionFolder.title}` : '';
-      const atMax = workspaces.length >= MAX_WORKSPACES;
-      return [
-        { kind: 'item', icon: 'bookmark',       label: `Add bookmark${labelSuffix}`, onClick: () => handleNewBookmark(parentId, sectionFolder?.title) },
-        { kind: 'item', icon: 'folderPlus', label: `Add folder${labelSuffix}`,
-          onClick: () => handleNewFolder(parentId, sectionFolder?.title) },
-        { kind: 'item', icon: 'folderTree', label: 'Add workspace', disabled: atMax, title: atMax ? `Workspace limit reached (${MAX_WORKSPACES})` : undefined, onClick: () => handleAddWorkspace() },
-        { kind: 'separator' },
-        { kind: 'item', icon: 'settings',   label: 'Settings', onClick: () => openAppSettings() },
-      ];
-    }
-    if (isFolder(target)) {
-      return [
-        { kind: 'item', icon: 'folder',     label: 'Open folder', kbd: '↵', onClick: () => handlePickFolder(target) },
-        { kind: 'item', icon: 'pencil',     label: 'Rename',
-          onClick: () => handleRenameFolder(target) },
-        { kind: 'separator' },
-        { kind: 'item', icon: 'bookmark',       label: 'New bookmark inside',
-          onClick: () => handleNewBookmark(target.id, target.title) },
-        { kind: 'item', icon: 'folderPlus', label: 'New folder inside',
-          onClick: () => handleNewFolder(target.id, target.title) },
-        { kind: 'separator' },
-        { kind: 'item', icon: 'trash', label: 'Delete folder', kbd: IS_MAC ? '⌫' : 'Del', destructive: true,
-          onClick: () => setConfirmDeleteFolder(target) },
-      ];
-    }
-    const isInSelection = selection.ids.has(target.id) && selection.ids.size > 1;
-    const deleteLabel = isInSelection ? `Delete ${selection.ids.size} items` : 'Delete';
-    const deleteAction = isInSelection
-      ? () => setConfirmDeleteBatch(Array.from(selection.ids))
-      : async () => { await removeBookmark(target.id); refreshTree(); };
-    const targetIds = isInSelection ? Array.from(selection.ids) : [target.id];
-    const bookmarkUrls = targetIds
-      .map(id => findNode(tree, id))
-      .filter((n): n is BookmarkNode => !!n?.url)
-      .map(n => normalizeBookmarkUrl(n.url!));
-    const multi = bookmarkUrls.length > 1;
-    const newTabLabel = multi ? `Open ${bookmarkUrls.length} in new tabs` : 'Open in new tab';
-    const newWindowLabel = multi ? `Open ${bookmarkUrls.length} in new window` : 'Open in new window';
-    const openInNewTabs = () => {
-      for (const url of bookmarkUrls) window.open(url, '_blank', 'noopener');
-    };
-    const openInNewWindow = () => {
-      if (bookmarkUrls.length === 0) return;
-      extensionApi.windows?.create?.({ url: bookmarkUrls.length === 1 ? bookmarkUrls[0] : bookmarkUrls });
-    };
-    return [
-      { kind: 'item', icon: 'link',         label: 'Open',            kbd: '↵',  onClick: () => handlePickBookmark(target) },
-      { kind: 'item', icon: 'arrowRight',   label: newTabLabel,       kbd: multi ? undefined : (IS_MAC ? '⌘↵' : 'Ctrl+↵'), onClick: openInNewTabs },
-      { kind: 'item', icon: 'externalLink', label: newWindowLabel,    onClick: openInNewWindow },
-      { kind: 'item', icon: 'copy',         label: 'Copy URL',        onClick: () => target.url && navigator.clipboard?.writeText(normalizeBookmarkUrl(target.url)) },
-      { kind: 'separator' },
-      { kind: 'item', icon: 'pencil',       label: 'Edit…',           onClick: () => handleEditBookmark(target) },
-      { kind: 'separator' },
-      { kind: 'item', icon: 'trash',        label: deleteLabel,       kbd: IS_MAC ? '⌫' : 'Del', destructive: true,
-        onClick: deleteAction },
-    ];
-  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, handleAddWorkspace, workspaces.length, selection, refreshTree]);
-
-  const handleCanvasContextMenu = useCallback((event: React.MouseEvent) => {
-    const target = event.target as HTMLElement;
-    if (target.closest('input, textarea, [contenteditable="true"], .ff-modal-scrim, .ff-drawer, .ff-ctx, .ff-nav, .ff-results')) return;
-    event.preventDefault();
-    const tileEl = target.closest('[data-item-id]') as HTMLElement | null;
-    let menuTarget: BookmarkNode | null = null;
-    let sectionFolder: BookmarkNode | null = null;
-    if (tileEl?.dataset.itemId) {
-      menuTarget = findNode(tree, tileEl.dataset.itemId);
-    } else {
-      const scopeEl = target.closest('[data-scope-folder-id]') as HTMLElement | null;
-      const scopeId = scopeEl?.dataset.scopeFolderId;
-      if (scopeId && scopeId !== rootFolder?.id) sectionFolder = findFolder(tree, scopeId);
-    }
-    setContextMenu({ x: event.clientX, y: event.clientY, items: buildContextMenuItems(menuTarget, sectionFolder) });
-  }, [tree, buildContextMenuItems]);
+  const { buildContextMenuItems, handleOpenAddMenu, handleWorkspaceContextMenu, handleCanvasContextMenu } = useContextMenuBuilder({
+    tree,
+    rootFolder,
+    workspaces,
+    selection,
+    setContextMenu,
+    defaultParentId,
+    handleNewBookmark,
+    handleNewFolder,
+    handleAddWorkspace,
+    handlePickFolder,
+    handlePickBookmark,
+    handleEditBookmark,
+    handleRenameFolder,
+    handleDuplicateWorkspace,
+    openWorkspaceSettings,
+    openAppSettings,
+    setConfirmDeleteFolder,
+    setConfirmDeleteBatch,
+    setRenameWorkspaceTarget,
+    setConfirmDeleteWorkspace,
+    refreshTree,
+  });
 
   const searchIndex = useMemo(() => buildSearchIndex(tree), [tree]);
 
