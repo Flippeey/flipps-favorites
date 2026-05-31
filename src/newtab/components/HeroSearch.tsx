@@ -229,6 +229,7 @@ export function HeroSearch({ shape, index, usage, onPickBookmark, onPickFolder, 
     const r = visible[i];
     if (!r) return;
     setValue('');
+    if (overlayMode) setOverlayOpen(false);
     if (r.isFolder) onPickFolder(r);
     else onPickBookmark(r);
   };

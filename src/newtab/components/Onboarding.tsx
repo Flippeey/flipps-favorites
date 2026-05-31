@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { MAX_WORKSPACES } from '@/shared/constants';
 import type { AppSettings, BookmarkNode, ViewMode, ThemeMode, WorkspaceRecord } from '@/shared/messages';
+import { applyAccent } from '../lib/accent';
 import { formatFolderStats, scanFolders, type ScoredFolder } from '../lib/folder-scoring';
 import { altShortcut, modShortcut } from '../lib/platform';
 import { findFolder, topLevelFolders } from '../lib/tree';
@@ -336,17 +337,21 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
     if (finishing) return;
     setFinishing(true);
     try {
+      // Onboarding theme/accent picks only persist to an existing workspace via
+      // onPatchWorkspace. On a fresh install the workspace is created here, so carry the
+      // chosen accent + theme through as overrides — otherwise they reset to the defaults.
+      const onboardingOverrides = { accentColor: pendingAccentColor, themeMode: settings.themeMode };
       if (workspaceMode === 'single') {
         if (activeWorkspace) {
           await onPatchWorkspace({ rootFolderId: singleRootFolderId });
         } else if (singleRootFolderId) {
-          await onCreateWorkspace(singleRootFolderId, 'My workspace');
+          await onCreateWorkspace(singleRootFolderId, 'My workspace', onboardingOverrides);
         }
       } else if (workspaceMode === 'multiple' && selectedWorkspaceFolderIds.length > 0) {
         for (const id of selectedWorkspaceFolderIds) {
           const folder = findFolder(tree, id);
           if (folder) {
-            await onCreateWorkspace(id, folder.title);
+            await onCreateWorkspace(id, folder.title, onboardingOverrides);
           }
         }
       }
@@ -479,7 +484,14 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
                   key={a.id}
                   className="ff-accentchip"
                   data-active={pendingAccentColor.toUpperCase() === a.value.toUpperCase()}
-                  onClick={() => { setPendingAccentColor(a.value); void onPatchWorkspace({ accentColor: a.value }); }}
+                  onClick={() => {
+                    setPendingAccentColor(a.value);
+                    // Live preview: applyAccent writes the CSS vars immediately. On a fresh
+                    // install there is no workspace yet, so onPatchWorkspace would no-op and
+                    // App's accent effect never fires — drive the preview directly here.
+                    applyAccent(a.value);
+                    if (activeWorkspace) void onPatchWorkspace({ accentColor: a.value });
+                  }}
                   style={{ background: a.value, color: a.value }}
                   aria-label={a.label}
                 >
