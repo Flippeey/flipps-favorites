@@ -1,4 +1,4 @@
-import type { AppSettings, BookmarkUsageRecord, IconOverrideRecord, WorkspaceRecord } from '../../shared/messages';
+import type { AppSettings, BookmarkUsageRecord, IconOverrideRecord, WorkspaceRecord } from '@/shared/messages';
 import {
   defaultSettings,
   defaultWorkspaceSettings,
@@ -14,7 +14,7 @@ import {
   writeSettings,
   writeWorkspace,
   writeWorkspaceWallpaper,
-} from '../../shared/storage';
+} from '@/shared/storage';
 import { invalidateIcon } from './messaging';
 
 export const WORKSPACE_SCHEMA = 'flipps-workspace-transfer' as const;

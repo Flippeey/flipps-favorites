@@ -1,4 +1,4 @@
-import type { BookmarkNode, TileShape } from '../../shared/messages';
+import type { BookmarkNode, TileShape } from '@/shared/messages';
 import { isFolder } from '../lib/tree';
 import { Favicon } from './Favicon';
 

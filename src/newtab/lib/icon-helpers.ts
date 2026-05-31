@@ -1,4 +1,4 @@
-import { getBrandName } from '../../shared/url-brand';
+import { getBrandName } from '@/shared/url-brand';
 
 export function isValidBookmarkUrl(value: string): boolean {
   try {
@@ -52,7 +52,7 @@ export async function normalizeUploadedImage(file: File): Promise<string> {
   return readFileAsDataUrl(blob);
 }
 
-import { IconFetchError } from '../../shared/messages';
+import { IconFetchError } from '@/shared/messages';
 
 export function iconPersistenceErrorMessage(error: unknown, source: 'upload' | 'search'): string {
   if (error instanceof IconFetchError) {

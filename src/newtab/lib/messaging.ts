@@ -1,4 +1,4 @@
-import { extensionApi } from '../../shared/browser';
+import { extensionApi } from '@/shared/browser';
 import type {
   AppErrorResponse,
   AppRequest,
@@ -27,8 +27,8 @@ import type {
   CreateWorkspaceResponse,
   PatchWorkspaceResponse,
   DeleteWorkspaceResponse,
-} from '../../shared/messages';
-import { IconFetchError, messageTypes } from '../../shared/messages';
+} from '@/shared/messages';
+import { IconFetchError, messageTypes } from '@/shared/messages';
 
 async function send<T extends AppResponse>(req: AppRequest): Promise<T> {
   const res = (await extensionApi.runtime.sendMessage(req)) as T | AppErrorResponse | undefined;

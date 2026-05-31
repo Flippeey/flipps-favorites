@@ -1,4 +1,4 @@
-import type { BookmarkNode } from '../../shared/messages';
+import type { BookmarkNode } from '@/shared/messages';
 import { isFaviconCached, prefetchFavicon } from './favicon-cache';
 
 const CONCURRENCY = 4;

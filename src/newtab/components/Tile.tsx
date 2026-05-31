@@ -1,5 +1,5 @@
 import type { MouseEvent } from 'react';
-import type { BookmarkNode, TileShape } from '../../shared/messages';
+import type { BookmarkNode, TileShape } from '@/shared/messages';
 import { isFolder } from '../lib/tree';
 import { Favicon } from './Favicon';
 import { Ico } from './Ico';

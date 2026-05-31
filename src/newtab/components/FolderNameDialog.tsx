@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BookmarkNode } from '../../shared/messages';
+import type { BookmarkNode } from '@/shared/messages';
 import { createBookmark, updateBookmark } from '../lib/messaging';
 import { Ico } from './Ico';
 import { ModalDialog } from './ModalDialog';

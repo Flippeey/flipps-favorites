@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BookmarkNode } from '../../shared/messages';
+import type { BookmarkNode } from '@/shared/messages';
 import { createBookmark } from '../lib/messaging';
 import { getHostname, getSearchName, isValidBookmarkUrl } from '../lib/icon-helpers';
 import { Ico } from './Ico';

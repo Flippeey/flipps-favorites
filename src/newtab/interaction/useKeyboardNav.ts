@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { BookmarkNode } from '../../shared/messages';
+import type { BookmarkNode } from '@/shared/messages';
 import type { ContextMenuItem } from '../components/ContextMenu';
 import { isFolder } from '../lib/tree';
 

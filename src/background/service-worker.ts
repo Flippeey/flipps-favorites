@@ -1,5 +1,5 @@
 import { extensionApi } from '../shared/browser';
-import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceRequest, type CreateWorkspaceResponse, type DeleteWorkspaceRequest, type DeleteWorkspaceResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type PatchWorkspaceRequest, type PatchWorkspaceResponse, type WorkspaceRecord } from '../shared/messages';
+import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type PatchWorkspaceResponse, type WorkspaceRecord } from '../shared/messages';
 import { deleteWorkspace, markOnboardingPending, readBookmarkUsageRecords, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
 import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl, sweepGeneratedRecords } from './icons/icon-service';
 
@@ -145,22 +145,19 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
       return { workspaces } satisfies GetWorkspacesResponse;
     }
     case messageTypes.createWorkspace: {
-      const { workspace } = message as CreateWorkspaceRequest;
-      await writeWorkspace(workspace);
-      return { workspace } satisfies CreateWorkspaceResponse;
+      await writeWorkspace(message.workspace);
+      return { workspace: message.workspace } satisfies CreateWorkspaceResponse;
     }
     case messageTypes.patchWorkspace: {
-      const { id, patch } = message as PatchWorkspaceRequest;
       const all = await readWorkspaces();
-      const current = all.find(w => w.id === id);
-      if (!current) throw new Error(`Workspace ${id} not found`);
-      const updated: WorkspaceRecord = { ...current, ...patch, id };
+      const current = all.find(w => w.id === message.id);
+      if (!current) throw new Error(`Workspace ${message.id} not found`);
+      const updated: WorkspaceRecord = { ...current, ...message.patch, id: message.id };
       await writeWorkspace(updated);
       return { workspace: updated } satisfies PatchWorkspaceResponse;
     }
     case messageTypes.deleteWorkspace: {
-      const { id } = message as DeleteWorkspaceRequest;
-      await deleteWorkspace(id);
+      await deleteWorkspace(message.id);
       return { ok: true } satisfies DeleteWorkspaceResponse;
     }
     default:

@@ -1,4 +1,4 @@
-import type { BookmarkNode } from '../../shared/messages';
+import type { BookmarkNode } from '@/shared/messages';
 
 export function findNode(nodes: BookmarkNode[], id: string): BookmarkNode | null {
   for (const n of nodes) {

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import type { BookmarkNode, WorkspaceRecord } from '../../shared/messages';
+import type { BookmarkNode, WorkspaceRecord } from '@/shared/messages';
 import { scanFolders } from '../lib/folder-scoring';
 import { findFolder, topLevelFolders } from '../lib/tree';
 import { ModalDialog } from './ModalDialog';
