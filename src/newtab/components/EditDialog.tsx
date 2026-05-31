@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useEscapeKey } from '../interaction/useEscapeKey';
-import type { BookmarkNode, IconSearchCandidate, IconSourceKind, ResolvedIcon } from '../../shared/messages';
+import type { BookmarkNode, IconSearchCandidate, IconSourceKind, ResolvedIcon } from '@/shared/messages';
 import {
   createBookmark,
   getIcon,

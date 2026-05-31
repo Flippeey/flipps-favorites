@@ -1,5 +1,5 @@
-import type { BookmarkNode } from '../../shared/messages';
-import { extractBrandInfo } from '../../shared/url-brand';
+import type { BookmarkNode } from '@/shared/messages';
+import { extractBrandInfo } from '@/shared/url-brand';
 import { countDescendants, findNode, topLevelFolders } from './tree';
 
 export interface FolderStats {

@@ -1,5 +1,5 @@
-import type { AppSettings, WorkspaceRecord } from '../../../shared/messages';
-import { defaultWorkspaceSettings } from '../../../shared/storage';
+import type { AppSettings, WorkspaceRecord } from '@/shared/messages';
+import { defaultWorkspaceSettings } from '@/shared/storage';
 
 export const FALLBACK_WORKSPACE: WorkspaceRecord = {
   id: '', name: '', rootFolderId: '',

@@ -1,4 +1,4 @@
-import type { FolderOpenMode, ViewMode } from '../../../shared/messages';
+import type { FolderOpenMode, ViewMode } from '@/shared/messages';
 import { Segmented, Toggle } from '../settings-controls';
 import type { SectionProps } from './types';
 

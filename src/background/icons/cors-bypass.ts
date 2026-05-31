@@ -1,4 +1,4 @@
-import { extensionApi } from '../../shared/browser';
+import { extensionApi } from '@/shared/browser';
 
 let corsBypassRuleCounter = 0;
 

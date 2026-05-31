@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveDockMode } from '../../../src/newtab/lib/dock-mode';
+import { resolveDockMode } from '@/newtab/lib/dock-mode';
 
 describe('resolveDockMode', () => {
   it('maps the three states', () => {

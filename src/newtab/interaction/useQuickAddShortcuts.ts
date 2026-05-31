@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { BookmarkNode } from '../../shared/messages';
+import type { BookmarkNode } from '@/shared/messages';
 import type { MarqueeSelection } from './useMarquee';
 import { findNode, isFolder } from '../lib/tree';
 

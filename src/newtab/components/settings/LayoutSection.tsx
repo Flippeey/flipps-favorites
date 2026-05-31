@@ -1,4 +1,4 @@
-import type { TileShape } from '../../../shared/messages';
+import type { TileShape } from '@/shared/messages';
 import {
   CUSTOM_LAYOUT_PRESET,
   CustomLayoutPreview,

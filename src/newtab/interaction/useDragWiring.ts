@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { AppSettings, BookmarkNode, WorkspaceRecord } from '../../shared/messages';
+import type { AppSettings, BookmarkNode, WorkspaceRecord } from '@/shared/messages';
 import type { MarqueeSelection } from './useMarquee';
 import { useDrag, type DropTarget, type DragPreviewState } from './useDrag';
 import { moveBookmark } from '../lib/messaging';

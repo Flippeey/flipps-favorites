@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AppSettings, BookmarkNode, WorkspaceRecord } from '../../shared/messages';
+import type { AppSettings, BookmarkNode, WorkspaceRecord } from '@/shared/messages';
 import { Ico } from './Ico';
 import {
   AppearanceSection,

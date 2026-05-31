@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { runOptimistic } from '../../../src/newtab/state/useOptimisticPatch';
+import { runOptimistic } from '@/newtab/state/useOptimisticPatch';
 
 describe('runOptimistic', () => {
   it('applies optimistic value, then reconciles with server result', async () => {

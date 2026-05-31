@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
-import { MAX_WORKSPACES } from '../../shared/constants';
-import type { AppSettings, BookmarkNode, ViewMode, ThemeMode, WorkspaceRecord } from '../../shared/messages';
+import { MAX_WORKSPACES } from '@/shared/constants';
+import type { AppSettings, BookmarkNode, ViewMode, ThemeMode, WorkspaceRecord } from '@/shared/messages';
 import { formatFolderStats, scanFolders, type ScoredFolder } from '../lib/folder-scoring';
 import { altShortcut, modShortcut } from '../lib/platform';
 import { findFolder, topLevelFolders } from '../lib/tree';

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { TileShape } from '../../shared/messages';
+import type { TileShape } from '@/shared/messages';
 import { fetchIcon, iconCache, subscribeFaviconCache } from '../lib/favicon-cache';
-import { buildFallbackSvgDataUrl } from '../../shared/icon-fallback';
+import { buildFallbackSvgDataUrl } from '@/shared/icon-fallback';
 
 function radiusForShape(shape: TileShape): string {
   switch (shape) {

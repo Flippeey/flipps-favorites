@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { BookmarkNode, LayoutPresetId } from '../../shared/messages';
+import type { BookmarkNode, LayoutPresetId } from '@/shared/messages';
 import { Ico } from './Ico';
 
 export const ACCENT_PRESETS: { id: string; label: string; value: string }[] = [

@@ -1,7 +1,7 @@
-import type { BookmarkNode } from '../../../shared/messages';
+import type { BookmarkNode } from '@/shared/messages';
 import { FolderMultiPicker } from '../FolderMultiPicker';
 import { Segmented } from '../settings-controls';
-import { resolveDockMode, type DockMode } from '../../lib/dock-mode';
+import { resolveDockMode, type DockMode } from '@/newtab/lib/dock-mode';
 import type { SectionProps } from './types';
 
 export function DockSection({ settings, tree, onPatch }: SectionProps & { tree: BookmarkNode[] }) {

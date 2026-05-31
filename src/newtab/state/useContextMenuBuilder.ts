@@ -1,13 +1,13 @@
 import { useCallback, type MouseEvent } from 'react';
-import type { BookmarkNode, WorkspaceRecord } from '../../shared/messages';
+import type { BookmarkNode, WorkspaceRecord } from '@/shared/messages';
 import type { ContextMenuItem } from '../components/ContextMenu';
 import type { MarqueeSelection } from '../interaction/useMarquee';
 import type { WorkspaceSectionId, AppSectionId } from '../components/settings';
-import { extensionApi } from '../../shared/browser';
+import { extensionApi } from '@/shared/browser';
 import { removeBookmark } from '../lib/messaging';
 import { findFolder, findNode, isFolder } from '../lib/tree';
 import { IS_MAC } from '../lib/platform';
-import { MAX_WORKSPACES } from '../../shared/constants';
+import { MAX_WORKSPACES } from '@/shared/constants';
 import { normalizeBookmarkUrl } from '../lib/url';
 
 interface UseContextMenuBuilderArgs {

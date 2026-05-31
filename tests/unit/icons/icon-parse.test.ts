@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseLargestSize, parseOriginIconCandidates,
   extractDuckDuckGoToken, isDataUrl, getFileNameFromUrl,
-} from '../../../src/background/icons/icon-parse';
+} from '@/background/icons/icon-parse';
 
 describe('parseLargestSize', () => {
   it('picks the largest min-edge across all size tokens', () => {

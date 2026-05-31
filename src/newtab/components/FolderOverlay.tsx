@@ -1,6 +1,6 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { BookmarkNode, TileShape } from '../../shared/messages';
+import type { BookmarkNode, TileShape } from '@/shared/messages';
 import { findNode, isFolder } from '../lib/tree';
 import { TileFor } from './Tile';
 import { Ico } from './Ico';

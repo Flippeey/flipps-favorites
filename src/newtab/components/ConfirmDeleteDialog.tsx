@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { BookmarkNode } from '../../shared/messages';
+import type { BookmarkNode } from '@/shared/messages';
 import { countDescendants } from '../lib/tree';
 import { Ico } from './Ico';
 import { ModalDialog } from './ModalDialog';

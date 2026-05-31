@@ -1,5 +1,5 @@
-import type { IconCacheRecord, IconSourceKind, ResolvedIcon } from '../../shared/messages';
-import { buildFallbackSvgDataUrl } from '../../shared/icon-fallback';
+import type { IconCacheRecord, IconSourceKind, ResolvedIcon } from '@/shared/messages';
+import { buildFallbackSvgDataUrl } from '@/shared/icon-fallback';
 import { cacheTtlMs, iconPipelineVersion } from './icon-constants';
 import { isDataUrl } from './icon-parse';
 import { getIconLabel } from './icon-classify';

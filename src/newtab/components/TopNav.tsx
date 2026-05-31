@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { BookmarkNode, BookmarkSortMode, SortDirection, ViewMode, WorkspaceRecord } from '../../shared/messages';
+import type { BookmarkNode, BookmarkSortMode, SortDirection, ViewMode, WorkspaceRecord } from '@/shared/messages';
 import { altShortcut } from '../lib/platform';
 import { Ico } from './Ico';
 

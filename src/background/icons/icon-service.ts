@@ -1,7 +1,7 @@
-import type { GetIconRequest, IconCacheRecord, IconSearchCandidate, ResolvedIcon, SetIconOverrideRequest, IconOverrideRecord } from '../../shared/messages';
-import { extensionApi } from '../../shared/browser';
-import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRecord, readIconCacheRecord, readIconCacheRecords, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideRecord } from '../../shared/storage';
-import { evictExpiredCachedIcons } from '../../shared/icon-idb';
+import type { GetIconRequest, IconCacheRecord, IconSearchCandidate, ResolvedIcon, SetIconOverrideRequest, IconOverrideRecord } from '@/shared/messages';
+import { extensionApi } from '@/shared/browser';
+import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRecord, readIconCacheRecord, readIconCacheRecords, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideRecord } from '@/shared/storage';
+import { evictExpiredCachedIcons } from '@/shared/icon-idb';
 import { iconPipelineVersion, maxDuckDuckGoResults, autoSourceTimeoutMs, sweepBatchSize, sweepBatchSpacingMs, maxConcurrentResolutions, getIconCacheKey, getOverrideKey } from './icon-constants';
 import { ResolutionSemaphore, sleep, firstSuccessful } from './concurrency';
 import { createGeneratedRecord, toResolvedIcon } from './icon-image';

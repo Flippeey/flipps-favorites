@@ -1,4 +1,4 @@
-import type { BookmarkNode } from '../../shared/messages';
+import type { BookmarkNode } from '@/shared/messages';
 import { topLevelFolders } from '../lib/tree';
 import { Ico } from './Ico';
 

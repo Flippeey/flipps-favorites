@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildFallbackSvgDataUrl, colorFromLabel, escapeSvgText } from '../../../src/shared/icon-fallback';
+import { buildFallbackSvgDataUrl, colorFromLabel, escapeSvgText } from '@/shared/icon-fallback';
 
 describe('escapeSvgText', () => {
   it('escapes all five XML entities', () => {

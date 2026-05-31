@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { WorkspaceRecord } from '../../shared/messages';
+import type { WorkspaceRecord } from '@/shared/messages';
 
 // Alt+1-9 switches workspace (only when no modifier conflicts and no input is focused).
 export function useWorkspaceShortcut(workspaces: WorkspaceRecord[], onSwitch: (id: string) => void): void {

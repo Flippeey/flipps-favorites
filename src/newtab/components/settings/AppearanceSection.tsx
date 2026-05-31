@@ -7,8 +7,8 @@ import type {
   GradientStyle,
   ThemeMode,
   WorkspaceRecord,
-} from '../../../shared/messages';
-import { useBlobUrl } from '../../lib/useBlobUrl';
+} from '@/shared/messages';
+import { useBlobUrl } from '@/newtab/lib/useBlobUrl';
 import { Ico } from '../Ico';
 import {
   ACCENT_PRESETS,

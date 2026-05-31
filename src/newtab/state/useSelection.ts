@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { BookmarkNode } from '../../shared/messages';
+import type { BookmarkNode } from '@/shared/messages';
 import type { MarqueeSelection } from '../interaction/useMarquee';
 import { isFolder } from '../lib/tree';
 

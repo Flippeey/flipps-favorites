@@ -7,6 +7,9 @@ const rootDir = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: { '@': resolve(rootDir, 'src') },
+  },
   build: {
     target: 'es2022',
     emptyOutDir: true,

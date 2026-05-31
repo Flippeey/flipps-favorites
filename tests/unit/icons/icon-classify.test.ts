@@ -3,7 +3,7 @@ import {
   extractHostname, getDomainRoot, tokenizeQuery, isStockPhotoHost,
   isLogoAggregatorHost, isLikelyAggregatorHost, isCollageTitle, stripHtml,
   scoreDuckDuckGoResult, clampFaviconSize,
-} from '../../../src/background/icons/icon-classify';
+} from '@/background/icons/icon-classify';
 
 describe('extractHostname', () => {
   it('strips www and tolerates scheme-less input', () => {

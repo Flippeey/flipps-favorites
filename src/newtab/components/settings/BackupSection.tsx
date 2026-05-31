@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import type { AppSettings } from '../../../shared/messages';
+import type { AppSettings } from '@/shared/messages';
 import {
   applyWorkspaceImport,
   buildWorkspaceExport,
   downloadWorkspaceExport,
   parseWorkspaceFile,
   type WorkspaceImportMode,
-} from '../../lib/workspace-transfer';
+} from '@/newtab/lib/workspace-transfer';
 import { Ico } from '../Ico';
 import { Segmented } from '../settings-controls';
 

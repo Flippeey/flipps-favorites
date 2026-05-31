@@ -1,4 +1,4 @@
-import { MOD_KEY } from '../../lib/platform';
+import { MOD_KEY } from '@/newtab/lib/platform';
 
 export function HelpSection() {
   const mod = MOD_KEY;

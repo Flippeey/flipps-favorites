@@ -1,9 +1,9 @@
 import { useCallback } from 'react';
-import type { AppSettings, WorkspaceRecord } from '../../shared/messages';
+import type { AppSettings, WorkspaceRecord } from '@/shared/messages';
 import type { MarqueeSelection } from '../interaction/useMarquee';
 import { createWorkspace, deleteWorkspace, patchSettings, patchWorkspace } from '../lib/messaging';
-import { defaultWorkspaceSettings, readWorkspaceWallpaper, writeWorkspaceWallpaper } from '../../shared/storage';
-import { MAX_WORKSPACES } from '../../shared/constants';
+import { defaultWorkspaceSettings, readWorkspaceWallpaper, writeWorkspaceWallpaper } from '@/shared/storage';
+import { MAX_WORKSPACES } from '@/shared/constants';
 import { runOptimistic } from './useOptimisticPatch';
 
 interface UseWorkspaceActionsArgs {
@@ -15,7 +15,7 @@ interface UseWorkspaceActionsArgs {
   setNewWorkspaceOpen: (open: boolean) => void;
   setWorkspaceWallpaper: (url: string) => void;
   setIsSwitching: (switching: boolean) => void;
-  setFolderPath: React.Dispatch<React.SetStateAction<import('../../shared/messages').BookmarkNode[]>>;
+  setFolderPath: React.Dispatch<React.SetStateAction<import('@/shared/messages').BookmarkNode[]>>;
   setSelection: React.Dispatch<React.SetStateAction<MarqueeSelection>>;
   handlePatch: (patch: Partial<AppSettings>) => Promise<void>;
 }

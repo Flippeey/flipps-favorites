@@ -1,6 +1,6 @@
-import type { GetIconRequest, IconCacheRecord, IconOverrideRecord, IconSearchCandidate, ResolvedIcon } from '../../shared/messages';
-import { IconFetchError } from '../../shared/messages';
-import { writeIconOverrideRecord, deleteIconCacheRecord } from '../../shared/storage';
+import type { GetIconRequest, IconCacheRecord, IconOverrideRecord, IconSearchCandidate, ResolvedIcon } from '@/shared/messages';
+import { IconFetchError } from '@/shared/messages';
+import { writeIconOverrideRecord, deleteIconCacheRecord } from '@/shared/storage';
 import {
   faviconProviderUrl,
   faviconRequestSize,
@@ -44,7 +44,7 @@ import {
 } from './icon-image';
 import { withCorsBypass } from './cors-bypass';
 import { sleep } from './concurrency';
-import { extractBrandInfo } from '../../shared/url-brand';
+import { extractBrandInfo } from '@/shared/url-brand';
 
 interface DuckDuckGoSearchResponse {
   results?: Array<{ image: string; thumbnail: string; title: string; url: string; width: number; height: number }>;

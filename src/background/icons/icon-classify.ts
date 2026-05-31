@@ -1,5 +1,5 @@
-import type { IconSearchCandidate } from '../../shared/messages';
-import { extractBrandInfo } from '../../shared/url-brand';
+import type { IconSearchCandidate } from '@/shared/messages';
+import { extractBrandInfo } from '@/shared/url-brand';
 import { faviconProviderUrl } from './icon-constants';
 
 export function getIconLabel(bookmarkTitle: string | undefined, bookmarkUrl: string): string {

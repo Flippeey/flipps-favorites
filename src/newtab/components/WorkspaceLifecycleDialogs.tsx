@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import type { WorkspaceRecord } from '../../shared/messages';
+import type { WorkspaceRecord } from '@/shared/messages';
 import { Ico } from './Ico';
 import { ModalDialog } from './ModalDialog';
 

@@ -1,6 +1,6 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { BookmarkNode, ClockHourFormat, TileShape } from '../../shared/messages';
+import type { BookmarkNode, ClockHourFormat, TileShape } from '@/shared/messages';
 import { IS_MAC } from '../lib/platform';
 import { Favicon } from './Favicon';
 import { Ico } from './Ico';
