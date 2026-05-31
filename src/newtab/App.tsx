@@ -16,11 +16,12 @@ import { ConfirmDeleteWorkspaceDialog, WorkspaceRenameDialog } from './component
 import { TopNav, type SortChoice } from './components/TopNav';
 import { SectionsView, TilesView, FolderPageView } from './components/views';
 import { useMarquee } from './interaction/useMarquee';
-import { useDrag } from './interaction/useDrag';
+import { useDragWiring } from './interaction/useDragWiring';
 import { useWorkspaceShortcut } from './interaction/useWorkspaceShortcut';
 import { useKeyboardNav, useDeleteShortcut } from './interaction/useKeyboardNav';
+import { useQuickAddShortcuts } from './interaction/useQuickAddShortcuts';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
-import { getBookmarkTree, getBookmarkUsage, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
+import { getBookmarkTree, getBookmarkUsage, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
 import { normalizeBookmarkUrl } from './lib/url';
 import { resolveDockMode } from './lib/dock-mode';
@@ -371,48 +372,6 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     }
   }, [focusedTileId, canvasEl]);
 
-  const getOrderedChildren = useCallback((folderId: string): Array<{ id: string }> => {
-    const folder = findFolder(tree, folderId);
-    return sortedChildren(folder?.children).map(c => ({ id: c.id }));
-  }, [tree, sortedChildren]);
-
-  const handleDragCommit = useCallback(async (dragIds: string[], target: import('./interaction/useDrag').DropTarget) => {
-    try {
-      if (target.kind === 'folder') {
-        for (const id of dragIds) {
-          await moveBookmark(id, target.folderId);
-        }
-      } else if (target.kind === 'dock') {
-        const dockFolderId = settings.dockFolderId || rootFolder?.id || '';
-        if (!dockFolderId) return;
-        for (const id of dragIds) {
-          await moveBookmark(id, dockFolderId);
-        }
-      } else if (target.kind === 'workspace') {
-        const ws = workspaces.find(w => w.id === target.workspaceId);
-        if (!ws) return;
-        if (ws.rootFolderId === rootFolder?.id) return;
-        for (const id of dragIds) {
-          await moveBookmark(id, ws.rootFolderId);
-        }
-      } else {
-        // reorder — preserve drag-source order, increment index as we go for items moving forward in same parent
-        let idx = target.index;
-        for (const id of dragIds) {
-          await moveBookmark(id, target.parentId, idx);
-          idx += 1;
-        }
-      }
-      // Drop selection scope if target moved away
-      const moveTargetScope = target.kind === 'folder' ? target.folderId : target.kind === 'dock' ? (settings.dockFolderId || rootFolder?.id || '') : target.kind === 'workspace' ? (workspaces.find(w => w.id === target.workspaceId)?.rootFolderId ?? '') : target.parentId;
-      setSelection({ ids: new Set(dragIds), scopeFolderId: moveTargetScope });
-    } finally {
-      await refreshTree();
-    }
-  }, [refreshTree, rootFolder, settings.dockFolderId, workspaces]);
-
-  const dragEnabled = settings.bookmarkSortMode === 'manual';
-
   const marqueeRect = useMarquee({
     surface: canvasEl,
     container: appEl,
@@ -429,34 +388,20 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     onSelect: setSelection,
   });
 
-  const canvasDragPreview = useDrag({
-    surface: canvasEl,
-    rootFolderId: rootFolder?.id ?? '',
-    enabled: dragEnabled,
+  const { dragPreview, dragEnabled } = useDragWiring({
+    canvasEl,
+    overlayBodyEl,
+    dockEl,
+    rootFolder,
+    settings,
+    workspaces,
+    tree,
+    sortedChildren,
     selectionRef,
-    getOrderedChildren,
-    onCommit: handleDragCommit,
+    setSelection,
+    refreshTree,
     dragEngagedRef,
   });
-  const overlayDragPreview = useDrag({
-    surface: overlayBodyEl,
-    rootFolderId: rootFolder?.id ?? '',
-    enabled: dragEnabled,
-    selectionRef,
-    getOrderedChildren,
-    onCommit: handleDragCommit,
-    dragEngagedRef,
-  });
-  const dockDragPreview = useDrag({
-    surface: dockEl,
-    rootFolderId: rootFolder?.id ?? '',
-    enabled: dragEnabled,
-    selectionRef,
-    getOrderedChildren,
-    onCommit: handleDragCommit,
-    dragEngagedRef,
-  });
-  const dragPreview = canvasDragPreview ?? overlayDragPreview ?? dockDragPreview;
 
   const handleDeleteFocused = useCallback(async (item: BookmarkNode) => {
     if (isFolder(item)) {
@@ -500,46 +445,17 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   });
 
   // Single-key quick-add shortcuts — only when no overlay is open
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.isComposing || anyOverlayOpen) return;
-
-      const t = e.target as HTMLElement;
-      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) return;
-
-      const mod = e.ctrlKey || e.metaKey;
-
-      if (mod || e.altKey || e.shiftKey) return;
-
-      switch (e.key.toLowerCase()) {
-        case 'a':
-          e.preventDefault();
-          handleNewBookmark();
-          break;
-        case 'f':
-          e.preventDefault();
-          handleNewFolder();
-          break;
-        case 'w':
-          e.preventDefault();
-          setNewWorkspaceOpen(true);
-          break;
-        case 'e': {
-          if (selection.ids.size === 1) {
-            const id = [...selection.ids][0];
-            const node = findNode(tree, id);
-            if (node) {
-              if (isFolder(node)) handleRenameFolder(node);
-              else handleEditBookmark(node);
-            }
-          }
-          break;
-        }
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [anyOverlayOpen, selection, tree, handleNewBookmark, handleNewFolder, handleEditBookmark, handleRenameFolder, openAppSettings]);
+  const handleOpenNewWorkspace = useCallback(() => setNewWorkspaceOpen(true), []);
+  useQuickAddShortcuts({
+    enabled: !anyOverlayOpen,
+    selection,
+    tree,
+    onNewBookmark: handleNewBookmark,
+    onNewFolder: handleNewFolder,
+    onNewWorkspace: handleOpenNewWorkspace,
+    onRenameFolder: handleRenameFolder,
+    onEditBookmark: handleEditBookmark,
+  });
 
   const wallpaperBlobUrl = useBlobUrl(workspaceWallpaper);
   const tileShape = activeWorkspace?.tileShape ?? 'squircle';
