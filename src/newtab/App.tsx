@@ -23,6 +23,7 @@ import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
 import { getBookmarkTree, getBookmarkUsage, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
 import { normalizeBookmarkUrl } from './lib/url';
+import { resolveDockMode } from './lib/dock-mode';
 import { prefetchAllIcons } from './lib/icon-prefetch';
 import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper } from '../shared/storage';
@@ -228,8 +229,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     return (rootFolder?.children ?? []).slice(0, 8);
   }, [tree, settings.showDock, settings.dockFolderId, rootFolder]);
 
-  const dockMode: 'always' | 'hover' | 'hidden' =
-    !settings.showDock ? 'hidden' : settings.autoHideDock ? 'hover' : 'always';
+  const dockMode = resolveDockMode(settings.showDock, settings.autoHideDock);
 
   const handlePickFolder = useCallback((folder: BookmarkNode) => {
     if (settings.folderOpenMode === 'page') {

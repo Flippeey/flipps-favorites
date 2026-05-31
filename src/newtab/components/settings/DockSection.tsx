@@ -1,11 +1,11 @@
 import type { BookmarkNode } from '../../../shared/messages';
 import { FolderMultiPicker } from '../FolderMultiPicker';
 import { Segmented } from '../settings-controls';
+import { resolveDockMode, type DockMode } from '../../lib/dock-mode';
 import type { SectionProps } from './types';
 
 export function DockSection({ settings, tree, onPatch }: SectionProps & { tree: BookmarkNode[] }) {
-  const visibility: 'always' | 'hover' | 'hidden' =
-    !settings.showDock ? 'hidden' : settings.autoHideDock ? 'hover' : 'always';
+  const visibility: DockMode = resolveDockMode(settings.showDock, settings.autoHideDock);
   return (
     <div className="ff-set-section">
       <h3 className="ff-set-section__title">Dock</h3>
