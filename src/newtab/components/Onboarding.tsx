@@ -7,7 +7,7 @@ import { altShortcut, modShortcut } from '../lib/platform';
 import { findFolder, topLevelFolders } from '../lib/tree';
 import { Ico } from './Ico';
 import { FolderMultiPicker, twoLevelFolders } from './FolderMultiPicker';
-import { ACCENT_PRESETS, FolderPicker, ThemeCardPreview } from './settings';
+import { ACCENT_PRESETS, ThemeCardPreview } from './settings';
 
 interface OnboardingProps {
   settings: AppSettings;
@@ -26,7 +26,7 @@ function WorkspaceTabPreview({ folders }: { folders: { name: string; color: stri
   return (
     <div style={{
       display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'wrap',
-      padding: '12px 16px', marginBottom: 12,
+      padding: '8px 12px',
       background: 'var(--ink-1)', borderRadius: 10,
       border: '1px solid var(--line-1)',
     }}>
@@ -137,12 +137,11 @@ export function WorkspaceRecommendations({
   const [showManual, setShowManual] = useState(!hasRecommendations);
 
   if (!hasRecommendations) {
-    return <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} excludeIds={excludeIds} />;
+    return <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} excludeIds={excludeIds} embedded />;
   }
 
   return (
-    <div style={{ maxHeight: 380, overflowY: 'auto', paddingRight: 2 }}>
-      <div style={{ display: 'grid', gap: 16 }}>
+    <div style={{ display: 'grid', gap: 16 }}>
         {preSelected.length > 0 && (
           <div>
             <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
@@ -189,9 +188,8 @@ export function WorkspaceRecommendations({
         </button>
 
         {showManual && (
-          <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} excludeIds={excludeIds} />
+          <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} excludeIds={excludeIds} embedded />
         )}
-      </div>
     </div>
   );
 }
@@ -283,15 +281,12 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
   const scanResult = useMemo(() => scanFolders(tree), [tree]);
 
   const [step, setStep] = useState(0);
-  const [workspaceMode, setWorkspaceMode] = useState<'single' | 'multiple'>(
-    scanResult.preSelected.length >= 2 ? 'multiple' : 'single',
-  );
-  const [selectedWorkspaceFolderIds, setSelectedWorkspaceFolderIds] = useState<string[]>(
-    scanResult.preSelected.length >= 2 ? scanResult.preSelected.map(f => f.id) : [],
-  );
-  const [singleRootFolderId, setSingleRootFolderId] = useState<string>(
-    activeWorkspace?.rootFolderId ?? scanResult.preSelected[0]?.id ?? '',
-  );
+  // Seed at least one folder so the default state is valid; the user can change it.
+  const [selectedWorkspaceFolderIds, setSelectedWorkspaceFolderIds] = useState<string[]>(() => {
+    if (scanResult.preSelected.length) return scanResult.preSelected.map(f => f.id);
+    const fallback = activeWorkspace?.rootFolderId ?? topLevelFolders(tree)[0]?.id;
+    return fallback ? [fallback] : [];
+  });
   const [pendingAccentColor, setPendingAccentColor] = useState(
     activeWorkspace?.accentColor ?? ACCENT_PRESETS[0].value,
   );
@@ -306,8 +301,8 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
 
   const hasRecommendations = scanResult.preSelected.length > 0 || scanResult.suggested.length > 0;
   const workspaceStepDesc = hasRecommendations
-    ? 'We found some folders that look like good workspaces. Adjust the selection, or browse all folders.'
-    : 'Pick a root folder, or create multiple workspaces — each with its own layout and theme.';
+    ? 'Pick one or more folders to start with — each becomes its own workspace. Adjust the selection or browse all folders.'
+    : 'Pick one or more folders to start with — each becomes its own workspace.';
 
   const steps = [
     { title: "Welcome to Flipp's Favorites", desc: '' },
@@ -321,11 +316,6 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
 
   // Resolve the preview-folders list each render so it stays in sync with the picker.
   const previewFolders: { name: string; color: string }[] = (() => {
-    if (workspaceMode === 'single') {
-      const folder = topLevelFolders(tree).find(f => f.id === activeWorkspace?.rootFolderId);
-      const name = folder?.title ?? activeWorkspace?.name ?? 'Workspace';
-      return [{ name, color: activeWorkspace?.accentColor ?? ACCENT_PRESETS[0].value }];
-    }
     const folders = twoLevelFolders(tree);
     return selectedWorkspaceFolderIds
       .map(id => folders.find(f => f.id === id))
@@ -341,18 +331,20 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
       // onPatchWorkspace. On a fresh install the workspace is created here, so carry the
       // chosen accent + theme through as overrides — otherwise they reset to the defaults.
       const onboardingOverrides = { accentColor: pendingAccentColor, themeMode: settings.themeMode };
-      if (workspaceMode === 'single') {
-        if (activeWorkspace) {
-          await onPatchWorkspace({ rootFolderId: singleRootFolderId });
-        } else if (singleRootFolderId) {
-          await onCreateWorkspace(singleRootFolderId, 'My workspace', onboardingOverrides);
-        }
-      } else if (workspaceMode === 'multiple' && selectedWorkspaceFolderIds.length > 0) {
-        for (const id of selectedWorkspaceFolderIds) {
-          const folder = findFolder(tree, id);
-          if (folder) {
-            await onCreateWorkspace(id, folder.title, onboardingOverrides);
-          }
+      // Each selected folder becomes a workspace. If a workspace already exists
+      // (re-running onboarding), the first selection retargets it and the rest are
+      // created; on a fresh install all selections are created from scratch.
+      const [firstId, ...restIds] = selectedWorkspaceFolderIds;
+      if (activeWorkspace) {
+        if (firstId) await onPatchWorkspace({ rootFolderId: firstId });
+      } else if (firstId) {
+        const folder = findFolder(tree, firstId);
+        await onCreateWorkspace(firstId, folder?.title ?? 'My workspace', onboardingOverrides);
+      }
+      for (const id of restIds) {
+        const folder = findFolder(tree, id);
+        if (folder) {
+          await onCreateWorkspace(id, folder.title, onboardingOverrides);
         }
       }
     } catch {
@@ -405,65 +397,21 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
 
           {step === 1 && (
             <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
-              <WorkspaceTabPreview folders={previewFolders} />
-              <p style={{ fontSize: 12, color: 'var(--fg-3)', textAlign: 'center', margin: '0 0 4px' }}>
-                Each workspace is a separate home screen that you can customize how you like.
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-                <button
-                  className="ff-card"
-                  onClick={() => setWorkspaceMode('single')}
-                  style={{
-                    textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'var(--fg-1)',
-                    borderColor: workspaceMode === 'single' ? 'var(--accent)' : 'var(--line-1)',
-                    background: workspaceMode === 'single' ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
-                    boxShadow: workspaceMode === 'single' ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' : 'none',
-                    padding: 14,
-                  }}
-                >
-                  <div style={{ fontWeight: 600, marginBottom: 4 }}>Single workspace</div>
-                  <div style={{ fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.45 }}>One collection. Pick your root folder below.</div>
-                </button>
-                <button
-                  className="ff-card"
-                  onClick={() => setWorkspaceMode('multiple')}
-                  style={{
-                    textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'var(--fg-1)',
-                    borderColor: workspaceMode === 'multiple' ? 'var(--accent)' : 'var(--line-1)',
-                    background: workspaceMode === 'multiple' ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
-                    boxShadow: workspaceMode === 'multiple' ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' : 'none',
-                    padding: 14,
-                  }}
-                >
-                  <div style={{ fontWeight: 600, marginBottom: 4 }}>Multiple workspaces</div>
-                  <div style={{ fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.45 }}>Multiple collections. Pick a few to start.</div>
-                </button>
-              </div>
-              {workspaceMode === 'single' && (
-                <div className="ff-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                  <div>
-                    <div className="ff-row__label">Root folder</div>
-                    <div className="ff-row__hint">Your starting view. Change later in Settings.</div>
-                  </div>
-                  <FolderPicker
-                    tree={tree}
-                    value={activeWorkspace?.rootFolderId ?? ''}
-                    onChange={(id) => onPatchWorkspace({ rootFolderId: id })}
-                  />
-                </div>
-              )}
-              {workspaceMode === 'multiple' && (
-                <div>
-                  <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>Select folders to use as workspaces:</div>
-                  <WorkspaceRecommendations
-                    tree={tree}
-                    preSelected={scanResult.preSelected}
-                    suggested={scanResult.suggested}
-                    selectedIds={selectedWorkspaceFolderIds}
-                    onToggle={id => setSelectedWorkspaceFolderIds(prev =>
-                      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id].slice(0, MAX_WORKSPACES),
-                    )}
-                  />
+              <WorkspaceRecommendations
+                tree={tree}
+                preSelected={scanResult.preSelected}
+                suggested={scanResult.suggested}
+                selectedIds={selectedWorkspaceFolderIds}
+                onToggle={id => setSelectedWorkspaceFolderIds(prev =>
+                  prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id].slice(0, MAX_WORKSPACES),
+                )}
+              />
+              {previewFolders.length > 0 && (
+                <div style={{ display: 'grid', gap: 6 }}>
+                  <p style={{ fontSize: 11, color: 'var(--fg-3)', textAlign: 'center', margin: 0 }}>
+                    Your workspaces will look like this:
+                  </p>
+                  <WorkspaceTabPreview folders={previewFolders} />
                 </div>
               )}
             </div>
@@ -542,7 +490,12 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
               </button>
             )}
             {step < steps.length - 1 ? (
-              <button className="ff-btn" onClick={() => setStep(step + 1)}>
+              <button
+                className="ff-btn"
+                onClick={() => setStep(step + 1)}
+                disabled={step === 1 && selectedWorkspaceFolderIds.length === 0}
+                title={step === 1 && selectedWorkspaceFolderIds.length === 0 ? 'Pick at least one folder to continue' : undefined}
+              >
                 Next <Ico name="chevronRight" size={14} />
               </button>
             ) : (

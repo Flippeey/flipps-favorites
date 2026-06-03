@@ -3,10 +3,11 @@ import { extensionApi } from '@/shared/browser';
 import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRecord, readIconCacheRecord, readIconCacheRecords, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideRecord } from '@/shared/storage';
 import { evictExpiredCachedIcons } from '@/shared/icon-idb';
 import { iconPipelineVersion, maxDuckDuckGoResults, autoSourceTimeoutMs, sweepBatchSize, sweepBatchSpacingMs, maxConcurrentResolutions, getIconCacheKey, getOverrideKey } from './icon-constants';
-import { ResolutionSemaphore, sleep, firstSuccessful } from './concurrency';
+import { ResolutionSemaphore, sleep } from './concurrency';
 import { createGeneratedRecord, toResolvedIcon } from './icon-image';
 import { dedupeIconCandidates, getDomainCandidates, buildSearchQueryFromBookmark } from './icon-classify';
 import { isDataUrl, normalizeDataUrl } from './icon-parse';
+import { extractBrandInfo } from '@/shared/url-brand';
 import {
   fetchS2Favicon, fetchOriginScrape, fetchIconHorse, fetchDuckDuckGoFirstHit,
   searchDuckDuckGoImages, gatherAuthoritativeCandidates, downloadAndPersistOverride,
@@ -89,7 +90,13 @@ export async function searchIcons(query: string, bookmarkUrl?: string): Promise<
     ]);
   }
 
-  const merged = dedupeIconCandidates([...authoritative, ...remoteCandidates, ...fallbackCandidates]);
+  // For personal-infra hosts the origin probes are unreachable, so brand image-search
+  // results (remoteCandidates) are the only good source — rank them first.
+  const { isPersonalInfra } = bookmarkUrl ? extractBrandInfo(bookmarkUrl) : { isPersonalInfra: false };
+  const ordered = isPersonalInfra
+    ? [...remoteCandidates, ...authoritative, ...fallbackCandidates]
+    : [...authoritative, ...remoteCandidates, ...fallbackCandidates];
+  const merged = dedupeIconCandidates(ordered);
   if (merged.length) {
     return merged.slice(0, maxDuckDuckGoResults);
   }
@@ -163,18 +170,38 @@ async function resolveAutomaticIcon(request: GetIconRequest, cacheKey: string): 
     .contains({ origins: ['https://www.google.com/*'] })
     .catch(() => false);
 
-  const racers: Array<Promise<IconCacheRecord | null>> = [
-    fetchOriginScrape(request.bookmarkUrl, cacheKey).catch(() => null),
-  ];
-  if (hasFaviconPermission) {
-    racers.push(fetchS2Favicon(request.bookmarkUrl, cacheKey).catch(() => null));
-  }
+  // Prefer the origin-scraped icon over Google S2. Both run concurrently, but we
+  // wait for origin first: it returns the size-sorted apple-touch-icon / manifest
+  // icon (the same brand-correct, high-res candidate the edit dialog surfaces as
+  // its top option). A plain Promise.race here let S2's single fast request win
+  // almost every time and poisoned the cache with the smaller generic favicon —
+  // the visible quality gap between auto-resolve and the edit dialog.
+  // Personal-infra hosts (jellyfin.local.flippflix.com) are unreachable to Google S2,
+  // which then returns its generic globe placeholder — a "successful" wrong icon that
+  // poisons the cache. Skip S2 for these and let the brand image search resolve them.
+  const { isPersonalInfra } = extractBrandInfo(request.bookmarkUrl);
+  const originPromise = fetchOriginScrape(request.bookmarkUrl, cacheKey).catch(() => null);
+  const s2Promise = (hasFaviconPermission && !isPersonalInfra)
+    ? fetchS2Favicon(request.bookmarkUrl, cacheKey).catch(() => null)
+    : Promise.resolve<IconCacheRecord | null>(null);
 
-  const winner = await Promise.race([
-    firstSuccessful(racers),
+  const origin = await Promise.race([
+    originPromise,
     sleep(autoSourceTimeoutMs).then(() => null),
   ]);
-  if (winner) return winner;
+  if (origin) return origin;
+
+  // Origin yielded nothing within budget — fall back to S2 (already in flight,
+  // capped by its own internal timeout).
+  const s2 = await s2Promise;
+  if (s2) return s2;
+
+  // Personal-infra: jump straight to the brand image search before Icon Horse, which
+  // also only yields a placeholder for an unreachable private host.
+  if (isPersonalInfra) {
+    const ddg = await fetchDuckDuckGoFirstHit(request, cacheKey).catch(() => null);
+    if (ddg) return ddg;
+  }
 
   // Fallback: Icon Horse. Accepts placeholder output as last resort before DDG.
   const iconHorse = await fetchIconHorse(request.bookmarkUrl, cacheKey).catch(() => null);

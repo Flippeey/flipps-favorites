@@ -401,6 +401,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setSelection,
     refreshTree,
     dragEngagedRef,
+    onSwitchWorkspace: handleSwitchWorkspace,
   });
 
   const handleDeleteFocused = useCallback(async (item: BookmarkNode) => {

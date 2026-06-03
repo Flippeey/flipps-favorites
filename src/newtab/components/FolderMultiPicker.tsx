@@ -7,6 +7,9 @@ export interface FolderMultiPickerProps {
   selectedIds: string[];
   onToggle: (id: string) => void;
   excludeIds?: Set<string>;
+  // When true, the picker does not scroll itself — an ancestor owns the scroll.
+  // Avoids stacking a second scrollbar inside an already-scrollable container.
+  embedded?: boolean;
 }
 
 export function twoLevelFolders(tree: BookmarkNode[]): { id: string; title: string; depth: number }[] {
@@ -24,10 +27,10 @@ export function twoLevelFolders(tree: BookmarkNode[]): { id: string; title: stri
   return result;
 }
 
-export function FolderMultiPicker({ tree, selectedIds, onToggle, excludeIds }: FolderMultiPickerProps) {
+export function FolderMultiPicker({ tree, selectedIds, onToggle, excludeIds, embedded }: FolderMultiPickerProps) {
   const folders = twoLevelFolders(tree).filter(f => !excludeIds?.has(f.id));
   return (
-    <div style={{ display: 'grid', gap: 4, maxHeight: 240, overflowY: 'auto', paddingRight: 2 }}>
+    <div style={{ display: 'grid', gap: 4, ...(embedded ? {} : { maxHeight: 240, overflowY: 'auto' }), paddingRight: 2 }}>
       {folders.map(f => {
         const active = selectedIds.includes(f.id);
         return (

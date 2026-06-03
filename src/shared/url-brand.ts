@@ -5,6 +5,12 @@ const PERSONAL_INFRA_MARKERS = new Set(['local', 'lan', 'home', 'homelab', 'inte
 
 export interface BrandInfo {
   brand: string;
+  // A meaningful non-generic subdomain that sits left of the registrable brand
+  // (e.g. 'drive' in drive.google.com). Empty when the host is a bare domain, the
+  // subdomain is generic (www/m/app/login…), or the host is personal-infra.
+  // Kept separate from `brand` so display/scoring keep using the root brand while
+  // search queries can combine the two ('google drive').
+  subdomain: string;
   isPersonalInfra: boolean;
 }
 
@@ -20,17 +26,26 @@ function safeHostname(url: string): string | null {
   }
 }
 
+// The label immediately left of the registrable brand, if it is meaningful.
+// Generic subdomains were already stripped from the front, so any remaining label
+// here (drive, play, shop) carries brand intent. Empty when absent or equal to brand.
+function subdomainAt(parts: string[], brandIndex: number): string {
+  if (brandIndex < 1) return '';
+  const label = parts[brandIndex - 1] ?? '';
+  return label && label !== parts[brandIndex] ? label : '';
+}
+
 export function extractBrandInfo(url: string): BrandInfo {
   const raw = safeHostname(url);
-  if (!raw) return { brand: '', isPersonalInfra: false };
+  if (!raw) return { brand: '', subdomain: '', isPersonalInfra: false };
 
   const hostname = raw.replace(GENERIC_SUBDOMAIN_RE, '');
   const parts = hostname.split('.').filter(Boolean);
-  if (parts.length === 0) return { brand: '', isPersonalInfra: false };
+  if (parts.length === 0) return { brand: '', subdomain: '', isPersonalInfra: false };
 
   // service.local / jellyfin.homelab.lan
   if (parts.length >= 2 && PERSONAL_INFRA_TLDS.has(parts[parts.length - 1])) {
-    return { brand: parts[0], isPersonalInfra: true };
+    return { brand: parts[0], subdomain: '', isPersonalInfra: true };
   }
 
   // prowlarr.local.flippflix.com — marker in the middle
@@ -38,20 +53,22 @@ export function extractBrandInfo(url: string): BrandInfo {
     parts.length >= 3 &&
     parts.slice(1, -1).some(seg => PERSONAL_INFRA_MARKERS.has(seg))
   ) {
-    return { brand: parts[0], isPersonalInfra: true };
+    return { brand: parts[0], subdomain: '', isPersonalInfra: true };
   }
 
-  // pogdesign.co.uk
+  // shop.pogdesign.co.uk -> brand pogdesign, subdomain shop
   if (parts.length >= 3 && REGISTRY_SLDS.has(parts[parts.length - 2])) {
-    return { brand: parts[parts.length - 3] ?? '', isPersonalInfra: false };
+    const brandIndex = parts.length - 3;
+    return { brand: parts[brandIndex] ?? '', subdomain: subdomainAt(parts, brandIndex), isPersonalInfra: false };
   }
 
-  // mail.google.com -> google
+  // drive.google.com -> brand google, subdomain drive
   if (parts.length >= 2) {
-    return { brand: parts[parts.length - 2] ?? '', isPersonalInfra: false };
+    const brandIndex = parts.length - 2;
+    return { brand: parts[brandIndex] ?? '', subdomain: subdomainAt(parts, brandIndex), isPersonalInfra: false };
   }
 
-  return { brand: parts[0] ?? '', isPersonalInfra: false };
+  return { brand: parts[0] ?? '', subdomain: '', isPersonalInfra: false };
 }
 
 export function getBrandName(url: string): string {

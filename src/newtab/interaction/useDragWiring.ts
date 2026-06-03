@@ -18,6 +18,7 @@ interface UseDragWiringArgs {
   setSelection: React.Dispatch<React.SetStateAction<MarqueeSelection>>;
   refreshTree: () => Promise<void>;
   dragEngagedRef: React.RefObject<boolean>;
+  onSwitchWorkspace: (id: string) => void;
 }
 
 interface UseDragWiringResult {
@@ -32,7 +33,13 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
   const {
     canvasEl, overlayBodyEl, dockEl, rootFolder, settings, workspaces, tree,
     sortedChildren, selectionRef, setSelection, refreshTree, dragEngagedRef,
+    onSwitchWorkspace,
   } = args;
+
+  // Spring-loaded tabs: open the hovered workspace mid-drag (skip if already active).
+  const handleSpringOpenWorkspace = useCallback((id: string) => {
+    if (id !== settings.activeWorkspaceId) onSwitchWorkspace(id);
+  }, [onSwitchWorkspace, settings.activeWorkspaceId]);
 
   const getOrderedChildren = useCallback((folderId: string): Array<{ id: string }> => {
     const folder = findFolder(tree, folderId);
@@ -84,6 +91,7 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
     getOrderedChildren,
     onCommit: handleDragCommit,
     dragEngagedRef,
+    onSpringOpenWorkspace: handleSpringOpenWorkspace,
   });
   const overlayDragPreview = useDrag({
     surface: overlayBodyEl,
@@ -93,6 +101,7 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
     getOrderedChildren,
     onCommit: handleDragCommit,
     dragEngagedRef,
+    onSpringOpenWorkspace: handleSpringOpenWorkspace,
   });
   const dockDragPreview = useDrag({
     surface: dockEl,
@@ -102,6 +111,7 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
     getOrderedChildren,
     onCommit: handleDragCommit,
     dragEngagedRef,
+    onSpringOpenWorkspace: handleSpringOpenWorkspace,
   });
   const dragPreview = canvasDragPreview ?? overlayDragPreview ?? dockDragPreview;
 

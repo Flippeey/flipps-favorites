@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   extractHostname, getDomainRoot, tokenizeQuery, isStockPhotoHost,
   isLogoAggregatorHost, isLikelyAggregatorHost, isCollageTitle, stripHtml,
-  scoreDuckDuckGoResult, clampFaviconSize,
+  scoreDuckDuckGoResult, clampFaviconSize, buildSearchQueryFromBookmark,
 } from '@/background/icons/icon-classify';
 
 describe('extractHostname', () => {
@@ -50,6 +50,17 @@ describe('clampFaviconSize', () => {
     expect(clampFaviconSize(64)).toBe(128);
     expect(clampFaviconSize(999)).toBe(256);
     expect(clampFaviconSize(200)).toBe(200);
+  });
+});
+
+describe('buildSearchQueryFromBookmark', () => {
+  it('appends a meaningful subdomain so multi-tenant hosts resolve the right brand', () => {
+    expect(buildSearchQueryFromBookmark('https://drive.google.com')).toBe('google drive logo');
+    expect(buildSearchQueryFromBookmark('https://play.google.com/store')).toBe('google play logo');
+  });
+  it('uses the bare brand for plain hosts and personal-infra services', () => {
+    expect(buildSearchQueryFromBookmark('https://github.com')).toBe('github logo');
+    expect(buildSearchQueryFromBookmark('https://jellyfin.local.flippflix.com')).toBe('jellyfin logo');
   });
 });
 

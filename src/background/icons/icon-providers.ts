@@ -158,7 +158,10 @@ export async function gatherAuthoritativeCandidates(bookmarkUrl: string): Promis
   if (!hostname) return [];
 
   const origin = `https://${hostname}`;
-  const probes = await gatherOriginIconProbes(hostname);
+  // Personal-infra hosts are unreachable to a background fetch, so origin probes just
+  // produce broken thumbnails — skip them; brand image search supplies the candidates.
+  const { isPersonalInfra } = extractBrandInfo(bookmarkUrl);
+  const probes = isPersonalInfra ? [] : await gatherOriginIconProbes(hostname);
 
   const candidates: IconSearchCandidate[] = probes
     .filter(probe => probe.sizeHint === 0 || probe.sizeHint >= 64)

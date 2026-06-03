@@ -34,9 +34,11 @@ export function extractHostname(value: string | undefined): string | null {
 
 export function buildSearchQueryFromBookmark(bookmarkUrl?: string): string {
   if (!bookmarkUrl) return '';
-  const { brand, isPersonalInfra } = extractBrandInfo(bookmarkUrl);
+  const { brand, subdomain, isPersonalInfra } = extractBrandInfo(bookmarkUrl);
   if (brand) {
-    return `${brand} logo`.trim();
+    // Combine root brand + meaningful subdomain so multi-tenant hosts resolve their
+    // own product ('google drive', 'google play') instead of the parent brand.
+    return `${subdomain ? `${brand} ${subdomain}` : brand} logo`.trim();
   }
   // Fallback for unusual hostnames where brand extraction yielded nothing.
   const hostname = extractHostname(bookmarkUrl);

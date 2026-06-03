@@ -16,9 +16,14 @@ interface UseDragArgs {
   onCommit: (dragIds: string[], target: DropTarget) => void;
   onCancel?: () => void;
   dragEngagedRef?: { current: boolean };
+  // Spring-loaded workspace tabs: called once when the pointer hovers a workspace
+  // tab for SPRING_DELAY_MS during a drag, so the user can open that workspace and
+  // drop precisely instead of dumping the item into its root.
+  onSpringOpenWorkspace?: (workspaceId: string) => void;
 }
 
 const DRAG_THRESHOLD = 6;
+const SPRING_DELAY_MS = 900;
 
 function closestScopeId(el: HTMLElement | null, rootFolderId: string): string {
   const scopeEl = el?.closest('[data-scope-folder-id]') as HTMLElement | null;
@@ -69,6 +74,7 @@ export function useDrag({
   onCommit,
   onCancel,
   dragEngagedRef,
+  onSpringOpenWorkspace,
 }: UseDragArgs): DragPreviewState | null {
   const [preview, setPreview] = useState<DragPreviewState | null>(null);
   const stateRef = useRef<{
@@ -83,6 +89,10 @@ export function useDrag({
     dropTarget: DropTarget | null;
     dropOnBackdrop: boolean;
     tiles: HTMLElement[] | null;
+    springWsId: string | null;
+    springTimer: ReturnType<typeof setTimeout> | null;
+    springFiredFor: string | null;
+    sprung: boolean;
   } | null>(null);
   const rootFolderIdRef = useRef(rootFolderId);
   rootFolderIdRef.current = rootFolderId;
@@ -92,6 +102,8 @@ export function useDrag({
   onCommitRef.current = onCommit;
   const onCancelRef = useRef(onCancel);
   onCancelRef.current = onCancel;
+  const onSpringOpenWorkspaceRef = useRef(onSpringOpenWorkspace);
+  onSpringOpenWorkspaceRef.current = onSpringOpenWorkspace;
 
   useEffect(() => {
     if (!enabled) return;
@@ -101,6 +113,7 @@ export function useDrag({
     const cancel = () => {
       clearDropAttrs({ includeSource: true });
       setPreview(null);
+      if (stateRef.current?.springTimer) clearTimeout(stateRef.current.springTimer);
       stateRef.current = null;
       onCancelRef.current?.();
     };
@@ -134,6 +147,10 @@ export function useDrag({
         dropTarget: null,
         dropOnBackdrop: false,
         tiles: null,
+        springWsId: null,
+        springTimer: null,
+        springFiredFor: null,
+        sprung: false,
       };
     };
 
@@ -157,12 +174,42 @@ export function useDrag({
         drag.tiles = Array.from(canvas.querySelectorAll<HTMLElement>('[data-item-id]:not([data-item-kind="section"])'));
       }
 
+      // A spring-load workspace switch rebuilds the canvas; the cached tile list is
+      // nulled on switch so the gap-snap fallback re-reads the new workspace's tiles.
+      if (drag.engaged && !drag.tiles) {
+        drag.tiles = Array.from(canvas.querySelectorAll<HTMLElement>('[data-item-id]:not([data-item-kind="section"])'));
+      }
+
       setPreview({ ids: drag.dragIds, x: event.clientX, y: event.clientY });
       clearDropAttrs({ includeSource: false });
 
       const dragSet = new Set(drag.dragIds);
       const elementUnder = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
       drag.dropOnBackdrop = false;
+
+      // Spring-loaded workspace tabs: hovering a tab for SPRING_DELAY_MS opens that
+      // workspace mid-drag. Use a real timer (not elapsed-time checked per move) so it
+      // fires even when the pointer is held still over the tab. Entering a different
+      // target (another tab, the dock, a folder, empty space) cancels the pending timer.
+      if (onSpringOpenWorkspaceRef.current) {
+        const springWsId = elementUnder?.closest<HTMLElement>('[data-workspace-id]')?.dataset.workspaceId || null;
+        if (springWsId !== drag.springWsId) {
+          if (drag.springTimer) { clearTimeout(drag.springTimer); drag.springTimer = null; }
+          drag.springWsId = springWsId;
+          if (springWsId !== drag.springFiredFor) drag.springFiredFor = null;
+          if (springWsId && drag.springFiredFor !== springWsId) {
+            drag.springTimer = setTimeout(() => {
+              const d = stateRef.current;
+              if (!d || !d.active || d.springWsId !== springWsId || d.springFiredFor === springWsId) return;
+              d.springTimer = null;
+              d.springFiredFor = springWsId;
+              d.sprung = true;
+              d.tiles = null;
+              onSpringOpenWorkspaceRef.current?.(springWsId);
+            }, SPRING_DELAY_MS);
+          }
+        }
+      }
       const dockEl = elementUnder?.closest('.ff-dock') as HTMLElement | null;
       if (dockEl && dockEl.dataset.scopeFolderId !== drag.scopeId) {
         const dockFolderTile = elementUnder?.closest<HTMLElement>('[data-item-id][data-item-kind="folder"]');
@@ -310,8 +357,11 @@ export function useDrag({
           drag.dropTarget = { kind: 'reorder', parentId: rootFolderIdRef.current, index: ordered.length };
           return;
         }
-        const ordered = getOrderedChildrenRef.current(drag.scopeId).filter(c => !dragSet.has(c.id));
-        drag.dropTarget = { kind: 'reorder', parentId: drag.scopeId, index: ordered.length };
+        // After a spring switch the dragged items still live in the old scope; an
+        // empty-area drop should land in the now-active workspace root, not the origin.
+        const fallbackScope = drag.sprung ? rootFolderIdRef.current : drag.scopeId;
+        const ordered = getOrderedChildrenRef.current(fallbackScope).filter(c => !dragSet.has(c.id));
+        drag.dropTarget = { kind: 'reorder', parentId: fallbackScope, index: ordered.length };
         return;
       }
 
@@ -363,6 +413,7 @@ export function useDrag({
       const ids = drag.dragIds;
       const engaged = drag.engaged;
       const dropOnBackdrop = drag.dropOnBackdrop;
+      if (drag.springTimer) clearTimeout(drag.springTimer);
       clearDropAttrs({ includeSource: true });
       setPreview(null);
       stateRef.current = null;
@@ -387,6 +438,7 @@ export function useDrag({
     window.addEventListener('pointercancel', cancel);
     window.addEventListener('keydown', onKey);
     return () => {
+      if (stateRef.current?.springTimer) clearTimeout(stateRef.current.springTimer);
       canvas.removeEventListener('pointerdown', onDown);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);

@@ -11,7 +11,6 @@ if (!target || !outDir) {
 const extensionVersion = process.env.EXTENSION_VERSION ?? '2.3.2';
 const firefoxExtensionId = process.env.FIREFOX_EXTENSION_ID ?? 'com.flipps-favorites@flippflix.com';
 const firefoxStrictMinVersion = process.env.FIREFOX_STRICT_MIN_VERSION ?? '140.0';
-const firefoxAndroidStrictMinVersion = process.env.FIREFOX_ANDROID_STRICT_MIN_VERSION ?? '142.0';
 const firefoxUpdateUrl = process.env.FIREFOX_UPDATE_URL;
 const includeHttpHosts = process.env.INCLUDE_HTTP_HOSTS === '1';
 
@@ -82,9 +81,6 @@ const browserSpecific = {
         data_collection_permissions: {
           required: ['none'],
         },
-      },
-      gecko_android: {
-        strict_min_version: firefoxAndroidStrictMinVersion,
       },
     },
   },

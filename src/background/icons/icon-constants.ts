@@ -1,4 +1,4 @@
-export const iconPipelineVersion = 'bookmark-icons-v7';
+export const iconPipelineVersion = 'bookmark-icons-v8';
 export const faviconProviderUrl = 'https://www.google.com/s2/favicons';
 export const faviconRequestSize = 256;
 export const duckDuckGoSearchUrl = 'https://duckduckgo.com/';

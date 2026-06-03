@@ -33,6 +33,25 @@ test('replay button opens onboarding; Skip closes it', async ({ newtabPage }) =>
   await expect(newtabPage.locator('.ff-onboard')).toHaveCount(0);
 });
 
+test('workspace step requires at least one folder before advancing', async ({ newtabPage }) => {
+  await newtabPage.getByRole('button', { name: 'Replay onboarding' }).click();
+  const onboard = newtabPage.locator('.ff-onboard');
+  await expect(onboard).toBeVisible();
+
+  // Step 0 -> step 1 (workspace selection). A folder is seeded by default, so Next is enabled.
+  await onboard.getByRole('button', { name: /Next/i }).click();
+  const nextBtn = onboard.getByRole('button', { name: /Next/i });
+  await expect(nextBtn).toBeEnabled();
+
+  // Deselect the seeded folder -> nothing chosen -> Next is blocked (the validation rule).
+  await onboard.getByRole('button', { name: /Onboard Root/ }).first().click();
+  await expect(nextBtn).toBeDisabled();
+
+  // Reselecting a folder re-enables advancing.
+  await onboard.getByRole('button', { name: /Onboard Root/ }).first().click();
+  await expect(nextBtn).toBeEnabled();
+});
+
 test('Next through all steps reaches "Get started" and chosen accent persists', async ({ newtabPage }) => {
   await newtabPage.getByRole('button', { name: 'Replay onboarding' }).click();
   const onboard = newtabPage.locator('.ff-onboard');
