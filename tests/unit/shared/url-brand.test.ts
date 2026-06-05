@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractBrandInfo, getBrandName } from '@/shared/url-brand';
+import { buildBrandSearchQuery, extractBrandInfo, getBrandName } from '@/shared/url-brand';
 
 describe('extractBrandInfo — subdomain-aware brand', () => {
   it('keeps a meaningful subdomain distinct from the registrable brand', () => {
@@ -33,5 +33,26 @@ describe('getBrandName — unchanged display brand (root only)', () => {
   it('returns the registrable brand, ignoring subdomain', () => {
     expect(getBrandName('https://drive.google.com')).toBe('google');
     expect(getBrandName('https://github.com')).toBe('github');
+  });
+});
+
+describe('buildBrandSearchQuery — shared search seed (auto-resolve + edit dialog)', () => {
+  it('combines brand + meaningful subdomain so multi-tenant products resolve themselves', () => {
+    // This is the regression the edit dialog had: it seeded "google logo" instead
+    // of the product-specific query, so the right icon never surfaced as a result.
+    expect(buildBrandSearchQuery('https://calendar.google.com/')).toBe('google calendar logo');
+    expect(buildBrandSearchQuery('https://drive.google.com')).toBe('google drive logo');
+    expect(buildBrandSearchQuery('https://play.google.com/store')).toBe('google play logo');
+  });
+
+  it('uses the bare brand for plain hosts, generic subdomains, and personal-infra', () => {
+    expect(buildBrandSearchQuery('https://github.com')).toBe('github logo');
+    expect(buildBrandSearchQuery('https://www.google.com')).toBe('google logo');
+    expect(buildBrandSearchQuery('https://jellyfin.local.flippflix.com')).toBe('jellyfin logo');
+  });
+
+  it('returns empty for missing/unparseable input so callers can fall back to the title', () => {
+    expect(buildBrandSearchQuery(undefined)).toBe('');
+    expect(buildBrandSearchQuery('')).toBe('');
   });
 });

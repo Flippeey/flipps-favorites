@@ -75,3 +75,27 @@ export function getBrandName(url: string): string {
   const info = extractBrandInfo(url);
   return info.brand.length >= 3 ? info.brand : '';
 }
+
+// Single source of truth for the brand image-search query used by BOTH the
+// auto-resolve pipeline (icon-providers) and the edit-dialog search seed.
+// Combines the root brand with a meaningful subdomain so multi-tenant hosts
+// resolve their own product ('google drive', 'google play') instead of the
+// parent brand ('google'). Falls back to the hostname when brand extraction
+// yields nothing.
+export function buildBrandSearchQuery(url?: string): string {
+  if (!url) return '';
+  const { brand, subdomain, isPersonalInfra } = extractBrandInfo(url);
+  if (brand) {
+    return `${subdomain ? `${brand} ${subdomain}` : brand} logo`.trim();
+  }
+
+  const hostname = safeHostname(url)?.replace(/^www\./, '');
+  if (!hostname) return '';
+  if (isPersonalInfra) {
+    const first = hostname.split('.')[0];
+    return first ? `${first} logo`.trim() : '';
+  }
+  const parts = hostname.split('.');
+  const core = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0];
+  return `${core} logo`.trim();
+}
