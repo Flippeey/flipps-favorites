@@ -13,11 +13,11 @@ import {
 } from '../lib/messaging';
 import {
   getHostname,
-  getSearchName,
   iconPersistenceErrorMessage,
   isValidBookmarkUrl,
   normalizeUploadedImage,
 } from '../lib/icon-helpers';
+import { buildBrandSearchQuery } from '@/shared/url-brand';
 import { invalidateFaviconCache } from '../lib/favicon-cache';
 import { Ico } from './Ico';
 import { ModalDialog } from './ModalDialog';
@@ -39,7 +39,11 @@ type StatusKind = 'info' | 'success' | 'error';
 type Status = { message: string; kind: StatusKind } | null;
 
 function defaultQuery(title: string, url: string): string {
-  const seed = getSearchName(url) || title.trim() || getHostname(url);
+  // Same subdomain-aware query the auto-resolve pipeline uses, so the dialog seeds
+  // 'google calendar logo' for calendar.google.com — not the bare 'google logo'.
+  const brandQuery = buildBrandSearchQuery(url);
+  if (brandQuery) return brandQuery;
+  const seed = title.trim() || getHostname(url);
   return `${seed} logo`.trim();
 }
 

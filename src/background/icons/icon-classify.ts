@@ -1,6 +1,10 @@
 import type { IconSearchCandidate } from '@/shared/messages';
-import { extractBrandInfo } from '@/shared/url-brand';
 import { faviconProviderUrl } from './icon-constants';
+
+// Re-exported under the legacy name so backend callers + tests keep importing it
+// from here. The implementation now lives in shared/url-brand so the edit dialog
+// can seed its search box with the exact same subdomain-aware query.
+export { buildBrandSearchQuery as buildSearchQueryFromBookmark } from '@/shared/url-brand';
 
 export function getIconLabel(bookmarkTitle: string | undefined, bookmarkUrl: string): string {
   const trimmedTitle = bookmarkTitle?.trim();
@@ -30,26 +34,6 @@ export function extractHostname(value: string | undefined): string | null {
       return null;
     }
   }
-}
-
-export function buildSearchQueryFromBookmark(bookmarkUrl?: string): string {
-  if (!bookmarkUrl) return '';
-  const { brand, subdomain, isPersonalInfra } = extractBrandInfo(bookmarkUrl);
-  if (brand) {
-    // Combine root brand + meaningful subdomain so multi-tenant hosts resolve their
-    // own product ('google drive', 'google play') instead of the parent brand.
-    return `${subdomain ? `${brand} ${subdomain}` : brand} logo`.trim();
-  }
-  // Fallback for unusual hostnames where brand extraction yielded nothing.
-  const hostname = extractHostname(bookmarkUrl);
-  if (!hostname) return '';
-  if (isPersonalInfra) {
-    const first = hostname.split('.')[0];
-    return first ? `${first} logo`.trim() : '';
-  }
-  const parts = hostname.split('.');
-  const core = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0];
-  return `${core} logo`.trim();
 }
 
 export function getDomainCandidates(bookmarkUrl: string): IconSearchCandidate[] {
