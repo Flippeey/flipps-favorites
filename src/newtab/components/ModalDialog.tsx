@@ -1,5 +1,6 @@
-import { useCallback, useState, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { useEscapeKey } from '../interaction/useEscapeKey';
+import { useFocusTrap } from '../interaction/useFocusTrap';
 import { Ico } from './Ico';
 
 interface ModalDialogProps {
@@ -26,6 +27,7 @@ export function ModalDialog({
   children,
 }: ModalDialogProps) {
   const [closing, setClosing] = useState(false);
+  const dialogRef = useRef<HTMLElement | null>(null);
 
   const handleClose = useCallback(() => {
     if (closing) return;
@@ -34,6 +36,7 @@ export function ModalDialog({
   }, [closing, onClose]);
 
   useEscapeKey(handleClose);
+  useFocusTrap(dialogRef);
 
   const onScrimMouseDown = (e: MouseEvent) => {
     if (e.target === e.currentTarget) handleClose();
@@ -67,12 +70,27 @@ export function ModalDialog({
   return (
     <div className="ff-modal-scrim" data-closing={closing || undefined} onMouseDown={onScrimMouseDown}>
       {as === 'form' ? (
-        <form className="ff-dialog" data-closing={closing || undefined} style={dialogStyle} onSubmit={onSubmit}>
+        <form
+          ref={(el) => { dialogRef.current = el; }}
+          className="ff-dialog"
+          role="dialog"
+          aria-modal="true"
+          data-closing={closing || undefined}
+          style={dialogStyle}
+          onSubmit={onSubmit}
+        >
           {head}
           {body}
         </form>
       ) : (
-        <div className="ff-dialog" data-closing={closing || undefined} style={dialogStyle}>
+        <div
+          ref={(el) => { dialogRef.current = el; }}
+          className="ff-dialog"
+          role="dialog"
+          aria-modal="true"
+          data-closing={closing || undefined}
+          style={dialogStyle}
+        >
           {head}
           {body}
         </div>

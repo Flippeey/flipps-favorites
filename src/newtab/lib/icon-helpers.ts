@@ -1,9 +1,10 @@
 import { getBrandName } from '@/shared/url-brand';
+import { ALLOWED_BOOKMARK_SCHEMES } from '@/shared/constants';
 
 export function isValidBookmarkUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    return (ALLOWED_BOOKMARK_SCHEMES as readonly string[]).includes(parsed.protocol);
   } catch {
     return false;
   }

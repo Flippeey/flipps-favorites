@@ -21,6 +21,16 @@ export function isFolder(node: BookmarkNode): boolean {
   return Array.isArray(node.children);
 }
 
+export function findParentFolder(nodes: BookmarkNode[], childId: string): BookmarkNode | null {
+  for (const n of nodes) {
+    if (!n.children) continue;
+    if (n.children.some(c => c.id === childId)) return n;
+    const r = findParentFolder(n.children, childId);
+    if (r) return r;
+  }
+  return null;
+}
+
 export interface DescendantCount {
   bookmarks: number;
   folders: number;

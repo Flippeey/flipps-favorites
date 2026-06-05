@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AppSettings, BookmarkNode, WorkspaceRecord } from '@/shared/messages';
+import { useFocusTrap } from '../interaction/useFocusTrap';
 import { Ico } from './Ico';
 import {
   AppearanceSection,
@@ -50,6 +51,8 @@ interface AppSettingsDrawerProps {
 export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation', onPatchGlobal, onAfterImport, onClose }: AppSettingsDrawerProps) {
   const [section, setSection] = useState<AppSectionId>(initialSection);
   const [closing, setClosing] = useState(false);
+  const drawerRef = useRef<HTMLElement | null>(null);
+  useFocusTrap(drawerRef);
 
   const handleClose = useCallback(() => {
     if (closing) return;
@@ -68,7 +71,7 @@ export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation
   return (
     <>
       <div className="ff-modal-scrim" data-closing={closing || undefined} onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }} style={{ background: 'rgba(0,0,0,0.35)' }} />
-      <aside className="ff-drawer" data-closing={closing || undefined} role="dialog" aria-label="App settings">
+      <aside ref={(el) => { drawerRef.current = el; }} className="ff-drawer" data-closing={closing || undefined} role="dialog" aria-modal="true" aria-label="App settings">
         <header className="ff-drawer__head">
           <div>
             <div className="ff-dialog__eyebrow">Settings</div>
@@ -117,6 +120,8 @@ interface WorkspaceSettingsDrawerProps {
 export function WorkspaceSettingsDrawer({ settings, activeWorkspace, workspaceWallpaper, initialSection = 'appearance', onPatchWorkspace, onSetWorkspaceWallpaper, onClose }: WorkspaceSettingsDrawerProps) {
   const [section, setSection] = useState<WorkspaceSectionId>(initialSection);
   const [closing, setClosing] = useState(false);
+  const drawerRef = useRef<HTMLElement | null>(null);
+  useFocusTrap(drawerRef);
 
   const handleClose = useCallback(() => {
     if (closing) return;
@@ -135,7 +140,7 @@ export function WorkspaceSettingsDrawer({ settings, activeWorkspace, workspaceWa
   return (
     <>
       <div className="ff-modal-scrim" data-closing={closing || undefined} onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }} style={{ background: 'rgba(0,0,0,0.35)' }} />
-      <aside className="ff-drawer" data-closing={closing || undefined} role="dialog" aria-label="Workspace settings">
+      <aside ref={(el) => { drawerRef.current = el; }} className="ff-drawer" data-closing={closing || undefined} role="dialog" aria-modal="true" aria-label="Workspace settings">
         <header className="ff-drawer__head">
           <div>
             <div className="ff-dialog__eyebrow">Workspace{activeWorkspace ? ` · ${activeWorkspace.name}` : ''}</div>

@@ -78,7 +78,8 @@ test('cannot exceed MAX_WORKSPACES (9)', async ({ freshPage }) => {
   await expect(freshPage.locator('.ff-ws-tab')).toHaveCount(MAX_WORKSPACES);
 
   // Open the Add menu — the "Add workspace" item must be disabled when at the limit.
-  await freshPage.getByRole('button', { name: 'Add' }).click();
+  // exact:true targets the nav "Add" button, not the empty-state "Add bookmark" one.
+  await freshPage.getByRole('button', { name: 'Add', exact: true }).click();
   const addWorkspaceItem = freshPage.locator('.ff-ctx__item').filter({ hasText: 'Add workspace' });
   await expect(addWorkspaceItem).toBeVisible();
   await expect(addWorkspaceItem).toBeDisabled();
@@ -100,7 +101,7 @@ test('create workspace via NewWorkspaceDialog adds a tab', async ({ newtabPage, 
   const countBefore = world.workspaces.length; // 5
 
   // Open the Add menu, then click "Add workspace".
-  await newtabPage.getByRole('button', { name: 'Add' }).click();
+  await newtabPage.getByRole('button', { name: 'Add', exact: true }).click();
   const addMenu = contextMenu(newtabPage);
   await expect(addMenu).toBeVisible();
   await addMenu.locator('.ff-ctx__item').filter({ hasText: 'Add workspace' }).click();

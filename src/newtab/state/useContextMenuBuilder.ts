@@ -4,7 +4,6 @@ import type { ContextMenuItem } from '../components/ContextMenu';
 import type { MarqueeSelection } from '../interaction/useMarquee';
 import type { WorkspaceSectionId, AppSectionId } from '../components/settings';
 import { extensionApi } from '@/shared/browser';
-import { removeBookmark } from '../lib/messaging';
 import { findFolder, findNode, isFolder } from '../lib/tree';
 import { IS_MAC } from '../lib/platform';
 import { MAX_WORKSPACES } from '@/shared/constants';
@@ -31,7 +30,7 @@ interface UseContextMenuBuilderArgs {
   setConfirmDeleteBatch: (ids: string[] | null) => void;
   setRenameWorkspaceTarget: (ws: WorkspaceRecord | null) => void;
   setConfirmDeleteWorkspace: (ws: WorkspaceRecord | null) => void;
-  refreshTree: () => Promise<void>;
+  onDeleteBookmark: (item: BookmarkNode) => void | Promise<void>;
 }
 
 interface UseContextMenuBuilderResult {
@@ -63,7 +62,7 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
     setConfirmDeleteBatch,
     setRenameWorkspaceTarget,
     setConfirmDeleteWorkspace,
-    refreshTree,
+    onDeleteBookmark,
   } = args;
 
   const buildContextMenuItems = useCallback((target: BookmarkNode | null, sectionFolder: BookmarkNode | null = null): ContextMenuItem[] => {
@@ -99,7 +98,7 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
     const deleteLabel = isInSelection ? `Delete ${selection.ids.size} items` : 'Delete';
     const deleteAction = isInSelection
       ? () => setConfirmDeleteBatch(Array.from(selection.ids))
-      : async () => { await removeBookmark(target.id); refreshTree(); };
+      : () => { void onDeleteBookmark(target); };
     const targetIds = isInSelection ? Array.from(selection.ids) : [target.id];
     const bookmarkUrls = targetIds
       .map(id => findNode(tree, id))
@@ -126,7 +125,7 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
       { kind: 'item', icon: 'trash',        label: deleteLabel,       kbd: IS_MAC ? '⌫' : 'Del', destructive: true,
         onClick: deleteAction },
     ];
-  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, handleAddWorkspace, workspaces.length, selection, refreshTree]);
+  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, handleAddWorkspace, workspaces.length, selection, onDeleteBookmark]);
 
   const handleOpenAddMenu = useCallback((x: number, y: number) => {
     const atMax = workspaces.length >= MAX_WORKSPACES;

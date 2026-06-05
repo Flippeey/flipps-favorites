@@ -10,16 +10,24 @@ export type FolderNameDialogTarget =
 
 interface FolderNameDialogProps {
   target: FolderNameDialogTarget;
+  siblingNames?: string[];
   onClose: () => void;
   onSaved: (folder: BookmarkNode) => void;
 }
 
-export function FolderNameDialog({ target, onClose, onSaved }: FolderNameDialogProps) {
+export function FolderNameDialog({ target, siblingNames, onClose, onSaved }: FolderNameDialogProps) {
   const initial = target.mode === 'rename' ? target.title : '';
   const [value, setValue] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Non-blocking duplicate-name hint — the browser allows sibling folders with
+  // the same name, so we warn but never block submit.
+  const trimmedLower = value.trim().toLowerCase();
+  const duplicateWarning = trimmedLower && (siblingNames ?? []).some(n => n.toLowerCase() === trimmedLower)
+    ? 'A folder with this name already exists here.'
+    : null;
 
   useEffect(() => {
     const el = inputRef.current;
@@ -81,6 +89,7 @@ export function FolderNameDialog({ target, onClose, onSaved }: FolderNameDialogP
         />
       </div>
       {error && <div className="ff-status" data-kind="error" role="alert">{error}</div>}
+      {!error && duplicateWarning && <div className="ff-status" data-kind="info" role="status">{duplicateWarning}</div>}
       <div className="ff-dialog__actions">
         <button type="button" className="ff-btn ff-btn--ghost" onClick={onClose}>Cancel</button>
         <button type="submit" className="ff-btn" disabled={saving}>
