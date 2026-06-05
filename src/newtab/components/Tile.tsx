@@ -139,6 +139,7 @@ export function SectionHeader({ folder, rootFolderId, dragEnabled, onMenu }: Sec
         type="button"
         className="ff-section__menu"
         aria-label={`Open menu for ${folder.title}`}
+        title="Folder options"
         onClick={(e) => {
           e.stopPropagation();
           onMenu?.(folder, e);

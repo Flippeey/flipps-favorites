@@ -43,11 +43,11 @@
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), transform var(--dur-instant) var(--ease-press);
 }
-.ff-iconbtn:hover { background: var(--ink-3); color: var(--accent); border-color: var(--accent-border); }
+.ff-iconbtn:hover { background: var(--ink-3); color: var(--accent-on-surface, var(--accent)); border-color: var(--accent-border); }
 .ff-iconbtn:focus-visible { outline: none; border-color: var(--accent-border); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent); }
 .ff-iconbtn:active { transform: scale(0.96); }
 .ff-iconbtn--icon { padding: 0; width: 34px; justify-content: center; }
-.ff-iconbtn--active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-border); }
+.ff-iconbtn--active { background: var(--accent-soft); color: var(--accent-on-surface, var(--accent)); border-color: var(--accent-border); }
 
 .ff-crumb {
   display: inline-flex; align-items: center; gap: var(--s-2);
@@ -61,7 +61,7 @@
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
   white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis;
 }
-.ff-crumb__btn:hover { background: var(--ink-3); color: var(--accent); }
+.ff-crumb__btn:hover { background: var(--ink-3); color: var(--accent-on-surface, var(--accent)); }
 .ff-crumb__btn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent); }
 
 .ff-pill {
@@ -75,7 +75,7 @@
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
 }
-.ff-pill:hover { background: var(--ink-3); color: var(--accent); border-color: var(--accent-border); }
+.ff-pill:hover { background: var(--ink-3); color: var(--accent-on-surface, var(--accent)); border-color: var(--accent-border); }
 .ff-pill:focus-visible { outline: none; border-color: var(--accent-border); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent); }
 
 /* Nav-right cluster — unify icon buttons + pills as frost chips so they read
@@ -99,13 +99,13 @@
 .ff-nav .ff-pill:hover {
   background: color-mix(in oklab, var(--frost-strong) 78%, transparent);
   border-color: var(--accent-border);
-  color: var(--accent);
+  color: var(--accent-on-surface, var(--accent));
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 14%, transparent);
 }
 .ff-nav .ff-iconbtn--active {
   background: var(--accent-soft);
   border-color: var(--accent-border);
-  color: var(--accent);
+  color: var(--accent-on-surface, var(--accent));
 }
 
 [data-theme="light"] .ff-nav .ff-iconbtn,
@@ -118,7 +118,7 @@
 [data-theme="light"] .ff-nav .ff-pill:hover {
   background: color-mix(in oklab, var(--accent) 14%, rgba(255, 255, 255, 0.96));
   border-color: color-mix(in oklab, var(--accent) 55%, transparent);
-  color: var(--accent-600, var(--accent));
+  color: var(--accent-on-surface, var(--accent));
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent);
 }
 /* Higher-specificity override so the light+wallpaper combo can't fall back to
@@ -126,7 +126,7 @@
 [data-theme="light"] .ff-app[data-bg="wallpaper"] .ff-nav .ff-iconbtn:hover,
 [data-theme="light"] .ff-app[data-bg="wallpaper"] .ff-nav .ff-pill:hover {
   background: color-mix(in oklab, var(--accent) 14%, rgba(255, 255, 255, 0.96));
-  color: var(--accent-600, var(--accent));
+  color: var(--accent-on-surface, var(--accent));
   border-color: color-mix(in oklab, var(--accent) 55%, transparent);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent);
 }
@@ -155,9 +155,9 @@
   border-radius: var(--r-sm); cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
-.ff-sort__option:hover, .ff-fpicker__option:hover { background: var(--accent-soft); color: var(--accent); }
+.ff-sort__option:hover, .ff-fpicker__option:hover { background: var(--accent-soft); color: var(--accent-on-surface, var(--accent)); }
 .ff-sort__option[data-active="true"], .ff-fpicker__option[data-active="true"] {
-  background: var(--accent-soft); color: var(--accent); font-weight: 500;
+  background: var(--accent-soft); color: var(--accent-on-surface, var(--accent)); font-weight: 500;
 }
 
 .ff-fpicker { position: relative; }
@@ -190,7 +190,7 @@
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
 .ff-ctx__item:disabled { color: var(--fg-4); cursor: not-allowed; opacity: 0.7; }
-.ff-ctx__item[data-hovered="true"]:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
+.ff-ctx__item[data-hovered="true"]:not(:disabled) { background: var(--accent-soft); color: var(--accent-on-surface, var(--accent)); }
 .ff-ctx__item[data-destructive="true"]:not(:disabled) { color: var(--danger); }
 .ff-ctx__item[data-destructive="true"][data-hovered="true"]:not(:disabled) {
   background: color-mix(in oklab, var(--danger) 14%, transparent); color: var(--danger);
@@ -282,14 +282,14 @@
 
 .ff-ws-tab.is-active {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-on-surface, var(--accent));
   font-weight: 600;
   border-color: var(--accent-border);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 12%, transparent);
 }
 
 [data-theme="light"] .ff-ws-tab.is-active {
-  color: var(--accent-600, var(--accent));
+  color: var(--accent-on-surface, var(--accent));
   background: color-mix(in oklab, var(--accent) 10%, var(--ink-1));
   border-color: var(--accent-border);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 14%, transparent);
@@ -306,7 +306,7 @@
 .ff-ws-tab[data-drop-hover="true"] {
   background: var(--accent-soft);
   border-color: var(--accent-border);
-  color: var(--accent);
+  color: var(--accent-on-surface, var(--accent));
 }
 
 .ff-ws-tab[data-dragging="true"] {

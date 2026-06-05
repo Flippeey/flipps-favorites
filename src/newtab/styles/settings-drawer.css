@@ -56,7 +56,7 @@
 .ff-drawer__navitem:hover { background: var(--ink-2); color: var(--fg-1); }
 .ff-drawer__navitem[data-active="true"] {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-on-surface, var(--accent));
   border-color: var(--accent-border);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 12%, transparent);
 }

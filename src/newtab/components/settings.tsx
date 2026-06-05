@@ -77,7 +77,7 @@ export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation
             <div className="ff-dialog__eyebrow">Settings</div>
             <div className="ff-dialog__title">{APP_SECTION_TITLES[section]}</div>
           </div>
-          <button className="ff-iconbtn ff-iconbtn--icon" aria-label="Close" onClick={handleClose}>
+          <button className="ff-iconbtn ff-iconbtn--icon" aria-label="Close" title="Close" onClick={handleClose}>
             <Ico name="close" size={16} />
           </button>
         </header>
@@ -146,7 +146,7 @@ export function WorkspaceSettingsDrawer({ settings, activeWorkspace, workspaceWa
             <div className="ff-dialog__eyebrow">Workspace{activeWorkspace ? ` · ${activeWorkspace.name}` : ''}</div>
             <div className="ff-dialog__title">{WORKSPACE_SECTION_TITLES[section]}</div>
           </div>
-          <button className="ff-iconbtn ff-iconbtn--icon" aria-label="Close" onClick={handleClose}>
+          <button className="ff-iconbtn ff-iconbtn--icon" aria-label="Close" title="Close" onClick={handleClose}>
             <Ico name="close" size={16} />
           </button>
         </header>

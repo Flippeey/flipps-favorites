@@ -82,12 +82,8 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
     try {
       const candidates = await searchIcons(q, bookmarkUrl);
       setResults(candidates);
-      setStatus({
-        kind: candidates.length ? 'info' : 'error',
-        message: candidates.length
-          ? `Found ${candidates.length} icon candidates.`
-          : 'No matches.',
-      });
+      // Count is shown in the Search-icons header; only surface a status when there's nothing.
+      setStatus(candidates.length ? null : { kind: 'error', message: 'No matches.' });
     } catch {
       setResults([]);
       setStatus({ kind: 'error', message: 'Search failed.' });
@@ -270,7 +266,10 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
                   src={previewSrc}
                   alt=""
                   referrerPolicy="no-referrer"
-                  style={{ width: '70%', height: '70%', objectFit: 'contain' }}
+                  // Cap, don't stretch: an <img> with no fixed width renders at its
+                  // native pixel size, so low-res icons stay sharp instead of being
+                  // upscaled to fill the box; large icons still shrink to fit.
+                  style={{ maxWidth: '70%', maxHeight: '70%', objectFit: 'contain' }}
                 />
               ) : (
                 <span className="ff-iconpreview__fallback">
@@ -302,6 +301,20 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
               style={{ display: 'none' }}
             />
 
+            {canManageIcon && (
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 11,
+                  color: 'var(--fg-3)',
+                  textAlign: 'center',
+                  letterSpacing: 0.2,
+                }}
+              >
+                Hover the preview for quick icon actions.
+              </p>
+            )}
+
             {previewIcon && (
               <p
                 style={{
@@ -324,18 +337,25 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
               </div>
             )}
 
-            <button className="ff-btn" disabled={saving} onClick={handleSave}>
+            <button className="ff-btn" disabled={saving} onClick={handleSave} title="Save bookmark">
               <Ico name="check" size={14} /> {saving ? 'Saving…' : 'Save bookmark'}
             </button>
           </aside>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
             <div>
-              <h4 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 600 }}>
-                Search
-              </h4>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+                <h4 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 600 }}>
+                  Search icons
+                </h4>
+                {results.length > 0 && (
+                  <span style={{ fontSize: 12, color: 'var(--fg-3)', flexShrink: 0 }}>
+                    {results.length} candidate{results.length === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
               <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--fg-3)', lineHeight: 1.5 }}>
-                Search for an icon or favicon and click a result to apply it immediately.
+                Search the web for icons and favicons. Click any result to apply instantly.
               </p>
             </div>
 
@@ -349,7 +369,7 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
                 style={{ flex: 1 }}
                 disabled={!canManageIcon}
               />
-              <button className="ff-btn" type="submit" disabled={!canManageIcon || searching || !query.trim()}>
+              <button className="ff-btn ff-btn--ghost" type="submit" disabled={!canManageIcon || searching || !query.trim()} title="Search for icons">
                 <Ico name="search" size={14} />
                 <span>Search</span>
               </button>

@@ -26,7 +26,9 @@ export async function normalizeUploadedImage(file: File): Promise<string> {
   const sourceDataUrl = await readFileAsDataUrl(file);
   const image = await loadImageElement(sourceDataUrl);
   const canvas = document.createElement('canvas');
-  const size = 96;
+  // 160px: tiles render ~76px (clean downscale) while the edit-dialog preview box
+  // (~196px) shows near-native detail instead of upscaling a small raster.
+  const size = 160;
   canvas.width = size;
   canvas.height = size;
   const context = canvas.getContext('2d');

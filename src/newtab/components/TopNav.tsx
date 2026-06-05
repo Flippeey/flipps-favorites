@@ -93,7 +93,7 @@ function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
   return (
     <div className="ff-ws-tabs-wrap">
       {canScrollLeft && (
-        <button className="ff-ws-scroll ff-ws-scroll--left" onClick={() => scroll(-1)} aria-label="Scroll tabs left">
+        <button className="ff-ws-scroll ff-ws-scroll--left" onClick={() => scroll(-1)} aria-label="Scroll tabs left" title="Scroll tabs left">
           <Ico name="chevronLeft" size={12} />
         </button>
       )}
@@ -137,7 +137,7 @@ function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
         })}
       </div>
       {canScrollRight && (
-        <button className="ff-ws-scroll ff-ws-scroll--right" onClick={() => scroll(1)} aria-label="Scroll tabs right">
+        <button className="ff-ws-scroll ff-ws-scroll--right" onClick={() => scroll(1)} aria-label="Scroll tabs right" title="Scroll tabs right">
           <Ico name="chevronRight" size={12} />
         </button>
       )}
@@ -170,7 +170,7 @@ function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace }:
 
   return (
     <div className="ff-ws-dropdown" ref={ref}>
-      <button className="ff-pill" onClick={() => setOpen(o => !o)} aria-haspopup="listbox" aria-expanded={open}>
+      <button className="ff-pill" onClick={() => setOpen(o => !o)} aria-haspopup="listbox" aria-expanded={open} aria-label="Switch workspace" title="Switch workspace">
         {activeWs && <span className="ff-ws-tab__dot" style={{ background: activeWs.accentColor }} />}
         <span>{activeWs?.name ?? 'Workspace'}</span>
         <Ico name="chevronDown" size={12} />
@@ -265,6 +265,7 @@ export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
         <button
           className="ff-iconbtn ff-iconbtn--icon"
           aria-label="Add"
+          title="Add"
           aria-haspopup="menu"
           onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); onOpenAddMenu(r.left, r.bottom + 6); }}
         >
@@ -281,6 +282,8 @@ export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
         <div className="ff-sort" ref={sortRef}>
           <button
             className="ff-pill"
+            aria-label={`Sort bookmarks (current: ${sortLabel})`}
+            title="Sort bookmarks"
             aria-haspopup="listbox"
             aria-expanded={sortOpen}
             onClick={() => setSortOpen(o => !o)}
@@ -307,11 +310,11 @@ export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
             </ul>
           )}
         </div>
-        <button className="ff-iconbtn" onClick={onOpenWorkspaceSettings} aria-label="Customize workspace">
+        <button className="ff-iconbtn" onClick={onOpenWorkspaceSettings} aria-label="Customize workspace" title="Customize workspace">
           <Ico name="palette" size={16} />
           <span>Customize</span>
         </button>
-        <button className="ff-iconbtn" onClick={onOpenAppSettings} aria-label="Settings">
+        <button className="ff-iconbtn" onClick={onOpenAppSettings} aria-label="Settings" title="Settings">
           <Ico name="settings" size={16} />
           <span>Settings</span>
         </button>

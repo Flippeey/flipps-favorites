@@ -88,7 +88,7 @@
   display: grid; place-items: center;
   border-radius: var(--r-md);
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-on-surface, var(--accent));
 }
 .ff-onboard__tip-headline {
   font-size: 15px; font-weight: 600;

@@ -11,7 +11,10 @@
   }
   .ff-nav__center { display: none; }
   .ff-hero { padding: var(--s-8) var(--s-4) var(--s-6); }
-  .ff-canvas { padding: 0 var(--s-3) var(--s-16); }
+  /* Keep the 80px reserve for the always-on dock; the dock is fixed regardless
+     of width, so dropping it here put the last tile row under the dock. */
+  .ff-canvas { padding: 0 var(--s-3) calc(var(--s-16) + 80px); }
+  .ff-app[data-dock="hidden"] .ff-canvas { padding-bottom: var(--s-16); }
   .ff-dialog__body { grid-template-columns: 1fr; }
   .ff-drawer__body { grid-template-columns: 1fr; }
   .ff-drawer__nav { border-right: 0; border-bottom: 1px solid var(--line-1); flex-direction: row; overflow-x: auto; }

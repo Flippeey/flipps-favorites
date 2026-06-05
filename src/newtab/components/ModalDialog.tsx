@@ -57,6 +57,7 @@ export function ModalDialog({
         type="button"
         className="ff-iconbtn ff-iconbtn--icon"
         aria-label="Close"
+        title="Close"
         onClick={handleClose}
       >
         <Ico name="close" size={16} />

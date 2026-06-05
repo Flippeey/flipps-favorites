@@ -235,6 +235,7 @@ export function FolderOverlay({
             onClick={handleBack}
             disabled={stack.length <= 1}
             aria-label="Back to parent folder"
+            title="Back"
             style={{ opacity: stack.length <= 1 ? 0.35 : 1, pointerEvents: stack.length <= 1 ? 'none' : 'auto' }}
           >
             <Ico name="chevronLeft" size={16} />
@@ -278,7 +279,7 @@ export function FolderOverlay({
               <Ico name="folderPlus" size={16} />
             </button>
           )}
-          <button className="ff-iconbtn ff-iconbtn--icon" onClick={handleClose} aria-label="Close overlay">
+          <button className="ff-iconbtn ff-iconbtn--icon" onClick={handleClose} aria-label="Close overlay" title="Close">
             <Ico name="close" size={16} />
           </button>
         </div>

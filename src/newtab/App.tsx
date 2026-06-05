@@ -119,10 +119,13 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     [tree, activeWorkspace?.rootFolderId],
   );
 
-  // Apply tweaks → CSS variables
+  // Apply tweaks → CSS variables. Accent foreground tokens (--accent-contrast,
+  // --accent-on-surface) are theme-aware, so recompute on theme change too.
   useEffect(() => {
-    if (activeWorkspace) applyAccent(activeWorkspace.accentColor);
-  }, [activeWorkspace?.accentColor]);
+    if (activeWorkspace) {
+      applyAccent(activeWorkspace.accentColor, resolveThemeAttr(activeWorkspace.themeMode ?? settings.themeMode));
+    }
+  }, [activeWorkspace?.accentColor, activeWorkspace?.themeMode, settings.themeMode]);
 
   useEffect(() => {
     if (!activeWorkspace) return;

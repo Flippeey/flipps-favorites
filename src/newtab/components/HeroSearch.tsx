@@ -302,6 +302,7 @@ export function HeroSearch({ shape, index, usage, activeWorkspaceId, onPickBookm
             type="button"
             className="ff-search__clear"
             aria-label="Clear search"
+            title="Clear search"
             onMouseDown={(e) => {
               e.preventDefault();
               setValue('');

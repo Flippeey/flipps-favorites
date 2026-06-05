@@ -49,7 +49,7 @@
 }
 .ff-dialog__eyebrow {
   font-size: 11px; letter-spacing: 0.08em;
-  text-transform: uppercase; color: var(--accent);
+  text-transform: uppercase; color: var(--accent-on-surface, var(--accent));
   font-weight: 600;
 }
 .ff-dialog__title {
@@ -88,13 +88,15 @@
   border-radius: var(--r-md);
   background: var(--accent);
   border: 1px solid color-mix(in oklab, var(--accent) 70%, #000);
-  color: #fff;
+  color: var(--accent-contrast, #fff);
   font-size: 14px; font-weight: 600;
   cursor: pointer;
   transition: transform var(--dur-instant) var(--ease-press), background var(--dur-fast) var(--ease-out);
   box-shadow: 0 6px 18px color-mix(in oklab, var(--accent) 30%, transparent);
 }
-.ff-btn:hover { background: color-mix(in oklab, var(--accent) 90%, #fff); }
+/* Brighten in place rather than mixing toward white — mixing white into a bright
+   accent lowers contrast against the now-dark --accent-contrast text. */
+.ff-btn:hover { filter: brightness(1.05); }
 .ff-btn:active { transform: scale(0.97); }
 .ff-btn--ghost {
   background: var(--ink-3);
@@ -109,7 +111,7 @@
   border-color: color-mix(in oklab, var(--danger) 70%, #000);
   box-shadow: 0 6px 18px color-mix(in oklab, var(--danger) 30%, transparent);
 }
-.ff-btn--danger:hover { background: color-mix(in oklab, var(--danger) 90%, #fff); }
+.ff-btn--danger:hover { filter: brightness(1.05); }
 
 .ff-btn--danger-ghost {
   background: transparent;
@@ -240,8 +242,19 @@
 .ff-accentchip[data-active="true"]::after {
   content: ''; position: absolute;
   inset: -5px; border-radius: var(--r-lg);
-  border: 2px solid currentColor;
+  border: 2px solid var(--fg-1);   /* theme foreground, not the swatch's own hue */
 }
+/* Selected check — white + shadow reads on any swatch hue (same treatment as the
+   hover label). Hidden while hovering so it doesn't fight the accent-name label. */
+.ff-accentchip[data-active="true"]::before {
+  content: '✓'; position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; line-height: 1;
+  color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  pointer-events: none; z-index: 1;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.ff-accentchip[data-active="true"]:hover::before { opacity: 0; }
 .ff-accentchip__label {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;

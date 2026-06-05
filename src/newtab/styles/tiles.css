@@ -72,7 +72,7 @@
   outline: 1.5px solid var(--accent-border);
   outline-offset: -1px;
 }
-.ff-tile[data-selected="true"] .ff-tile__label { color: var(--accent); }
+.ff-tile[data-selected="true"] .ff-tile__label { color: var(--accent-on-surface, var(--accent)); }
 
 .ff-tile:not([data-selected="true"]) .ff-tile__label { position: relative; }
 .ff-tile:hover .ff-tile__label::after {
@@ -128,7 +128,7 @@
   position: absolute; bottom: -4px; right: -4px;
   min-width: 22px; height: 22px; padding: 0 6px;
   border-radius: 11px;
-  background: var(--accent); color: #fff;
+  background: var(--accent); color: var(--accent-contrast, #fff);
   font-size: 11px; font-weight: 600;
   display: grid; place-items: center;
   box-shadow: 0 2px 8px color-mix(in oklab, var(--accent) 35%, transparent);
@@ -142,7 +142,7 @@
   background: color-mix(in oklab, var(--accent) 14%, var(--ink-3));
   border-radius: inherit;
   display: grid; place-items: center;
-  color: var(--accent);
+  color: var(--accent-on-surface, var(--accent));
 }
 .ff-folder-tile__empty {
   width: 100%; height: 100%;
@@ -166,7 +166,7 @@
   width: 32px; height: 32px;
   border-radius: var(--r-sm);
   display: grid; place-items: center;
-  color: var(--accent);
+  color: var(--accent-on-surface, var(--accent));
   background: color-mix(in oklab, var(--accent) 14%, var(--ink-2));
   border: 1px solid var(--accent-border);
   box-shadow: inset 0 1px 0 color-mix(in oklab, var(--accent) 20%, transparent);
@@ -175,7 +175,7 @@
   font-family: var(--font-display);
   font-size: 17px; font-weight: 600;
   letter-spacing: var(--tr-snug);
-  color: var(--accent); margin: 0;
+  color: var(--accent-on-surface, var(--accent)); margin: 0;
 }
 .ff-section__count {
   font-size: 12px;
@@ -203,7 +203,7 @@
   border: 0; cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
-.ff-section__menu:hover { background: var(--ink-3); color: var(--accent); }
+.ff-section__menu:hover { background: var(--ink-3); color: var(--accent-on-surface, var(--accent)); }
 .ff-section__menu:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .ff-section__header[data-item-kind="section"] { cursor: grab; }
 .ff-section__header[data-item-kind="section"]:active { cursor: grabbing; }
