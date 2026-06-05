@@ -21,11 +21,30 @@ interface TreeViewProps extends BaseViewProps {
 
 interface TilesViewProps extends Omit<TreeViewProps, 'onSectionMenu'> {
   rootBookmarks?: BookmarkNode[];
+  onEmptyAdd?: () => void;
 }
 
 interface SectionsViewProps extends TreeViewProps {
   dragEnabled?: boolean;
   rootBookmarks?: BookmarkNode[];
+  onEmptyAdd?: () => void;
+}
+
+function EmptyRoot({ scopeFolderId, onAdd }: { scopeFolderId: string; onAdd?: () => void }) {
+  return (
+    <div className="ff-page-view" data-scope-folder-id={scopeFolderId}>
+      <div className="ff-empty">
+        <div className="ff-empty__icon"><Ico name="bookmark" size={28} /></div>
+        <h3>No bookmarks yet</h3>
+        <p>Add your first bookmark to get started.</p>
+        {onAdd && (
+          <button type="button" className="ff-btn" onClick={onAdd}>
+            <Ico name="plus" size={14} /> Add bookmark
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function isSelectedIn(scope: string, containerScope: string, ids: ReadonlySet<string> | undefined, itemId: string): boolean {
@@ -34,7 +53,10 @@ function isSelectedIn(scope: string, containerScope: string, ids: ReadonlySet<st
   return ids.has(itemId);
 }
 
-export function TilesView({ tree, rootBookmarks, shape, scopeFolderId, onPickFolder, onPickItem, onContextMenu, selectedIds, selectionScopeFolderId, focusedTileId }: TilesViewProps) {
+export function TilesView({ tree, rootBookmarks, shape, scopeFolderId, onPickFolder, onPickItem, onContextMenu, selectedIds, selectionScopeFolderId, focusedTileId, onEmptyAdd }: TilesViewProps) {
+  if (tree.length === 0 && (rootBookmarks ?? []).length === 0) {
+    return <EmptyRoot scopeFolderId={scopeFolderId} onAdd={onEmptyAdd} />;
+  }
   return (
     <div className="ff-grid" data-scope-folder-id={scopeFolderId}>
       {tree.map(folder => (
@@ -63,7 +85,10 @@ export function TilesView({ tree, rootBookmarks, shape, scopeFolderId, onPickFol
   );
 }
 
-export function SectionsView({ tree, rootBookmarks, shape, scopeFolderId, dragEnabled, onPickFolder, onPickItem, onSectionMenu, onContextMenu, selectedIds, selectionScopeFolderId, focusedTileId }: SectionsViewProps) {
+export function SectionsView({ tree, rootBookmarks, shape, scopeFolderId, dragEnabled, onPickFolder, onPickItem, onSectionMenu, onContextMenu, selectedIds, selectionScopeFolderId, focusedTileId, onEmptyAdd }: SectionsViewProps) {
+  if (tree.length === 0 && (rootBookmarks ?? []).length === 0) {
+    return <EmptyRoot scopeFolderId={scopeFolderId} onAdd={onEmptyAdd} />;
+  }
   return (
     <div className="ff-sections" data-scope-folder-id={scopeFolderId}>
       {(rootBookmarks ?? []).length > 0 && (

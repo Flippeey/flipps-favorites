@@ -1,6 +1,6 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { BookmarkNode, ClockHourFormat, TileShape } from '@/shared/messages';
+import type { BookmarkNode, ClockHourFormat, TileShape, WorkspaceRecord } from '@/shared/messages';
 import { IS_MAC } from '../lib/platform';
 import { Favicon } from './Favicon';
 import { Ico } from './Ico';
@@ -12,15 +12,34 @@ export interface FlatSearchResult {
   isFolder?: boolean;
   folderTitle?: string;
   folderId?: string;
+  workspaceId?: string;
+  workspaceName?: string;
 }
 
-export function buildSearchIndex(tree: BookmarkNode[]): FlatSearchResult[] {
+interface WorkspaceTag {
+  id: string;
+  name: string;
+}
+
+// Flatten the tree into a search index. Each node is tagged with the workspace
+// that owns it (the workspace whose root folder is an ancestor), so results can
+// show which workspace a hit lives in. The workspace root folders themselves are
+// excluded — they are containers, not navigable results.
+export function buildSearchIndex(tree: BookmarkNode[], workspaces: WorkspaceRecord[] = []): FlatSearchResult[] {
+  const rootToWorkspace = new Map<string, WorkspaceTag>();
+  for (const ws of workspaces) rootToWorkspace.set(ws.rootFolderId, { id: ws.id, name: ws.name });
+
   const out: FlatSearchResult[] = [];
-  const walk = (nodes: BookmarkNode[], parent?: BookmarkNode) => {
+  const walk = (nodes: BookmarkNode[], parent: BookmarkNode | undefined, ws: WorkspaceTag | undefined) => {
     for (const n of nodes) {
+      const enteredWs = rootToWorkspace.get(n.id);
+      const ownerWs = enteredWs ?? ws;
       if (Array.isArray(n.children)) {
-        out.push({ id: n.id, title: n.title, isFolder: true });
-        walk(n.children, n);
+        // Skip the workspace root folder node itself (it's the container).
+        if (!enteredWs) {
+          out.push({ id: n.id, title: n.title, isFolder: true, workspaceId: ws?.id, workspaceName: ws?.name });
+        }
+        walk(n.children, n, ownerWs);
       } else {
         out.push({
           id: n.id,
@@ -28,11 +47,13 @@ export function buildSearchIndex(tree: BookmarkNode[]): FlatSearchResult[] {
           url: n.url,
           folderId: parent?.id,
           folderTitle: parent?.title,
+          workspaceId: ownerWs?.id,
+          workspaceName: ownerWs?.name,
         });
       }
     }
   };
-  walk(tree);
+  walk(tree, undefined, undefined);
   return out;
 }
 
@@ -40,9 +61,16 @@ interface HeroSearchProps {
   shape: TileShape;
   index: FlatSearchResult[];
   usage?: Record<string, number>;
+  activeWorkspaceId?: string;
   onPickBookmark: (item: FlatSearchResult) => void;
   onPickFolder: (item: FlatSearchResult) => void;
   overlayMode?: boolean;
+}
+
+// Tag to show only when a result lives in a workspace other than the active one.
+function foreignWorkspaceTag(r: FlatSearchResult, activeWorkspaceId?: string): string | null {
+  if (!r.workspaceName || !r.workspaceId) return null;
+  return r.workspaceId === activeWorkspaceId ? null : r.workspaceName;
 }
 
 function isTypingTarget(el: EventTarget | null): boolean {
@@ -149,7 +177,7 @@ function scoreResult(result: FlatSearchResult, query: string, usage: Record<stri
   return score;
 }
 
-export function HeroSearch({ shape, index, usage, onPickBookmark, onPickFolder, overlayMode }: HeroSearchProps) {
+export function HeroSearch({ shape, index, usage, activeWorkspaceId, onPickBookmark, onPickFolder, overlayMode }: HeroSearchProps) {
   const [value, setValue] = useState('');
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -297,7 +325,9 @@ export function HeroSearch({ shape, index, usage, onPickBookmark, onPickFolder, 
               No matches.
             </div>
           )}
-          {visible.map((r, i) => (
+          {visible.map((r, i) => {
+            const wsTag = foreignWorkspaceTag(r, activeWorkspaceId);
+            return (
             <div
               key={r.id}
               ref={el => { rowRefs.current[i] = el; }}
@@ -321,7 +351,9 @@ export function HeroSearch({ shape, index, usage, onPickBookmark, onPickFolder, 
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <span className="ff-results__title">{r.title}</span>
-                    <span className="ff-results__url" style={{ color: 'var(--fg-3)', fontSize: 11 }}>Folder</span>
+                    <span className="ff-results__url" style={{ color: 'var(--fg-3)', fontSize: 11 }}>
+                      Folder{wsTag ? ` · ${wsTag}` : ''}
+                    </span>
                   </div>
                 </>
               ) : (
@@ -333,11 +365,14 @@ export function HeroSearch({ shape, index, usage, onPickBookmark, onPickFolder, 
                     <span className="ff-results__title">{r.title}</span>
                     <span className="ff-results__url">{r.url}</span>
                   </div>
-                  <span className="ff-results__path">{r.folderTitle}</span>
+                  <span className="ff-results__path">
+                    {wsTag ? (r.folderTitle ? `${r.folderTitle} · ${wsTag}` : wsTag) : r.folderTitle}
+                  </span>
                 </>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

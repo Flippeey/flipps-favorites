@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { BookmarkNode } from '@/shared/messages';
 import { createBookmark } from '../lib/messaging';
 import { getHostname, getSearchName, isValidBookmarkUrl } from '../lib/icon-helpers';
+import { hasUrlScheme } from '../lib/url';
 import { Ico } from './Ico';
 import { ModalDialog } from './ModalDialog';
 
@@ -41,9 +42,11 @@ export function QuickAddDialog({ parentId, parentTitle, onClose, onSaved }: Quic
       return;
     }
     if (!isValidBookmarkUrl(url)) {
-      const withScheme = `https://${url.replace(/^\/+/, '')}`;
-      if (isValidBookmarkUrl(withScheme)) {
-        url = withScheme;
+      // Only manufacture a scheme for bare hosts. An input that already carries a
+      // scheme (e.g. mailto:, ftp:) must not be coerced into a junk https URL.
+      const coerced = hasUrlScheme(url) ? null : `https://${url.replace(/^\/+/, '')}`;
+      if (coerced && isValidBookmarkUrl(coerced)) {
+        url = coerced;
       } else {
         setError('URL is not valid.');
         return;

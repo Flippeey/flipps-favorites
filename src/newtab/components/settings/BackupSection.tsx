@@ -111,7 +111,7 @@ export function BackupSection({ onAfterImport }: BackupSectionProps) {
         <div className="ff-row">
           <div>
             <div className="ff-row__label">Import mode</div>
-            <div className="ff-row__hint">Merge keeps existing data and overlays the file. Replace wipes settings and icon overrides first.</div>
+            <div className="ff-row__hint">Merge keeps existing data and overlays the file. Replace wipes settings and icon overrides first. Workspaces always merge by ID — your current workspaces are never deleted.</div>
           </div>
           <Segmented<WorkspaceImportMode>
             options={[{ id: 'merge', label: 'Merge' }, { id: 'replace', label: 'Replace' }]}

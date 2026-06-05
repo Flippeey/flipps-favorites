@@ -21,16 +21,19 @@ import { useWorkspaceShortcut } from './interaction/useWorkspaceShortcut';
 import { useKeyboardNav, useDeleteShortcut } from './interaction/useKeyboardNav';
 import { useQuickAddShortcuts } from './interaction/useQuickAddShortcuts';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
-import { getBookmarkTree, getBookmarkUsage, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
+import { createBookmark, getBookmarkTree, getBookmarkUsage, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
 import { normalizeBookmarkUrl } from './lib/url';
 import { resolveDockMode } from './lib/dock-mode';
 import { prefetchAllIcons } from './lib/icon-prefetch';
-import { findFolder, findNode, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
+import { findFolder, findNode, findParentFolder, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
+import { MAX_WORKSPACES } from '../shared/constants';
 import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper } from '../shared/storage';
 import { useWorkspaceActions } from './state/useWorkspaceActions';
 import { useSelection } from './state/useSelection';
 import { useContextMenuBuilder } from './state/useContextMenuBuilder';
+import { useToasts } from './state/useToasts';
+import { ToastHost } from './components/ToastHost';
 
 interface AppProps {
   initialSettings: AppSettings;
@@ -49,6 +52,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const [tree, setTree] = useState(initialTree);
   const [usage, setUsage] = useState<Record<string, number>>({});
   const [workspaces, setWorkspaces] = useState(initialWorkspaces);
+  const { toasts, pushToast, dismissToast } = useToasts();
 
   const activeWorkspace = useMemo(
     () => workspaces.find(w => w.id === settings.activeWorkspaceId) ?? workspaces[0] ?? null,
@@ -194,6 +198,44 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     }
   }, []);
 
+  // Delete a single bookmark with an Undo affordance. Captures the original
+  // parent + position so Undo re-creates it where it was. Failure surfaces a toast.
+  const handleDeleteBookmark = useCallback(async (item: BookmarkNode) => {
+    const parent = item.parentId ? findFolder(tree, item.parentId) : null;
+    const idx = parent?.children?.findIndex(c => c.id === item.id) ?? -1;
+    const snapshot = {
+      parentId: item.parentId,
+      title: item.title,
+      url: item.url,
+      index: idx >= 0 ? idx : undefined,
+    };
+    try {
+      await removeBookmark(item.id);
+      await refreshTree();
+      pushToast({
+        kind: 'info',
+        message: `Deleted “${item.title}”`,
+        action: snapshot.parentId
+          ? {
+              label: 'Undo',
+              onClick: () => {
+                void (async () => {
+                  try {
+                    await createBookmark(snapshot.parentId!, snapshot.title, snapshot.url, snapshot.index);
+                    await refreshTree();
+                  } catch {
+                    pushToast({ kind: 'error', message: 'Couldn’t restore the bookmark.' });
+                  }
+                })();
+              },
+            }
+          : undefined,
+      });
+    } catch {
+      pushToast({ kind: 'error', message: `Couldn’t delete “${item.title}”.` });
+    }
+  }, [tree, refreshTree, pushToast]);
+
   const sortedChildren = useCallback((children?: BookmarkNode[]) => {
     if (!children) return [];
     return sortChildren(children, settings.bookmarkSortMode, settings.bookmarkSortDirection, usage);
@@ -335,10 +377,10 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setConfirmDeleteBatch,
     setRenameWorkspaceTarget,
     setConfirmDeleteWorkspace,
-    refreshTree,
+    onDeleteBookmark: handleDeleteBookmark,
   });
 
-  const searchIndex = useMemo(() => buildSearchIndex(tree), [tree]);
+  const searchIndex = useMemo(() => buildSearchIndex(tree, workspaces), [tree, workspaces]);
 
   const onPickSearchBookmark = useCallback((r: FlatSearchResult) => {
     if (!r.url) return;
@@ -409,13 +451,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       setConfirmDeleteFolder(item);
       return;
     }
-    try {
-      await removeBookmark(item.id);
-      refreshTree();
-    } catch {
-      // ignore
-    }
-  }, [refreshTree]);
+    await handleDeleteBookmark(item);
+  }, [handleDeleteBookmark]);
 
   // Arrow-key grid navigation. Active only when no dialog/overlay/input has focus —
   // otherwise we'd hijack typing or contend with active surfaces.
@@ -446,7 +483,22 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   });
 
   // Single-key quick-add shortcuts — only when no overlay is open
-  const handleOpenNewWorkspace = useCallback(() => setNewWorkspaceOpen(true), []);
+  const handleOpenNewWorkspace = useCallback(() => {
+    if (workspaces.length >= MAX_WORKSPACES) return;
+    setNewWorkspaceOpen(true);
+  }, [workspaces.length]);
+
+  const folderSiblingNames = useMemo<string[]>(() => {
+    if (!folderNameTarget) return [];
+    const parent = folderNameTarget.mode === 'create'
+      ? findFolder(tree, folderNameTarget.parentId)
+      : findParentFolder(tree, folderNameTarget.id);
+    const selfId = folderNameTarget.mode === 'rename' ? folderNameTarget.id : null;
+    return (parent?.children ?? [])
+      .filter(isFolder)
+      .filter(f => f.id !== selfId)
+      .map(f => f.title);
+  }, [folderNameTarget, tree]);
   useQuickAddShortcuts({
     enabled: !anyOverlayOpen,
     selection,
@@ -528,6 +580,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
               shape={tileShape}
               index={searchIndex}
               usage={usage}
+              activeWorkspaceId={settings.activeWorkspaceId}
               onPickBookmark={onPickSearchBookmark}
               onPickFolder={onPickSearchFolder}
             />
@@ -539,6 +592,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           shape={tileShape}
           index={searchIndex}
           usage={usage}
+          activeWorkspaceId={settings.activeWorkspaceId}
           onPickBookmark={onPickSearchBookmark}
           onPickFolder={onPickSearchFolder}
           overlayMode
@@ -563,6 +617,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             scopeFolderId={rootFolder?.id ?? ''}
             shape={tileShape}
             dragEnabled={dragEnabled}
+            onEmptyAdd={() => handleNewBookmark()}
             onPickFolder={handleTileClick}
             onPickItem={handleTileClick}
             onSectionMenu={(folder, event) => {
@@ -583,6 +638,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             rootBookmarks={sortedRootChildren.filter(c => !isFolder(c))}
             scopeFolderId={rootFolder?.id ?? ''}
             shape={tileShape}
+            onEmptyAdd={() => handleNewBookmark()}
             onPickFolder={handleTileClick}
             onPickItem={handleTileClick}
             selectedIds={selection.ids}
@@ -672,6 +728,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       {folderNameTarget && (
         <FolderNameDialog
           target={folderNameTarget}
+          siblingNames={folderSiblingNames}
           onClose={() => setFolderNameTarget(null)}
           onSaved={() => { setFolderNameTarget(null); refreshTree(); }}
         />
@@ -789,6 +846,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       </button>
 
       {settings.showClock && <ClockMini hourFormat={settings.clockHourFormat} />}
+
+      <ToastHost toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
