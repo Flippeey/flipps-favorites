@@ -130,10 +130,16 @@ export interface WorkspaceRecommendationsProps {
   excludeIds?: Set<string>;
 }
 
+// Cap the curated recommendation list. preSelected (max 3 from scanFolders) is
+// topped up with the best suggested folders so the user sees 3-5 strong starting
+// points; anything beyond that lives behind "Browse all folders".
+const MAX_RECOMMENDATIONS = 5;
+
 export function WorkspaceRecommendations({
   tree, preSelected, suggested, selectedIds, onToggle, excludeIds,
 }: WorkspaceRecommendationsProps) {
-  const hasRecommendations = preSelected.length > 0 || suggested.length > 0;
+  const recommendations = [...preSelected, ...suggested].slice(0, MAX_RECOMMENDATIONS);
+  const hasRecommendations = recommendations.length > 0;
   const [showManual, setShowManual] = useState(!hasRecommendations);
 
   if (!hasRecommendations) {
@@ -142,41 +148,21 @@ export function WorkspaceRecommendations({
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-        {preSelected.length > 0 && (
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
-              Recommended based on your bookmarks
-            </div>
-            <div style={{ display: 'grid', gap: 4 }}>
-              {preSelected.map(f => (
-                <RecommendedFolderCard
-                  key={f.id}
-                  folder={f}
-                  active={selectedIds.includes(f.id)}
-                  onToggle={() => onToggle(f.id)}
-                />
-              ))}
-            </div>
+        <div>
+          <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
+            Recommended based on your bookmarks
           </div>
-        )}
-
-        {suggested.length > 0 && (
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
-              Other folders
-            </div>
-            <div style={{ display: 'grid', gap: 4 }}>
-              {suggested.map(f => (
-                <RecommendedFolderCard
-                  key={f.id}
-                  folder={f}
-                  active={selectedIds.includes(f.id)}
-                  onToggle={() => onToggle(f.id)}
-                />
-              ))}
-            </div>
+          <div style={{ display: 'grid', gap: 4 }}>
+            {recommendations.map(f => (
+              <RecommendedFolderCard
+                key={f.id}
+                folder={f}
+                active={selectedIds.includes(f.id)}
+                onToggle={() => onToggle(f.id)}
+              />
+            ))}
           </div>
-        )}
+        </div>
 
         <button
           className="ff-iconbtn"
