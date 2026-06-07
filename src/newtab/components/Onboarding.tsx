@@ -132,27 +132,41 @@ export interface WorkspaceRecommendationsProps {
 
 // Cap the curated recommendation list. preSelected (max 3 from scanFolders) is
 // topped up with the best suggested folders so the user sees 3-5 strong starting
-// points; anything beyond that lives behind "Browse all folders".
+// points pinned above the full browsable tree.
 const MAX_RECOMMENDATIONS = 5;
 
+// Labelled rule separating the pinned recommendations from the full folder tree.
+function FolderSectionDivider({ label }: { label: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '2px 0 8px' }}>
+      <span style={{
+        fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+        textTransform: 'uppercase', color: 'var(--fg-3)', flexShrink: 0,
+      }}>
+        {label}
+      </span>
+      <span style={{ flex: 1, height: 1, background: 'var(--line-1)' }} />
+    </div>
+  );
+}
+
+// One continuous picker surface: a few ranked recommendations pinned on top,
+// then the full expand/collapse tree. The recommendations are a shortcut; the
+// tree remains the source of truth, so a folder selected in either lights up in
+// both. No mode switch, no height-shifting disclosure.
 export function WorkspaceRecommendations({
   tree, preSelected, suggested, selectedIds, onToggle, excludeIds,
 }: WorkspaceRecommendationsProps) {
   const recommendations = [...preSelected, ...suggested].slice(0, MAX_RECOMMENDATIONS);
-  const hasRecommendations = recommendations.length > 0;
-  const [showManual, setShowManual] = useState(!hasRecommendations);
-
-  if (!hasRecommendations) {
-    return <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} excludeIds={excludeIds} embedded />;
-  }
 
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-        <div>
+    <div style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 2 }}>
+      {recommendations.length > 0 && (
+        <>
           <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
             Recommended based on your bookmarks
           </div>
-          <div style={{ display: 'grid', gap: 4 }}>
+          <div style={{ display: 'grid', gap: 4, marginBottom: 14 }}>
             {recommendations.map(f => (
               <RecommendedFolderCard
                 key={f.id}
@@ -162,20 +176,10 @@ export function WorkspaceRecommendations({
               />
             ))}
           </div>
-        </div>
-
-        <button
-          className="ff-iconbtn"
-          type="button"
-          style={{ fontSize: 12, color: 'var(--fg-3)', justifySelf: 'start' }}
-          onClick={() => setShowManual(v => !v)}
-        >
-          {showManual ? 'Hide' : 'Browse'} all folders
-        </button>
-
-        {showManual && (
-          <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} excludeIds={excludeIds} embedded />
-        )}
+          <FolderSectionDivider label="All folders" />
+        </>
+      )}
+      <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} excludeIds={excludeIds} embedded />
     </div>
   );
 }
