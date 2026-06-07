@@ -5,8 +5,8 @@ releases/
 docs/*
 
 # Claude Code (config, agents, runtime data)
+# Root CLAUDE.md is tracked (shared project instructions); .claude/ detail docs stay local.
 .claude/
-CLAUDE.md
 .mcp.json
 
 # Runtime / generated data
