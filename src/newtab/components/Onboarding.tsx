@@ -105,12 +105,15 @@ export interface WorkspaceRecommendationsProps {
   selectedIds: string[];
   onToggle: (id: string) => void;
   excludeIds?: Set<string>;
+  // 'full' (onboarding): lean into discovery — up to 5 recommendations and the
+  // tree opens to the current selection. 'compact' (add-to-existing dashboard):
+  // a tighter shortlist of 3 and a collapsed tree, so the dialog stays short.
+  variant?: 'full' | 'compact';
 }
 
-// Cap the curated recommendation list. preSelected (max 3 from scanFolders) is
-// topped up with the best suggested folders so the user sees 3-5 strong starting
-// points pinned above the full browsable tree.
-const MAX_RECOMMENDATIONS = 5;
+// How many ranked folders to pin above the tree per variant. preSelected (max 3
+// from scanFolders) is topped up with the best suggested folders to reach the cap.
+const RECOMMENDATION_CAP: Record<'full' | 'compact', number> = { full: 5, compact: 3 };
 
 // Labelled rule separating the pinned recommendations from the full folder tree.
 function FolderSectionDivider({ label }: { label: string }) {
@@ -134,9 +137,9 @@ function FolderSectionDivider({ label }: { label: string }) {
 // surrounding dialog/onboarding body — the picker stays unbounded so there is
 // never a second nested scrollbar.
 export function WorkspaceRecommendations({
-  tree, preSelected, suggested, selectedIds, onToggle, excludeIds,
+  tree, preSelected, suggested, selectedIds, onToggle, excludeIds, variant = 'full',
 }: WorkspaceRecommendationsProps) {
-  const recommendations = [...preSelected, ...suggested].slice(0, MAX_RECOMMENDATIONS);
+  const recommendations = [...preSelected, ...suggested].slice(0, RECOMMENDATION_CAP[variant]);
 
   return (
     <div>
@@ -158,7 +161,14 @@ export function WorkspaceRecommendations({
           <FolderSectionDivider label="All folders" />
         </>
       )}
-      <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} excludeIds={excludeIds} embedded />
+      <FolderMultiPicker
+        tree={tree}
+        selectedIds={selectedIds}
+        onToggle={onToggle}
+        excludeIds={excludeIds}
+        embedded
+        autoExpand={variant === 'full'}
+      />
     </div>
   );
 }

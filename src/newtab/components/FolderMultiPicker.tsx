@@ -11,15 +11,20 @@ export interface FolderMultiPickerProps {
   // When true, the picker does not scroll itself — an ancestor owns the scroll.
   // Avoids stacking a second scrollbar inside an already-scrollable container.
   embedded?: boolean;
+  // When true (default), the tree opens to the path of any already-selected
+  // folder on mount. Set false for compact contexts that want a collapsed tree.
+  autoExpand?: boolean;
 }
 
-export function FolderMultiPicker({ tree, selectedIds, onToggle, excludeIds, embedded }: FolderMultiPickerProps) {
+export function FolderMultiPicker({ tree, selectedIds, onToggle, excludeIds, embedded, autoExpand = true }: FolderMultiPickerProps) {
   // Seed expansion with the path to every already-selected folder so a deep
   // selection is visible without the user having to drill back down to it.
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     const init = new Set<string>();
-    for (const id of selectedIds) {
-      for (const ancestor of ancestorFolderIds(tree, id)) init.add(ancestor);
+    if (autoExpand) {
+      for (const id of selectedIds) {
+        for (const ancestor of ancestorFolderIds(tree, id)) init.add(ancestor);
+      }
     }
     return init;
   });
