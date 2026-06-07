@@ -5,13 +5,11 @@ React 19 SPA in newtab; vanilla TS service worker.
 
 ## Rules
 
-- Edit existing files; create new ones only when absolutely necessary.
 - Keep working files and tests in `tests/` or `docs/` — not the repo root.
 - After every code change, run `npm run build` — typecheck runs automatically via hook. Both Chrome and Firefox builds must pass.
 - Cross-context calls go through the message pipeline (`shared/messages.ts` → `lib/messaging.ts` → `service-worker.ts`). Use `extensionApi` from `shared/browser.ts` for any browser API — never raw `chrome.*` / `browser.*`.
-- Strict TypeScript. `unknown` + narrowing at boundaries, not `any`. React state is immutable (spread / `new Set(prev.ids)`).
+- Strict TS: `unknown` + narrowing at boundaries, never `any`. Treat React state as immutable (`{ ...prev }` / `new Set(prev.ids)`).
 - Prefer JSX text children for rendering (React escapes). Avoid `innerHTML`.
-- Match existing style. Touch only what the task requires.
 
 ## Tech Stack
 
@@ -24,7 +22,7 @@ React 19 SPA in newtab; vanilla TS service worker.
 
 ## Layout (src/)
 
-- `background/service-worker.ts` — MV3 message router + lifecycle. `background/icons/` — icon resolution pipeline (service, providers, parse, classify, image, concurrency, cors-bypass).
+- `background/service-worker.ts` — MV3 message router + lifecycle. `background/icons/` — icon resolution pipeline (entry: `icon-service.ts`).
 - `newtab/App.tsx` — owns top-level state; composes hooks from `newtab/state/` (`useSelection`, `useWorkspaceActions`, `useToasts`, `useContextMenuBuilder`, `useOptimisticPatch`). Child components are presentational (props + `on*` callbacks).
 - `newtab/components/` — React components; `components/settings/` holds per-section drawer panels (Appearance, Layout, Clock, Dock, Navigation, Backup, Help).
 - `newtab/interaction/` — pointer/keyboard hooks (`useDrag`/`useDragWiring`, `useMarquee`, `useKeyboardNav`, `useFocusTrap`, `useQuickAddShortcuts`, `useWorkspaceShortcut`, `useEscapeKey`).
