@@ -19,33 +19,6 @@ interface OnboardingProps {
   onFinish: () => void;
 }
 
-// Live preview of the workspace tab bar shown above the folder picker so users can
-// see what "workspaces" actually look like before they finish onboarding.
-function WorkspaceTabPreview({ folders }: { folders: { name: string; color: string }[] }) {
-  if (folders.length === 0) return null;
-  return (
-    <div style={{
-      display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'wrap',
-      padding: '8px 12px',
-      background: 'var(--ink-1)', borderRadius: 10,
-      border: '1px solid var(--line-1)',
-    }}>
-      {folders.map((f, i) => (
-        <div key={`${f.name}-${i}`} style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '4px 10px', borderRadius: 8,
-          background: i === 0 ? 'var(--ink-3)' : 'transparent',
-          fontSize: 12, fontWeight: i === 0 ? 600 : 500,
-          color: i === 0 ? f.color : 'var(--fg-2)',
-        }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
-          {f.name}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function ThemeChoiceCard({ id, label, hint, active, onSelect, preview }: {
   id: ThemeMode;
   label: string;
@@ -107,16 +80,17 @@ function RecommendedFolderCard({
         boxShadow: active
           ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)'
           : 'none',
-        padding: '10px 14px',
-        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '7px 12px',
+        display: 'flex', alignItems: 'center', gap: 8,
       }}
     >
-      <Ico name="folder" size={14} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>{folder.title}</div>
-        <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>{statsLine}</div>
-      </div>
-      {active && <Ico name="check" size={13} style={{ color: 'var(--accent)' }} />}
+      <Ico name="folder" size={14} style={{ flexShrink: 0 }} />
+      <span style={{ fontSize: 13, fontWeight: 600, flexShrink: 0 }}>{folder.title}</span>
+      <span style={{
+        fontSize: 12, color: 'var(--fg-3)', flex: 1, minWidth: 0,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>{statsLine}</span>
+      {active && <Ico name="check" size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />}
     </button>
   );
 }
@@ -306,13 +280,6 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
   ];
   const s = steps[step];
 
-  // Resolve the preview-folders list each render so it stays in sync with the picker.
-  // Folders can be selected at any depth now, so resolve titles via a full-tree lookup.
-  const previewFolders: { name: string; color: string }[] = selectedWorkspaceFolderIds
-    .map(id => findFolder(tree, id))
-    .filter((f): f is BookmarkNode => Boolean(f))
-    .map((f, i) => ({ name: f.title, color: ACCENT_PRESETS[i % ACCENT_PRESETS.length].value }));
-
   const handleFinish = async () => {
     if (finishing) return;
     setFinishing(true);
@@ -396,14 +363,6 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
                   prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id].slice(0, MAX_WORKSPACES),
                 )}
               />
-              {previewFolders.length > 0 && (
-                <div style={{ display: 'grid', gap: 6 }}>
-                  <p style={{ fontSize: 11, color: 'var(--fg-3)', textAlign: 'center', margin: 0 }}>
-                    Your workspaces will look like this:
-                  </p>
-                  <WorkspaceTabPreview folders={previewFolders} />
-                </div>
-              )}
             </div>
           )}
 
