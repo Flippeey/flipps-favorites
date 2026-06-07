@@ -6,7 +6,7 @@ import { formatFolderStats, scanFolders, type ScoredFolder } from '../lib/folder
 import { altShortcut, modShortcut } from '../lib/platform';
 import { findFolder, topLevelFolders } from '../lib/tree';
 import { Ico } from './Ico';
-import { FolderMultiPicker, twoLevelFolders } from './FolderMultiPicker';
+import { FolderMultiPicker } from './FolderMultiPicker';
 import { ACCENT_PRESETS, ThemeCardPreview } from './settings';
 
 interface OnboardingProps {
@@ -315,13 +315,11 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
   const s = steps[step];
 
   // Resolve the preview-folders list each render so it stays in sync with the picker.
-  const previewFolders: { name: string; color: string }[] = (() => {
-    const folders = twoLevelFolders(tree);
-    return selectedWorkspaceFolderIds
-      .map(id => folders.find(f => f.id === id))
-      .filter((f): f is { id: string; title: string; depth: number } => Boolean(f))
-      .map((f, i) => ({ name: f.title, color: ACCENT_PRESETS[i % ACCENT_PRESETS.length].value }));
-  })();
+  // Folders can be selected at any depth now, so resolve titles via a full-tree lookup.
+  const previewFolders: { name: string; color: string }[] = selectedWorkspaceFolderIds
+    .map(id => findFolder(tree, id))
+    .filter((f): f is BookmarkNode => Boolean(f))
+    .map((f, i) => ({ name: f.title, color: ACCENT_PRESETS[i % ACCENT_PRESETS.length].value }));
 
   const handleFinish = async () => {
     if (finishing) return;

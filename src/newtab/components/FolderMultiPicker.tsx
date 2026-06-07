@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import type { BookmarkNode } from '@/shared/messages';
-import { topLevelFolders } from '../lib/tree';
+import { ancestorFolderIds, flattenFolderTree } from '../lib/tree';
 import { Ico } from './Ico';
 
 export interface FolderMultiPickerProps {
@@ -12,46 +13,78 @@ export interface FolderMultiPickerProps {
   embedded?: boolean;
 }
 
-export function twoLevelFolders(tree: BookmarkNode[]): { id: string; title: string; depth: number }[] {
-  const result: { id: string; title: string; depth: number }[] = [];
-  for (const f of topLevelFolders(tree)) {
-    result.push({ id: f.id, title: f.title, depth: 0 });
-    if (f.children) {
-      for (const child of f.children) {
-        if (Array.isArray(child.children)) {
-          result.push({ id: child.id, title: child.title, depth: 1 });
-        }
-      }
-    }
-  }
-  return result;
-}
-
 export function FolderMultiPicker({ tree, selectedIds, onToggle, excludeIds, embedded }: FolderMultiPickerProps) {
-  const folders = twoLevelFolders(tree).filter(f => !excludeIds?.has(f.id));
+  // Seed expansion with the path to every already-selected folder so a deep
+  // selection is visible without the user having to drill back down to it.
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const init = new Set<string>();
+    for (const id of selectedIds) {
+      for (const ancestor of ancestorFolderIds(tree, id)) init.add(ancestor);
+    }
+    return init;
+  });
+
+  const toggleExpand = (id: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const rows = flattenFolderTree(tree, expanded).filter(f => !excludeIds?.has(f.id));
+
   return (
     <div style={{ display: 'grid', gap: 4, ...(embedded ? {} : { maxHeight: 240, overflowY: 'auto' }), paddingRight: 2 }}>
-      {folders.map(f => {
+      {rows.map(f => {
         const active = selectedIds.includes(f.id);
+        const isOpen = expanded.has(f.id);
         return (
-          <button
-            key={f.id}
-            onClick={() => onToggle(f.id)}
-            className="ff-card"
-            style={{
-              textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'var(--fg-1)',
-              borderColor: active ? 'var(--accent)' : 'var(--line-1)',
-              background: active ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
-              boxShadow: active ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' : 'none',
-              padding: '7px 12px',
-              paddingLeft: 12 + f.depth * 18,
-              display: 'flex', alignItems: 'center', gap: 8,
-            }}
-          >
-            <Ico name="folder" size={f.depth === 0 ? 14 : 12} style={{ opacity: f.depth === 0 ? 1 : 0.7 }} />
-            <span style={{ fontSize: f.depth === 0 ? 13 : 12, opacity: f.depth === 0 ? 1 : 0.85 }}>{f.title}</span>
-            {active && <Ico name="check" size={13} style={{ marginLeft: 'auto', color: 'var(--accent)' }} />}
-          </button>
+          <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 4, paddingLeft: f.depth * 16 }}>
+            {f.hasChildren ? (
+              <button
+                type="button"
+                onClick={() => toggleExpand(f.id)}
+                className="ff-iconbtn ff-iconbtn--icon"
+                aria-label={isOpen ? `Collapse ${f.title}` : `Expand ${f.title}`}
+                aria-expanded={isOpen}
+                style={{ flexShrink: 0, width: 22, height: 22, display: 'grid', placeItems: 'center' }}
+              >
+                <Ico
+                  name="chevronRight"
+                  size={13}
+                  style={{ transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .12s' }}
+                />
+              </button>
+            ) : (
+              <span style={{ width: 22, flexShrink: 0 }} />
+            )}
+            <button
+              onClick={() => onToggle(f.id)}
+              className="ff-card"
+              style={{
+                flex: 1, minWidth: 0,
+                textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'var(--fg-1)',
+                borderColor: active ? 'var(--accent)' : 'var(--line-1)',
+                background: active ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
+                boxShadow: active ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' : 'none',
+                padding: '7px 12px',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}
+            >
+              <Ico
+                name="folder"
+                size={f.depth === 0 ? 14 : 12}
+                style={{ opacity: f.depth === 0 ? 1 : 0.75, flexShrink: 0 }}
+              />
+              <span style={{
+                fontSize: f.depth === 0 ? 13 : 12,
+                opacity: f.depth === 0 ? 1 : 0.9,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>{f.title}</span>
+              {active && <Ico name="check" size={13} style={{ marginLeft: 'auto', color: 'var(--accent)', flexShrink: 0 }} />}
+            </button>
+          </div>
         );
       })}
     </div>
