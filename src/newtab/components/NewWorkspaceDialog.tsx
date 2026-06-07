@@ -65,6 +65,7 @@ export function NewWorkspaceDialog({ tree, workspaces, onConfirm, onClose }: New
       eyebrow="Workspaces"
       title="New workspace"
       onClose={onClose}
+      width="min(720px, 100%)"
       bodyStyle={{ gridTemplateColumns: '1fr' }}
     >
       <div>

@@ -85,9 +85,12 @@ function RecommendedFolderCard({
       }}
     >
       <Ico name="folder" size={14} style={{ flexShrink: 0 }} />
-      <span style={{ fontSize: 13, fontWeight: 600, flexShrink: 0 }}>{folder.title}</span>
       <span style={{
-        fontSize: 12, color: 'var(--fg-3)', flex: 1, minWidth: 0,
+        fontSize: 13, fontWeight: 600, flex: '0 1 auto', minWidth: 0,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>{folder.title}</span>
+      <span style={{
+        fontSize: 12, color: 'var(--fg-3)', flex: '1 1 auto', minWidth: 0,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{statsLine}</span>
       {active && <Ico name="check" size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />}
