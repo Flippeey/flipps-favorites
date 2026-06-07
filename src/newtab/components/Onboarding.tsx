@@ -153,14 +153,16 @@ function FolderSectionDivider({ label }: { label: string }) {
 // One continuous picker surface: a few ranked recommendations pinned on top,
 // then the full expand/collapse tree. The recommendations are a shortcut; the
 // tree remains the source of truth, so a folder selected in either lights up in
-// both. No mode switch, no height-shifting disclosure.
+// both. No mode switch, no height-shifting disclosure. Scrolling is owned by the
+// surrounding dialog/onboarding body — the picker stays unbounded so there is
+// never a second nested scrollbar.
 export function WorkspaceRecommendations({
   tree, preSelected, suggested, selectedIds, onToggle, excludeIds,
 }: WorkspaceRecommendationsProps) {
   const recommendations = [...preSelected, ...suggested].slice(0, MAX_RECOMMENDATIONS);
 
   return (
-    <div style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 2 }}>
+    <div>
       {recommendations.length > 0 && (
         <>
           <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
