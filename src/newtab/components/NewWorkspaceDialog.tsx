@@ -65,12 +65,11 @@ export function NewWorkspaceDialog({ tree, workspaces, onConfirm, onClose }: New
       eyebrow="Workspaces"
       title="New workspace"
       onClose={onClose}
+      width="min(720px, 100%)"
       bodyStyle={{ gridTemplateColumns: '1fr' }}
     >
-      <div>
-        <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 12 }}>
-          Select a folder to use as the workspace root:
-        </div>
+      <div className="ff-field">
+        <label className="ff-field__label">Workspace root</label>
         <WorkspaceRecommendations
           tree={tree}
           preSelected={filteredPreSelected}
@@ -78,6 +77,7 @@ export function NewWorkspaceDialog({ tree, workspaces, onConfirm, onClose }: New
           selectedIds={selectedId ? [selectedId] : []}
           excludeIds={excludeIds}
           onToggle={handleFolderSelect}
+          variant="compact"
         />
       </div>
       <div className="ff-field" style={{ marginTop: 8 }}>

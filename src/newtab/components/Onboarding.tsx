@@ -6,7 +6,7 @@ import { formatFolderStats, scanFolders, type ScoredFolder } from '../lib/folder
 import { altShortcut, modShortcut } from '../lib/platform';
 import { findFolder, topLevelFolders } from '../lib/tree';
 import { Ico } from './Ico';
-import { FolderMultiPicker, twoLevelFolders } from './FolderMultiPicker';
+import { FolderMultiPicker } from './FolderMultiPicker';
 import { ACCENT_PRESETS, ThemeCardPreview } from './settings';
 
 interface OnboardingProps {
@@ -17,33 +17,6 @@ interface OnboardingProps {
   onPatchWorkspace: (patch: Partial<WorkspaceRecord>) => Promise<void>;
   onCreateWorkspace: (rootFolderId: string, name: string, overrides?: Partial<WorkspaceRecord>) => Promise<string | undefined>;
   onFinish: () => void;
-}
-
-// Live preview of the workspace tab bar shown above the folder picker so users can
-// see what "workspaces" actually look like before they finish onboarding.
-function WorkspaceTabPreview({ folders }: { folders: { name: string; color: string }[] }) {
-  if (folders.length === 0) return null;
-  return (
-    <div style={{
-      display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'wrap',
-      padding: '8px 12px',
-      background: 'var(--ink-1)', borderRadius: 10,
-      border: '1px solid var(--line-1)',
-    }}>
-      {folders.map((f, i) => (
-        <div key={`${f.name}-${i}`} style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '4px 10px', borderRadius: 8,
-          background: i === 0 ? 'var(--ink-3)' : 'transparent',
-          fontSize: 12, fontWeight: i === 0 ? 600 : 500,
-          color: i === 0 ? f.color : 'var(--fg-2)',
-        }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
-          {f.name}
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function ThemeChoiceCard({ id, label, hint, active, onSelect, preview }: {
@@ -107,16 +80,20 @@ function RecommendedFolderCard({
         boxShadow: active
           ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)'
           : 'none',
-        padding: '10px 14px',
-        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '7px 12px',
+        display: 'flex', alignItems: 'center', gap: 8,
       }}
     >
-      <Ico name="folder" size={14} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>{folder.title}</div>
-        <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>{statsLine}</div>
-      </div>
-      {active && <Ico name="check" size={13} style={{ color: 'var(--accent)' }} />}
+      <Ico name="folder" size={14} style={{ flexShrink: 0 }} />
+      <span style={{
+        fontSize: 13, fontWeight: 600, flex: '0 1 auto', minWidth: 0,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>{folder.title}</span>
+      <span style={{
+        fontSize: 12, color: 'var(--fg-3)', flex: '1 1 auto', minWidth: 0,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>{statsLine}</span>
+      {active && <Ico name="check" size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />}
     </button>
   );
 }
@@ -128,68 +105,70 @@ export interface WorkspaceRecommendationsProps {
   selectedIds: string[];
   onToggle: (id: string) => void;
   excludeIds?: Set<string>;
+  // 'full' (onboarding): lean into discovery — up to 5 recommendations and the
+  // tree opens to the current selection. 'compact' (add-to-existing dashboard):
+  // a tighter shortlist of 3 and a collapsed tree, so the dialog stays short.
+  variant?: 'full' | 'compact';
 }
 
-export function WorkspaceRecommendations({
-  tree, preSelected, suggested, selectedIds, onToggle, excludeIds,
-}: WorkspaceRecommendationsProps) {
-  const hasRecommendations = preSelected.length > 0 || suggested.length > 0;
-  const [showManual, setShowManual] = useState(!hasRecommendations);
+// How many ranked folders to pin above the tree per variant. preSelected (max 3
+// from scanFolders) is topped up with the best suggested folders to reach the cap.
+const RECOMMENDATION_CAP: Record<'full' | 'compact', number> = { full: 5, compact: 3 };
 
-  if (!hasRecommendations) {
-    return <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} excludeIds={excludeIds} embedded />;
-  }
+// Labelled rule separating the pinned recommendations from the full folder tree.
+function FolderSectionDivider({ label }: { label: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '2px 0 8px' }}>
+      <span style={{
+        fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+        textTransform: 'uppercase', color: 'var(--fg-3)', flexShrink: 0,
+      }}>
+        {label}
+      </span>
+      <span style={{ flex: 1, height: 1, background: 'var(--line-1)' }} />
+    </div>
+  );
+}
+
+// One continuous picker surface: a few ranked recommendations pinned on top,
+// then the full expand/collapse tree. The recommendations are a shortcut; the
+// tree remains the source of truth, so a folder selected in either lights up in
+// both. No mode switch, no height-shifting disclosure. Scrolling is owned by the
+// surrounding dialog/onboarding body — the picker stays unbounded so there is
+// never a second nested scrollbar.
+export function WorkspaceRecommendations({
+  tree, preSelected, suggested, selectedIds, onToggle, excludeIds, variant = 'full',
+}: WorkspaceRecommendationsProps) {
+  const recommendations = [...preSelected, ...suggested].slice(0, RECOMMENDATION_CAP[variant]);
 
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-        {preSelected.length > 0 && (
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
-              Recommended based on your bookmarks
-            </div>
-            <div style={{ display: 'grid', gap: 4 }}>
-              {preSelected.map(f => (
-                <RecommendedFolderCard
-                  key={f.id}
-                  folder={f}
-                  active={selectedIds.includes(f.id)}
-                  onToggle={() => onToggle(f.id)}
-                />
-              ))}
-            </div>
+    <div>
+      {recommendations.length > 0 && (
+        <>
+          <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
+            Recommended based on your bookmarks
           </div>
-        )}
-
-        {suggested.length > 0 && (
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
-              Other folders
-            </div>
-            <div style={{ display: 'grid', gap: 4 }}>
-              {suggested.map(f => (
-                <RecommendedFolderCard
-                  key={f.id}
-                  folder={f}
-                  active={selectedIds.includes(f.id)}
-                  onToggle={() => onToggle(f.id)}
-                />
-              ))}
-            </div>
+          <div style={{ display: 'grid', gap: 4, marginBottom: 14 }}>
+            {recommendations.map(f => (
+              <RecommendedFolderCard
+                key={f.id}
+                folder={f}
+                active={selectedIds.includes(f.id)}
+                onToggle={() => onToggle(f.id)}
+              />
+            ))}
           </div>
-        )}
-
-        <button
-          className="ff-iconbtn"
-          type="button"
-          style={{ fontSize: 12, color: 'var(--fg-3)', justifySelf: 'start' }}
-          onClick={() => setShowManual(v => !v)}
-        >
-          {showManual ? 'Hide' : 'Browse'} all folders
-        </button>
-
-        {showManual && (
-          <FolderMultiPicker tree={tree} selectedIds={selectedIds} onToggle={onToggle} excludeIds={excludeIds} embedded />
-        )}
+          <FolderSectionDivider label="All folders" />
+        </>
+      )}
+      <FolderMultiPicker
+        tree={tree}
+        selectedIds={selectedIds}
+        onToggle={onToggle}
+        excludeIds={excludeIds}
+        embedded
+        autoExpand={variant === 'full'}
+      />
     </div>
   );
 }
@@ -314,15 +293,6 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
   ];
   const s = steps[step];
 
-  // Resolve the preview-folders list each render so it stays in sync with the picker.
-  const previewFolders: { name: string; color: string }[] = (() => {
-    const folders = twoLevelFolders(tree);
-    return selectedWorkspaceFolderIds
-      .map(id => folders.find(f => f.id === id))
-      .filter((f): f is { id: string; title: string; depth: number } => Boolean(f))
-      .map((f, i) => ({ name: f.title, color: ACCENT_PRESETS[i % ACCENT_PRESETS.length].value }));
-  })();
-
   const handleFinish = async () => {
     if (finishing) return;
     setFinishing(true);
@@ -406,14 +376,6 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
                   prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id].slice(0, MAX_WORKSPACES),
                 )}
               />
-              {previewFolders.length > 0 && (
-                <div style={{ display: 'grid', gap: 6 }}>
-                  <p style={{ fontSize: 11, color: 'var(--fg-3)', textAlign: 'center', margin: 0 }}>
-                    Your workspaces will look like this:
-                  </p>
-                  <WorkspaceTabPreview folders={previewFolders} />
-                </div>
-              )}
             </div>
           )}
 

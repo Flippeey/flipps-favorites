@@ -65,6 +65,46 @@ export function topLevelFolders(tree: BookmarkNode[]): BookmarkNode[] {
   return out;
 }
 
+export interface FolderRow {
+  id: string;
+  title: string;
+  depth: number;
+  hasChildren: boolean;
+}
+
+// Flattens the folder tree into an ordered list of visible rows for the folder
+// picker. A folder's children are only emitted when its id is in `expandedIds`,
+// and recursion stops at `maxDepth` so deeply-nested trees stay bounded.
+export function flattenFolderTree(
+  tree: BookmarkNode[],
+  expandedIds: ReadonlySet<string>,
+  maxDepth = 8,
+): FolderRow[] {
+  const rows: FolderRow[] = [];
+  const childFolders = (node: BookmarkNode): BookmarkNode[] =>
+    (node.children ?? []).filter(c => Array.isArray(c.children));
+  const walk = (folder: BookmarkNode, depth: number): void => {
+    const subFolders = childFolders(folder);
+    rows.push({ id: folder.id, title: folder.title, depth, hasChildren: subFolders.length > 0 });
+    if (depth >= maxDepth || !expandedIds.has(folder.id)) return;
+    for (const sub of subFolders) walk(sub, depth + 1);
+  };
+  for (const top of topLevelFolders(tree)) walk(top, 0);
+  return rows;
+}
+
+// Folder ids of every ancestor of `id`, nearest first. Used to auto-expand the
+// path to an already-selected folder so a deep selection is visible on mount.
+export function ancestorFolderIds(tree: BookmarkNode[], id: string): string[] {
+  const ids: string[] = [];
+  let parent = findParentFolder(tree, id);
+  while (parent) {
+    ids.push(parent.id);
+    parent = findParentFolder(tree, parent.id);
+  }
+  return ids;
+}
+
 export function resolveRootFolder(tree: BookmarkNode[], rootId: string): BookmarkNode | null {
   if (rootId) {
     const folder = findFolder(tree, rootId);
