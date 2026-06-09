@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BookmarkNode, BookmarkSortMode, SortDirection, ViewMode, WorkspaceRecord } from '@/shared/messages';
 import { altShortcut } from '../lib/platform';
+import { useScrollCollapsed } from '../lib/useScrollCollapsed';
 import { Ico } from './Ico';
 
 export interface SortChoice {
@@ -198,15 +199,9 @@ function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace }:
 }
 
 export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onReorderWorkspaces, onOpenAddMenu, path, onCrumb, sortValue, onSort, folderMode, onToggleViewMode, onOpenAppSettings, onOpenWorkspaceSettings }: TopNavProps) {
-  const [scrolled, setScrolled] = useState(false);
+  const scrolled = useScrollCollapsed();
   const [sortOpen, setSortOpen] = useState(false);
   const sortRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
 
   useEffect(() => {
     if (!sortOpen) return;
