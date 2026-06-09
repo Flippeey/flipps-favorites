@@ -23,6 +23,7 @@ import { useQuickAddShortcuts } from './interaction/useQuickAddShortcuts';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
 import { createBookmark, getBookmarkTree, getBookmarkUsage, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
+import { useScrollCollapsed } from './lib/useScrollCollapsed';
 import { normalizeBookmarkUrl } from './lib/url';
 import { resolveDockMode } from './lib/dock-mode';
 import { prefetchAllIcons } from './lib/icon-prefetch';
@@ -97,7 +98,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const [onboardOpen, setOnboardOpen] = useState(initialOnboardOpen ?? false);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   const [isSwitching, setIsSwitching] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
+  const isScrolled = useScrollCollapsed();
   const [folderPath, setFolderPath] = useState<BookmarkNode[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<BookmarkNode | null>(null);
@@ -156,12 +157,6 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   useEffect(() => {
     prefetchAllIcons(tree);
   }, [tree]);
-
-  useEffect(() => {
-    const onScroll = () => setIsScrolled(window.scrollY > 8);
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
 
   const handlePatch = useCallback(async (patch: Partial<AppSettings>) => {
     setSettings(prev => ({ ...prev, ...patch }));
