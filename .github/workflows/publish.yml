@@ -1,0 +1,95 @@
+name: Publish extension
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm run build
+
+      # A stale tag must not ship a mismatched build.
+      - name: Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          [ "$TAG" = "$PKG" ] || { echo "Tag v$TAG != package.json $PKG"; exit 1; }
+
+      - name: Zip packages
+        run: |
+          (cd dist/chrome  && zip -r ../../flipps-favorites-chrome.zip  .)
+          (cd dist/firefox && zip -r ../../flipps-favorites-firefox.zip .)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: flipps-favorites-*.zip
+
+  chrome:
+    needs: build
+    # Secrets live in the prod environment; required-reviewer approval gates this job.
+    environment: prod
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: packages
+
+      - name: Upload & publish to Chrome Web Store
+        uses: mnao305/chrome-extension-upload@fdfe79400af990f5145a319e834aee64907ccff4 # v6.0.0
+        with:
+          file-path: flipps-favorites-chrome.zip
+          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
+          client-id: ${{ secrets.CHROME_CLIENT_ID }}
+          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
+
+  firefox:
+    needs: build
+    environment: prod
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build:firefox
+
+      # AMO reviews bundled/minified code from source; reproducible via npm ci && npm run build:firefox.
+      - name: Create source zip for AMO review
+        run: git archive HEAD --format=zip -o flipps-favorites-source.zip
+
+      # --approval-timeout 0: listed submissions are human-reviewed, so don't
+      # poll for the signed XPI — succeed once upload + validation complete.
+      - name: Sign & submit to AMO
+        run: >
+          npx web-ext sign
+          --source-dir dist/firefox
+          --channel listed
+          --approval-timeout 0
+          --upload-source-code flipps-favorites-source.zip
+          --api-key "$AMO_JWT_ISSUER"
+          --api-secret "$AMO_JWT_SECRET"
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}

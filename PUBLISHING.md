@@ -30,7 +30,7 @@ npm run build          # builds both
 
 ## Credentials needed (one-time setup → store as GitHub secrets)
 
-**Chrome Web Store** — create OAuth client in Google Cloud Console, then generate a refresh token once:
+**Chrome Web Store** — create OAuth client in Google Cloud Console, then generate a refresh token once (see [Generating `CHROME_REFRESH_TOKEN`](#generating-chrome_refresh_token) below):
 - `CHROME_EXTENSION_ID`
 - `CHROME_CLIENT_ID`
 - `CHROME_CLIENT_SECRET`
@@ -46,6 +46,33 @@ npm run build          # builds both
 - `AMO_JWT_SECRET`
 
 > ⚠️ All stores still run a **review** after upload. "Publish" here means *submit for review*, not *go live instantly*. Plan releases with that lead time in mind.
+
+Secrets live in the **`prod` environment** (repo Settings → Environments → prod), not as repo-level secrets. Publish jobs declare `environment: prod` to access them — a repo-level secret with the same name would NOT be picked up there, and vice versa.
+
+### Generating `CHROME_REFRESH_TOKEN`
+
+One-time, run privately (the token grants publish access to the extension):
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → create/select a project → **APIs & Services → Library** → enable **Chrome Web Store API**.
+2. **OAuth consent screen** → External → fill in app name + own email; add your own Google account as a test user.
+3. **Credentials → Create credentials → OAuth client ID** → type **Web application** → add authorized redirect URI `http://localhost:8818` (no server needs to run there). This yields `CHROME_CLIENT_ID` / `CHROME_CLIENT_SECRET`.
+4. Open in a browser (replace `<CLIENT_ID>`):
+
+   ```
+   https://accounts.google.com/o/oauth2/auth?response_type=code&access_type=offline&scope=https://www.googleapis.com/auth/chromewebstore&redirect_uri=http://localhost:8818&client_id=<CLIENT_ID>
+   ```
+
+   Approve → browser redirects to `localhost:8818` (the "can't connect" error page is expected) → copy the `code=` query param from the address bar.
+5. Exchange the code within a few minutes:
+
+   ```bash
+   curl -s -X POST https://oauth2.googleapis.com/token \
+     -d "client_id=<CLIENT_ID>&client_secret=<CLIENT_SECRET>&code=<CODE>&grant_type=authorization_code&redirect_uri=http://localhost:8818"
+   ```
+
+   Save the `refresh_token` from the response as the `CHROME_REFRESH_TOKEN` secret in the `prod` environment.
+
+> ⚠️ While the OAuth consent screen is in **Testing** status, refresh tokens expire after 7 days. Publish the consent screen (fine for own-use apps) to get a non-expiring token.
 
 ---
 
@@ -63,100 +90,24 @@ Keep `auto-publish` behind a manual approval or `workflow_dispatch` input for th
 
 ---
 
-## Draft GitHub Actions workflow
+## Live workflow: `.github/workflows/publish.yml`
 
-> **Draft only — not wired up.** Add the secrets above before enabling. Save as `.github/workflows/publish.yml` when ready.
+The workflow is wired up. How it runs:
 
-```yaml
-name: Publish extension
+1. **Trigger** — pushing a `v*` tag (the `/ff-release` flow bumps version, commits, and tags; pushing the tag fires this workflow). `workflow_dispatch` allows manual runs from the Actions tab. There is **no** version-diff detection on `main` — the tag is the explicit release signal.
+2. **`build` job** (ungated) — `npm ci` → typecheck → build both targets → verifies the tag matches `package.json` version (a stale tag fails fast) → uploads chrome + firefox zips as artifacts.
+3. **`chrome` / `firefox` jobs** (gated) — both declare `environment: prod`. With **Required reviewers** enabled on the environment, they pause until approved in the Actions UI. On approval:
+   - **Chrome** — `mnao305/chrome-extension-upload` (pinned to the v6.0.0 SHA) exchanges the refresh token, uploads the zip, and publishes (= submits for review).
+   - **Firefox** — `web-ext sign --channel listed` uploads to AMO with the source zip attached (`git archive`; build is reproducible via `npm ci && npm run build:firefox`). `--approval-timeout 0` makes the job succeed once upload + validation complete instead of polling for the human-reviewed signed XPI.
 
-on:
-  push:
-    tags: ["v*"]
-  workflow_dispatch:
-    inputs:
-      publish:
-        description: "Submit to stores (false = build + artifact only)"
-        type: boolean
-        default: false
+Jobs run in parallel after `build`; a failure in one store does not block the other.
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.ver.outputs.version }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm run build
-      - id: ver
-        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-      - name: Zip packages
-        run: |
-          cd dist/chrome  && zip -r ../../flipps-favorites-chrome.zip  . && cd ../..
-          cd dist/firefox && zip -r ../../flipps-favorites-firefox.zip . && cd ../..
-      - uses: actions/upload-artifact@v4
-        with:
-          name: packages
-          path: flipps-favorites-*.zip
+### Edge — not wired yet
 
-  chrome:
-    needs: build
-    if: github.event_name == 'push' || inputs.publish
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with: { name: packages }
-      - name: Upload & publish to Chrome Web Store
-        uses: mnao305/chrome-extension-upload@v5
-        with:
-          file-path: flipps-favorites-chrome.zip
-          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
-          client-id: ${{ secrets.CHROME_CLIENT_ID }}
-          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
-          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
+No Partner Center credentials exist yet. To add later: create the `EDGE_PRODUCT_ID` / `EDGE_CLIENT_ID` / `EDGE_API_KEY` secrets in the `prod` environment, then add an `edge` job using `wdzeng/edge-addon` (pin to a SHA) with the **chrome** zip — same package serves both Chromium stores.
 
-  edge:
-    needs: build
-    if: github.event_name == 'push' || inputs.publish
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with: { name: packages }
-      # Same package as Chrome. Uses the Edge Add-ons API v1.1.
-      - name: Upload to Edge Add-ons
-        uses: wdzeng/edge-addon@v2
-        with:
-          product-id: ${{ secrets.EDGE_PRODUCT_ID }}
-          zip-path: flipps-favorites-chrome.zip
-          client-id: ${{ secrets.EDGE_CLIENT_ID }}
-          api-key: ${{ secrets.EDGE_API_KEY }}
+### One-time setup checklist
 
-  firefox:
-    needs: build
-    if: github.event_name == 'push' || inputs.publish
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci && npm run build:firefox
-      - name: Sign & submit to AMO
-        run: npx web-ext sign
-          --source-dir dist/firefox
-          --channel listed
-          --api-key "$AMO_JWT_ISSUER"
-          --api-secret "$AMO_JWT_SECRET"
-        env:
-          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
-          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
-```
-
-### Notes on the draft
-- The third-party actions (`mnao305/chrome-extension-upload`, `wdzeng/edge-addon`) are popular wrappers around the official REST APIs. Pin them to a SHA in production. If you prefer no third-party actions, both stores can be driven with `curl` against their REST endpoints — slightly more code, zero supply-chain surface.
-- `web-ext sign --channel listed` submits to the public AMO listing; use `unlisted` for self-distributed signed builds.
-- All three jobs run in parallel after `build`; a failure in one store does not block the others.
-- For source-code submission (AMO sometimes requests it for minified/bundled extensions), add `--upload-source-code` or attach the source zip — the Vite build is reproducible from `npm ci && npm run build:firefox`.
+- [ ] Repo Settings → Environments → `prod` → tick **Required reviewers**, add yourself, save. Without this, a tag push publishes straight to stores.
+- [ ] Generate and add `CHROME_REFRESH_TOKEN` (instructions above).
+- [ ] First dry run: Actions → "Publish extension" → Run workflow. The build job produces artifacts; **reject** the chrome/firefox approval to verify the gate without touching stores.
