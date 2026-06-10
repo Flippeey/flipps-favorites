@@ -21,6 +21,7 @@ import type {
   RemoveBookmarkResponse,
   MoveBookmarkResponse,
   GetBookmarkUsageResponse,
+  IconOverrideScope,
   RecordBookmarkUseResponse,
   WorkspaceRecord,
   GetWorkspacesResponse,
@@ -92,6 +93,7 @@ export async function setIconOverride(args: {
   dataUrl: string;
   fileName: string;
   mimeType: string;
+  scope?: IconOverrideScope;
 }): Promise<ResolvedIcon> {
   const res = await send<SetIconOverrideResponse>({ type: messageTypes.setIconOverride, ...args });
   return res.icon;
@@ -103,6 +105,7 @@ export async function setIconOverrideFromUrl(args: {
   imageUrl: string;
   fallbackImageUrl?: string;
   fileName?: string;
+  scope?: IconOverrideScope;
 }): Promise<ResolvedIcon> {
   const res = await send<SetIconOverrideFromUrlResponse>({ type: messageTypes.setIconOverrideFromUrl, ...args });
   return res.icon;

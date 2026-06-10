@@ -1,4 +1,5 @@
 import { getIcon } from './messaging';
+import { getRegistrableDomain, getScopeHostname, type IconOverrideScope } from '@/shared/icon-scope';
 
 export const iconCache = new Map<string, string>();
 export const inflight = new Map<string, Promise<string>>();
@@ -10,6 +11,33 @@ export function invalidateFaviconCache(url: string): void {
   const listeners = subscribers.get(url);
   if (listeners) {
     listeners.forEach(fn => fn());
+  }
+}
+
+// A host/domain-scoped override changes the icon of every tile on that site, so
+// the per-URL page cache must drop all matching entries, not just the edited one.
+export function invalidateFaviconCacheForScope(url: string, scope: IconOverrideScope): void {
+  if (scope === 'exact') {
+    invalidateFaviconCache(url);
+    return;
+  }
+  const hostname = getScopeHostname(url);
+  if (!hostname) {
+    invalidateFaviconCache(url);
+    return;
+  }
+  const root = getRegistrableDomain(hostname);
+  const matches = (candidateUrl: string): boolean => {
+    const candidateHost = getScopeHostname(candidateUrl);
+    if (!candidateHost) return candidateUrl === url;
+    if (scope === 'host') return candidateHost === hostname;
+    return getRegistrableDomain(candidateHost) === root;
+  };
+  const knownUrls = new Set([url, ...iconCache.keys(), ...inflight.keys(), ...subscribers.keys()]);
+  for (const knownUrl of knownUrls) {
+    if (matches(knownUrl)) {
+      invalidateFaviconCache(knownUrl);
+    }
   }
 }
 

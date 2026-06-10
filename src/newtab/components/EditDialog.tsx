@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useEscapeKey } from '../interaction/useEscapeKey';
 import type { BookmarkNode, IconSearchCandidate, IconSourceKind, ResolvedIcon } from '@/shared/messages';
+import { getRegistrableDomain, getScopeHostname, type IconOverrideScope } from '@/shared/icon-scope';
 import {
   createBookmark,
   getIcon,
@@ -18,7 +19,7 @@ import {
   normalizeUploadedImage,
 } from '../lib/icon-helpers';
 import { buildBrandSearchQuery } from '@/shared/url-brand';
-import { invalidateFaviconCache } from '../lib/favicon-cache';
+import { invalidateFaviconCache, invalidateFaviconCacheForScope } from '../lib/favicon-cache';
 import { Ico } from './Ico';
 import { ModalDialog } from './ModalDialog';
 
@@ -68,6 +69,9 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
   const [searching, setSearching] = useState(false);
   const [previewIcon, setPreviewIcon] = useState<ResolvedIcon | null>(null);
   const [working, setWorking] = useState(false);
+  // Default to host scope: picking an icon once should fix every bookmark on the
+  // same site (5 dev.azure.com bookmarks = 1 override, not 5).
+  const [overrideScope, setOverrideScope] = useState<IconOverrideScope>('host');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -163,9 +167,10 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
         bookmarkTitle,
         imageUrl: candidate.imageUrl,
         fallbackImageUrl: candidate.previewUrl !== candidate.imageUrl ? candidate.previewUrl : undefined,
+        scope: overrideScope,
       });
       setPreviewIcon(icon);
-      invalidateFaviconCache(bookmarkUrl);
+      invalidateFaviconCacheForScope(bookmarkUrl, overrideScope);
       setStatus({ kind: 'success', message: 'Icon applied.' });
     } catch (e) {
       setStatus({ kind: 'error', message: iconPersistenceErrorMessage(e, 'search') });
@@ -196,7 +201,8 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
     try {
       const icon = await removeIconOverride(bookmarkUrl, bookmarkTitle);
       setPreviewIcon(icon);
-      invalidateFaviconCache(bookmarkUrl);
+      // Removal clears every scope, so refresh all tiles that could share it.
+      invalidateFaviconCacheForScope(bookmarkUrl, 'domain');
       setStatus({ kind: 'info', message: 'Icon override removed.' });
     } catch {
       setStatus({ kind: 'error', message: 'Could not remove icon override.' });
@@ -223,9 +229,10 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
         dataUrl,
         fileName: file.name,
         mimeType: 'image/png',
+        scope: overrideScope,
       });
       setPreviewIcon(icon);
-      invalidateFaviconCache(bookmarkUrl);
+      invalidateFaviconCacheForScope(bookmarkUrl, overrideScope);
       setStatus({ kind: 'success', message: 'Icon uploaded.' });
     } catch (e) {
       setStatus({ kind: 'error', message: iconPersistenceErrorMessage(e, 'upload') });
@@ -242,6 +249,17 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
 
   const canManageIcon = Boolean(target.id);
   const previewSrc = previewIcon?.dataUrl ?? null;
+  const scopeHostname = getScopeHostname(bookmarkUrl);
+  const scopeDomain = getRegistrableDomain(scopeHostname);
+  const scopeOptions: Array<{ value: IconOverrideScope; label: string; title: string }> = [
+    { value: 'exact', label: 'This bookmark', title: 'Apply the icon to this bookmark only' },
+    ...(scopeHostname
+      ? [{ value: 'host' as const, label: scopeHostname, title: `Apply to every bookmark on ${scopeHostname}` }]
+      : []),
+    ...(scopeDomain && scopeDomain !== scopeHostname
+      ? [{ value: 'domain' as const, label: `*.${scopeDomain}`, title: `Apply to every bookmark under ${scopeDomain}` }]
+      : []),
+  ];
 
   return (
     <ModalDialog
@@ -300,6 +318,27 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
               onChange={handleFileChange}
               style={{ display: 'none' }}
             />
+
+            {canManageIcon && scopeOptions.length > 1 && (
+              <div className="ff-field">
+                <label className="ff-field__label">Apply icon to</label>
+                <div className="ff-segmented" role="radiogroup" aria-label="Icon override scope" style={{ alignSelf: 'stretch' }}>
+                  {scopeOptions.map(option => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className="ff-segmented__option"
+                      data-active={overrideScope === option.value}
+                      title={option.title}
+                      onClick={() => setOverrideScope(option.value)}
+                      style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {canManageIcon && (
               <p

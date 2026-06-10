@@ -1,9 +1,10 @@
-export const iconPipelineVersion = 'bookmark-icons-v8';
+export const iconPipelineVersion = 'bookmark-icons-v9';
 export const faviconProviderUrl = 'https://www.google.com/s2/favicons';
 export const faviconRequestSize = 256;
 export const duckDuckGoSearchUrl = 'https://duckduckgo.com/';
 export const iconHorseBaseUrl = 'https://icon.horse/icon/';
 export const minimumAcceptedIconSize = 64;
+export const maxSvgIconBytes = 256 * 1024;
 export const minimumAutoIconSize = 96;
 export const minimumOverrideIconSize = 64;
 export const maxDuckDuckGoResults = 30;
@@ -19,10 +20,15 @@ export const sweepBatchSize = 4;
 export const sweepBatchSpacingMs = 250;
 export const maxConcurrentResolutions = 6;
 
+// Automatic resolution is host-derived (origin scrape by hostname, S2 by domain,
+// DDG query built from the URL's brand), so cache per host: N bookmarks on
+// dev.azure.com share one resolution + one stored record instead of N.
 export function getIconCacheKey(bookmarkUrl: string): string {
+  try {
+    const hostname = new URL(bookmarkUrl).hostname.toLowerCase().replace(/^www\./, '');
+    if (hostname) return `icon:host:${hostname}`;
+  } catch {
+    // not a parseable URL — fall through to the exact-URL key
+  }
   return `icon:${bookmarkUrl}`;
-}
-
-export function getOverrideKey(bookmarkUrl: string): string {
-  return `override:${bookmarkUrl}`;
 }

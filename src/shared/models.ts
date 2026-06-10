@@ -2,6 +2,8 @@
 // app (src/**) and the Playwright test suite (tests/**). Message contracts live
 // in messages.ts, which re-exports everything here.
 
+import type { IconOverrideScope } from './icon-scope';
+
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type BackgroundFitMode = 'cover' | 'contain' | 'fill';
 export type BackgroundPositionMode = 'center' | 'top' | 'bottom';
@@ -131,7 +133,10 @@ export interface IconCacheRecord {
 }
 
 export interface IconOverrideRecord {
+  // Storage key derived from scope: 'exact:<url>' | 'host:<hostname>' | 'domain:<root>'.
   overrideKey: string;
+  scope: IconOverrideScope;
+  // The URL the override was set from (kept for display/export even on broader scopes).
   bookmarkUrl: string;
   dataUrl: string;
   fileName: string;

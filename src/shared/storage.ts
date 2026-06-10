@@ -12,6 +12,7 @@ import {
   writeCachedIcon,
 } from './icon-idb';
 import type { AppSettings, BookmarkUsageRecord, IconCacheRecord, IconOverrideRecord, WorkspaceRecord } from './messages';
+import { getOverrideLookupKeys } from './icon-scope';
 import { createCachedRecordStore, createCachedValueStore } from './storage-buckets';
 
 const storageKey = 'app-settings';
@@ -209,16 +210,27 @@ export async function readIconOverrideRecords(): Promise<Record<string, IconOver
   return readAllIconOverrides();
 }
 
+// Resolve the override that applies to a bookmark URL, most specific scope first
+// (exact URL, then host, then registrable domain).
 export async function readIconOverrideRecord(bookmarkUrl: string): Promise<IconOverrideRecord | null> {
-  return readIconOverride(bookmarkUrl);
+  for (const key of getOverrideLookupKeys(bookmarkUrl)) {
+    const record = await readIconOverride(key);
+    if (record) return record;
+  }
+  return null;
 }
 
 export async function writeIconOverrideRecord(record: IconOverrideRecord): Promise<void> {
   await writeIconOverride(record);
 }
 
-export async function deleteIconOverrideRecord(bookmarkUrl: string): Promise<void> {
-  await deleteIconOverride(bookmarkUrl);
+export async function deleteIconOverrideRecord(overrideKey: string): Promise<void> {
+  await deleteIconOverride(overrideKey);
+}
+
+// Remove every override that currently applies to this URL, across all scopes.
+export async function deleteIconOverrideRecordsForUrl(bookmarkUrl: string): Promise<void> {
+  await Promise.all(getOverrideLookupKeys(bookmarkUrl).map(key => deleteIconOverride(key)));
 }
 
 export async function readBookmarkUsageRecords(): Promise<Record<string, BookmarkUsageRecord>> {

@@ -15,6 +15,7 @@ import {
   writeWorkspace,
   writeWorkspaceWallpaper,
 } from '@/shared/storage';
+import { getOverrideKeyForScope, normalizeOverrideScope, type IconOverrideScope } from '@/shared/icon-scope';
 import { invalidateIcon } from './messaging';
 
 export const WORKSPACE_SCHEMA = 'flipps-workspace-transfer' as const;
@@ -28,6 +29,8 @@ interface IconOverrideTransferRecord {
   fileName: string;
   mimeType: string;
   updatedAt: number;
+  // Absent in exports made before scoped overrides existed — treated as 'exact'.
+  scope?: IconOverrideScope;
 }
 
 interface BookmarkUsageTransferRecord {
@@ -150,7 +153,13 @@ export async function applyWorkspaceImport(
   payload: WorkspaceExportPayload,
   mode: WorkspaceImportMode,
 ): Promise<WorkspaceImportSummary> {
-  const dedupedOverrides = dedupeByKey(payload.iconOverrides, r => r.bookmarkUrl, (a, b) => b.updatedAt - a.updatedAt);
+  // Records that differ only in scope are distinct (an exact override and a host
+  // override for the same URL coexist), so dedupe on the derived storage key.
+  const dedupedOverrides = dedupeByKey(
+    payload.iconOverrides,
+    r => getOverrideKeyForScope(r.bookmarkUrl, normalizeOverrideScope(r.scope)) ?? `exact:${r.bookmarkUrl}`,
+    (a, b) => b.updatedAt - a.updatedAt,
+  );
   const dedupedUsage = dedupeByKey(payload.bookmarkUsage, r => r.bookmarkId, (a, b) => b.usedAt - a.usedAt);
 
   if (mode === 'replace') {
@@ -181,8 +190,11 @@ export async function applyWorkspaceImport(
   }
 
   for (const record of dedupedOverrides) {
+    const scope = normalizeOverrideScope(record.scope);
+    const overrideKey = getOverrideKeyForScope(record.bookmarkUrl, scope) ?? `exact:${record.bookmarkUrl}`;
     const fullRecord: IconOverrideRecord = {
-      overrideKey: `override:${record.bookmarkUrl}`,
+      overrideKey,
+      scope: overrideKey.startsWith('exact:') ? 'exact' : scope,
       bookmarkUrl: record.bookmarkUrl,
       dataUrl: record.dataUrl,
       fileName: record.fileName,
@@ -222,6 +234,7 @@ function toTransferOverride(record: IconOverrideRecord): IconOverrideTransferRec
     fileName: record.fileName,
     mimeType: record.mimeType,
     updatedAt: record.updatedAt,
+    scope: normalizeOverrideScope(record.scope),
   };
 }
 
@@ -250,6 +263,7 @@ function normalizeOverride(value: unknown): IconOverrideTransferRecord | null {
     fileName: candidate.fileName,
     mimeType: candidate.mimeType,
     updatedAt,
+    scope: normalizeOverrideScope(candidate.scope),
   };
 }
 
