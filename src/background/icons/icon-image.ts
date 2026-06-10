@@ -1,8 +1,9 @@
 import type { IconCacheRecord, IconSourceKind, ResolvedIcon } from '@/shared/messages';
 import { buildFallbackSvgDataUrl } from '@/shared/icon-fallback';
-import { cacheTtlMs, iconPipelineVersion } from './icon-constants';
+import { cacheTtlMs, iconPipelineVersion, maxSvgIconBytes } from './icon-constants';
 import { isDataUrl } from './icon-parse';
 import { getIconLabel } from './icon-classify';
+import { isIcoBytes, extractLargestIcoPng } from './ico-parse';
 
 interface FetchAndValidateArgs {
   imageUrl: string;
@@ -12,6 +13,9 @@ interface FetchAndValidateArgs {
   timeoutMs: number;
   minimumEdge: number;
   requireOpaqueCenter: boolean;
+  // Accept SVG without bitmap validation. Only set for candidates declared by the
+  // bookmark's own origin (<link rel="icon">); rendered via <img>, so scripts are inert.
+  allowSvg?: boolean;
 }
 
 export async function fetchAndValidateImage(args: FetchAndValidateArgs): Promise<IconCacheRecord | null> {
@@ -23,11 +27,32 @@ export async function fetchAndValidateImage(args: FetchAndValidateArgs): Promise
   }
   if (!response.ok) return null;
 
-  const blob = await response.blob().catch(() => null);
+  let blob = await response.blob().catch(() => null);
   if (!blob) return null;
 
-  const mimeType = blob.type || 'image/png';
+  let mimeType = blob.type || 'image/png';
   if (!mimeType.startsWith('image/')) return null;
+
+  // createImageBitmap rejects SVG blobs in worker contexts, so SVG-only sites
+  // (increasingly common) would always fall through to weaker sources. Trust
+  // same-origin declared SVGs after a cheap sanity check instead.
+  if (args.allowSvg && (mimeType.includes('svg') || /\.svg(?:$|\?)/i.test(args.imageUrl))) {
+    if (blob.size === 0 || blob.size > maxSvgIconBytes) return null;
+    const text = await blob.text().catch(() => '');
+    if (!text.includes('<svg')) return null;
+    return buildRecord(args, await blobToDataUrl(blob, 'image/svg+xml'), 'image/svg+xml');
+  }
+
+  // ICO containers also fail createImageBitmap in workers; most modern multi-size
+  // favicons embed PNG payloads — swap in the largest one and validate it as PNG.
+  const bytes = new Uint8Array(await blob.arrayBuffer().catch(() => new ArrayBuffer(0)));
+  if (isIcoBytes(bytes)) {
+    const extracted = extractLargestIcoPng(bytes);
+    if (extracted) {
+      blob = new Blob([extracted.png as BlobPart], { type: 'image/png' });
+      mimeType = 'image/png';
+    }
+  }
 
   let bitmap: ImageBitmap;
   try {
@@ -48,7 +73,10 @@ export async function fetchAndValidateImage(args: FetchAndValidateArgs): Promise
 
   const dataUrl = await blobToDataUrl(blob, mimeType);
   if (!isDataUrl(dataUrl)) return null;
+  return buildRecord(args, dataUrl, mimeType);
+}
 
+function buildRecord(args: FetchAndValidateArgs, dataUrl: string, mimeType: string): IconCacheRecord {
   const now = Date.now();
   return {
     cacheKey: args.cacheKey,

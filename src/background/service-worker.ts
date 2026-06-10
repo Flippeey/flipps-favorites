@@ -122,7 +122,7 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
       return { icon: await setIconOverride(message) };
     case messageTypes.setIconOverrideFromUrl:
       return {
-        icon: await setIconOverrideFromUrl(message.bookmarkUrl, message.imageUrl, message.fileName, message.fallbackImageUrl),
+        icon: await setIconOverrideFromUrl(message.bookmarkUrl, message.imageUrl, message.fileName, message.fallbackImageUrl, message.scope),
       };
     case messageTypes.removeIconOverride:
       return { icon: await removeIconOverride(message.bookmarkUrl, message.bookmarkTitle) };

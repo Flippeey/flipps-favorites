@@ -25,6 +25,7 @@ export const messageTypes = {
 // Domain models + unions now live in models.ts. Re-export so existing
 // `import { … } from './messages'` call sites keep working unchanged.
 export * from './models';
+export type { IconOverrideScope } from './icon-scope';
 
 import type {
   AppSettings,
@@ -33,6 +34,7 @@ import type {
   ResolvedIcon,
   WorkspaceRecord,
 } from './models';
+import type { IconOverrideScope } from './icon-scope';
 
 export interface PingRequest {
   type: typeof messageTypes.ping;
@@ -151,6 +153,8 @@ export interface SetIconOverrideRequest {
   dataUrl: string;
   fileName: string;
   mimeType: string;
+  // How broadly the override applies. Absent (older callers) means 'exact'.
+  scope?: IconOverrideScope;
 }
 
 export interface SetIconOverrideResponse {
@@ -164,6 +168,7 @@ export interface SetIconOverrideFromUrlRequest {
   imageUrl: string;
   fallbackImageUrl?: string;
   fileName?: string;
+  scope?: IconOverrideScope;
 }
 
 export interface SetIconOverrideFromUrlResponse {

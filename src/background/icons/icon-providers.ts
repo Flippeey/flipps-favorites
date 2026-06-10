@@ -17,8 +17,8 @@ import {
   s2TimeoutMs,
   ddgFirstHitTimeoutMs,
   getIconCacheKey,
-  getOverrideKey,
 } from './icon-constants';
+import { getOverrideKeyForScope, normalizeOverrideScope, type IconOverrideScope } from '@/shared/icon-scope';
 import {
   extractHostname,
   buildSearchQueryFromBookmark,
@@ -28,6 +28,7 @@ import {
   isCollageTitle,
   stripHtml,
   clampFaviconSize,
+  isCrossRootRedirect,
 } from './icon-classify';
 import {
   parseOriginIconCandidates,
@@ -45,6 +46,7 @@ import {
 import { withCorsBypass } from './cors-bypass';
 import { sleep } from './concurrency';
 import { extractBrandInfo } from '@/shared/url-brand';
+import { isIcoBytes, extractLargestIcoPng } from './ico-parse';
 
 interface DuckDuckGoSearchResponse {
   results?: Array<{ image: string; thumbnail: string; title: string; url: string; width: number; height: number }>;
@@ -63,10 +65,19 @@ export async function fetchS2Favicon(bookmarkUrl: string, cacheKey: string): Pro
   });
 }
 
-export async function gatherOriginIconProbes(hostname: string): Promise<Array<{ url: string; sizeHint: number; weight: number }>> {
+export interface OriginProbeResult {
+  probes: Array<{ url: string; sizeHint: number; weight: number }>;
+  // True when fetching https://<host>/ landed on a different registrable domain
+  // (login.microsoftonline.com for dev.azure.com, etc.). The returned HTML then
+  // describes the login provider, not the bookmarked site — its icons are poison.
+  gated: boolean;
+}
+
+export async function gatherOriginIconProbes(hostname: string): Promise<OriginProbeResult> {
   return withCorsBypass(`||${hostname}/`, async () => {
     const origin = `https://${hostname}`;
     let html = '';
+    let gated = false;
     try {
       const response = await fetchWithTimeout(`${origin}/`, originFetchTimeoutMs, {
         headers: {
@@ -74,7 +85,9 @@ export async function gatherOriginIconProbes(hostname: string): Promise<Array<{ 
         },
         redirect: 'follow',
       });
-      if (response.ok) {
+      if (response.url && isCrossRootRedirect(hostname, response.url)) {
+        gated = true;
+      } else if (response.ok) {
         html = await response.text();
       }
     } catch {
@@ -114,6 +127,10 @@ export async function gatherOriginIconProbes(hostname: string): Promise<Array<{ 
       { url: `${origin}/apple-touch-icon.png`, sizeHint: 180, weight: 80 },
       { url: `${origin}/apple-touch-icon-precomposed.png`, sizeHint: 180, weight: 75 },
       { url: `${origin}/apple-touch-icon-180x180.png`, sizeHint: 180, weight: 70 },
+      { url: `${origin}/android-chrome-192x192.png`, sizeHint: 192, weight: 65 },
+      // sizeHint 0 sorts it last: the multi-size root favicon is the last same-host
+      // resort, but for hosts like dev.azure.com it is the only correct public icon.
+      { url: `${origin}/favicon.ico`, sizeHint: 0, weight: 40 },
     );
 
     const unique = new Map<string, { url: string; sizeHint: number; weight: number }>();
@@ -123,22 +140,26 @@ export async function gatherOriginIconProbes(hostname: string): Promise<Array<{ 
       }
     }
 
-    return Array.from(unique.values()).sort(
+    const ordered = Array.from(unique.values()).sort(
       (left, right) => (right.sizeHint - left.sizeHint) || (right.weight - left.weight),
     );
-  }).catch(() => [] as Array<{ url: string; sizeHint: number; weight: number }>);
+    return { probes: ordered, gated };
+  }).catch(() => ({ probes: [], gated: false } as OriginProbeResult));
 }
 
-export async function fetchOriginScrape(bookmarkUrl: string, cacheKey: string): Promise<IconCacheRecord | null> {
+export async function fetchOriginScrape(
+  bookmarkUrl: string,
+  cacheKey: string,
+): Promise<{ record: IconCacheRecord | null; gated: boolean }> {
   const hostname = extractHostname(bookmarkUrl);
-  if (!hostname) return null;
+  if (!hostname) return { record: null, gated: false };
 
-  const ordered = await gatherOriginIconProbes(hostname);
-  if (!ordered.length) return null;
+  const { probes, gated } = await gatherOriginIconProbes(hostname);
+  if (!probes.length) return { record: null, gated };
 
-  return withCorsBypass(`||${hostname}/`, async () => {
-    for (const probe of ordered.slice(0, 8)) {
-      const record = await fetchAndValidateImage({
+  const record = await withCorsBypass(`||${hostname}/`, async () => {
+    for (const probe of probes.slice(0, 8)) {
+      const candidate = await fetchAndValidateImage({
         imageUrl: probe.url,
         bookmarkUrl,
         cacheKey,
@@ -146,11 +167,13 @@ export async function fetchOriginScrape(bookmarkUrl: string, cacheKey: string): 
         timeoutMs: originFetchTimeoutMs,
         minimumEdge: minimumAutoIconSize,
         requireOpaqueCenter: true,
+        allowSvg: true,
       }).catch(() => null);
-      if (record) return record;
+      if (candidate) return candidate;
     }
     return null;
   }).catch(() => null);
+  return { record, gated };
 }
 
 export async function gatherAuthoritativeCandidates(bookmarkUrl: string): Promise<IconSearchCandidate[]> {
@@ -161,7 +184,7 @@ export async function gatherAuthoritativeCandidates(bookmarkUrl: string): Promis
   // Personal-infra hosts are unreachable to a background fetch, so origin probes just
   // produce broken thumbnails — skip them; brand image search supplies the candidates.
   const { isPersonalInfra } = extractBrandInfo(bookmarkUrl);
-  const probes = isPersonalInfra ? [] : await gatherOriginIconProbes(hostname);
+  const probes = isPersonalInfra ? [] : (await gatherOriginIconProbes(hostname)).probes;
 
   const candidates: IconSearchCandidate[] = probes
     .filter(probe => probe.sizeHint === 0 || probe.sizeHint >= 64)
@@ -328,6 +351,7 @@ export async function downloadAndPersistOverride(
   bookmarkUrl: string,
   imageUrl: string,
   fileName?: string,
+  scope?: IconOverrideScope,
 ): Promise<ResolvedIcon> {
   let response: Response;
   try {
@@ -340,13 +364,24 @@ export async function downloadAndPersistOverride(
     throw new IconFetchError('http-status', `Icon image request failed with ${String(response.status)}.`, response.status);
   }
 
-  const blob = await response.blob().catch((error: unknown) => {
+  let blob = await response.blob().catch((error: unknown) => {
     throw new IconFetchError('decode-fail', `Could not read icon body: ${describeError(error)}`);
   });
 
-  const mimeType = blob.type || 'image/png';
+  let mimeType = blob.type || 'image/png';
   if (!mimeType.startsWith('image/')) {
     throw new IconFetchError('not-image', 'Remote icon response is not an image.');
+  }
+
+  // ICO containers can't be decoded via createImageBitmap in worker contexts —
+  // extract the largest embedded PNG so multi-size favicons survive validation.
+  const bytes = new Uint8Array(await blob.arrayBuffer().catch(() => new ArrayBuffer(0)));
+  if (isIcoBytes(bytes)) {
+    const extracted = extractLargestIcoPng(bytes);
+    if (extracted) {
+      blob = new Blob([extracted.png as BlobPart], { type: 'image/png' });
+      mimeType = 'image/png';
+    }
   }
 
   let dimensions: { width: number; height: number };
@@ -369,9 +404,12 @@ export async function downloadAndPersistOverride(
   const dataUrl = await blobToDataUrl(blob, mimeType);
   const now = Date.now();
   const cacheKey = getIconCacheKey(bookmarkUrl);
-  const overrideKey = getOverrideKey(bookmarkUrl);
+  const normalizedScope = normalizeOverrideScope(scope);
+  const overrideKey = getOverrideKeyForScope(bookmarkUrl, normalizedScope)
+    ?? `exact:${bookmarkUrl}`;
   const record: IconOverrideRecord = {
     overrideKey,
+    scope: overrideKey.startsWith('exact:') ? 'exact' : normalizedScope,
     bookmarkUrl,
     dataUrl,
     fileName: fileName || getFileNameFromUrl(imageUrl),

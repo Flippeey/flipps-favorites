@@ -164,6 +164,17 @@ export function tokenizeQuery(query: string): string[] {
     .filter(part => part !== 'logo' && part !== 'icon');
 }
 
+// True when fetching https://<requestedHostname>/ ended on a different registrable
+// domain (dev.azure.com -> login.microsoftonline.com). The final page is then a
+// login/SSO provider, and its icons describe the wrong brand.
+export function isCrossRootRedirect(requestedHostname: string, finalUrl: string): boolean {
+  const finalHostname = extractHostname(finalUrl);
+  if (!finalHostname) return false;
+  const requestedRoot = getDomainRoot(requestedHostname.replace(/^www\./, ''));
+  const finalRoot = getDomainRoot(finalHostname);
+  return Boolean(requestedRoot && finalRoot && requestedRoot !== finalRoot);
+}
+
 export function getDomainRoot(hostname: string | null): string | null {
   if (!hostname) {
     return null;

@@ -1,7 +1,10 @@
 import type { IconCacheRecord, IconOverrideRecord } from './messages';
+import { getOverrideKeyForScope } from './icon-scope';
 
 const DB_NAME = 'ff-icons';
-const DB_VERSION = 1;
+// v2: overrides store re-keyed from bookmarkUrl to overrideKey so scoped
+// (host/domain) records can coexist with exact-URL ones.
+const DB_VERSION = 2;
 const STORE_CACHE = 'cache';
 const STORE_OVERRIDES = 'overrides';
 
@@ -11,13 +14,34 @@ function getDB(): Promise<IDBDatabase> {
   if (_db) return Promise.resolve(_db);
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (event) => {
       const db = req.result;
+      const oldVersion = event.oldVersion;
       if (!db.objectStoreNames.contains(STORE_CACHE)) {
         db.createObjectStore(STORE_CACHE, { keyPath: 'cacheKey' });
       }
       if (!db.objectStoreNames.contains(STORE_OVERRIDES)) {
-        db.createObjectStore(STORE_OVERRIDES, { keyPath: 'bookmarkUrl' });
+        db.createObjectStore(STORE_OVERRIDES, { keyPath: 'overrideKey' });
+      } else if (oldVersion < 2 && req.transaction) {
+        // Re-key existing v1 records (keyPath bookmarkUrl) as exact-scope records.
+        // All requests stay inside the versionchange transaction, which remains
+        // alive while any of them are pending.
+        const upgradeTx = req.transaction;
+        const legacyStore = upgradeTx.objectStore(STORE_OVERRIDES);
+        const readAll = legacyStore.getAll();
+        readAll.onsuccess = () => {
+          const legacyRecords = readAll.result as Array<Omit<IconOverrideRecord, 'scope'>>;
+          db.deleteObjectStore(STORE_OVERRIDES);
+          const nextStore = db.createObjectStore(STORE_OVERRIDES, { keyPath: 'overrideKey' });
+          for (const legacy of legacyRecords) {
+            const migrated: IconOverrideRecord = {
+              ...legacy,
+              scope: 'exact',
+              overrideKey: getOverrideKeyForScope(legacy.bookmarkUrl, 'exact') ?? `exact:${legacy.bookmarkUrl}`,
+            };
+            nextStore.put(migrated);
+          }
+        };
       }
     };
     req.onsuccess = () => {
@@ -104,16 +128,16 @@ export async function evictExpiredCachedIcons(): Promise<number> {
   return evicted;
 }
 
-export async function readIconOverride(bookmarkUrl: string): Promise<IconOverrideRecord | null> {
-  return (await idbGet<IconOverrideRecord>(STORE_OVERRIDES, bookmarkUrl)) ?? null;
+export async function readIconOverride(overrideKey: string): Promise<IconOverrideRecord | null> {
+  return (await idbGet<IconOverrideRecord>(STORE_OVERRIDES, overrideKey)) ?? null;
 }
 
 export async function writeIconOverride(record: IconOverrideRecord): Promise<void> {
   await idbPut(STORE_OVERRIDES, record);
 }
 
-export async function deleteIconOverride(bookmarkUrl: string): Promise<void> {
-  await idbDelete(STORE_OVERRIDES, bookmarkUrl);
+export async function deleteIconOverride(overrideKey: string): Promise<void> {
+  await idbDelete(STORE_OVERRIDES, overrideKey);
 }
 
 export async function clearIconOverrides(): Promise<void> {
@@ -122,5 +146,5 @@ export async function clearIconOverrides(): Promise<void> {
 
 export async function readAllIconOverrides(): Promise<Record<string, IconOverrideRecord>> {
   const all = await idbGetAll<IconOverrideRecord>(STORE_OVERRIDES);
-  return Object.fromEntries(all.map(r => [r.bookmarkUrl, r]));
+  return Object.fromEntries(all.map(r => [r.overrideKey, r]));
 }
