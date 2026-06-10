@@ -74,6 +74,12 @@ const browserSpecific = {
       // as a service worker where fetch() does not get the CORS bypass.
       page: 'background.html',
     },
+    // Firefox shows the Home page (about:home) on startup, not the new tab page,
+    // so chrome_url_overrides.newtab alone never appears on browser launch.
+    // Chrome/Edge open the NTP on startup and don't need (or reliably support) this.
+    chrome_settings_overrides: {
+      homepage: 'newtab.html',
+    },
     browser_specific_settings: {
       gecko: {
         id: firefoxExtensionId,
