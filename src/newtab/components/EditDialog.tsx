@@ -74,6 +74,10 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
   const [overrideScope, setOverrideScope] = useState<IconOverrideScope>('host');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Tracks an in-flight candidate apply so a double-click (which fires click →
+  // click → dblclick) dedupes onto the single network write instead of issuing
+  // a second override and racing the close.
+  const applyingRef = useRef<Promise<ResolvedIcon | null> | null>(null);
 
   const bookmarkUrl = target.url;
   const bookmarkTitle = target.title;
@@ -158,25 +162,49 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
     }
   };
 
-  const handlePickCandidate = async (candidate: IconSearchCandidate) => {
-    if (!target.id || working) return;
-    setWorking(true);
-    try {
-      const icon = await setIconOverrideFromUrl({
-        bookmarkUrl,
-        bookmarkTitle,
-        imageUrl: candidate.imageUrl,
-        fallbackImageUrl: candidate.previewUrl !== candidate.imageUrl ? candidate.previewUrl : undefined,
-        scope: overrideScope,
-      });
-      setPreviewIcon(icon);
-      invalidateFaviconCacheForScope(bookmarkUrl, overrideScope);
-      setStatus({ kind: 'success', message: 'Icon applied.' });
-    } catch (e) {
-      setStatus({ kind: 'error', message: iconPersistenceErrorMessage(e, 'search') });
-    } finally {
-      setWorking(false);
+  const applyCandidate = async (candidate: IconSearchCandidate): Promise<void> => {
+    if (!target.id) return;
+    // Reuse an apply already running for this gesture (the click that preceded a
+    // dblclick) rather than starting a second write.
+    if (applyingRef.current) {
+      await applyingRef.current.catch(() => undefined);
+      return;
     }
+    const run = (async (): Promise<ResolvedIcon | null> => {
+      setWorking(true);
+      try {
+        const icon = await setIconOverrideFromUrl({
+          bookmarkUrl,
+          bookmarkTitle,
+          imageUrl: candidate.imageUrl,
+          fallbackImageUrl: candidate.previewUrl !== candidate.imageUrl ? candidate.previewUrl : undefined,
+          scope: overrideScope,
+        });
+        setPreviewIcon(icon);
+        invalidateFaviconCacheForScope(bookmarkUrl, overrideScope);
+        setStatus({ kind: 'success', message: 'Icon applied.' });
+        return icon;
+      } catch (e) {
+        setStatus({ kind: 'error', message: iconPersistenceErrorMessage(e, 'search') });
+        return null;
+      } finally {
+        setWorking(false);
+        applyingRef.current = null;
+      }
+    })();
+    applyingRef.current = run;
+    await run.catch(() => undefined);
+  };
+
+  // Single click: apply the icon, keep the dialog open for further tweaks.
+  const handlePickCandidate = (candidate: IconSearchCandidate): void => {
+    void applyCandidate(candidate);
+  };
+
+  // Double click (power users): apply, then close once the write settles.
+  const handlePickCandidateAndClose = async (candidate: IconSearchCandidate): Promise<void> => {
+    await applyCandidate(candidate);
+    onClose();
   };
 
   const handleRefreshIcon = async () => {
@@ -431,9 +459,10 @@ export function EditDialog({ target, onClose, onSaved }: EditDialogProps) {
                       key={candidate.imageUrl}
                       type="button"
                       className="ff-icongrid__cell"
-                      title={candidate.label}
+                      title={`${candidate.label} — double-click to apply and close`}
                       onClick={() => handlePickCandidate(candidate)}
-                      disabled={working}
+                      onDoubleClick={() => { void handlePickCandidateAndClose(candidate); }}
+                      data-busy={working || undefined}
                       style={{ display: isValidated ? undefined : 'none' }}
                     >
                       <img
