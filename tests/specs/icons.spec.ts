@@ -5,8 +5,10 @@ import { test, expect } from '../fixtures/extension-context.js';
 import { MOCK_FAVICON_PNG } from '../fixtures/test-data.js';
 import {
   clearExtensionStorage,
+  clickMenuItem,
   createTestBookmark,
   createTestFolder,
+  openContextMenu,
   reloadNewtab,
   removeBookmarkTree,
   setupDefaultWorkspace,
@@ -89,6 +91,64 @@ test.describe('icon pipeline', () => {
     const hasImg = (await tile.locator('.ff-favicon img').count()) > 0;
     const hasLetter = (await tile.locator('.ff-favicon span').count()) > 0;
     expect(hasImg || hasLetter).toBe(true);
+  });
+
+  // Why it matters: power users pick an icon and want to be done. A single click
+  // applies but keeps the dialog open for further tweaks; a double-click applies
+  // AND closes. If the candidate cell were disabled mid-apply the second click
+  // would be swallowed and the double-click contract would silently break.
+  test('double-clicking an icon search result applies it and closes the dialog', async ({ context, newtabPage }) => {
+    // Mock DuckDuckGo image search so exactly one candidate renders deterministically.
+    await context.route('https://duckduckgo.com/**', async (route) => {
+      const url = route.request().url();
+      if (url.includes('i.js')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            results: [{
+              image: 'https://mock.test/full.png',
+              thumbnail: 'https://mock.test/thumb.png',
+              title: 'Example logo',
+              url: 'https://mock.test/',
+              width: 128,
+              height: 128,
+            }],
+          }),
+        });
+      } else {
+        // Search page only needs to carry a vqd token for extractDuckDuckGoToken().
+        await route.fulfill({ status: 200, contentType: 'text/html', body: '<script>vqd="3-mocktoken";</script>' });
+      }
+    });
+    // Thumbnail (shown in the grid) + full image (downloaded when applied).
+    await context.route('https://mock.test/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'image/png', body: MOCK_FAVICON_PNG }));
+
+    await reloadNewtab(newtabPage);
+    const tile = newtabPage.locator('.ff-tile[data-item-kind="bookmark"]', { hasText: 'Example Site' }).first();
+    await expect(tile).toBeVisible();
+
+    const menu = await openContextMenu(newtabPage, tile);
+    await clickMenuItem(menu, /^Edit/);
+
+    const dialog = newtabPage.locator('.ff-modal-scrim');
+    await expect(dialog).toBeVisible();
+
+    // The dialog auto-searches on open. Cells stay display:none until their preview
+    // loads (≥64px); origin candidates point at unmockable example.com images, so the
+    // mocked DDG result is the one that validates and becomes visible.
+    const cell = newtabPage.locator('.ff-icongrid__cell:visible').first();
+    await expect(cell).toBeVisible({ timeout: 10_000 });
+
+    // Single click applies but leaves the dialog open.
+    await cell.click();
+    await newtabPage.waitForTimeout(300);
+    await expect(dialog).toBeVisible();
+
+    // Double click applies and closes.
+    await cell.dblclick();
+    await expect(dialog).toBeHidden({ timeout: 10_000 });
   });
 
   test('no CORS errors logged during icon load', async ({ newtabPage }) => {
