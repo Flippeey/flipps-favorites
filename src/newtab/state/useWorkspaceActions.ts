@@ -1,9 +1,10 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { AppSettings, WorkspaceRecord } from '@/shared/messages';
 import type { MarqueeSelection } from '../interaction/useMarquee';
 import { createWorkspace, deleteWorkspace, patchSettings, patchWorkspace } from '../lib/messaging';
 import { defaultWorkspaceSettings, readWorkspaceWallpaper, writeWorkspaceWallpaper } from '@/shared/storage';
 import { MAX_WORKSPACES } from '@/shared/constants';
+import { pickNextAccent } from '../lib/workspace-accent';
 import { runOptimistic } from './useOptimisticPatch';
 
 interface UseWorkspaceActionsArgs {
@@ -51,6 +52,12 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
     handlePatch,
   } = args;
 
+  // Mirror the latest workspaces so sequential creates (onboarding bulk-create
+  // awaits each call) see prior additions — the memoized callback's closure would
+  // otherwise read a stale render-time snapshot and assign duplicate accents.
+  const workspacesRef = useRef(workspaces);
+  useEffect(() => { workspacesRef.current = workspaces; }, [workspaces]);
+
   const handleSwitchWorkspace = useCallback(async (id: string) => {
     setIsSwitching(true);
     await new Promise(r => setTimeout(r, 130));
@@ -84,24 +91,34 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
     name: string,
     overrides?: Partial<Omit<WorkspaceRecord, 'id' | 'name' | 'rootFolderId'>>,
   ): Promise<string | undefined> => {
-    if (workspaces.length >= MAX_WORKSPACES) return undefined;
-    if (workspaces.some(w => w.rootFolderId === rootFolderId)) return undefined;
+    // Read the live list (ref, not closure) so a sequential bulk-create loop sees
+    // workspaces added by prior iterations before the next render.
+    const current = workspacesRef.current;
+    if (current.length >= MAX_WORKSPACES) return undefined;
+    if (current.some(w => w.rootFolderId === rootFolderId)) return undefined;
+    // Auto-pick an accent not used by existing workspaces for instant visual
+    // differentiation. Sits between the defaults and the caller's overrides so an
+    // explicit accentColor (e.g. the user's onboarding pick) still wins.
     const workspace: WorkspaceRecord = {
       id: crypto.randomUUID(),
       name,
       rootFolderId,
       ...defaultWorkspaceSettings,
+      accentColor: pickNextAccent(current.map(w => w.accentColor)),
       ...(overrides ?? {}),
     };
     try {
       const created = await createWorkspace(workspace);
+      // Advance the ref synchronously so the next bulk-create iteration sees this
+      // workspace (and its accent) before React re-renders.
+      workspacesRef.current = [...workspacesRef.current, created];
       setWorkspaces(prev => [...prev, created]);
       await handlePatch({ activeWorkspaceId: created.id });
       return created.id;
     } catch {
       return undefined;
     }
-  }, [workspaces, handlePatch, setWorkspaces]);
+  }, [handlePatch, setWorkspaces]);
 
   const handleDeleteWorkspace = useCallback(async (id: string) => {
     if (workspaces.length <= 1) return;
