@@ -186,7 +186,14 @@ export function useDrag({
         }
       };
       const setReorder = (parentId: string, index: number, hint?: { el: HTMLElement; pos: 'before' | 'after' }): void => {
-        if (!reorderEnabledRef.current) { blockReorder(); return; }
+        // A "reorder" target whose parent differs from the drag's origin scope is
+        // actually a relocation (moving into a different folder / the root) — valid
+        // in any sort mode. Only a same-parent reorder is position-based and thus
+        // gated to manual sort.
+        const isRelocation = parentId !== drag.scopeId;
+        if (!reorderEnabledRef.current && !isRelocation) { blockReorder(); return; }
+        // Show the drop indicator whenever the drop is live — including an auto-sort
+        // relocation, where it marks where the item lands before the sort settles it.
         if (hint) hint.el.dataset.dropPosition = hint.pos;
         drag.dropTarget = { kind: 'reorder', parentId, index };
       };
@@ -385,7 +392,11 @@ export function useDrag({
         const sectionsEl = canvas?.querySelector<HTMLElement>('.ff-sections');
         if (sectionsEl && drag.dragKind !== 'section') {
           const ordered = getOrderedChildrenRef.current(rootFolderIdRef.current).filter(c => !dragSet.has(c.id));
-          if (reorderEnabledRef.current) sectionsEl.dataset.dropTarget = 'true';
+          // Highlight when the drop is live: a manual-sort append, or (under
+          // auto-sort) a relocation of an item dragged out of a folder into root.
+          if (reorderEnabledRef.current || rootFolderIdRef.current !== drag.scopeId) {
+            sectionsEl.dataset.dropTarget = 'true';
+          }
           setReorder(rootFolderIdRef.current, ordered.length);
           return;
         }

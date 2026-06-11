@@ -161,6 +161,10 @@
   display: flex; align-items: center; gap: var(--s-3);
   margin: 0 0 var(--s-5);
   padding: 0 4px; position: relative;
+  /* Shrink to content so the draggable grab zone (the whole header is the section
+     drag handle) stays on the icon/title/count/menu — not the full row width, which
+     otherwise swallows marquee-select drags started beside the header. */
+  width: fit-content; max-width: 100%;
 }
 .ff-section__icon-folder {
   width: 32px; height: 32px;

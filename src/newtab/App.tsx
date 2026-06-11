@@ -438,7 +438,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   });
 
   const handleReorderBlocked = useCallback(() => {
-    pushToast({ kind: 'info', message: 'These tiles are sorted automatically — switch to Manual sort to reorder them.' });
+    pushToast({ kind: 'info', message: 'Switch to Manual sort to reorder tiles.' });
   }, [pushToast]);
 
   const { dragPreview, dragEnabled } = useDragWiring({

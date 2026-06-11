@@ -271,4 +271,39 @@ test.describe('drag-drop under auto-sort', () => {
       newtabPage.locator('.ff-toast__msg', { hasText: /Manual sort/i }),
     ).toBeVisible({ timeout: 5_000 });
   });
+
+  // WHY: dragging a bookmark OUT of a folder back to the workspace root is a
+  // relocation (its parent changes), not an in-place reorder — so it must commit
+  // under auto-sort just like it does under manual. Regression guard for the bug
+  // where cross-parent drops were wrongly gated as "reorder" and silently dropped.
+  test('drag from a folder section to root relocates under name sort', async ({ newtabPage }) => {
+    // List mode renders each folder as an inline section (scope = folder id) above
+    // the root grid (scope = root), so a folder→root drag is reachable on one canvas.
+    await patchSettings(newtabPage, { folderMode: 'list' });
+    await reloadNewtab(newtabPage);
+
+    const section = newtabPage.locator('.ff-sections section[data-scope-folder-id]').first();
+    await section.waitFor({ state: 'visible', timeout: 5_000 });
+
+    const srcTile = section.locator('[data-item-id][data-item-kind="bookmark"]').first();
+    const srcId = await srcTile.getAttribute('data-item-id');
+    if (!srcId) throw new Error('folder bookmark not found');
+
+    const rootTile = newtabPage.locator('.ff-sections > .ff-grid [data-item-id][data-item-kind="bookmark"]').first();
+    const srcBox = await srcTile.boundingBox();
+    const rootBox = await rootTile.boundingBox();
+    if (!srcBox || !rootBox) throw new Error('tile bounding boxes not found');
+
+    await pointerDrag(newtabPage, srcBox, rootBox, 12);
+
+    // The bookmark now lives in the root grid scope…
+    await expect(
+      newtabPage.locator(`.ff-sections > .ff-grid [data-item-id="${srcId}"]`),
+    ).toBeVisible({ timeout: 8_000 });
+
+    // …and no longer inside the folder section.
+    await expect(
+      newtabPage.locator(`.ff-sections section[data-scope-folder-id] [data-item-id="${srcId}"]`),
+    ).toHaveCount(0);
+  });
 });
