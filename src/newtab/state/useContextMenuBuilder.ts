@@ -28,6 +28,7 @@ interface UseContextMenuBuilderArgs {
   openAppSettings: (section?: AppSectionId) => void;
   setConfirmDeleteFolder: (folder: BookmarkNode | null) => void;
   setConfirmDeleteBatch: (ids: string[] | null) => void;
+  onMoveSelectionToNewFolder: (ids: string[]) => void;
   setRenameWorkspaceTarget: (ws: WorkspaceRecord | null) => void;
   setConfirmDeleteWorkspace: (ws: WorkspaceRecord | null) => void;
   onDeleteBookmark: (item: BookmarkNode) => void | Promise<void>;
@@ -60,6 +61,7 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
     openAppSettings,
     setConfirmDeleteFolder,
     setConfirmDeleteBatch,
+    onMoveSelectionToNewFolder,
     setRenameWorkspaceTarget,
     setConfirmDeleteWorkspace,
     onDeleteBookmark,
@@ -121,11 +123,15 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
       { kind: 'item', icon: 'copy',         label: 'Copy URL',        onClick: () => target.url && navigator.clipboard?.writeText(normalizeBookmarkUrl(target.url)) },
       { kind: 'separator' },
       { kind: 'item', icon: 'pencil',       label: 'Edit…',           onClick: () => handleEditBookmark(target) },
+      ...(isInSelection
+        ? [{ kind: 'item' as const, icon: 'folderPlus' as const, label: `Move ${selection.ids.size} to new folder…`,
+            onClick: () => onMoveSelectionToNewFolder(targetIds) }]
+        : []),
       { kind: 'separator' },
       { kind: 'item', icon: 'trash',        label: deleteLabel,       kbd: IS_MAC ? '⌫' : 'Del', destructive: true,
         onClick: deleteAction },
     ];
-  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, handleAddWorkspace, workspaces.length, selection, onDeleteBookmark]);
+  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, handleAddWorkspace, workspaces.length, selection, onDeleteBookmark, onMoveSelectionToNewFolder]);
 
   const handleOpenAddMenu = useCallback((x: number, y: number) => {
     const atMax = workspaces.length >= MAX_WORKSPACES;

@@ -5,7 +5,7 @@ import { Ico } from './Ico';
 import { ModalDialog } from './ModalDialog';
 
 export type FolderNameDialogTarget =
-  | { mode: 'create'; parentId: string; parentTitle?: string }
+  | { mode: 'create'; parentId: string; parentTitle?: string; moveIds?: string[] }
   | { mode: 'rename'; id: string; title: string };
 
 interface FolderNameDialogProps {
