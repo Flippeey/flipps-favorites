@@ -186,8 +186,15 @@ export function useDrag({
         }
       };
       const setReorder = (parentId: string, index: number, hint?: { el: HTMLElement; pos: 'before' | 'after' }): void => {
-        if (!reorderEnabledRef.current) { blockReorder(); return; }
-        if (hint) hint.el.dataset.dropPosition = hint.pos;
+        // A "reorder" target whose parent differs from the drag's origin scope is
+        // actually a relocation (moving into a different folder / the root) — valid
+        // in any sort mode. Only a same-parent reorder is position-based and thus
+        // gated to manual sort.
+        const isRelocation = parentId !== drag.scopeId;
+        if (!reorderEnabledRef.current && !isRelocation) { blockReorder(); return; }
+        // Skip the between-siblings indicator under auto-sort: the slot is recomputed
+        // by the sort, so the line would imply an ordering the user can't actually set.
+        if (hint && reorderEnabledRef.current) hint.el.dataset.dropPosition = hint.pos;
         drag.dropTarget = { kind: 'reorder', parentId, index };
       };
 
