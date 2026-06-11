@@ -10,11 +10,19 @@ interface UseDragArgs {
   surface: HTMLElement | null;
   rootFolderId: string;
   enabled: boolean;
+  // Reordering (positioning a tile between siblings) is only meaningful under
+  // manual sort; under auto-sort it's suppressed while relocation drops (into a
+  // folder, the dock, or another workspace) stay live. Distinct from `enabled`,
+  // which gates the whole drag interaction.
+  reorderEnabled: boolean;
   selectionRef: RefObject<{ ids: Set<string>; scopeFolderId: string }>;
   // Fetch the live ordered children for a folder id (after current sort).
   getOrderedChildren: (folderId: string) => Array<{ id: string }>;
   onCommit: (dragIds: string[], target: DropTarget) => void;
   onCancel?: () => void;
+  // Fired once per drag when a reorder is attempted while reordering is disabled,
+  // so the UI can explain that Manual sort is required.
+  onReorderBlocked?: () => void;
   dragEngagedRef?: { current: boolean };
   // Spring-loaded workspace tabs: called once when the pointer hovers a workspace
   // tab for SPRING_DELAY_MS during a drag, so the user can open that workspace and
@@ -69,10 +77,12 @@ export function useDrag({
   surface,
   rootFolderId,
   enabled,
+  reorderEnabled,
   selectionRef,
   getOrderedChildren,
   onCommit,
   onCancel,
+  onReorderBlocked,
   dragEngagedRef,
   onSpringOpenWorkspace,
 }: UseDragArgs): DragPreviewState | null {
@@ -93,6 +103,7 @@ export function useDrag({
     springTimer: ReturnType<typeof setTimeout> | null;
     springFiredFor: string | null;
     sprung: boolean;
+    reorderBlocked: boolean;
   } | null>(null);
   const rootFolderIdRef = useRef(rootFolderId);
   rootFolderIdRef.current = rootFolderId;
@@ -104,6 +115,10 @@ export function useDrag({
   onCancelRef.current = onCancel;
   const onSpringOpenWorkspaceRef = useRef(onSpringOpenWorkspace);
   onSpringOpenWorkspaceRef.current = onSpringOpenWorkspace;
+  const reorderEnabledRef = useRef(reorderEnabled);
+  reorderEnabledRef.current = reorderEnabled;
+  const onReorderBlockedRef = useRef(onReorderBlocked);
+  onReorderBlockedRef.current = onReorderBlocked;
 
   useEffect(() => {
     if (!enabled) return;
@@ -151,12 +166,30 @@ export function useDrag({
         springTimer: null,
         springFiredFor: null,
         sprung: false,
+        reorderBlocked: false,
       };
     };
 
     const onMove = (event: PointerEvent) => {
       const drag = stateRef.current;
       if (!drag || !drag.active) return;
+
+      // Reorder is position-based, so it's only meaningful under manual sort.
+      // When disabled, clear any reorder target and surface the reason once per
+      // drag — relocation drops (folder/dock/workspace) are handled before any
+      // reorder code runs, so they stay live regardless.
+      const blockReorder = (): void => {
+        drag.dropTarget = null;
+        if (!drag.reorderBlocked) {
+          drag.reorderBlocked = true;
+          onReorderBlockedRef.current?.();
+        }
+      };
+      const setReorder = (parentId: string, index: number, hint?: { el: HTMLElement; pos: 'before' | 'after' }): void => {
+        if (!reorderEnabledRef.current) { blockReorder(); return; }
+        if (hint) hint.el.dataset.dropPosition = hint.pos;
+        drag.dropTarget = { kind: 'reorder', parentId, index };
+      };
 
       const dx = event.clientX - drag.startX;
       const dy = event.clientY - drag.startY;
@@ -297,7 +330,7 @@ export function useDrag({
 
         if (!targetSectionId) {
           const ordered = getOrderedChildrenRef.current(rootFolderIdRef.current).filter(c => !dragSet.has(c.id));
-          drag.dropTarget = { kind: 'reorder', parentId: rootFolderIdRef.current, index: ordered.length };
+          setReorder(rootFolderIdRef.current, ordered.length);
           return;
         }
 
@@ -312,8 +345,7 @@ export function useDrag({
         }
 
         const targetSec = canvas.querySelector<HTMLElement>(`section[data-scope-folder-id="${targetSectionId}"]`);
-        if (targetSec) targetSec.dataset.dropPosition = placeAfter ? 'after' : 'before';
-        drag.dropTarget = { kind: 'reorder', parentId: rootFolderIdRef.current, index: dropIndex };
+        setReorder(rootFolderIdRef.current, dropIndex, targetSec ? { el: targetSec, pos: placeAfter ? 'after' : 'before' } : undefined);
         return;
       }
 
@@ -352,16 +384,16 @@ export function useDrag({
         // (mirrors folder-overlay backdrop behaviour)
         const sectionsEl = canvas?.querySelector<HTMLElement>('.ff-sections');
         if (sectionsEl && drag.dragKind !== 'section') {
-          sectionsEl.dataset.dropTarget = 'true';
           const ordered = getOrderedChildrenRef.current(rootFolderIdRef.current).filter(c => !dragSet.has(c.id));
-          drag.dropTarget = { kind: 'reorder', parentId: rootFolderIdRef.current, index: ordered.length };
+          if (reorderEnabledRef.current) sectionsEl.dataset.dropTarget = 'true';
+          setReorder(rootFolderIdRef.current, ordered.length);
           return;
         }
         // After a spring switch the dragged items still live in the old scope; an
         // empty-area drop should land in the now-active workspace root, not the origin.
         const fallbackScope = drag.sprung ? rootFolderIdRef.current : drag.scopeId;
         const ordered = getOrderedChildrenRef.current(fallbackScope).filter(c => !dragSet.has(c.id));
-        drag.dropTarget = { kind: 'reorder', parentId: fallbackScope, index: ordered.length };
+        setReorder(fallbackScope, ordered.length);
         return;
       }
 
@@ -402,8 +434,7 @@ export function useDrag({
         }
       }
 
-      hoverTile.dataset.dropPosition = placeAfter ? 'after' : 'before';
-      drag.dropTarget = { kind: 'reorder', parentId: hoverScope, index: dropIndex };
+      setReorder(hoverScope, dropIndex, { el: hoverTile, pos: placeAfter ? 'after' : 'before' });
     };
 
     const onUp = (event: PointerEvent) => {

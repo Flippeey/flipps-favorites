@@ -123,7 +123,10 @@ export function useMarquee({ surface, container, rootFolderId, enabled, selectio
       if (!drag || !drag.active) return;
       drag.active = false;
       setRect(null);
-      try { canvas.releasePointerCapture(event.pointerId); } catch { /* noop */ }
+      // Release on the same element the capture was taken on (listenerEl). Releasing
+      // on `canvas` when container !== canvas targets an element that never held the
+      // capture, leaving it dangling and bleeding into the next pointer gesture.
+      try { listenerEl.releasePointerCapture(event.pointerId); } catch { /* noop */ }
       stateRef.current = null;
     };
 
