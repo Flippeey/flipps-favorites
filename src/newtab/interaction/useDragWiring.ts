@@ -1,9 +1,11 @@
 import { useCallback } from 'react';
 import type { AppSettings, BookmarkNode, WorkspaceRecord } from '@/shared/messages';
+import type { PushToastInput } from '../state/useToasts';
 import type { MarqueeSelection } from './useMarquee';
 import { useDrag, type DropTarget, type DragPreviewState } from './useDrag';
 import { moveBookmark } from '../lib/messaging';
 import { findFolder } from '../lib/tree';
+import { captureMoveSnapshots, restoreMoveSnapshots } from '../lib/move-snapshot';
 
 interface UseDragWiringArgs {
   canvasEl: HTMLElement | null;
@@ -21,6 +23,8 @@ interface UseDragWiringArgs {
   onSwitchWorkspace: (id: string) => void;
   // Surfaced once per drag when a reorder is attempted under a non-manual sort.
   onReorderBlocked: () => void;
+  // Pushes the post-relocate "Moved …" toast carrying an Undo action.
+  pushToast: (input: PushToastInput) => void;
 }
 
 interface UseDragWiringResult {
@@ -35,7 +39,7 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
   const {
     canvasEl, overlayBodyEl, dockEl, rootFolder, settings, workspaces, tree,
     sortedChildren, selectionRef, setSelection, refreshTree, dragEngagedRef,
-    onSwitchWorkspace, onReorderBlocked,
+    onSwitchWorkspace, onReorderBlocked, pushToast,
   } = args;
 
   // Spring-loaded tabs: open the hovered workspace mid-drag (skip if already active).
@@ -49,6 +53,11 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
   }, [tree, sortedChildren]);
 
   const handleDragCommit = useCallback(async (dragIds: string[], target: DropTarget) => {
+    // Relocations (folder / dock / workspace) get an Undo toast; reorder-within-
+    // parent does not (out of scope). Snapshot origins from the live tree BEFORE
+    // moving so Undo can replay each item back to its parent + index.
+    const isRelocate = target.kind === 'folder' || target.kind === 'dock' || target.kind === 'workspace';
+    const snapshots = isRelocate ? captureMoveSnapshots(tree, dragIds) : [];
     try {
       if (target.kind === 'folder') {
         for (const id of dragIds) {
@@ -78,10 +87,34 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
       // Drop selection scope if target moved away
       const moveTargetScope = target.kind === 'folder' ? target.folderId : target.kind === 'dock' ? (settings.dockFolderId || rootFolder?.id || '') : target.kind === 'workspace' ? (workspaces.find(w => w.id === target.workspaceId)?.rootFolderId ?? '') : target.parentId;
       setSelection({ ids: new Set(dragIds), scopeFolderId: moveTargetScope });
+
+      // Skip the toast for no-op drops where every item already lives in the
+      // target scope (target scope == source scope) — nothing was relocated.
+      const relocated = snapshots.filter(s => s.parentId !== moveTargetScope);
+      if (isRelocate && relocated.length > 0) {
+        const count = relocated.length;
+        pushToast({
+          kind: 'info',
+          message: `Moved ${count} ${count === 1 ? 'item' : 'items'}`,
+          action: {
+            label: 'Undo',
+            onClick: () => {
+              void (async () => {
+                try {
+                  await restoreMoveSnapshots(relocated, moveBookmark);
+                  await refreshTree();
+                } catch {
+                  pushToast({ kind: 'error', message: 'Couldn’t undo the move.' });
+                }
+              })();
+            },
+          },
+        });
+      }
     } finally {
       await refreshTree();
     }
-  }, [refreshTree, rootFolder, settings.dockFolderId, workspaces, setSelection]);
+  }, [tree, refreshTree, rootFolder, settings.dockFolderId, workspaces, setSelection, pushToast]);
 
   // Drag itself is always live so relocation (into a folder, the dock, or another
   // workspace) works in every sort mode. Only reordering — positioning between

@@ -307,15 +307,15 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
       // Onboarding theme/accent picks only persist to an existing workspace via
       // onPatchWorkspace. On a fresh install the workspace is created here, so carry the
       // chosen accent + theme through as overrides — otherwise they reset to the defaults.
-      // layoutPreset is a resolution-aware default applied only to workspaces
-      // created here (fresh install / new selections via onCreateWorkspace). The
-      // activeWorkspace retarget branch below never spreads these overrides, so an
-      // existing workspace's user-chosen layout is left untouched.
-      const onboardingOverrides = {
-        accentColor: pendingAccentColor,
-        themeMode: settings.themeMode,
-        layoutPreset: recommendedLayout.layoutPreset,
-      };
+      // Only the first workspace honors the user's explicit accent pick; bulk-created
+      // siblings auto-pick a distinct unused accent (handled in handleCreateWorkspace).
+      // layoutPreset is a resolution-aware default applied to every workspace created
+      // here (fresh install / new selections via onCreateWorkspace). The activeWorkspace
+      // retarget branch below never spreads these overrides, so an existing workspace's
+      // user-chosen accent + layout are left untouched.
+      const layoutPreset = recommendedLayout.layoutPreset;
+      const firstOverrides = { accentColor: pendingAccentColor, themeMode: settings.themeMode, layoutPreset };
+      const restOverrides = { themeMode: settings.themeMode, layoutPreset };
       // Each selected folder becomes a workspace. If a workspace already exists
       // (re-running onboarding), the first selection retargets it and the rest are
       // created; on a fresh install all selections are created from scratch.
@@ -324,12 +324,12 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
         if (firstId) await onPatchWorkspace({ rootFolderId: firstId });
       } else if (firstId) {
         const folder = findFolder(tree, firstId);
-        await onCreateWorkspace(firstId, folder?.title ?? 'My workspace', onboardingOverrides);
+        await onCreateWorkspace(firstId, folder?.title ?? 'My workspace', firstOverrides);
       }
       for (const id of restIds) {
         const folder = findFolder(tree, id);
         if (folder) {
-          await onCreateWorkspace(id, folder.title, onboardingOverrides);
+          await onCreateWorkspace(id, folder.title, restOverrides);
         }
       }
     } catch {
