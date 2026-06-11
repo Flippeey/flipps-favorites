@@ -28,6 +28,7 @@ import { normalizeBookmarkUrl } from './lib/url';
 import { resolveDockMode } from './lib/dock-mode';
 import { prefetchAllIcons } from './lib/icon-prefetch';
 import { findFolder, findNode, findParentFolder, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
+import { captureMoveSnapshots, restoreMoveSnapshots } from './lib/move-snapshot';
 import { MAX_WORKSPACES } from '../shared/constants';
 import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper } from '../shared/storage';
 import { useWorkspaceActions } from './state/useWorkspaceActions';
@@ -456,6 +457,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     dragEngagedRef,
     onSwitchWorkspace: handleSwitchWorkspace,
     onReorderBlocked: handleReorderBlocked,
+    pushToast,
   });
 
   const handleDeleteFocused = useCallback(async (item: BookmarkNode) => {
@@ -746,11 +748,34 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             const moveIds = folderNameTarget.mode === 'create' ? folderNameTarget.moveIds : undefined;
             setFolderNameTarget(null);
             if (moveIds && moveIds.length > 0) {
+              // Capture origins before relocating so Undo can replay each item
+              // back to its parent + index (the new folder is empty at this point).
+              const snapshots = captureMoveSnapshots(tree, moveIds);
               try {
                 // Sequential to preserve selection order in the new folder.
                 for (const id of moveIds) await moveBookmark(id, folder.id);
                 setSelection({ ids: new Set(moveIds), scopeFolderId: folder.id });
-                pushToast({ kind: 'info', message: `Moved ${moveIds.length} ${moveIds.length === 1 ? 'item' : 'items'} to “${folder.title}”.` });
+                pushToast({
+                  kind: 'info',
+                  message: `Moved ${moveIds.length} ${moveIds.length === 1 ? 'item' : 'items'} to “${folder.title}”.`,
+                  action: snapshots.length > 0
+                    ? {
+                        label: 'Undo',
+                        onClick: () => {
+                          void (async () => {
+                            try {
+                              // Restore items to origin, then remove the now-empty new folder.
+                              await restoreMoveSnapshots(snapshots, moveBookmark);
+                              await removeBookmark(folder.id, true);
+                              await refreshTree();
+                            } catch {
+                              pushToast({ kind: 'error', message: 'Couldn’t undo the move.' });
+                            }
+                          })();
+                        },
+                      }
+                    : undefined,
+                });
               } catch {
                 pushToast({ kind: 'error', message: 'Couldn’t move the selected bookmarks.' });
               }
