@@ -3,6 +3,7 @@ import { MAX_WORKSPACES } from '@/shared/constants';
 import type { AppSettings, BookmarkNode, ViewMode, ThemeMode, WorkspaceRecord } from '@/shared/messages';
 import { applyAccent } from '../lib/accent';
 import { formatFolderStats, scanFolders, type ScoredFolder } from '../lib/folder-scoring';
+import { recommendLayout, readViewportMetrics } from '../lib/layout-recommendation';
 import { altShortcut, modShortcut } from '../lib/platform';
 import { findFolder, topLevelFolders } from '../lib/tree';
 import { Ico } from './Ico';
@@ -259,6 +260,12 @@ function TipsCarousel() {
 export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWorkspace, onCreateWorkspace, onFinish }: OnboardingProps) {
   const scanResult = useMemo(() => scanFolders(tree), [tree]);
 
+  // Resolution-aware default for NEW installs: pick a layout preset that fits the
+  // current window/screen so small laptops don't get oversized tiles and big/4K
+  // monitors aren't sparse. Computed once at onboarding start (empty deps) — this
+  // is an initial default, not a live re-layout on resize.
+  const recommendedLayout = useMemo(() => recommendLayout(readViewportMetrics()), []);
+
   const [step, setStep] = useState(0);
   // Seed at least one folder so the default state is valid; the user can change it.
   const [selectedWorkspaceFolderIds, setSelectedWorkspaceFolderIds] = useState<string[]>(() => {
@@ -302,8 +309,13 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
       // chosen accent + theme through as overrides — otherwise they reset to the defaults.
       // Only the first workspace honors the user's explicit accent pick; bulk-created
       // siblings auto-pick a distinct unused accent (handled in handleCreateWorkspace).
-      const firstOverrides = { accentColor: pendingAccentColor, themeMode: settings.themeMode };
-      const restOverrides = { themeMode: settings.themeMode };
+      // layoutPreset is a resolution-aware default applied to every workspace created
+      // here (fresh install / new selections via onCreateWorkspace). The activeWorkspace
+      // retarget branch below never spreads these overrides, so an existing workspace's
+      // user-chosen accent + layout are left untouched.
+      const layoutPreset = recommendedLayout.layoutPreset;
+      const firstOverrides = { accentColor: pendingAccentColor, themeMode: settings.themeMode, layoutPreset };
+      const restOverrides = { themeMode: settings.themeMode, layoutPreset };
       // Each selected folder becomes a workspace. If a workspace already exists
       // (re-running onboarding), the first selection retargets it and the rest are
       // created; on a fresh install all selections are created from scratch.
