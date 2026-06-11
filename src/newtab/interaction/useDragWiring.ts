@@ -19,6 +19,8 @@ interface UseDragWiringArgs {
   refreshTree: () => Promise<void>;
   dragEngagedRef: React.RefObject<boolean>;
   onSwitchWorkspace: (id: string) => void;
+  // Surfaced once per drag when a reorder is attempted under a non-manual sort.
+  onReorderBlocked: () => void;
 }
 
 interface UseDragWiringResult {
@@ -33,7 +35,7 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
   const {
     canvasEl, overlayBodyEl, dockEl, rootFolder, settings, workspaces, tree,
     sortedChildren, selectionRef, setSelection, refreshTree, dragEngagedRef,
-    onSwitchWorkspace,
+    onSwitchWorkspace, onReorderBlocked,
   } = args;
 
   // Spring-loaded tabs: open the hovered workspace mid-drag (skip if already active).
@@ -81,39 +83,50 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
     }
   }, [refreshTree, rootFolder, settings.dockFolderId, workspaces, setSelection]);
 
-  const dragEnabled = settings.bookmarkSortMode === 'manual';
+  // Drag itself is always live so relocation (into a folder, the dock, or another
+  // workspace) works in every sort mode. Only reordering — positioning between
+  // siblings — is gated to manual sort, since auto-sort recomputes position.
+  const reorderEnabled = settings.bookmarkSortMode === 'manual';
 
   const canvasDragPreview = useDrag({
     surface: canvasEl,
     rootFolderId: rootFolder?.id ?? '',
-    enabled: dragEnabled,
+    enabled: true,
+    reorderEnabled,
     selectionRef,
     getOrderedChildren,
     onCommit: handleDragCommit,
+    onReorderBlocked,
     dragEngagedRef,
     onSpringOpenWorkspace: handleSpringOpenWorkspace,
   });
   const overlayDragPreview = useDrag({
     surface: overlayBodyEl,
     rootFolderId: rootFolder?.id ?? '',
-    enabled: dragEnabled,
+    enabled: true,
+    reorderEnabled,
     selectionRef,
     getOrderedChildren,
     onCommit: handleDragCommit,
+    onReorderBlocked,
     dragEngagedRef,
     onSpringOpenWorkspace: handleSpringOpenWorkspace,
   });
   const dockDragPreview = useDrag({
     surface: dockEl,
     rootFolderId: rootFolder?.id ?? '',
-    enabled: dragEnabled,
+    enabled: true,
+    reorderEnabled,
     selectionRef,
     getOrderedChildren,
     onCommit: handleDragCommit,
+    onReorderBlocked,
     dragEngagedRef,
     onSpringOpenWorkspace: handleSpringOpenWorkspace,
   });
   const dragPreview = canvasDragPreview ?? overlayDragPreview ?? dockDragPreview;
 
-  return { dragPreview, dragEnabled };
+  // `dragEnabled` drives the section-header drag handle affordance, which is a
+  // reorder-only interaction — so it tracks reorderEnabled (manual sort).
+  return { dragPreview, dragEnabled: reorderEnabled };
 }

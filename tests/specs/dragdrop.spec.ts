@@ -196,3 +196,79 @@ test.describe('drag-drop', () => {
     await expect(overlay.locator(`[data-item-id="${srcId}"]`)).toBeVisible();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Auto-sort (non-manual): relocation must still work; only reordering is gated.
+// Regression guard for the bug where ALL drag was disabled off manual sort,
+// silently breaking drag-into-folder / drag-to-workspace moves.
+// ---------------------------------------------------------------------------
+
+test.describe('drag-drop under auto-sort', () => {
+  test.beforeEach(async ({ newtabPage }) => {
+    await resetStorage(newtabPage);
+    await seedMinimal(newtabPage, { rootBookmarks: 5, folders: 1, bookmarksPerFolder: 2 });
+    await reloadNewtab(newtabPage);
+    await patchSettings(newtabPage, {
+      bookmarkSortMode: 'name',
+      bookmarkSortDirection: 'asc',
+      folderMode: 'grid',
+      folderOpenMode: 'overlay',
+    });
+    await reloadNewtab(newtabPage);
+  });
+
+  // WHY: moving a bookmark into a folder is relocation, not reordering — it must
+  // work in every sort mode. This is the capability the bug silently removed.
+  test('drag bookmark into folder still relocates under name sort', async ({ newtabPage }) => {
+    const rootBookmarks = newtabPage.locator('.ff-canvas [data-item-id][data-item-kind="bookmark"]');
+    const folderTile = newtabPage.locator('.ff-canvas [data-item-id][data-item-kind="folder"]').first();
+    const srcId = await rootBookmarks.nth(0).getAttribute('data-item-id');
+    if (!srcId) throw new Error('source bookmark not found');
+
+    const srcBox = await rootBookmarks.nth(0).boundingBox();
+    const folderBox = await folderTile.boundingBox();
+    if (!srcBox || !folderBox) throw new Error('tile bounding boxes not found');
+
+    const dst: BoundingBox = {
+      x: folderBox.x + folderBox.width / 2 - 1,
+      y: folderBox.y,
+      width: 1,
+      height: folderBox.height,
+    };
+
+    await pointerDrag(newtabPage, srcBox, dst, 12);
+
+    // Bookmark left the root scope…
+    await expect(
+      newtabPage.locator(`.ff-canvas [data-item-id="${srcId}"][data-item-kind="bookmark"]`),
+    ).toHaveCount(0, { timeout: 8_000 });
+
+    // …and now lives inside the folder.
+    await folderTile.click();
+    const overlay = newtabPage.locator('.ff-folder-overlay');
+    await overlay.waitFor({ state: 'visible', timeout: 5_000 });
+    await expect(overlay.locator(`[data-item-id="${srcId}"]`)).toBeVisible();
+  });
+
+  // WHY: positioning between siblings is meaningless under auto-sort, so it's
+  // suppressed — and the user is told why instead of the drag silently no-op'ing.
+  test('reordering is suppressed under name sort and explains why', async ({ newtabPage }) => {
+    const tiles = newtabPage.locator('.ff-canvas [data-item-id][data-item-kind="bookmark"]');
+    const srcBox = await tiles.nth(0).boundingBox();
+    const dstBox = await tiles.nth(1).boundingBox();
+    if (!srcBox || !dstBox) throw new Error('tile bounding boxes not found');
+
+    const dst: BoundingBox = {
+      x: dstBox.x + dstBox.width * 0.8,
+      y: dstBox.y,
+      width: 1,
+      height: dstBox.height,
+    };
+
+    await pointerDrag(newtabPage, srcBox, dst);
+
+    await expect(
+      newtabPage.locator('.ff-toast__msg', { hasText: /Manual sort/i }),
+    ).toBeVisible({ timeout: 5_000 });
+  });
+});

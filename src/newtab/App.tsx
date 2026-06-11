@@ -428,6 +428,10 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     onSelect: setSelection,
   });
 
+  const handleReorderBlocked = useCallback(() => {
+    pushToast({ kind: 'info', message: 'These tiles are sorted automatically — switch to Manual sort to reorder them.' });
+  }, [pushToast]);
+
   const { dragPreview, dragEnabled } = useDragWiring({
     canvasEl,
     overlayBodyEl,
@@ -442,6 +446,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     refreshTree,
     dragEngagedRef,
     onSwitchWorkspace: handleSwitchWorkspace,
+    onReorderBlocked: handleReorderBlocked,
   });
 
   const handleDeleteFocused = useCallback(async (item: BookmarkNode) => {
