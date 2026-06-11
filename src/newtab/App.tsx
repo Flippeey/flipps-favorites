@@ -21,7 +21,7 @@ import { useWorkspaceShortcut } from './interaction/useWorkspaceShortcut';
 import { useKeyboardNav, useDeleteShortcut } from './interaction/useKeyboardNav';
 import { useQuickAddShortcuts } from './interaction/useQuickAddShortcuts';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
-import { createBookmark, getBookmarkTree, getBookmarkUsage, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
+import { createBookmark, getBookmarkTree, getBookmarkUsage, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
 import { useScrollCollapsed } from './lib/useScrollCollapsed';
 import { normalizeBookmarkUrl } from './lib/url';
@@ -354,6 +354,14 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setEditTarget({ id: item.id, parentId: item.parentId, title: item.title, url: item.url ?? '' });
   }, []);
 
+  // Multi-select → "Move N to new folder": open the create-folder dialog carrying
+  // the selected ids; the move happens once the folder exists (see onSaved below).
+  // The folder lands in the selection's own scope so it appears in the current view.
+  const handleMoveSelectionToNewFolder = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    setFolderNameTarget({ mode: 'create', parentId: selection.scopeFolderId || defaultParentId(), moveIds: ids });
+  }, [selection.scopeFolderId, defaultParentId]);
+
   const { buildContextMenuItems, handleOpenAddMenu, handleWorkspaceContextMenu, handleCanvasContextMenu } = useContextMenuBuilder({
     tree,
     rootFolder,
@@ -373,6 +381,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     openAppSettings,
     setConfirmDeleteFolder,
     setConfirmDeleteBatch,
+    onMoveSelectionToNewFolder: handleMoveSelectionToNewFolder,
     setRenameWorkspaceTarget,
     setConfirmDeleteWorkspace,
     onDeleteBookmark: handleDeleteBookmark,
@@ -733,7 +742,21 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           target={folderNameTarget}
           siblingNames={folderSiblingNames}
           onClose={() => setFolderNameTarget(null)}
-          onSaved={() => { setFolderNameTarget(null); refreshTree(); }}
+          onSaved={async (folder) => {
+            const moveIds = folderNameTarget.mode === 'create' ? folderNameTarget.moveIds : undefined;
+            setFolderNameTarget(null);
+            if (moveIds && moveIds.length > 0) {
+              try {
+                // Sequential to preserve selection order in the new folder.
+                for (const id of moveIds) await moveBookmark(id, folder.id);
+                setSelection({ ids: new Set(moveIds), scopeFolderId: folder.id });
+                pushToast({ kind: 'info', message: `Moved ${moveIds.length} ${moveIds.length === 1 ? 'item' : 'items'} to “${folder.title}”.` });
+              } catch {
+                pushToast({ kind: 'error', message: 'Couldn’t move the selected bookmarks.' });
+              }
+            }
+            await refreshTree();
+          }}
         />
       )}
 

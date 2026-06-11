@@ -18,7 +18,7 @@
 import { test, expect } from '../fixtures/world.js';
 import { resetStorage, seedMinimal } from '../fixtures/seeding.js';
 import { tileById, tilesInScope } from '../fixtures/selectors.js';
-import { reloadNewtab, patchSettings } from '../fixtures/bookmark-helpers.js';
+import { reloadNewtab, patchSettings, openContextMenu, clickMenuItem } from '../fixtures/bookmark-helpers.js';
 import type { Page } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
@@ -243,5 +243,50 @@ test.describe('selection', () => {
 
     // The three tiles should no longer be in the DOM.
     await expect(tiles).toHaveCount(3); // 6 - 3 = 3 remaining
+  });
+
+  // -------------------------------------------------------------------------
+  // WHY: bulk-organising is the payoff of multi-select. The context menu must
+  // offer "move to new folder", and creating the folder must actually relocate
+  // every selected bookmark into it — not just open an empty dialog.
+  test('multi-select context menu moves the selected bookmarks into a new folder', async ({ newtabPage }) => {
+    // Use overlay folders so we can open the new folder and verify its contents.
+    await patchSettings(newtabPage, { folderOpenMode: 'overlay' });
+    await reloadNewtab(newtabPage);
+
+    const tiles = tilesInScope(newtabPage, rootFolderId);
+    const modKey = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+    const id0 = await tiles.nth(0).getAttribute('data-item-id');
+    const id1 = await tiles.nth(1).getAttribute('data-item-id');
+    if (!id0 || !id1) throw new Error('expected bookmark tiles');
+
+    await tiles.nth(0).click({ modifiers: [modKey] });
+    await tiles.nth(1).click({ modifiers: [modKey] });
+
+    // Right-click a selected tile → the menu offers the batch action.
+    const menu = await openContextMenu(newtabPage, tiles.nth(1));
+    await clickMenuItem(menu, /Move 2 to new folder/);
+
+    // Name + create the folder.
+    const dialog = newtabPage.locator('.ff-dialog');
+    await dialog.waitFor({ state: 'visible', timeout: 5_000 });
+    await dialog.locator('input.ff-input').fill('Grouped');
+    await dialog.getByRole('button', { name: /Create folder/ }).click();
+    await dialog.waitFor({ state: 'hidden', timeout: 5_000 });
+
+    // Both bookmarks leave the root scope (6 - 2 = 4 bookmark tiles remain).
+    await expect(tilesInScope(newtabPage, rootFolderId).locator(`[data-item-id="${id0}"]`))
+      .toHaveCount(0, { timeout: 8_000 });
+    await expect(tilesInScope(newtabPage, rootFolderId).locator(`[data-item-id="${id1}"]`))
+      .toHaveCount(0);
+
+    // …and land inside the new folder.
+    const folderTile = newtabPage.locator('.ff-canvas [data-item-kind="folder"]', { hasText: 'Grouped' }).first();
+    await folderTile.click();
+    const overlay = newtabPage.locator('.ff-folder-overlay');
+    await overlay.waitFor({ state: 'visible', timeout: 5_000 });
+    await expect(overlay.locator(`[data-item-id="${id0}"]`)).toBeVisible();
+    await expect(overlay.locator(`[data-item-id="${id1}"]`)).toBeVisible();
   });
 });
