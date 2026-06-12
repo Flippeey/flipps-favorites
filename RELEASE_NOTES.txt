@@ -1,0 +1,10 @@
+What's new in 2.4.1:
+
+- Move to new folder: select multiple bookmarks and use the right-click menu to move them into a new folder in one step
+- Undo relocations: moving or dragging a bookmark shows a toast with an Undo button to reverse it instantly
+- Auto-accent per workspace: each new workspace gets a distinct accent colour automatically
+- Double-click icon to apply: in the icon editor, double-clicking a search result applies it and closes the dialog
+- Resolution-aware layout: new installs on high-density or wide displays start with a better-fitting layout density
+- Fixed: bookmarks and folders can now be dragged to a different parent even when a sort mode is active
+- Fixed: drop indicator now appears correctly when dragging to the root under auto-sort
+- Fixed: list-view drag handle no longer triggers on clicks outside the handle icon

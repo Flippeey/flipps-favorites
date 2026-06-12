@@ -82,14 +82,17 @@ jobs:
       # --approval-timeout 0: listed submissions are human-reviewed, so don't
       # poll for the signed XPI — succeed once upload + validation complete.
       - name: Sign & submit to AMO
-        run: >
-          npx web-ext sign
-          --source-dir dist/firefox
-          --channel listed
-          --approval-timeout 0
-          --upload-source-code flipps-favorites-source.zip
-          --api-key "$AMO_JWT_ISSUER"
-          --api-secret "$AMO_JWT_SECRET"
+        run: |
+          NOTES=""
+          if [ -f RELEASE_NOTES.txt ]; then NOTES="$(cat RELEASE_NOTES.txt)"; fi
+          npx web-ext sign \
+            --source-dir dist/firefox \
+            --channel listed \
+            --approval-timeout 0 \
+            --upload-source-code flipps-favorites-source.zip \
+            --release-notes "$NOTES" \
+            --api-key "$AMO_JWT_ISSUER" \
+            --api-secret "$AMO_JWT_SECRET"
         env:
           AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
           AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
