@@ -42,10 +42,10 @@ function SortDropdown({ value, onSelect }: SortDropdownProps) {
   const label = SORT_OPTIONS.find(o => o.value === value)?.label ?? 'Manual';
 
   return (
-    <div className="ff-sort" ref={ref}>
+    <div className="ff-sort ff-sort--block" ref={ref}>
       <button
         type="button"
-        className="ff-pill"
+        className="ff-pill ff-sort__trigger"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Sort bookmarks (current: ${label})`}
@@ -53,7 +53,7 @@ function SortDropdown({ value, onSelect }: SortDropdownProps) {
         onClick={() => setOpen(o => !o)}
       >
         <Ico name="sort" size={14} />
-        <span>{label}</span>
+        <span className="ff-sort__current">{label}</span>
         <Ico name="chevronDown" size={12} />
       </button>
       {open && (
@@ -97,11 +97,9 @@ export function LayoutSection({ workspace, onPatch }: WorkspaceSectionProps) {
             onChange={(v) => onPatch({ folderMode: v })}
           />
         </div>
-        <div className="ff-row">
-          <div>
-            <div className="ff-row__label">Sort</div>
-            <div className="ff-row__hint">Order bookmarks in this workspace. Also on the toolbar.</div>
-          </div>
+        <div className="ff-stackrow">
+          <div className="ff-row__label" style={{ marginBottom: 4 }}>Sort</div>
+          <div className="ff-row__hint" style={{ marginBottom: 8 }}>Order bookmarks in this workspace. Also on the toolbar.</div>
           <SortDropdown
             value={sortValue}
             onSelect={(choice) => onPatch({ bookmarkSortMode: choice.mode, bookmarkSortDirection: choice.direction })}

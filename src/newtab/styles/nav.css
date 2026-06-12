@@ -159,6 +159,14 @@
 .ff-sort__option[data-active="true"], .ff-fpicker__option[data-active="true"] {
   background: var(--accent-soft); color: var(--accent-on-surface, var(--accent)); font-weight: 500;
 }
+/* Full-width block variant: used inside the settings drawer (Layout → Sort). */
+.ff-sort--block { display: block; }
+.ff-sort--block .ff-sort__trigger { width: 100%; justify-content: space-between; }
+.ff-sort--block .ff-sort__current {
+  flex: 1; min-width: 0; text-align: left;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ff-sort--block .ff-sort__panel { left: 0; right: 0; min-width: 0; }
 
 .ff-fpicker { position: relative; }
 .ff-fpicker__option { justify-content: flex-start; }
