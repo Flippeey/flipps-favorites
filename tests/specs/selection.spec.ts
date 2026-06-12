@@ -18,7 +18,7 @@
 import { test, expect } from '../fixtures/world.js';
 import { resetStorage, seedMinimal } from '../fixtures/seeding.js';
 import { tileById, tilesInScope } from '../fixtures/selectors.js';
-import { reloadNewtab, patchSettings, openContextMenu, clickMenuItem } from '../fixtures/bookmark-helpers.js';
+import { reloadNewtab, patchSettings, patchWorkspace, openContextMenu, clickMenuItem } from '../fixtures/bookmark-helpers.js';
 import type { Page } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
@@ -53,7 +53,8 @@ test.describe('selection', () => {
     rootFolderId = seeded.rootFolderId;
     await reloadNewtab(newtabPage);
     // Grid mode: all bookmarks share a single scope, predictable navItems order.
-    await patchSettings(newtabPage, { folderMode: 'grid', bookmarkSortMode: 'manual' });
+    // View/sort are per-workspace fields → patch the seeded workspace record.
+    await patchWorkspace(newtabPage, { folderMode: 'grid', bookmarkSortMode: 'manual' }, 'ws-minimal');
     await reloadNewtab(newtabPage);
   });
 
@@ -159,7 +160,10 @@ test.describe('selection', () => {
     const { seedPromoWorld } = await import('../fixtures/seeding.js');
     const freshWorld = await seedPromoWorld(newtabPage);
     await reloadNewtab(newtabPage);
-    await patchSettings(newtabPage, { bookmarkSortMode: 'manual', folderMode: 'grid', folderOpenMode: 'overlay' });
+    // Active promo workspace is 'promo-work'; view/sort are per-workspace,
+    // folderOpenMode is global.
+    await patchWorkspace(newtabPage, { bookmarkSortMode: 'manual', folderMode: 'grid' }, 'promo-work');
+    await patchSettings(newtabPage, { folderOpenMode: 'overlay' });
     await reloadNewtab(newtabPage);
 
     const apolloId = freshWorld.bookmarkIdByTitle('Project Apollo');

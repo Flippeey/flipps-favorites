@@ -1,24 +1,130 @@
-import type { TileShape } from '@/shared/messages';
+import { useEffect, useRef, useState } from 'react';
+import type { TileShape, ViewMode } from '@/shared/messages';
 import {
   CUSTOM_LAYOUT_PRESET,
   CustomLayoutPreview,
   DensityPreview,
+  GridViewPreview,
   LAYOUT_PRESETS,
-  Segmented,
+  ListViewPreview,
+  SectionTitle,
   Slider,
+  TileShapePreview,
   Toggle,
 } from '../settings-controls';
+import { Ico } from '../Ico';
+import { SORT_OPTIONS, type SortChoice } from '../TopNav';
 import { FALLBACK_WORKSPACE } from './types';
 import type { WorkspaceSectionProps } from './types';
+
+function sortValueFor(mode: string, direction: string): string {
+  return mode === 'manual' ? 'manual' : `${mode}:${direction}`;
+}
+
+interface SortDropdownProps {
+  value: string;
+  onSelect: (choice: SortChoice) => void;
+}
+
+function SortDropdown({ value, onSelect }: SortDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const label = SORT_OPTIONS.find(o => o.value === value)?.label ?? 'Manual';
+
+  return (
+    <div className="ff-sort ff-sort--block" ref={ref}>
+      <button
+        type="button"
+        className="ff-pill ff-sort__trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`Sort bookmarks (current: ${label})`}
+        title="Sort bookmarks"
+        onClick={() => setOpen(o => !o)}
+      >
+        <Ico name="sort" size={14} />
+        <span className="ff-sort__current">{label}</span>
+        <Ico name="chevronDown" size={12} />
+      </button>
+      {open && (
+        <ul className="ff-sort__panel" role="listbox">
+          {SORT_OPTIONS.map(o => (
+            <li
+              key={o.value}
+              role="option"
+              aria-selected={o.value === value}
+              className="ff-sort__option"
+              data-active={o.value === value}
+              onClick={() => { onSelect(o); setOpen(false); }}
+            >
+              <span>{o.label}</span>
+              {o.value === value && <Ico name="check" size={14} />}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export function LayoutSection({ workspace, onPatch }: WorkspaceSectionProps) {
   const ws = workspace ?? FALLBACK_WORKSPACE;
   const isCustom = ws.layoutPreset === 'custom';
+  const sortValue = sortValueFor(ws.bookmarkSortMode, ws.bookmarkSortDirection);
   return (
     <div className="ff-set-section">
-      <h3 className="ff-set-section__title">Layout</h3>
-      <p className="ff-set-section__desc">Choose a preset, or fine-tune each control.</p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 24 }}>
+      <SectionTitle>Sort</SectionTitle>
+      <div style={{ marginBottom: 4 }}>
+        <SortDropdown
+          value={sortValue}
+          onSelect={(choice) => onPatch({ bookmarkSortMode: choice.mode, bookmarkSortDirection: choice.direction })}
+        />
+      </div>
+      <SectionTitle>View</SectionTitle>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 4 }}>
+        {([
+          { mode: 'grid' as ViewMode, label: 'Grid', desc: 'Folder tiles' },
+          { mode: 'list' as ViewMode, label: 'List', desc: 'Open inline' },
+        ]).map(({ mode, label, desc }) => {
+          const activeView = ws.folderMode === mode;
+          return (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => onPatch({ folderMode: mode })}
+              className="ff-card"
+              data-active={activeView}
+              aria-pressed={activeView}
+              style={{
+                textAlign: 'left', cursor: 'pointer', color: 'var(--fg-1)', font: 'inherit',
+                borderColor: activeView ? 'var(--accent)' : 'var(--line-1)',
+                background: activeView ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontWeight: 600 }}>{label}</span>
+                <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>{desc}</span>
+              </div>
+              {mode === 'grid' ? <GridViewPreview active={activeView} /> : <ListViewPreview active={activeView} />}
+            </button>
+          );
+        })}
+      </div>
+      <SectionTitle>Density</SectionTitle>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 4 }}>
         {LAYOUT_PRESETS.map(p => {
           const active = ws.layoutPreset === p.id;
           return (
@@ -118,19 +224,33 @@ export function LayoutSection({ workspace, onPatch }: WorkspaceSectionProps) {
           </div>
         </div>
       )}
-      <div className="ff-card">
-        <div className="ff-row">
-          <div className="ff-row__label">Tile shape</div>
-          <Segmented<TileShape>
-            options={[
-              { id: 'squircle', label: 'Squircle' },
-              { id: 'rounded',  label: 'Rounded' },
-              { id: 'circle',   label: 'Circle' },
-            ]}
-            value={ws.tileShape}
-            onChange={(v) => onPatch({ tileShape: v })}
-          />
-        </div>
+      <SectionTitle>Tile shape</SectionTitle>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+        {([
+          { id: 'squircle' as TileShape, label: 'Squircle' },
+          { id: 'rounded' as TileShape, label: 'Rounded' },
+          { id: 'circle' as TileShape, label: 'Circle' },
+        ]).map(({ id, label }) => {
+          const activeShape = ws.tileShape === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onPatch({ tileShape: id })}
+              className="ff-card"
+              data-active={activeShape}
+              aria-pressed={activeShape}
+              style={{
+                textAlign: 'left', cursor: 'pointer', color: 'var(--fg-1)', font: 'inherit',
+                borderColor: activeShape ? 'var(--accent)' : 'var(--line-1)',
+                background: activeShape ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>{label}</div>
+              <TileShapePreview shape={id} active={activeShape} />
+            </button>
+          );
+        })}
       </div>
       <div className="ff-card" style={{ marginTop: 16 }}>
         <div className="ff-row">

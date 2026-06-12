@@ -58,59 +58,9 @@ test.describe('settings-nav: drawer lifecycle', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// View mode (Grid ↔ List)
-// ---------------------------------------------------------------------------
-test.describe('settings-nav: view mode', () => {
-  test('switching to List sets folderMode=list immediately', async ({ newtabPage }) => {
-    await patchSettings(newtabPage, { folderMode: 'grid' });
-    await reloadNewtab(newtabPage);
-
-    await openNavigation(newtabPage);
-    await newtabPage.locator('.ff-row', { hasText: 'View' })
-      .locator('.ff-segmented__option', { hasText: 'List' }).click();
-
-    // Verify the option is now active (data-active="true").
-    await expect(
-      newtabPage.locator('.ff-row', { hasText: 'View' })
-        .locator('.ff-segmented__option', { hasText: 'List' }),
-    ).toHaveAttribute('data-active', 'true');
-  });
-
-  test('switching to Grid sets folderMode=grid immediately', async ({ newtabPage }) => {
-    await patchSettings(newtabPage, { folderMode: 'list' });
-    await reloadNewtab(newtabPage);
-
-    await openNavigation(newtabPage);
-    await newtabPage.locator('.ff-row', { hasText: 'View' })
-      .locator('.ff-segmented__option', { hasText: 'Grid' }).click();
-
-    await expect(
-      newtabPage.locator('.ff-row', { hasText: 'View' })
-        .locator('.ff-segmented__option', { hasText: 'Grid' }),
-    ).toHaveAttribute('data-active', 'true');
-  });
-
-  test('view mode persists after reload', async ({ newtabPage }) => {
-    await patchSettings(newtabPage, { folderMode: 'grid' });
-    await reloadNewtab(newtabPage);
-
-    await openNavigation(newtabPage);
-    await newtabPage.locator('.ff-row', { hasText: 'View' })
-      .locator('.ff-segmented__option', { hasText: 'List' }).click();
-
-    // Wait for the async settings write to commit before reloading, then reload.
-    await waitForSettings(newtabPage, (s) => s.folderMode === 'list');
-    await reloadNewtab(newtabPage);
-
-    // Re-open and verify persisted value.
-    await openNavigation(newtabPage);
-    await expect(
-      newtabPage.locator('.ff-row', { hasText: 'View' })
-        .locator('.ff-segmented__option', { hasText: 'List' }),
-    ).toHaveAttribute('data-active', 'true');
-  });
-});
+// View mode (Grid ↔ List) moved out of the app-settings Navigation drawer into
+// the per-workspace Customize drawer (LayoutSection). Its coverage now lives in
+// settings-layout.spec.ts, since folderMode is a WorkspaceRecord field.
 
 // ---------------------------------------------------------------------------
 // Folder open mode (Overlay ↔ Page)

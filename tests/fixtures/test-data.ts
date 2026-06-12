@@ -78,6 +78,9 @@ export const DEFAULT_WORKSPACE_SETTINGS: Omit<WorkspaceRecord, 'id' | 'name' | '
   bookmarkIconSize: 75,
   tileShape: 'squircle',
   showTileLabels: true,
+  folderMode: 'grid',
+  bookmarkSortMode: 'manual',
+  bookmarkSortDirection: 'asc',
 };
 
 /** Preset accent colors from src/settings/config/options.ts */

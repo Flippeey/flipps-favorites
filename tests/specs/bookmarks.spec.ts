@@ -9,7 +9,7 @@ import {
   createTestBookmark,
   createTestFolder,
   openContextMenu,
-  patchSettings,
+  patchWorkspace,
   reloadNewtab,
   removeBookmarkTree,
   setupDefaultWorkspace,
@@ -22,8 +22,9 @@ test.beforeEach(async ({ newtabPage }) => {
   await clearExtensionStorage(newtabPage);
   rootId = await createTestFolder(newtabPage, 'BM Root');
   await setupDefaultWorkspace(newtabPage, rootId);
-  // Use grid mode so root bookmarks render at the top level.
-  await patchSettings(newtabPage, { folderMode: 'grid' });
+  // Use grid mode so root bookmarks render at the top level. View mode is a
+  // per-workspace field, so patch the active workspace record, not AppSettings.
+  await patchWorkspace(newtabPage, { folderMode: 'grid' });
   await reloadNewtab(newtabPage);
 });
 

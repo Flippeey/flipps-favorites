@@ -36,6 +36,7 @@ import {
   moveToBox,
   openNewtab,
   patchSettings,
+  patchWorkspace,
   resetCursor,
   saveVideo,
   seedPromoWorkspaces,
@@ -373,7 +374,8 @@ async function recordDragReorder(context, origin, workspaceIds, control) {
 
 async function recordViewModeSwitch(context, origin, workspaceIds, control) {
   console.log('\n── Video 07: view-mode-switch');
-  await patchSettings(control, { activeWorkspaceId: workspaceIds.Personal, folderMode: 'grid' });
+  await patchSettings(control, { activeWorkspaceId: workspaceIds.Personal });
+  await patchWorkspace(control, workspaceIds.Personal, { folderMode: 'grid' });
 
   const page = await openRecordingPage(context, origin);
   await waitForReady(page);
@@ -403,7 +405,7 @@ async function recordViewModeSwitch(context, origin, workspaceIds, control) {
   }
 
   await saveVideo(page, '07-view-mode-switch');
-  await patchSettings(control, { folderMode: 'grid' });
+  await patchWorkspace(control, workspaceIds.Personal, { folderMode: 'grid' });
 }
 
 // ─── Scenario map ───────────────────────────────────────────────────────────

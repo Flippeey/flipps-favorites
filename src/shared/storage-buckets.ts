@@ -178,8 +178,12 @@ export function createCachedRecordStore<T>(args: {
   area?: StorageAreaPreference;
   migrateFromLocal?: boolean;
   resolveConflict?: (current: T, incoming: T) => T;
+  // Optional per-record normalizer applied on read. Storage values are untrusted
+  // input (sync peers on older versions may write field-less records); a record
+  // that fails narrowing returns null and is dropped from the map.
+  deserializeRecord?: (value: unknown) => T | null;
 }): CachedRecordStore<T> {
-  const { storageKey, area, migrateFromLocal, resolveConflict } = args;
+  const { storageKey, area, migrateFromLocal, resolveConflict, deserializeRecord } = args;
   const valueStore = createCachedValueStore<Record<string, T>>({
     storageKey,
     area,
@@ -189,7 +193,19 @@ export function createCachedRecordStore<T>(args: {
         return {};
       }
 
-      return { ...(storedValue as Record<string, T>) };
+      const rawMap = storedValue as Record<string, unknown>;
+      if (!deserializeRecord) {
+        return { ...(rawMap as Record<string, T>) };
+      }
+
+      const normalized: Record<string, T> = {};
+      for (const [key, value] of Object.entries(rawMap)) {
+        const record = deserializeRecord(value);
+        if (record !== null) {
+          normalized[key] = record;
+        }
+      }
+      return normalized;
     },
     serialize(value) {
       return { ...value };

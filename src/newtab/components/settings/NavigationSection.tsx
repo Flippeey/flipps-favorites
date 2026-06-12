@@ -1,4 +1,4 @@
-import type { FolderOpenMode, ViewMode } from '@/shared/messages';
+import type { FolderOpenMode } from '@/shared/messages';
 import { Segmented, Toggle } from '../settings-controls';
 import type { SectionProps } from './types';
 
@@ -21,17 +21,6 @@ export function NavigationSection({ settings, onPatch }: SectionProps) {
             <div className="ff-row__hint">Reopen the workspace you were using when you closed the tab.</div>
           </div>
           <Toggle on={settings.rememberLastFolder} onChange={(v) => onPatch({ rememberLastFolder: v })} />
-        </div>
-        <div className="ff-row">
-          <div>
-            <div className="ff-row__label">View</div>
-            <div className="ff-row__hint">Grid shows folders as compact tiles; List unfolds every folder inline.</div>
-          </div>
-          <Segmented<ViewMode>
-            options={[{ id: 'grid', label: 'Grid' }, { id: 'list', label: 'List' }]}
-            value={settings.folderMode}
-            onChange={(v) => onPatch({ folderMode: v })}
-          />
         </div>
         <div className="ff-row">
           <div>

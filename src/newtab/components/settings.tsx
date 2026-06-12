@@ -74,7 +74,7 @@ export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation
       <aside ref={(el) => { drawerRef.current = el; }} className="ff-drawer" data-closing={closing || undefined} role="dialog" aria-modal="true" aria-label="App settings">
         <header className="ff-drawer__head">
           <div>
-            <div className="ff-dialog__eyebrow">Settings</div>
+            <div className="ff-dialog__eyebrow">All workspaces</div>
             <div className="ff-dialog__title">{APP_SECTION_TITLES[section]}</div>
           </div>
           <button className="ff-iconbtn ff-iconbtn--icon" aria-label="Close" title="Close" onClick={handleClose}>
@@ -143,7 +143,7 @@ export function WorkspaceSettingsDrawer({ settings, activeWorkspace, workspaceWa
       <aside ref={(el) => { drawerRef.current = el; }} className="ff-drawer" data-closing={closing || undefined} role="dialog" aria-modal="true" aria-label="Workspace settings">
         <header className="ff-drawer__head">
           <div>
-            <div className="ff-dialog__eyebrow">Workspace{activeWorkspace ? ` · ${activeWorkspace.name}` : ''}</div>
+            <div className="ff-dialog__eyebrow">This workspace{activeWorkspace ? ` · ${activeWorkspace.name}` : ''}</div>
             <div className="ff-dialog__title">{WORKSPACE_SECTION_TITLES[section]}</div>
           </div>
           <button className="ff-iconbtn ff-iconbtn--icon" aria-label="Close" title="Close" onClick={handleClose}>

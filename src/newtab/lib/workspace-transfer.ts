@@ -1,4 +1,12 @@
-import type { AppSettings, BookmarkUsageRecord, IconOverrideRecord, WorkspaceRecord } from '@/shared/messages';
+import type {
+  AppSettings,
+  BookmarkSortMode,
+  BookmarkUsageRecord,
+  IconOverrideRecord,
+  SortDirection,
+  ViewMode,
+  WorkspaceRecord,
+} from '@/shared/messages';
 import {
   defaultSettings,
   defaultWorkspaceSettings,
@@ -19,7 +27,10 @@ import { getOverrideKeyForScope, normalizeOverrideScope, type IconOverrideScope 
 import { invalidateIcon } from './messaging';
 
 export const WORKSPACE_SCHEMA = 'flipps-workspace-transfer' as const;
-export const WORKSPACE_SCHEMA_VERSION = 2;
+// v3: per-workspace view/sort. v2 (and earlier) exports stored folderMode/
+// bookmarkSortMode/bookmarkSortDirection as GLOBAL settings; on import they are
+// upcast onto each WorkspaceRecord that lacks them (see legacyViewSortFromSettings).
+export const WORKSPACE_SCHEMA_VERSION = 3;
 
 export type WorkspaceImportMode = 'merge' | 'replace';
 
@@ -124,6 +135,24 @@ export async function parseWorkspaceFile(file: File): Promise<WorkspaceExportPay
     throw new Error('Import file is not a Flipp’s Favorites backup.');
   }
 
+  // Capture the RAW version BEFORE defaulting: a missing version means a legacy
+  // file (pre-v2 exports omitted it), so it must NOT be read as the current
+  // constant — that would skip the v2→v3 view/sort upcast below.
+  const rawSchemaVersion = typeof candidate.schemaVersion === 'number' ? candidate.schemaVersion : undefined;
+
+  // Forward-compat guard: refuse a backup written by a newer extension version
+  // rather than silently dropping fields we don't understand.
+  if (rawSchemaVersion !== undefined && rawSchemaVersion > WORKSPACE_SCHEMA_VERSION) {
+    throw new Error('Import file was made by a newer version of Flipp’s Favorites. Update the extension and try again.');
+  }
+
+  // v2 (and earlier / versionless) exports carried view + sort as GLOBAL
+  // settings. Upcast them onto each record that lacks the per-workspace fields.
+  // Read via Record<string, unknown> narrowing — AppSettings no longer types
+  // these fields, so a typed property read would not compile.
+  const isLegacy = rawSchemaVersion === undefined || rawSchemaVersion <= 2;
+  const legacyViewSort = isLegacy ? legacyViewSortFromSettings(candidate.settings) : null;
+
   const iconOverrides = Array.isArray(candidate.iconOverrides)
     ? candidate.iconOverrides.map(normalizeOverride).filter((r): r is IconOverrideTransferRecord => r !== null)
     : [];
@@ -131,13 +160,15 @@ export async function parseWorkspaceFile(file: File): Promise<WorkspaceExportPay
     ? candidate.bookmarkUsage.map(normalizeUsage).filter((r): r is BookmarkUsageTransferRecord => r !== null)
     : [];
   const workspaces = Array.isArray(candidate.workspaces)
-    ? candidate.workspaces.map(normalizeWorkspace).filter((r): r is WorkspaceRecord => r !== null)
+    ? candidate.workspaces
+        .map(ws => normalizeWorkspace(ws, legacyViewSort))
+        .filter((r): r is WorkspaceRecord => r !== null)
     : [];
   const workspaceWallpapers = normalizeWallpaperMap(candidate.workspaceWallpapers);
 
   return {
     schema: WORKSPACE_SCHEMA,
-    schemaVersion: typeof candidate.schemaVersion === 'number' ? candidate.schemaVersion : WORKSPACE_SCHEMA_VERSION,
+    schemaVersion: rawSchemaVersion ?? WORKSPACE_SCHEMA_VERSION,
     exportedAt: typeof candidate.exportedAt === 'number' ? candidate.exportedAt : Date.now(),
     settings: (candidate.settings && typeof candidate.settings === 'object'
       ? candidate.settings
@@ -147,6 +178,40 @@ export async function parseWorkspaceFile(file: File): Promise<WorkspaceExportPay
     iconOverrides,
     bookmarkUsage,
   };
+}
+
+// Legacy global view/sort carried by v2-and-earlier exports. Each field is only
+// set when the stored value passes its literal-union guard; missing/invalid
+// fields stay undefined so the record falls back to defaults during normalize.
+interface LegacyViewSort {
+  folderMode?: ViewMode;
+  bookmarkSortMode?: BookmarkSortMode;
+  bookmarkSortDirection?: SortDirection;
+}
+
+function legacyViewSortFromSettings(settings: unknown): LegacyViewSort {
+  if (!settings || typeof settings !== 'object') return {};
+  const raw = settings as Record<string, unknown>;
+  const out: LegacyViewSort = {};
+  if (isViewMode(raw.folderMode)) out.folderMode = raw.folderMode;
+  if (isBookmarkSortMode(raw.bookmarkSortMode)) out.bookmarkSortMode = raw.bookmarkSortMode;
+  if (isSortDirection(raw.bookmarkSortDirection)) out.bookmarkSortDirection = raw.bookmarkSortDirection;
+  return out;
+}
+
+// Local literal-union guards. Kept here (not imported from shared/storage) so
+// the transfer normalizer stays self-contained and independent of the
+// storage-side normalizeWorkspaceRecord.
+function isViewMode(value: unknown): value is ViewMode {
+  return value === 'grid' || value === 'list';
+}
+
+function isBookmarkSortMode(value: unknown): value is BookmarkSortMode {
+  return value === 'manual' || value === 'name' || value === 'lastUsed' || value === 'created';
+}
+
+function isSortDirection(value: unknown): value is SortDirection {
+  return value === 'asc' || value === 'desc';
 }
 
 export async function applyWorkspaceImport(
@@ -278,20 +343,35 @@ function normalizeUsage(value: unknown): BookmarkUsageTransferRecord | null {
   return { bookmarkId: candidate.bookmarkId, usedAt };
 }
 
-function normalizeWorkspace(value: unknown): WorkspaceRecord | null {
+function normalizeWorkspace(value: unknown, legacyViewSort: LegacyViewSort | null): WorkspaceRecord | null {
   if (!value || typeof value !== 'object') return null;
-  const candidate = value as Partial<WorkspaceRecord>;
+  const candidate = value as Partial<WorkspaceRecord> & Record<string, unknown>;
   if (typeof candidate.id !== 'string' || !candidate.id.trim()) return null;
   if (typeof candidate.name !== 'string' || !candidate.name.trim()) return null;
   if (typeof candidate.rootFolderId !== 'string' || !candidate.rootFolderId.trim()) return null;
   // Merge with defaults so any missing fields stay valid without trusting the file blindly.
-  return {
+  const merged = {
     ...defaultWorkspaceSettings,
     ...candidate,
     id: candidate.id,
     name: candidate.name,
     rootFolderId: candidate.rootFolderId,
   } as WorkspaceRecord;
+  // Resolve view/sort with a clear precedence: an explicit, valid per-record
+  // value (v3 files) > the legacy global upcast (v2 files) > the plain default.
+  // legacyViewSort is null for v3+, so explicit values always pass through there.
+  return {
+    ...merged,
+    folderMode: isViewMode(candidate.folderMode)
+      ? candidate.folderMode
+      : legacyViewSort?.folderMode ?? defaultWorkspaceSettings.folderMode,
+    bookmarkSortMode: isBookmarkSortMode(candidate.bookmarkSortMode)
+      ? candidate.bookmarkSortMode
+      : legacyViewSort?.bookmarkSortMode ?? defaultWorkspaceSettings.bookmarkSortMode,
+    bookmarkSortDirection: isSortDirection(candidate.bookmarkSortDirection)
+      ? candidate.bookmarkSortDirection
+      : legacyViewSort?.bookmarkSortDirection ?? defaultWorkspaceSettings.bookmarkSortDirection,
+  };
 }
 
 function normalizeWallpaperMap(value: unknown): WorkspaceWallpaperMap {

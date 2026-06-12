@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { AppSettings, BookmarkNode, WorkspaceRecord } from '@/shared/messages';
+import type { AppSettings, BookmarkNode, BookmarkSortMode, WorkspaceRecord } from '@/shared/messages';
 import type { PushToastInput } from '../state/useToasts';
 import type { MarqueeSelection } from './useMarquee';
 import { useDrag, type DropTarget, type DragPreviewState } from './useDrag';
@@ -13,6 +13,10 @@ interface UseDragWiringArgs {
   dockEl: HTMLElement | null;
   rootFolder: BookmarkNode | null;
   settings: AppSettings;
+  // Effective sort mode of the active workspace (per-workspace identity). Gates
+  // reordering — App derives it from activeWorkspace, so the hook never reads it
+  // off settings.
+  bookmarkSortMode: BookmarkSortMode;
   workspaces: WorkspaceRecord[];
   tree: BookmarkNode[];
   sortedChildren: (children?: BookmarkNode[]) => BookmarkNode[];
@@ -37,7 +41,7 @@ interface UseDragWiringResult {
 // unchanged. Returns whichever surface currently has an active preview.
 export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
   const {
-    canvasEl, overlayBodyEl, dockEl, rootFolder, settings, workspaces, tree,
+    canvasEl, overlayBodyEl, dockEl, rootFolder, settings, bookmarkSortMode, workspaces, tree,
     sortedChildren, selectionRef, setSelection, refreshTree, dragEngagedRef,
     onSwitchWorkspace, onReorderBlocked, pushToast,
   } = args;
@@ -122,7 +126,7 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
   // Drag itself is always live so relocation (into a folder, the dock, or another
   // workspace) works in every sort mode. Only reordering — positioning between
   // siblings — is gated to manual sort, since auto-sort recomputes position.
-  const reorderEnabled = settings.bookmarkSortMode === 'manual';
+  const reorderEnabled = bookmarkSortMode === 'manual';
 
   const canvasDragPreview = useDrag({
     surface: canvasEl,

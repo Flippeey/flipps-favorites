@@ -17,7 +17,7 @@
  *     introduce ordering non-determinism).
  */
 import { test, expect } from '../fixtures/world.js';
-import { resetStorage, seedMinimal, waitForSettings } from '../fixtures/seeding.js';
+import { resetStorage, seedMinimal, waitForWorkspace } from '../fixtures/seeding.js';
 import { sortPill, sortOption, tilesInScope } from '../fixtures/selectors.js';
 
 // ─── typed shim used at page.evaluate boundaries ─────────────────────────────
@@ -397,9 +397,12 @@ test.describe('sort modes', () => {
     await applySort(newtabPage, 'name', 'asc');
 
     // Gate the reload on the committed write so we don't read a stale sort.
-    await waitForSettings(
+    // Sort is a per-workspace field now — poll the active workspace record
+    // ('ws-sort', created by seedCustomOrder), not AppSettings.
+    await waitForWorkspace(
       newtabPage,
-      (s) => s.bookmarkSortMode === 'name' && s.bookmarkSortDirection === 'asc',
+      'ws-sort',
+      (w) => w.bookmarkSortMode === 'name' && w.bookmarkSortDirection === 'asc',
     );
     await newtabPage.reload();
     await newtabPage.waitForSelector('.ff-app');
