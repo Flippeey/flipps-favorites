@@ -333,3 +333,57 @@ test.describe('settings-layout: per-workspace view isolation', () => {
     expect(personal?.folderMode).toBe('grid');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Sort (per-workspace, beside View)
+//
+// WHY this matters: bookmarkSortMode/Direction became WorkspaceRecord fields in
+// the per-workspace migration, but their only UI was the TopNav dropdown. A user
+// configuring a workspace in the Customize drawer expects Sort to live next to
+// View. This control writes the SAME per-workspace fields the toolbar dropdown
+// does, so the two stay in sync; the value must persist per workspace.
+// ---------------------------------------------------------------------------
+const drawerSortPill = (page: Page) => page.locator('.ff-drawer .ff-sort .ff-pill');
+const drawerSortOption = (page: Page, label: string) =>
+  page.locator('.ff-drawer .ff-sort__panel .ff-sort__option', { hasText: label });
+
+test.describe('settings-layout: sort', () => {
+  test('choosing a sort option writes mode + direction to the active workspace', async ({ newtabPage }) => {
+    await patchWorkspace(newtabPage, WORK_WS_ID, { bookmarkSortMode: 'manual', bookmarkSortDirection: 'asc' });
+    await reloadNewtab(newtabPage);
+
+    await openLayout(newtabPage);
+    await drawerSortPill(newtabPage).click();
+    await drawerSortOption(newtabPage, 'Name (A → Z)').click();
+
+    // The per-workspace record carries the chosen mode + direction.
+    await waitForWorkspace(
+      newtabPage,
+      WORK_WS_ID,
+      (w) => w.bookmarkSortMode === 'name' && w.bookmarkSortDirection === 'asc',
+    );
+    // The pill reflects the new selection.
+    await expect(drawerSortPill(newtabPage)).toContainText('Name (A → Z)');
+  });
+
+  test('sort selection persists after reload', async ({ newtabPage }) => {
+    await patchWorkspace(newtabPage, WORK_WS_ID, { bookmarkSortMode: 'manual', bookmarkSortDirection: 'asc' });
+    await reloadNewtab(newtabPage);
+
+    await openLayout(newtabPage);
+    await drawerSortPill(newtabPage).click();
+    await drawerSortOption(newtabPage, 'Date added (newest)').click();
+    await waitForWorkspace(
+      newtabPage,
+      WORK_WS_ID,
+      (w) => w.bookmarkSortMode === 'created' && w.bookmarkSortDirection === 'desc',
+    );
+
+    await newtabPage.keyboard.press('Escape');
+    await expect(newtabPage.locator('.ff-drawer')).toHaveCount(0);
+    await reloadNewtab(newtabPage);
+
+    await openLayout(newtabPage);
+    await expect(drawerSortPill(newtabPage)).toContainText('Date added (newest)');
+  });
+});

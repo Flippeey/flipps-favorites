@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import type { TileShape, ViewMode } from '@/shared/messages';
 import {
   CUSTOM_LAYOUT_PRESET,
@@ -8,16 +9,82 @@ import {
   Slider,
   Toggle,
 } from '../settings-controls';
+import { Ico } from '../Ico';
+import { SORT_OPTIONS, type SortChoice } from '../TopNav';
 import { FALLBACK_WORKSPACE } from './types';
 import type { WorkspaceSectionProps } from './types';
+
+function sortValueFor(mode: string, direction: string): string {
+  return mode === 'manual' ? 'manual' : `${mode}:${direction}`;
+}
+
+interface SortDropdownProps {
+  value: string;
+  onSelect: (choice: SortChoice) => void;
+}
+
+function SortDropdown({ value, onSelect }: SortDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const label = SORT_OPTIONS.find(o => o.value === value)?.label ?? 'Manual';
+
+  return (
+    <div className="ff-sort" ref={ref}>
+      <button
+        type="button"
+        className="ff-pill"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`Sort bookmarks (current: ${label})`}
+        title="Sort bookmarks"
+        onClick={() => setOpen(o => !o)}
+      >
+        <Ico name="sort" size={14} />
+        <span>{label}</span>
+        <Ico name="chevronDown" size={12} />
+      </button>
+      {open && (
+        <ul className="ff-sort__panel" role="listbox">
+          {SORT_OPTIONS.map(o => (
+            <li
+              key={o.value}
+              role="option"
+              aria-selected={o.value === value}
+              className="ff-sort__option"
+              data-active={o.value === value}
+              onClick={() => { onSelect(o); setOpen(false); }}
+            >
+              <span>{o.label}</span>
+              {o.value === value && <Ico name="check" size={14} />}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export function LayoutSection({ workspace, onPatch }: WorkspaceSectionProps) {
   const ws = workspace ?? FALLBACK_WORKSPACE;
   const isCustom = ws.layoutPreset === 'custom';
+  const sortValue = sortValueFor(ws.bookmarkSortMode, ws.bookmarkSortDirection);
   return (
     <div className="ff-set-section">
       <h3 className="ff-set-section__title">Layout</h3>
-      <p className="ff-set-section__desc">Choose a preset, or fine-tune each control.</p>
+      <p className="ff-set-section__desc">View, sort, and tile density for this workspace.</p>
       <div className="ff-card" style={{ marginBottom: 24 }}>
         <div className="ff-row">
           <div>
@@ -28,6 +95,16 @@ export function LayoutSection({ workspace, onPatch }: WorkspaceSectionProps) {
             options={[{ id: 'grid', label: 'Grid' }, { id: 'list', label: 'List' }]}
             value={ws.folderMode}
             onChange={(v) => onPatch({ folderMode: v })}
+          />
+        </div>
+        <div className="ff-row">
+          <div>
+            <div className="ff-row__label">Sort</div>
+            <div className="ff-row__hint">Order bookmarks in this workspace. Also on the toolbar.</div>
+          </div>
+          <SortDropdown
+            value={sortValue}
+            onSelect={(choice) => onPatch({ bookmarkSortMode: choice.mode, bookmarkSortDirection: choice.direction })}
           />
         </div>
       </div>

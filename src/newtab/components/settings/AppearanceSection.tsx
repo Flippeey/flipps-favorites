@@ -39,7 +39,7 @@ export function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSe
     <>
       <div className="ff-set-section">
         <h3 className="ff-set-section__title">Theme</h3>
-        <p className="ff-set-section__desc">Choose light or dark directly, or follow the browser preference automatically.</p>
+        <p className="ff-set-section__desc">Set for this workspace — overrides the global default. Choose light or dark, or follow the browser preference.</p>
         <div className="ff-card" style={{ marginBottom: 16 }}>
           <div className="ff-row" style={{ padding: 0 }}>
             <div>
