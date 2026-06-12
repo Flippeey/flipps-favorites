@@ -4,9 +4,12 @@ import {
   CUSTOM_LAYOUT_PRESET,
   CustomLayoutPreview,
   DensityPreview,
+  GridViewPreview,
   LAYOUT_PRESETS,
-  Segmented,
+  ListViewPreview,
+  SectionTitle,
   Slider,
+  TileShapePreview,
   Toggle,
 } from '../settings-controls';
 import { Ico } from '../Ico';
@@ -83,30 +86,45 @@ export function LayoutSection({ workspace, onPatch }: WorkspaceSectionProps) {
   const sortValue = sortValueFor(ws.bookmarkSortMode, ws.bookmarkSortDirection);
   return (
     <div className="ff-set-section">
-      <h3 className="ff-set-section__title">Layout</h3>
-      <p className="ff-set-section__desc">View, sort, and tile density for this workspace.</p>
-      <div className="ff-card" style={{ marginBottom: 24 }}>
-        <div className="ff-row">
-          <div>
-            <div className="ff-row__label">View</div>
-            <div className="ff-row__hint">Grid shows folders as compact tiles; List unfolds every folder inline.</div>
-          </div>
-          <Segmented<ViewMode>
-            options={[{ id: 'grid', label: 'Grid' }, { id: 'list', label: 'List' }]}
-            value={ws.folderMode}
-            onChange={(v) => onPatch({ folderMode: v })}
-          />
-        </div>
-        <div className="ff-stackrow">
-          <div className="ff-row__label" style={{ marginBottom: 4 }}>Sort</div>
-          <div className="ff-row__hint" style={{ marginBottom: 8 }}>Order bookmarks in this workspace. Also on the toolbar.</div>
-          <SortDropdown
-            value={sortValue}
-            onSelect={(choice) => onPatch({ bookmarkSortMode: choice.mode, bookmarkSortDirection: choice.direction })}
-          />
-        </div>
+      <SectionTitle>Sort</SectionTitle>
+      <div style={{ marginBottom: 4 }}>
+        <SortDropdown
+          value={sortValue}
+          onSelect={(choice) => onPatch({ bookmarkSortMode: choice.mode, bookmarkSortDirection: choice.direction })}
+        />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 24 }}>
+      <SectionTitle>View</SectionTitle>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 4 }}>
+        {([
+          { mode: 'grid' as ViewMode, label: 'Grid', desc: 'Folder tiles' },
+          { mode: 'list' as ViewMode, label: 'List', desc: 'Open inline' },
+        ]).map(({ mode, label, desc }) => {
+          const activeView = ws.folderMode === mode;
+          return (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => onPatch({ folderMode: mode })}
+              className="ff-card"
+              data-active={activeView}
+              aria-pressed={activeView}
+              style={{
+                textAlign: 'left', cursor: 'pointer', color: 'var(--fg-1)', font: 'inherit',
+                borderColor: activeView ? 'var(--accent)' : 'var(--line-1)',
+                background: activeView ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontWeight: 600 }}>{label}</span>
+                <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>{desc}</span>
+              </div>
+              {mode === 'grid' ? <GridViewPreview active={activeView} /> : <ListViewPreview active={activeView} />}
+            </button>
+          );
+        })}
+      </div>
+      <SectionTitle>Density</SectionTitle>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 4 }}>
         {LAYOUT_PRESETS.map(p => {
           const active = ws.layoutPreset === p.id;
           return (
@@ -206,19 +224,33 @@ export function LayoutSection({ workspace, onPatch }: WorkspaceSectionProps) {
           </div>
         </div>
       )}
-      <div className="ff-card">
-        <div className="ff-row">
-          <div className="ff-row__label">Tile shape</div>
-          <Segmented<TileShape>
-            options={[
-              { id: 'squircle', label: 'Squircle' },
-              { id: 'rounded',  label: 'Rounded' },
-              { id: 'circle',   label: 'Circle' },
-            ]}
-            value={ws.tileShape}
-            onChange={(v) => onPatch({ tileShape: v })}
-          />
-        </div>
+      <SectionTitle>Tile shape</SectionTitle>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+        {([
+          { id: 'squircle' as TileShape, label: 'Squircle' },
+          { id: 'rounded' as TileShape, label: 'Rounded' },
+          { id: 'circle' as TileShape, label: 'Circle' },
+        ]).map(({ id, label }) => {
+          const activeShape = ws.tileShape === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onPatch({ tileShape: id })}
+              className="ff-card"
+              data-active={activeShape}
+              aria-pressed={activeShape}
+              style={{
+                textAlign: 'left', cursor: 'pointer', color: 'var(--fg-1)', font: 'inherit',
+                borderColor: activeShape ? 'var(--accent)' : 'var(--line-1)',
+                background: activeShape ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>{label}</div>
+              <TileShapePreview shape={id} active={activeShape} />
+            </button>
+          );
+        })}
       </div>
       <div className="ff-card" style={{ marginTop: 16 }}>
         <div className="ff-row">

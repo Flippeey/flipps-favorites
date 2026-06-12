@@ -70,6 +70,13 @@
 
 /* Settings cards / rows / theme + accent pickers */
 .ff-set-section { margin-bottom: var(--s-8); }
+/* Reusable group header — one consistent style for every settings section. */
+.ff-set-grouptitle {
+  font-size: 13px; font-weight: 600; color: var(--fg-2);
+  letter-spacing: 0.01em;
+  margin: 22px 0 10px;
+}
+.ff-set-grouptitle:first-child { margin-top: 0; }
 .ff-set-section__title {
   font-family: var(--font-display);
   font-size: 18px; font-weight: 600;

@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { BookmarkNode, LayoutPresetId } from '@/shared/messages';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import type { BookmarkNode, LayoutPresetId, TileShape } from '@/shared/messages';
 import { Ico } from './Ico';
+
+// Reusable section header for the settings drawer. One style for every group
+// header across all tabs (Appearance, Layout) — small, quiet, consistent.
+export function SectionTitle({ children }: { children: ReactNode }) {
+  return <h3 className="ff-set-grouptitle">{children}</h3>;
+}
 
 export const ACCENT_PRESETS: { id: string; label: string; value: string }[] = [
   { id: 'blue',     label: 'Blue',     value: '#3F72DC' },
@@ -183,7 +189,74 @@ export function DensityPreview({ cols, active }: { cols: number; active?: boolea
   );
 }
 
-export function ThemeCardPreview({ light }: { light?: boolean }) {
+export function GridViewPreview({ active }: { active?: boolean }) {
+  const fill = active ? 'color-mix(in oklab, var(--accent) 55%, var(--ink-3))' : 'var(--ink-3)';
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 5, height: '100%', padding: '2px 0 6px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5 }}>
+        {Array.from({ length: 10 }).map((_, i) => (
+          <div key={i} style={{
+            aspectRatio: 1,
+            background: fill,
+            borderRadius: 3,
+            transition: 'background 140ms ease-out',
+          }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function ListViewPreview({ active }: { active?: boolean }) {
+  const solid = active ? 'color-mix(in oklab, var(--accent) 55%, var(--ink-3))' : 'var(--ink-3)';
+  const soft = active
+    ? 'color-mix(in oklab, var(--accent) 30%, var(--ink-3))'
+    : 'color-mix(in oklab, var(--ink-3) 70%, var(--ink-2))';
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 8, height: '100%', padding: '2px 0' }}>
+      {[64, 82, 52].map((w, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ width: 12, height: 12, borderRadius: 3, background: solid, flexShrink: 0, transition: 'background 140ms ease-out' }} />
+          <div style={{ height: 6, width: `${w}%`, borderRadius: 3, background: soft, transition: 'background 140ms ease-out' }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function TileShapePreview({ shape, active }: { shape: TileShape; active?: boolean }) {
+  const fill = active ? 'color-mix(in oklab, var(--accent) 55%, var(--ink-3))' : 'var(--ink-3)';
+  // Match the real tile radii (tiles.css): squircle 0.28, rounded 0.16, circle 50%.
+  const radius = shape === 'circle' ? '50%' : shape === 'rounded' ? '16%' : '28%';
+  return (
+    <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 7, padding: '2px 0' }}>
+      {[0, 1, 2].map(i => (
+        <div key={i} style={{
+          width: 22, height: 22,
+          borderRadius: radius,
+          background: fill,
+          transition: 'background 140ms ease-out, border-radius 140ms ease-out',
+        }} />
+      ))}
+    </div>
+  );
+}
+
+export function ThemeCardPreview({ light, compact }: { light?: boolean; compact?: boolean }) {
+  // Compact variant (settings Appearance) — one row, smaller. Default keeps the
+  // original two-row skeleton used by onboarding, so that flow is unchanged.
+  if (compact) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        <div style={{ height: 5, width: 40, background: light ? '#E0DCD2' : '#2B2926', borderRadius: 2 }} />
+        <div style={{ display: 'flex', gap: 4 }}>
+          {[0,1,2,3].map(i => (
+            <div key={i} style={{ width: 11, height: 11, borderRadius: 3, background: light ? '#E6E1D5' : '#3A3835' }} />
+          ))}
+        </div>
+      </div>
+    );
+  }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ height: 6, width: 60, background: light ? '#E0DCD2' : '#2B2926', borderRadius: 3 }} />

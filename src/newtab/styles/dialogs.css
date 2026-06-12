@@ -205,6 +205,9 @@
 .ff-row + .ff-stackrow, .ff-stackrow + .ff-row, .ff-stackrow + .ff-stackrow { border-top: 1px solid var(--line-1); }
 
 .ff-themegrid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
+/* Compact theme (Light/Dark) picker — secondary control, kept low-profile. */
+.ff-themegrid--compact .ff-themecard { aspect-ratio: auto; min-height: 0; padding: 10px 12px; }
+.ff-themegrid--compact .ff-themecard__label { position: static; margin-top: 8px; }
 .ff-themecard {
   aspect-ratio: 16/10;
   border-radius: var(--r-lg);

@@ -163,43 +163,43 @@ test.describe('settings-layout: custom preset', () => {
 // ---------------------------------------------------------------------------
 // Tile shape
 // ---------------------------------------------------------------------------
+// Tile shape is a trio of skeleton-preview cards (Squircle / Rounded / Circle),
+// matching the View and Density cards. Each card carries data-active when its
+// shape is selected. 'Squircle'/'Rounded'/'Circle' are unique among drawer cards.
+const shapeCard = (page: Page, label: 'Squircle' | 'Rounded' | 'Circle') =>
+  page.locator('.ff-drawer button.ff-card', { hasText: label });
+
 test.describe('settings-layout: tile shape', () => {
-  test('Squircle option sets data-tile-shape=squircle on the app shell', async ({ newtabPage }) => {
+  test('Squircle card sets data-tile-shape=squircle on the app shell', async ({ newtabPage }) => {
     // Start from circle so the click is a real change.
     await patchWorkspace(newtabPage, WORK_WS_ID, { tileShape: 'circle' });
     await reloadNewtab(newtabPage);
 
     await openLayout(newtabPage);
-    await newtabPage.locator('.ff-row', { hasText: 'Tile shape' })
-      .locator('.ff-segmented__option', { hasText: 'Squircle' }).click();
+    await shapeCard(newtabPage, 'Squircle').click();
     await expect(appShell(newtabPage)).toHaveAttribute('data-tile-shape', 'squircle');
   });
 
-  test('Rounded option sets data-tile-shape=rounded', async ({ newtabPage }) => {
+  test('Rounded card sets data-tile-shape=rounded', async ({ newtabPage }) => {
     await openLayout(newtabPage);
-    await newtabPage.locator('.ff-row', { hasText: 'Tile shape' })
-      .locator('.ff-segmented__option', { hasText: 'Rounded' }).click();
+    await shapeCard(newtabPage, 'Rounded').click();
     await expect(appShell(newtabPage)).toHaveAttribute('data-tile-shape', 'rounded');
   });
 
-  test('Circle option sets data-tile-shape=circle', async ({ newtabPage }) => {
+  test('Circle card sets data-tile-shape=circle', async ({ newtabPage }) => {
     await openLayout(newtabPage);
-    await newtabPage.locator('.ff-row', { hasText: 'Tile shape' })
-      .locator('.ff-segmented__option', { hasText: 'Circle' }).click();
+    await shapeCard(newtabPage, 'Circle').click();
     await expect(appShell(newtabPage)).toHaveAttribute('data-tile-shape', 'circle');
   });
 
   test('tile-shape persists after reload', async ({ newtabPage }) => {
     await openLayout(newtabPage);
-    const circleOption = newtabPage.locator('.ff-row', { hasText: 'Tile shape' })
-      .locator('.ff-segmented__option', { hasText: 'Circle' });
-    await circleOption.click();
-    // Wait for data-tile-shape to reflect the change on the app shell (optimistic).
+    const circleCard = shapeCard(newtabPage, 'Circle');
+    await circleCard.click();
+    // app-shell attribute reflects the optimistic change immediately.
     await expect(appShell(newtabPage)).toHaveAttribute('data-tile-shape', 'circle');
-    // Also wait for the segmented option to be reconciled (data-active flips when
-    // the reconciled workspace record comes back from the service worker), which
-    // means the storage write has completed.
-    await expect(circleOption).toHaveAttribute('data-active', 'true');
+    // data-active flips once the reconciled record returns — proves the write committed.
+    await expect(circleCard).toHaveAttribute('data-active', 'true');
 
     await reloadNewtab(newtabPage);
     await expect(appShell(newtabPage)).toHaveAttribute('data-tile-shape', 'circle');
@@ -248,9 +248,11 @@ test.describe('settings-layout: show tile labels', () => {
 // compact grid and the unfolded list layout; it must apply optimistically and
 // survive a reload, scoped to the active workspace.
 // ---------------------------------------------------------------------------
-const viewRow = (page: Page) => page.locator('.ff-row', { hasText: 'View' });
-const viewOption = (page: Page, label: 'Grid' | 'List') =>
-  viewRow(page).locator('.ff-segmented__option', { hasText: label });
+// View is a pair of skeleton-preview cards (Grid / List), matching the density
+// presets. Each card carries data-active when its mode is selected. 'Grid'/'List'
+// are unique among drawer cards (presets are Balanced/Compact/Spacious/etc.).
+const viewCard = (page: Page, label: 'Grid' | 'List') =>
+  page.locator('.ff-drawer button.ff-card', { hasText: label });
 
 test.describe('settings-layout: view mode', () => {
   test('switching to List marks the List option active', async ({ newtabPage }) => {
@@ -258,9 +260,9 @@ test.describe('settings-layout: view mode', () => {
     await reloadNewtab(newtabPage);
 
     await openLayout(newtabPage);
-    await viewOption(newtabPage, 'List').click();
+    await viewCard(newtabPage, 'List').click();
 
-    await expect(viewOption(newtabPage, 'List')).toHaveAttribute('data-active', 'true');
+    await expect(viewCard(newtabPage, 'List')).toHaveAttribute('data-active', 'true');
   });
 
   test('switching to Grid marks the Grid option active', async ({ newtabPage }) => {
@@ -268,9 +270,9 @@ test.describe('settings-layout: view mode', () => {
     await reloadNewtab(newtabPage);
 
     await openLayout(newtabPage);
-    await viewOption(newtabPage, 'Grid').click();
+    await viewCard(newtabPage, 'Grid').click();
 
-    await expect(viewOption(newtabPage, 'Grid')).toHaveAttribute('data-active', 'true');
+    await expect(viewCard(newtabPage, 'Grid')).toHaveAttribute('data-active', 'true');
   });
 
   test('view mode persists after reload', async ({ newtabPage }) => {
@@ -278,14 +280,14 @@ test.describe('settings-layout: view mode', () => {
     await reloadNewtab(newtabPage);
 
     await openLayout(newtabPage);
-    await viewOption(newtabPage, 'List').click();
+    await viewCard(newtabPage, 'List').click();
 
     // Wait for the per-workspace write to commit before reloading, then reload.
     await waitForWorkspace(newtabPage, WORK_WS_ID, (w) => w.folderMode === 'list');
     await reloadNewtab(newtabPage);
 
     await openLayout(newtabPage);
-    await expect(viewOption(newtabPage, 'List')).toHaveAttribute('data-active', 'true');
+    await expect(viewCard(newtabPage, 'List')).toHaveAttribute('data-active', 'true');
   });
 });
 
@@ -312,14 +314,14 @@ test.describe('settings-layout: per-workspace view isolation', () => {
 
     // Work (active) shows List.
     await openLayout(newtabPage);
-    await expect(viewOption(newtabPage, 'List')).toHaveAttribute('data-active', 'true');
+    await expect(viewCard(newtabPage, 'List')).toHaveAttribute('data-active', 'true');
     await newtabPage.keyboard.press('Escape');
     await expect(newtabPage.locator('.ff-drawer')).toHaveCount(0);
 
     // Switch to Personal via its workspace tab — it shows Grid, not Work's List.
     await newtabPage.locator(`.ff-ws-tab[data-workspace-id="${world.workspaceIds.Personal}"]`).click();
     await openLayout(newtabPage);
-    await expect(viewOption(newtabPage, 'Grid')).toHaveAttribute('data-active', 'true');
+    await expect(viewCard(newtabPage, 'Grid')).toHaveAttribute('data-active', 'true');
     await newtabPage.keyboard.press('Escape');
     await expect(newtabPage.locator('.ff-drawer')).toHaveCount(0);
 

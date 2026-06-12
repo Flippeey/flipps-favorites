@@ -14,6 +14,7 @@ import {
   ACCENT_PRESETS,
   BgColorPicker,
   GRADIENT_PRESETS,
+  SectionTitle,
   Segmented,
   Slider,
   SOLID_PRESETS,
@@ -38,8 +39,7 @@ export function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSe
   return (
     <>
       <div className="ff-set-section">
-        <h3 className="ff-set-section__title">Theme</h3>
-        <p className="ff-set-section__desc">Set for this workspace — overrides the global default. Choose light or dark, or follow the browser preference.</p>
+        <SectionTitle>Theme</SectionTitle>
         <div className="ff-card" style={{ marginBottom: 16 }}>
           <div className="ff-row" style={{ padding: 0 }}>
             <div>
@@ -52,21 +52,20 @@ export function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSe
             />
           </div>
         </div>
-        <div className="ff-themegrid">
+        <div className="ff-themegrid ff-themegrid--compact">
           <button type="button" className="ff-themecard ff-themecard--light" data-active={themeMode === 'light'} onClick={() => onPatch({ themeMode: 'light' })}>
-            <ThemeCardPreview light />
+            <ThemeCardPreview light compact />
             <div className="ff-themecard__label">Light</div>
           </button>
           <button type="button" className="ff-themecard ff-themecard--dark" data-active={themeMode === 'dark'} onClick={() => onPatch({ themeMode: 'dark' })}>
-            <ThemeCardPreview />
+            <ThemeCardPreview compact />
             <div className="ff-themecard__label">Dark</div>
           </button>
         </div>
       </div>
 
       <div className="ff-set-section">
-        <h3 className="ff-set-section__title">Accent</h3>
-        <p className="ff-set-section__desc">Pick a palette color.</p>
+        <SectionTitle>Accent</SectionTitle>
         <div className="ff-accents" style={{ marginBottom: 8 }}>
           {ACCENT_PRESETS.map(a => (
             <button
@@ -101,8 +100,7 @@ export function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSe
       </div>
 
       <div className="ff-set-section">
-        <h3 className="ff-set-section__title">Background</h3>
-        <p className="ff-set-section__desc">Solid, a soft accent gradient, or your own wallpaper.</p>
+        <SectionTitle>Background</SectionTitle>
         <div className="ff-themegrid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
           {(['solid', 'gradient', 'wallpaper'] as BackgroundMode[]).map(opt => (
             <button
