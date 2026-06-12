@@ -262,28 +262,31 @@ async function scene12_onboardingWorkspaces(page, workspaceIds) {
 
 async function scene13_listHero(page, workspaceIds) {
   console.log('\n── Scene 13: list-hero');
-  await patchSettings(page, { activeWorkspaceId: workspaceIds.Personal, folderMode: 'list' });
+  await patchSettings(page, { activeWorkspaceId: workspaceIds.Personal });
+  await patchWorkspace(page, workspaceIds.Personal, { folderMode: 'list' });
   await reloadNewtab(page, 1500);
   await captureScene(page, '13-list-hero', workspaceIds.Personal);
-  await patchSettings(page, { folderMode: 'grid' });
+  await patchWorkspace(page, workspaceIds.Personal, { folderMode: 'grid' });
 }
 
 async function scene14_listGaming(page, workspaceIds) {
   console.log('\n── Scene 14: list-gaming');
   // Gaming has few root bookmarks but many small folders — best showcase of
   // list view's grouped sections.
-  await patchSettings(page, { activeWorkspaceId: workspaceIds.Gaming, folderMode: 'list' });
+  await patchSettings(page, { activeWorkspaceId: workspaceIds.Gaming });
+  await patchWorkspace(page, workspaceIds.Gaming, { folderMode: 'list' });
   await reloadNewtab(page, 1500);
   await captureScene(page, '14-list-gaming', workspaceIds.Gaming);
-  await patchSettings(page, { folderMode: 'grid' });
+  await patchWorkspace(page, workspaceIds.Gaming, { folderMode: 'grid' });
 }
 
 async function scene15_listDesign(page, workspaceIds) {
   console.log('\n── Scene 15: list-design (light theme)');
-  await patchSettings(page, { activeWorkspaceId: workspaceIds.Design, folderMode: 'list' });
+  await patchSettings(page, { activeWorkspaceId: workspaceIds.Design });
+  await patchWorkspace(page, workspaceIds.Design, { folderMode: 'list' });
   await reloadNewtab(page, 1500);
   await captureScene(page, '15-list-design', workspaceIds.Design);
-  await patchSettings(page, { folderMode: 'grid' });
+  await patchWorkspace(page, workspaceIds.Design, { folderMode: 'grid' });
 }
 
 async function scene16_iconPicker(page, workspaceIds) {

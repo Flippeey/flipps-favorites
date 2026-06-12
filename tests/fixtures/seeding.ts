@@ -142,6 +142,29 @@ export async function waitForSettings(
   }
 }
 
+/**
+ * Poll the service worker's committed workspace records until `predicate` holds
+ * for the record with `id`, so a test can reload without racing the async
+ * `workspaces/patch` write. The per-workspace counterpart to `waitForSettings`
+ * (view/sort fields live on WorkspaceRecord, not AppSettings). Throws after ~4s
+ * if the change never commits (fail loud rather than reload stale state).
+ */
+export async function waitForWorkspace(
+  page: Page,
+  id: string,
+  predicate: (workspace: WorkspaceRecord) => boolean,
+): Promise<void> {
+  const deadline = Date.now() + 4000;
+  for (;;) {
+    const record = (await getWorkspaces(page)).find((w) => w.id === id);
+    if (record && predicate(record)) return;
+    if (Date.now() > deadline) {
+      throw new Error(`Timed out waiting for workspace "${id}" to commit`);
+    }
+    await page.waitForTimeout(50);
+  }
+}
+
 /** Read all workspace records the service worker currently holds. */
 export async function getWorkspaces(page: Page): Promise<WorkspaceRecord[]> {
   return page.evaluate(async () => {

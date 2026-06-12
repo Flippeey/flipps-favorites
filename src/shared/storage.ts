@@ -11,7 +11,7 @@ import {
   writeIconOverride,
   writeCachedIcon,
 } from './icon-idb';
-import type { AppSettings, BookmarkUsageRecord, IconCacheRecord, IconOverrideRecord, WorkspaceRecord } from './messages';
+import type { AppSettings, BookmarkSortMode, BookmarkUsageRecord, IconCacheRecord, IconOverrideRecord, SortDirection, ViewMode, WorkspaceRecord } from './messages';
 import { getOverrideLookupKeys } from './icon-scope';
 import { createCachedRecordStore, createCachedValueStore } from './storage-buckets';
 
@@ -90,11 +90,20 @@ const wallpaperStore = createCachedValueStore<string>({
 });
 
 const workspacesKey = 'workspaces';
+// Persisted one-shot marker (storage.local) for the view/sort migration. The
+// memoized promise alone resets on every MV3 service-worker restart, so the
+// marker is what keeps the one-time copy idempotent across restarts.
+const workspaceViewSortMigrationMarkerKey = 'workspace-view-sort-migrated';
 
 const workspacesStore = createCachedRecordStore<WorkspaceRecord>({
   storageKey: workspacesKey,
   area: 'sync-preferred',
+  // Permanent normalize-on-read defense: an older sync peer can write a
+  // WorkspaceRecord lacking the per-workspace view/sort fields at any time.
+  deserializeRecord: normalizeWorkspaceRecord,
 });
+
+let workspaceViewSortMigrationPromise: Promise<void> | null = null;
 
 function workspaceWallpaperKey(workspaceId: string): string {
   return `app-wallpaper-${workspaceId}`;
@@ -109,12 +118,9 @@ export const defaultSettings: AppSettings = {
   showDock: false,
   autoHideDock: true,
   dockFolderId: '',
-  bookmarkSortMode: 'manual',
-  bookmarkSortDirection: 'asc',
   showClock: false,
   clockHourFormat: '24',
   showSearchBar: true,
-  folderMode: 'grid',
   folderOpenMode: 'overlay',
 };
 
@@ -137,7 +143,43 @@ export const defaultWorkspaceSettings: Omit<WorkspaceRecord, 'id' | 'name' | 'ro
   bookmarkIconSize: 75,
   tileShape: 'squircle',
   showTileLabels: true,
+  folderMode: 'grid',
+  bookmarkSortMode: 'manual',
+  bookmarkSortDirection: 'asc',
 };
+
+// Storage values are untrusted input. A WorkspaceRecord that lacks the new
+// per-workspace view/sort fields (sync peer on an older version) is filled with
+// defaults; one that is missing required identity fields is rejected (null).
+export function normalizeWorkspaceRecord(value: unknown): WorkspaceRecord | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const raw = value as Partial<WorkspaceRecord> & Record<string, unknown>;
+  if (typeof raw.id !== 'string' || typeof raw.rootFolderId !== 'string') {
+    return null;
+  }
+
+  return {
+    ...(raw as WorkspaceRecord),
+    folderMode: isViewMode(raw.folderMode) ? raw.folderMode : defaultWorkspaceSettings.folderMode,
+    bookmarkSortMode: isBookmarkSortMode(raw.bookmarkSortMode) ? raw.bookmarkSortMode : defaultWorkspaceSettings.bookmarkSortMode,
+    bookmarkSortDirection: isSortDirection(raw.bookmarkSortDirection) ? raw.bookmarkSortDirection : defaultWorkspaceSettings.bookmarkSortDirection,
+  };
+}
+
+function isViewMode(value: unknown): value is ViewMode {
+  return value === 'grid' || value === 'list';
+}
+
+function isBookmarkSortMode(value: unknown): value is BookmarkSortMode {
+  return value === 'manual' || value === 'name' || value === 'lastUsed' || value === 'created';
+}
+
+function isSortDirection(value: unknown): value is SortDirection {
+  return value === 'asc' || value === 'desc';
+}
 
 export async function readSettings(): Promise<AppSettings> {
   return settingsStore.read();
@@ -170,16 +212,10 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     showDock: typeof settings.showDock === 'boolean' ? settings.showDock : defaultSettings.showDock,
     autoHideDock: typeof settings.autoHideDock === 'boolean' ? settings.autoHideDock : defaultSettings.autoHideDock,
     dockFolderId: typeof settings.dockFolderId === 'string' ? settings.dockFolderId : defaultSettings.dockFolderId,
-    bookmarkSortMode: settings.bookmarkSortMode === 'manual' || settings.bookmarkSortMode === 'name' || settings.bookmarkSortMode === 'lastUsed' || settings.bookmarkSortMode === 'created'
-      ? settings.bookmarkSortMode : defaultSettings.bookmarkSortMode,
-    bookmarkSortDirection: settings.bookmarkSortDirection === 'asc' || settings.bookmarkSortDirection === 'desc'
-      ? settings.bookmarkSortDirection : defaultSettings.bookmarkSortDirection,
     showClock: typeof settings.showClock === 'boolean' ? settings.showClock : defaultSettings.showClock,
     clockHourFormat: settings.clockHourFormat === '12' || settings.clockHourFormat === '24'
       ? settings.clockHourFormat : defaultSettings.clockHourFormat,
     showSearchBar: typeof settings.showSearchBar === 'boolean' ? settings.showSearchBar : defaultSettings.showSearchBar,
-    folderMode: settings.folderMode === 'grid' || settings.folderMode === 'list'
-      ? settings.folderMode : defaultSettings.folderMode,
     folderOpenMode: settings.folderOpenMode === 'overlay' || settings.folderOpenMode === 'page'
       ? settings.folderOpenMode : defaultSettings.folderOpenMode,
   };
@@ -298,6 +334,140 @@ export async function markOnboardingCompleted(): Promise<OnboardingState> {
     completedAt: now,
     skippedAt: null,
   });
+}
+
+interface MinimalStorageArea {
+  // Methods are optional so the runtime presence guards below stay meaningful
+  // (an older browser may expose a storage area object without these methods).
+  get?: (keys: string | string[] | null) => Promise<Record<string, unknown>>;
+  set?: (items: Record<string, unknown>) => Promise<void>;
+  remove?: (keys: string | string[]) => Promise<void>;
+}
+
+// A storage area whose get/set are confirmed present (post-guard).
+interface ResolvedStorageArea {
+  get: (keys: string | string[] | null) => Promise<Record<string, unknown>>;
+  set: (items: Record<string, unknown>) => Promise<void>;
+}
+
+function asResolvedArea(area: MinimalStorageArea | undefined): ResolvedStorageArea | null {
+  return area?.get && area?.set ? { get: area.get.bind(area), set: area.set.bind(area) } : null;
+}
+
+// Resolve the area the sync-preferred workspaces/settings stores actually use:
+// sync when reachable, otherwise local. Mirrors createCachedValueStore's
+// resolveStorageArea so the migration reads/writes the same raw bytes the
+// stores do.
+async function resolveSyncPreferredArea(): Promise<ResolvedStorageArea | null> {
+  const syncArea = asResolvedArea(extensionApi.storage?.sync as MinimalStorageArea | undefined);
+  if (syncArea) {
+    try {
+      await syncArea.get(null);
+      return syncArea;
+    } catch {
+      /* fall through to local */
+    }
+  }
+  return asResolvedArea(extensionApi.storage?.local as MinimalStorageArea | undefined);
+}
+
+const legacyViewSortKeys = ['folderMode', 'bookmarkSortMode', 'bookmarkSortDirection'] as const;
+
+// One-time copy of the legacy GLOBAL view/sort values onto every WorkspaceRecord
+// that lacks them, then clear the legacy keys from raw app-settings. Reads the
+// RAW stored app-settings (NOT settingsStore.read) because normalizeSettings
+// strips fields and writeSettings replaces the whole stored object — the first
+// post-upgrade settings write would otherwise erase the legacy values. Gated by
+// a memoized promise (per SW lifetime) plus a persisted local marker
+// (idempotent across MV3 restarts). Invoked at the top of handleMessage.
+export async function ensureWorkspaceViewSortMigration(): Promise<void> {
+  if (!workspaceViewSortMigrationPromise) {
+    workspaceViewSortMigrationPromise = runWorkspaceViewSortMigration().catch(error => {
+      // Reset so a transient failure can retry on the next message; never crash
+      // the handler.
+      workspaceViewSortMigrationPromise = null;
+      console.warn('Failed to migrate workspace view/sort settings.', error);
+    });
+  }
+
+  await workspaceViewSortMigrationPromise;
+}
+
+async function runWorkspaceViewSortMigration(): Promise<void> {
+  const localArea = asResolvedArea(extensionApi.storage?.local as MinimalStorageArea | undefined);
+  if (!localArea) {
+    return;
+  }
+
+  // Cross-restart short-circuit: if the marker is set, the one-time copy already
+  // ran in a prior lifetime — never re-copy stale globals.
+  const markerStored = await localArea.get(workspaceViewSortMigrationMarkerKey);
+  if (markerStored[workspaceViewSortMigrationMarkerKey] === true) {
+    return;
+  }
+
+  const area = await resolveSyncPreferredArea();
+  if (!area) {
+    return;
+  }
+
+  const stored = await area.get([storageKey, workspacesKey]);
+  const rawSettings = asRecord(stored[storageKey]);
+  const legacy = extractLegacyViewSort(rawSettings);
+
+  if (legacy) {
+    const records = asRecord(stored[workspacesKey]) as Record<string, unknown>;
+    for (const value of Object.values(records)) {
+      const record = normalizeWorkspaceRecord(value);
+      if (!record) continue;
+      const source = asRecord(value);
+      const patched: WorkspaceRecord = {
+        ...record,
+        folderMode: isViewMode(source.folderMode) ? record.folderMode : legacy.folderMode,
+        bookmarkSortMode: isBookmarkSortMode(source.bookmarkSortMode) ? record.bookmarkSortMode : legacy.bookmarkSortMode,
+        bookmarkSortDirection: isSortDirection(source.bookmarkSortDirection) ? record.bookmarkSortDirection : legacy.bookmarkSortDirection,
+      };
+      await writeWorkspace(patched);
+    }
+
+    // Strip the legacy keys from raw app-settings so a restart cannot re-copy
+    // stale globals even before the marker check.
+    const nextSettings = { ...rawSettings };
+    for (const key of legacyViewSortKeys) delete nextSettings[key];
+    await area.set({ [storageKey]: nextSettings });
+    settingsStore.clearCache();
+  }
+
+  await localArea.set({ [workspaceViewSortMigrationMarkerKey]: true });
+}
+
+interface LegacyViewSort {
+  folderMode: ViewMode;
+  bookmarkSortMode: BookmarkSortMode;
+  bookmarkSortDirection: SortDirection;
+}
+
+// Returns the legacy global view/sort values only when at least one is present
+// in raw app-settings (an upgrade); missing fields fall back to defaults. Null
+// means a fresh install with no legacy keys — no copy needed.
+function extractLegacyViewSort(rawSettings: Record<string, unknown>): LegacyViewSort | null {
+  const hasLegacy = legacyViewSortKeys.some(key => key in rawSettings);
+  if (!hasLegacy) {
+    return null;
+  }
+
+  return {
+    folderMode: isViewMode(rawSettings.folderMode) ? rawSettings.folderMode : defaultWorkspaceSettings.folderMode,
+    bookmarkSortMode: isBookmarkSortMode(rawSettings.bookmarkSortMode) ? rawSettings.bookmarkSortMode : defaultWorkspaceSettings.bookmarkSortMode,
+    bookmarkSortDirection: isSortDirection(rawSettings.bookmarkSortDirection) ? rawSettings.bookmarkSortDirection : defaultWorkspaceSettings.bookmarkSortDirection,
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+  return { ...(value as Record<string, unknown>) };
 }
 
 async function ensureIconOverrideRecordsMigratedToLocal(): Promise<void> {

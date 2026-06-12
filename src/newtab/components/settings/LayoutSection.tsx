@@ -1,4 +1,4 @@
-import type { TileShape } from '@/shared/messages';
+import type { TileShape, ViewMode } from '@/shared/messages';
 import {
   CUSTOM_LAYOUT_PRESET,
   CustomLayoutPreview,
@@ -18,6 +18,19 @@ export function LayoutSection({ workspace, onPatch }: WorkspaceSectionProps) {
     <div className="ff-set-section">
       <h3 className="ff-set-section__title">Layout</h3>
       <p className="ff-set-section__desc">Choose a preset, or fine-tune each control.</p>
+      <div className="ff-card" style={{ marginBottom: 24 }}>
+        <div className="ff-row">
+          <div>
+            <div className="ff-row__label">View</div>
+            <div className="ff-row__hint">Grid shows folders as compact tiles; List unfolds every folder inline.</div>
+          </div>
+          <Segmented<ViewMode>
+            options={[{ id: 'grid', label: 'Grid' }, { id: 'list', label: 'List' }]}
+            value={ws.folderMode}
+            onChange={(v) => onPatch({ folderMode: v })}
+          />
+        </div>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 24 }}>
         {LAYOUT_PRESETS.map(p => {
           const active = ws.layoutPreset === p.id;

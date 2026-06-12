@@ -276,6 +276,12 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
   const [pendingAccentColor, setPendingAccentColor] = useState(
     activeWorkspace?.accentColor ?? ACCENT_PRESETS[0].value,
   );
+  // View mode is per-workspace now. Hold the pick locally and apply it at finish
+  // via creation overrides (fresh install) / onPatchWorkspace (existing workspace),
+  // mirroring the pendingAccentColor flow — no global settings write.
+  const [pendingFolderMode, setPendingFolderMode] = useState<ViewMode>(
+    activeWorkspace?.folderMode ?? 'grid',
+  );
   const [finishing, setFinishing] = useState(false);
   const [closing, setClosing] = useState(false);
 
@@ -314,14 +320,16 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
       // retarget branch below never spreads these overrides, so an existing workspace's
       // user-chosen accent + layout are left untouched.
       const layoutPreset = recommendedLayout.layoutPreset;
-      const firstOverrides = { accentColor: pendingAccentColor, themeMode: settings.themeMode, layoutPreset };
-      const restOverrides = { themeMode: settings.themeMode, layoutPreset };
+      const firstOverrides = { accentColor: pendingAccentColor, themeMode: settings.themeMode, layoutPreset, folderMode: pendingFolderMode };
+      const restOverrides = { themeMode: settings.themeMode, layoutPreset, folderMode: pendingFolderMode };
       // Each selected folder becomes a workspace. If a workspace already exists
       // (re-running onboarding), the first selection retargets it and the rest are
       // created; on a fresh install all selections are created from scratch.
       const [firstId, ...restIds] = selectedWorkspaceFolderIds;
       if (activeWorkspace) {
-        if (firstId) await onPatchWorkspace({ rootFolderId: firstId });
+        // Re-run over an existing workspace: apply the view-mode pick explicitly
+        // (the retarget branch never spreads overrides, by design).
+        if (firstId) await onPatchWorkspace({ rootFolderId: firstId, folderMode: pendingFolderMode });
       } else if (firstId) {
         const folder = findFolder(tree, firstId);
         await onCreateWorkspace(firstId, folder?.title ?? 'My workspace', firstOverrides);
@@ -433,11 +441,11 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
                   { id: 'grid', label: 'Grid', desc: 'Folders appear as tiles. Tap one to open it — best when you like to focus on one folder at a time.' },
                   { id: 'list', label: 'List', desc: 'Folders expand into sections with all their bookmarks visible — best when you want everything at a glance.' },
                 ] as { id: ViewMode; label: string; desc: string }[]).map(m => {
-                  const active = settings.folderMode === m.id;
+                  const active = pendingFolderMode === m.id;
                   return (
                     <button
                       key={m.id}
-                      onClick={() => onPatch({ folderMode: m.id })}
+                      onClick={() => setPendingFolderMode(m.id)}
                       className="ff-card"
                       style={{
                         textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'var(--fg-1)',

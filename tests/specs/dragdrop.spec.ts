@@ -20,7 +20,12 @@
  */
 import { test, expect } from '../fixtures/world.js';
 import { resetStorage, seedMinimal } from '../fixtures/seeding.js';
-import { reloadNewtab, patchSettings } from '../fixtures/bookmark-helpers.js';
+import { reloadNewtab, patchSettings, patchWorkspace } from '../fixtures/bookmark-helpers.js';
+
+// seedMinimal creates a single workspace with this id; per-workspace view/sort
+// fields are patched against it, while global fields (folderOpenMode) stay on
+// AppSettings via patchSettings.
+const MINIMAL_WS_ID = 'ws-minimal';
 import type { Page } from '@playwright/test';
 
 interface BoundingBox {
@@ -79,11 +84,8 @@ test.describe('drag-drop', () => {
     await resetStorage(newtabPage);
     await seedMinimal(newtabPage, { rootBookmarks: 5, folders: 1, bookmarksPerFolder: 2 });
     await reloadNewtab(newtabPage);
-    await patchSettings(newtabPage, {
-      bookmarkSortMode: 'manual',
-      folderMode: 'grid',
-      folderOpenMode: 'overlay',
-    });
+    await patchWorkspace(newtabPage, { bookmarkSortMode: 'manual', folderMode: 'grid' }, MINIMAL_WS_ID);
+    await patchSettings(newtabPage, { folderOpenMode: 'overlay' });
     await reloadNewtab(newtabPage);
   });
 
@@ -208,12 +210,12 @@ test.describe('drag-drop under auto-sort', () => {
     await resetStorage(newtabPage);
     await seedMinimal(newtabPage, { rootBookmarks: 5, folders: 1, bookmarksPerFolder: 2 });
     await reloadNewtab(newtabPage);
-    await patchSettings(newtabPage, {
-      bookmarkSortMode: 'name',
-      bookmarkSortDirection: 'asc',
-      folderMode: 'grid',
-      folderOpenMode: 'overlay',
-    });
+    await patchWorkspace(
+      newtabPage,
+      { bookmarkSortMode: 'name', bookmarkSortDirection: 'asc', folderMode: 'grid' },
+      MINIMAL_WS_ID,
+    );
+    await patchSettings(newtabPage, { folderOpenMode: 'overlay' });
     await reloadNewtab(newtabPage);
   });
 
@@ -279,7 +281,7 @@ test.describe('drag-drop under auto-sort', () => {
   test('drag from a folder section to root relocates under name sort', async ({ newtabPage }) => {
     // List mode renders each folder as an inline section (scope = folder id) above
     // the root grid (scope = root), so a folder→root drag is reachable on one canvas.
-    await patchSettings(newtabPage, { folderMode: 'list' });
+    await patchWorkspace(newtabPage, { folderMode: 'list' }, MINIMAL_WS_ID);
     await reloadNewtab(newtabPage);
 
     const section = newtabPage.locator('.ff-sections section[data-scope-folder-id]').first();

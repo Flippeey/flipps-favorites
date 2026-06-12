@@ -8,7 +8,7 @@
  */
 import { test, expect } from '../fixtures/world.js';
 import { openSettingsSection, reloadNewtab } from '../fixtures/bookmark-helpers.js';
-import { patchWorkspace } from '../fixtures/seeding.js';
+import { patchWorkspace, waitForWorkspace, getWorkspaces } from '../fixtures/seeding.js';
 import { appShell } from '../fixtures/selectors.js';
 import type { Page } from '@playwright/test';
 
@@ -29,7 +29,7 @@ test.describe('settings-layout: presets', () => {
     await reloadNewtab(newtabPage);
 
     await openLayout(newtabPage);
-    await newtabPage.locator('.ff-card', { hasText: 'Balanced' }).click();
+    await newtabPage.locator('button.ff-card', { hasText: 'Balanced' }).click();
     await expect.poll(() =>
       newtabPage.evaluate(() =>
         document.documentElement.style.getPropertyValue('--tile-size'),
@@ -39,7 +39,7 @@ test.describe('settings-layout: presets', () => {
 
   test('Compact preset sets --tile-size=56px', async ({ newtabPage }) => {
     await openLayout(newtabPage);
-    await newtabPage.locator('.ff-card', { hasText: 'Compact' }).click();
+    await newtabPage.locator('button.ff-card', { hasText: 'Compact' }).click();
     await expect.poll(() =>
       newtabPage.evaluate(() =>
         document.documentElement.style.getPropertyValue('--tile-size'),
@@ -49,7 +49,7 @@ test.describe('settings-layout: presets', () => {
 
   test('Spacious preset sets --tile-size=92px', async ({ newtabPage }) => {
     await openLayout(newtabPage);
-    await newtabPage.locator('.ff-card', { hasText: 'Spacious' }).click();
+    await newtabPage.locator('button.ff-card', { hasText: 'Spacious' }).click();
     await expect.poll(() =>
       newtabPage.evaluate(() =>
         document.documentElement.style.getPropertyValue('--tile-size'),
@@ -59,7 +59,7 @@ test.describe('settings-layout: presets', () => {
 
   test('Presentation preset sets --tile-size=116px', async ({ newtabPage }) => {
     await openLayout(newtabPage);
-    await newtabPage.locator('.ff-card', { hasText: 'Presentation' }).click();
+    await newtabPage.locator('button.ff-card', { hasText: 'Presentation' }).click();
     await expect.poll(() =>
       newtabPage.evaluate(() =>
         document.documentElement.style.getPropertyValue('--tile-size'),
@@ -84,7 +84,7 @@ test.describe('settings-layout: presets', () => {
       ),
     ).not.toBe('');
 
-    await newtabPage.locator('.ff-card', { hasText: 'Compact' }).click();
+    await newtabPage.locator('button.ff-card', { hasText: 'Compact' }).click();
 
     // CSS var set by applyDensity confirms the optimistic write fired.
     await expect.poll(() =>
@@ -136,7 +136,7 @@ test.describe('settings-layout: custom preset', () => {
   test('Custom preset reveals icon-size, tile-width, column-gap and row-gap sliders', async ({ newtabPage }) => {
     await openLayout(newtabPage);
     // Custom is the full-width card at the bottom of the grid.
-    await newtabPage.locator('.ff-card', { hasText: 'Custom' }).click();
+    await newtabPage.locator('button.ff-card', { hasText: 'Custom' }).click();
 
     // The sliders only appear when preset === 'custom'.
     await expect(newtabPage.locator('.ff-row', { hasText: 'Icon size' })).toBeVisible();
@@ -235,5 +235,101 @@ test.describe('settings-layout: show tile labels', () => {
 
     await expect(appShell(newtabPage)).toHaveAttribute('data-labels', 'true');
     await expect(newtabPage.locator('.ff-tile__label').first()).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// View mode (Grid ↔ List)
+//
+// Relocated here from settings-nav.spec.ts: the View segmented control moved out
+// of the app-settings Navigation drawer into this per-workspace Customize drawer
+// because folderMode is now a WorkspaceRecord field, not an AppSettings field.
+// WHY each test matters: the View control is the user's switch between the
+// compact grid and the unfolded list layout; it must apply optimistically and
+// survive a reload, scoped to the active workspace.
+// ---------------------------------------------------------------------------
+const viewRow = (page: Page) => page.locator('.ff-row', { hasText: 'View' });
+const viewOption = (page: Page, label: 'Grid' | 'List') =>
+  viewRow(page).locator('.ff-segmented__option', { hasText: label });
+
+test.describe('settings-layout: view mode', () => {
+  test('switching to List marks the List option active', async ({ newtabPage }) => {
+    await patchWorkspace(newtabPage, WORK_WS_ID, { folderMode: 'grid' });
+    await reloadNewtab(newtabPage);
+
+    await openLayout(newtabPage);
+    await viewOption(newtabPage, 'List').click();
+
+    await expect(viewOption(newtabPage, 'List')).toHaveAttribute('data-active', 'true');
+  });
+
+  test('switching to Grid marks the Grid option active', async ({ newtabPage }) => {
+    await patchWorkspace(newtabPage, WORK_WS_ID, { folderMode: 'list' });
+    await reloadNewtab(newtabPage);
+
+    await openLayout(newtabPage);
+    await viewOption(newtabPage, 'Grid').click();
+
+    await expect(viewOption(newtabPage, 'Grid')).toHaveAttribute('data-active', 'true');
+  });
+
+  test('view mode persists after reload', async ({ newtabPage }) => {
+    await patchWorkspace(newtabPage, WORK_WS_ID, { folderMode: 'grid' });
+    await reloadNewtab(newtabPage);
+
+    await openLayout(newtabPage);
+    await viewOption(newtabPage, 'List').click();
+
+    // Wait for the per-workspace write to commit before reloading, then reload.
+    await waitForWorkspace(newtabPage, WORK_WS_ID, (w) => w.folderMode === 'list');
+    await reloadNewtab(newtabPage);
+
+    await openLayout(newtabPage);
+    await expect(viewOption(newtabPage, 'List')).toHaveAttribute('data-active', 'true');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-workspace view-mode isolation
+//
+// WHY this matters: the whole point of moving folderMode onto WorkspaceRecord is
+// that each workspace remembers its OWN view. If two workspaces could not hold
+// different view modes — or if a switch leaked one workspace's mode onto another,
+// or a reload collapsed them back to a single global value — the migration would
+// be pointless. This encodes that intent, not just DOM shape.
+// ---------------------------------------------------------------------------
+test.describe('settings-layout: per-workspace view isolation', () => {
+  test('two workspaces hold different view modes and survive reload', async ({ newtabPage, world }) => {
+    // Seed Work=list, Personal=grid directly on the records, then verify the UI
+    // reflects each independently as the user switches between them and reloads.
+    // Gate the reload on both writes committing so the page never reads a stale
+    // (pre-patch) record — the per-workspace patch is async.
+    await patchWorkspace(newtabPage, world.workspaceIds.Work, { folderMode: 'list' });
+    await patchWorkspace(newtabPage, world.workspaceIds.Personal, { folderMode: 'grid' });
+    await waitForWorkspace(newtabPage, world.workspaceIds.Work, (w) => w.folderMode === 'list');
+    await waitForWorkspace(newtabPage, world.workspaceIds.Personal, (w) => w.folderMode === 'grid');
+    await reloadNewtab(newtabPage);
+
+    // Work (active) shows List.
+    await openLayout(newtabPage);
+    await expect(viewOption(newtabPage, 'List')).toHaveAttribute('data-active', 'true');
+    await newtabPage.keyboard.press('Escape');
+    await expect(newtabPage.locator('.ff-drawer')).toHaveCount(0);
+
+    // Switch to Personal via its workspace tab — it shows Grid, not Work's List.
+    await newtabPage.locator(`.ff-ws-tab[data-workspace-id="${world.workspaceIds.Personal}"]`).click();
+    await openLayout(newtabPage);
+    await expect(viewOption(newtabPage, 'Grid')).toHaveAttribute('data-active', 'true');
+    await newtabPage.keyboard.press('Escape');
+    await expect(newtabPage.locator('.ff-drawer')).toHaveCount(0);
+
+    // The committed records stayed distinct — reload proves persistence, not a
+    // transient in-memory split.
+    await reloadNewtab(newtabPage);
+    const records = await getWorkspaces(newtabPage);
+    const work = records.find((w) => w.id === world.workspaceIds.Work);
+    const personal = records.find((w) => w.id === world.workspaceIds.Personal);
+    expect(work?.folderMode).toBe('list');
+    expect(personal?.folderMode).toBe('grid');
   });
 });

@@ -26,6 +26,7 @@ import { useBlobUrl } from './lib/useBlobUrl';
 import { useScrollCollapsed } from './lib/useScrollCollapsed';
 import { normalizeBookmarkUrl } from './lib/url';
 import { resolveDockMode } from './lib/dock-mode';
+import { effectiveViewSort } from './lib/effective-view-sort';
 import { prefetchAllIcons } from './lib/icon-prefetch';
 import { findFolder, findNode, findParentFolder, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 import { captureMoveSnapshots, restoreMoveSnapshots } from './lib/move-snapshot';
@@ -59,6 +60,13 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const activeWorkspace = useMemo(
     () => workspaces.find(w => w.id === settings.activeWorkspaceId) ?? workspaces[0] ?? null,
     [workspaces, settings.activeWorkspaceId],
+  );
+
+  // View + sort are per-workspace (WorkspaceRecord). Derive the effective values
+  // for the active workspace, falling back to grid/manual/asc when none is active.
+  const { folderMode, bookmarkSortMode, bookmarkSortDirection } = useMemo(
+    () => effectiveViewSort(activeWorkspace),
+    [activeWorkspace?.folderMode, activeWorkspace?.bookmarkSortMode, activeWorkspace?.bookmarkSortDirection],
   );
 
   const orderedWorkspaces = useMemo<WorkspaceRecord[]>(() => {
@@ -171,11 +179,6 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     }
   }, []);
 
-  const handleToggleViewMode = useCallback(() => {
-    const next = settings.folderMode === 'grid' ? 'list' : 'grid';
-    handlePatch({ folderMode: next });
-  }, [settings.folderMode, handlePatch]);
-
   const openAppSettings = useCallback((section: AppSectionId = 'navigation') => {
     setWorkspaceSettingsOpen(false);
     setAppSettingsInitialSection(section);
@@ -237,8 +240,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
 
   const sortedChildren = useCallback((children?: BookmarkNode[]) => {
     if (!children) return [];
-    return sortChildren(children, settings.bookmarkSortMode, settings.bookmarkSortDirection, usage);
-  }, [settings.bookmarkSortMode, settings.bookmarkSortDirection, usage]);
+    return sortChildren(children, bookmarkSortMode, bookmarkSortDirection, usage);
+  }, [bookmarkSortMode, bookmarkSortDirection, usage]);
 
   const sortedRootChildren = useMemo(() => sortedChildren(rootFolder?.children), [rootFolder, sortedChildren]);
   const sortedCurrentFolder: BookmarkNode | null = folderPath.length > 0
@@ -250,7 +253,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   // Sections view flattens across all section grids; folder-page view uses current folder.
   const navItems = useMemo<BookmarkNode[]>(() => {
     if (!isAtRoot && sortedCurrentFolder) return sortedCurrentFolder.children ?? [];
-    if (settings.folderMode === 'list') {
+    if (folderMode === 'list') {
       const out: BookmarkNode[] = [];
       for (const folder of sortedRootChildren.filter(isFolder)) {
         for (const child of folder.children ?? []) out.push(child);
@@ -260,7 +263,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     const folders = sortedRootChildren.filter(isFolder);
     const bookmarks = sortedRootChildren.filter(c => !isFolder(c));
     return [...folders, ...bookmarks];
-  }, [isAtRoot, sortedCurrentFolder, sortedRootChildren, settings.folderMode]);
+  }, [isAtRoot, sortedCurrentFolder, sortedRootChildren, folderMode]);
 
   const dockItems = useMemo<BookmarkNode[]>(() => {
     if (!settings.showDock) return [];
@@ -327,11 +330,15 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
 
   const handleGoToCrumb = useCallback((idx: number) => setFolderPath(p => p.slice(0, idx)), []);
 
-  const sortChoice = settingsToSortValue(settings.bookmarkSortMode, settings.bookmarkSortDirection);
+  const sortChoice = settingsToSortValue(bookmarkSortMode, bookmarkSortDirection);
 
   const handleSortChange = useCallback((choice: SortChoice) => {
-    handlePatch({ bookmarkSortMode: choice.mode, bookmarkSortDirection: choice.direction });
-  }, [handlePatch]);
+    void handlePatchWorkspace({ bookmarkSortMode: choice.mode, bookmarkSortDirection: choice.direction });
+  }, [handlePatchWorkspace]);
+
+  const handleToggleViewMode = useCallback(() => {
+    void handlePatchWorkspace({ folderMode: folderMode === 'grid' ? 'list' : 'grid' });
+  }, [folderMode, handlePatchWorkspace]);
 
   const defaultParentId = useCallback((): string => {
     if (!isAtRoot && folderPath.length > 0) return folderPath[folderPath.length - 1].id;
@@ -448,6 +455,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     dockEl,
     rootFolder,
     settings,
+    bookmarkSortMode,
     workspaces,
     tree,
     sortedChildren,
@@ -579,7 +587,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           onCrumb={handleGoToCrumb}
           sortValue={sortChoice}
           onSort={handleSortChange}
-          folderMode={settings.folderMode}
+          folderMode={folderMode}
           onToggleViewMode={handleToggleViewMode}
           onOpenAppSettings={() => openAppSettings()}
           onOpenWorkspaceSettings={() => openWorkspaceSettings('appearance')}
@@ -624,7 +632,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             selectionScopeFolderId={selection.scopeFolderId}
             focusedTileId={focusedTileId}
           />
-        ) : settings.folderMode === 'list' ? (
+        ) : folderMode === 'list' ? (
           <SectionsView
             tree={sortedRootChildren.filter(isFolder)}
             rootBookmarks={sortedRootChildren.filter(c => !isFolder(c))}

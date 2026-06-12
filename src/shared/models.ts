@@ -42,6 +42,10 @@ export interface WorkspaceRecord {
   bookmarkIconSize: number;
   tileShape: TileShape;
   showTileLabels: boolean;
+  // View + sort identity (per-workspace)
+  folderMode: ViewMode;
+  bookmarkSortMode: BookmarkSortMode;
+  bookmarkSortDirection: SortDirection;
 }
 
 export interface AppSettings {
@@ -56,16 +60,12 @@ export interface AppSettings {
   showDock: boolean;
   autoHideDock: boolean;
   dockFolderId: string;
-  // Sort
-  bookmarkSortMode: BookmarkSortMode;
-  bookmarkSortDirection: SortDirection;
   // Clock
   showClock: boolean;
   clockHourFormat: ClockHourFormat;
   // Search bar
   showSearchBar: boolean;
   // Folder behaviour (global)
-  folderMode: ViewMode;
   folderOpenMode: FolderOpenMode;
 }
 

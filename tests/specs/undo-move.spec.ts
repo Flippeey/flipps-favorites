@@ -14,7 +14,10 @@
  */
 import { test, expect } from '../fixtures/world.js';
 import { resetStorage, seedMinimal } from '../fixtures/seeding.js';
-import { reloadNewtab, patchSettings } from '../fixtures/bookmark-helpers.js';
+import { reloadNewtab, patchSettings, patchWorkspace } from '../fixtures/bookmark-helpers.js';
+
+// seedMinimal creates this single workspace; view/sort are per-workspace fields.
+const MINIMAL_WS_ID = 'ws-minimal';
 import type { Page } from '@playwright/test';
 
 interface BoundingBox {
@@ -53,11 +56,8 @@ test.describe('undo move', () => {
     await resetStorage(newtabPage);
     await seedMinimal(newtabPage, { rootBookmarks: 5, folders: 1, bookmarksPerFolder: 2 });
     await reloadNewtab(newtabPage);
-    await patchSettings(newtabPage, {
-      bookmarkSortMode: 'manual',
-      folderMode: 'grid',
-      folderOpenMode: 'overlay',
-    });
+    await patchWorkspace(newtabPage, { bookmarkSortMode: 'manual', folderMode: 'grid' }, MINIMAL_WS_ID);
+    await patchSettings(newtabPage, { folderOpenMode: 'overlay' });
     await reloadNewtab(newtabPage);
   });
 
@@ -143,7 +143,7 @@ test.describe('undo move', () => {
   // Undo toast; previously only header drops did, so this recovery silently
   // vanished for the more natural "drop beside a sibling" gesture.
   test('list view: dropping beside a bookmark inside a folder shows Undo', async ({ newtabPage }) => {
-    await patchSettings(newtabPage, { folderMode: 'list' });
+    await patchWorkspace(newtabPage, { folderMode: 'list' }, MINIMAL_WS_ID);
     await reloadNewtab(newtabPage);
 
     // A root-level bookmark (in the root grid) and a bookmark living inside the
