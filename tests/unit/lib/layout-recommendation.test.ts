@@ -41,12 +41,21 @@ describe('recommendLayout', () => {
     expect(rec.sizingBucket).toBe('large');
   });
 
-  // WHY: native 4K real estate would look sparse with mid-size tiles; it should
-  // default to the roomiest preset.
-  it('4K (3840x2160) -> presentation', () => {
+  // WHY: a single 4K monitor is roomy but NOT presentation-roomy — presentation
+  // tiles are oversized on one flat panel (user report on a 3440x2160 screen).
+  // 4K-class width tops out at spacious; only 5K+ width earns presentation.
+  it('4K (3840x2160) -> spacious', () => {
     const rec = recommendLayout(metrics({ screenWidth: 3840, screenHeight: 2160 }));
-    expect(rec.layoutPreset).toBe('presentation');
-    expect(rec.sizingBucket).toBe('xlarge');
+    expect(rec.layoutPreset).toBe('spacious');
+    expect(rec.sizingBucket).toBe('large');
+  });
+
+  // WHY: the original user report — a 3440x2160 panel is wide and >3k but a single
+  // flat monitor; presentation tiles were too big. It must resolve to spacious. Its
+  // 1.59 aspect is below the ultrawide threshold, so it gets no roomier bump either.
+  it('3440x2160 wide panel (>3k, not ultrawide) -> spacious', () => {
+    const rec = recommendLayout(metrics({ screenWidth: 3440, screenHeight: 2160 }));
+    expect(rec.layoutPreset).toBe('spacious');
   });
 
   // WHY: a 4K panel maximized at 200% OS scale exposes only ~1920 effective CSS
@@ -66,7 +75,8 @@ describe('recommendLayout', () => {
   // WHY: a non-maximized window on a big screen still reports a small innerWidth,
   // but the physical screen (screenWidth/dpr) reveals the real real-estate class.
   // effectiveWidth takes the larger signal so an un-maximized 4K window isn't
-  // mis-sized as a tiny laptop.
+  // mis-sized as a tiny laptop — the physical 3840 width lifts it to spacious,
+  // not the compact a 900px innerWidth alone would pick.
   it('small window on a 4K screen falls back to physical width', () => {
     const rec = recommendLayout({
       innerWidth: 900,
@@ -75,7 +85,7 @@ describe('recommendLayout', () => {
       screenWidth: 3840,
       screenHeight: 2160,
     });
-    expect(rec.layoutPreset).toBe('presentation');
+    expect(rec.layoutPreset).toBe('spacious');
   });
 
   // WHY: ultrawide rows fit many more columns; the same width band would look
@@ -104,9 +114,16 @@ describe('recommendLayout', () => {
     expect(recommendLayout(metrics({ screenWidth: 2100, screenHeight: 1200 })).layoutPreset).toBe('spacious');
   });
 
-  // WHY: 3000 is the large/4K divide.
-  it('at the 4K cutoff (3000) -> presentation', () => {
-    expect(recommendLayout(metrics({ screenWidth: 3000, screenHeight: 1600 })).layoutPreset).toBe('presentation');
+  // WHY: 5000 is the spacious/presentation divide. Heights here keep aspect < the
+  // ultrawide threshold so these pin the BASE cutoff, not the bump. Just under stays
+  // spacious (4K-class width included)...
+  it('just below the presentation cutoff (4999) -> spacious', () => {
+    expect(recommendLayout(metrics({ screenWidth: 4999, screenHeight: 2500 })).layoutPreset).toBe('spacious');
+  });
+
+  // ...and exactly at the cutoff (5K-class width) crosses into presentation.
+  it('at the presentation cutoff (5000) -> presentation', () => {
+    expect(recommendLayout(metrics({ screenWidth: 5000, screenHeight: 2500 })).layoutPreset).toBe('presentation');
   });
 
   // WHY: the ultrawide bump must be capped — a band already at the roomiest preset
