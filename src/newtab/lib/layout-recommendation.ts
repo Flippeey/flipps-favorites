@@ -37,8 +37,11 @@ export interface LayoutRecommendation {
 // band; below the first → compact, then cascade upward.
 const SMALL_LAPTOP_MAX = 1500;   // < 1500: 1366x768-class laptops, scaled 13" screens.
 const STANDARD_MAX = 2100;       // 1500–2099: ~1080p (1920) desktops.
-const LARGE_MAX = 3000;          // 2100–2999: ~1440p / QHD (2560).
-//                                // >= 3000: 4K-class real estate (3840).
+const LARGE_MAX = 5000;          // 2100–4999: 1440p/QHD (2560) through 4K (3840) → spacious.
+//                                // >= 5000: only 5K-class width (e.g. a 5120 super-ultrawide)
+//                                // is roomy enough that spacious reads sparse → presentation.
+//                                // A single 4K / large flat panel stays spacious on purpose —
+//                                // presentation tiles are oversized on one big monitor.
 
 // Aspect ratio at/above which a display is treated as ultrawide. A 21:9 monitor
 // is ~2.33; 16:9 is ~1.78. Ultrawide rows hold far more tiles horizontally, so a

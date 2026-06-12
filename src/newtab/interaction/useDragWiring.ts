@@ -53,11 +53,14 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
   }, [tree, sortedChildren]);
 
   const handleDragCommit = useCallback(async (dragIds: string[], target: DropTarget) => {
-    // Relocations (folder / dock / workspace) get an Undo toast; reorder-within-
-    // parent does not (out of scope). Snapshot origins from the live tree BEFORE
-    // moving so Undo can replay each item back to its parent + index.
-    const isRelocate = target.kind === 'folder' || target.kind === 'dock' || target.kind === 'workspace';
-    const snapshots = isRelocate ? captureMoveSnapshots(tree, dragIds) : [];
+    // Snapshot every drag's origins from the live tree BEFORE moving so Undo can
+    // replay each item back to its parent + index. We snapshot unconditionally —
+    // not just for folder/dock/workspace drops — because a 'reorder' drop whose
+    // target parent differs from an item's source folder is itself a cross-folder
+    // relocation (e.g. list view: dropping next to a bookmark already inside a
+    // folder). The `relocated` filter below keeps pure same-parent reorders
+    // toast-free, so this stays correct for both cases.
+    const snapshots = captureMoveSnapshots(tree, dragIds);
     try {
       if (target.kind === 'folder') {
         for (const id of dragIds) {
@@ -91,7 +94,7 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
       // Skip the toast for no-op drops where every item already lives in the
       // target scope (target scope == source scope) — nothing was relocated.
       const relocated = snapshots.filter(s => s.parentId !== moveTargetScope);
-      if (isRelocate && relocated.length > 0) {
+      if (relocated.length > 0) {
         const count = relocated.length;
         pushToast({
           kind: 'info',
