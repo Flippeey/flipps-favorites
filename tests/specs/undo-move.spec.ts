@@ -137,6 +137,57 @@ test.describe('undo move', () => {
     await expect(undoToast(newtabPage)).toHaveCount(0);
   });
 
+  // WHY: regression — in list view a folder's bookmarks render inline, so dropping
+  // an item NEXT TO one of them (rather than on the folder header) lands via the
+  // reorder code path. That is still a cross-folder relocation and must raise the
+  // Undo toast; previously only header drops did, so this recovery silently
+  // vanished for the more natural "drop beside a sibling" gesture.
+  test('list view: dropping beside a bookmark inside a folder shows Undo', async ({ newtabPage }) => {
+    await patchSettings(newtabPage, { folderMode: 'list' });
+    await reloadNewtab(newtabPage);
+
+    // A root-level bookmark (in the root grid) and a bookmark living inside the
+    // folder section — distinct scopes, so the move crosses folders.
+    const rootBookmark = newtabPage
+      .locator('.ff-sections > .ff-grid > [data-item-id][data-item-kind="bookmark"]')
+      .first();
+    const folderBookmark = newtabPage
+      .locator('.ff-sections section[data-scope-folder-id] [data-item-id][data-item-kind="bookmark"]')
+      .first();
+
+    const srcId = await rootBookmark.getAttribute('data-item-id');
+    if (!srcId) throw new Error('root bookmark not found');
+
+    const srcBox = await rootBookmark.boundingBox();
+    const dstBox = await folderBookmark.boundingBox();
+    if (!srcBox || !dstBox) throw new Error('tile bounding boxes not found');
+
+    // Drop just past the sibling's centre → an "after" reorder into the folder.
+    const dst: BoundingBox = {
+      x: dstBox.x + dstBox.width * 0.8,
+      y: dstBox.y,
+      width: 1,
+      height: dstBox.height,
+    };
+
+    await pointerDrag(newtabPage, srcBox, dst);
+
+    // The item left the root grid…
+    await expect(
+      newtabPage.locator(`.ff-sections > .ff-grid > [data-item-id="${srcId}"]`),
+    ).toHaveCount(0, { timeout: 8_000 });
+
+    // …and the Undo toast appeared for the cross-folder move.
+    const toast = undoToast(newtabPage);
+    await expect(toast).toBeVisible({ timeout: 5_000 });
+
+    // Undo restores it to the root grid scope it came from.
+    await toast.locator('.ff-toast__action', { hasText: 'Undo' }).click();
+    await expect(
+      newtabPage.locator(`.ff-sections > .ff-grid > [data-item-id="${srcId}"]`),
+    ).toBeVisible({ timeout: 8_000 });
+  });
+
   // WHY: "Move N to new folder" creates a folder AND moves items. A true reversal
   // restores the items to origin AND deletes the now-empty folder — otherwise
   // Undo leaves orphan clutter behind.
