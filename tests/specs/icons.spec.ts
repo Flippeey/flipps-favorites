@@ -151,6 +151,65 @@ test.describe('icon pipeline', () => {
     await expect(dialog).toBeHidden({ timeout: 10_000 });
   });
 
+  // Why it matters: users need to know where each search result came from so they
+  // can judge quality (a Google favicon is authoritative; a web-search hit is a
+  // best-effort match). The source must be visible on hover without extra clicks.
+  test('icon search result cell title includes source label and action hint', async ({ context, newtabPage }) => {
+    // Block origin scrape, S2, and Icon Horse so only DDG web-search results appear.
+    // This ensures the first visible cell is a web-search candidate (sourceKind: 'search'),
+    // making the "Web search · <host>" assertion deterministic.
+    await context.route('https://example.com/**', (route) => route.abort('failed'));
+    await context.route('https://www.google.com/s2/favicons**', (route) => route.abort('failed'));
+    await context.route('https://icon.horse/**', (route) => route.abort('failed'));
+
+    await context.route('https://duckduckgo.com/**', async (route) => {
+      const url = route.request().url();
+      if (url.includes('i.js')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            results: [{
+              image: 'https://mock.test/full.png',
+              thumbnail: 'https://mock.test/thumb.png',
+              title: 'Example logo',
+              url: 'https://wikipedia.org/wiki/Example',
+              width: 128,
+              height: 128,
+            }],
+          }),
+        });
+      } else {
+        await route.fulfill({ status: 200, contentType: 'text/html', body: '<script>vqd="3-mocktoken";</script>' });
+      }
+    });
+    await context.route('https://mock.test/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'image/png', body: MOCK_FAVICON_PNG }));
+
+    await reloadNewtab(newtabPage);
+    const tile = newtabPage.locator('.ff-tile[data-item-kind="bookmark"]', { hasText: 'Example Site' }).first();
+    await expect(tile).toBeVisible();
+
+    const menu = await openContextMenu(newtabPage, tile);
+    await clickMenuItem(menu, /^Edit/);
+
+    const dialog = newtabPage.locator('.ff-modal-scrim');
+    await expect(dialog).toBeVisible();
+
+    // Wait for the DDG web-search result cell to load (≥64px image validated).
+    const cell = newtabPage.locator('.ff-icongrid__cell:visible').first();
+    await expect(cell).toBeVisible({ timeout: 15_000 });
+
+    // The cell is a web-search result from wikipedia.org.
+    // Its hover title must include the source ("Web search · wikipedia.org")
+    // and the action hint so users know both origin and how to apply.
+    const cellTitle = await cell.getAttribute('title');
+    expect(cellTitle).toContain('Web search · wikipedia.org');
+    expect(cellTitle).toContain('double-click to apply and close');
+
+    await expect(dialog).toBeVisible();
+  });
+
   test('no CORS errors logged during icon load', async ({ newtabPage }) => {
     const corsErrors: string[] = [];
     newtabPage.on('console', (msg) => {

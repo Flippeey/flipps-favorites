@@ -1,5 +1,6 @@
 import { getBrandName } from '@/shared/url-brand';
 import { ALLOWED_BOOKMARK_SCHEMES } from '@/shared/constants';
+import type { IconFitMode } from '@/shared/models';
 
 export function isValidBookmarkUrl(value: string): boolean {
   try {
@@ -22,7 +23,26 @@ export function getHostname(url: string): string {
   }
 }
 
-export async function normalizeUploadedImage(file: File): Promise<string> {
+/** Pure math: compute the drawImage rect for a given fit mode and canvas size. */
+export function computeIconDrawRect(
+  naturalWidth: number,
+  naturalHeight: number,
+  canvasSize: number,
+  fit: IconFitMode,
+): { x: number; y: number; width: number; height: number } {
+  const scale =
+    fit === 'cover'
+      ? Math.max(canvasSize / naturalWidth, canvasSize / naturalHeight)
+      : Math.min(canvasSize / naturalWidth, canvasSize / naturalHeight);
+  const width = naturalWidth * scale;
+  const height = naturalHeight * scale;
+  return { x: (canvasSize - width) / 2, y: (canvasSize - height) / 2, width, height };
+}
+
+export async function normalizeUploadedImage(
+  file: File,
+  fit: IconFitMode = 'contain',
+): Promise<string> {
   const sourceDataUrl = await readFileAsDataUrl(file);
   const image = await loadImageElement(sourceDataUrl);
   const canvas = document.createElement('canvas');
@@ -40,13 +60,14 @@ export async function normalizeUploadedImage(file: File): Promise<string> {
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = 'high';
 
-  const scale = Math.min(size / image.naturalWidth, size / image.naturalHeight);
-  const drawWidth = image.naturalWidth * scale;
-  const drawHeight = image.naturalHeight * scale;
-  const drawX = (size - drawWidth) / 2;
-  const drawY = (size - drawHeight) / 2;
+  const { x, y, width, height } = computeIconDrawRect(
+    image.naturalWidth,
+    image.naturalHeight,
+    size,
+    fit,
+  );
+  context.drawImage(image, x, y, width, height);
 
-  context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
   const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
   if (!blob) {
     throw new Error('Failed to export the uploaded icon.');
