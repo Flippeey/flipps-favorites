@@ -68,6 +68,20 @@ const ICON_SOURCE_LABELS: Record<IconSourceKind, string> = {
   generated: 'Placeholder',
 };
 
+function candidateSourceLabel(candidate: { sourceKind: 'favicon' | 'search'; sourcePageUrl?: string }): string {
+  if (candidate.sourceKind === 'favicon') return ICON_SOURCE_LABELS.favicon;
+  const base = ICON_SOURCE_LABELS.search;
+  if (candidate.sourcePageUrl) {
+    try {
+      const host = new URL(candidate.sourcePageUrl).hostname;
+      if (host) return `${base} · ${host}`;
+    } catch {
+      // malformed URL — fall through to base label
+    }
+  }
+  return base;
+}
+
 export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogProps) {
   const [title, setTitle] = useState(target.title);
   const [url, setUrl] = useState(target.url);
@@ -546,7 +560,7 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
                       key={candidate.imageUrl}
                       type="button"
                       className="ff-icongrid__cell"
-                      title={`${candidate.label} — double-click to apply and close`}
+                      title={`${candidate.label} — ${candidateSourceLabel(candidate)} — double-click to apply and close`}
                       onClick={() => handlePickCandidate(candidate)}
                       onDoubleClick={() => { void handlePickCandidateAndClose(candidate); }}
                       data-busy={working || undefined}
