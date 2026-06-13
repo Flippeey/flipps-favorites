@@ -207,18 +207,6 @@
   line-height: 1.5;
 }
 
-/* View-mode toggle row within the template step */
-.ff-template-view-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--s-3);
-  font-size: 12px;
-  color: var(--fg-2);
-}
-.ff-template-view-toggle__label {
-  flex-shrink: 0;
-}
-
 /* Tips carousel (onboarding step 5) */
 .ff-onboard__tips {
   display: flex;

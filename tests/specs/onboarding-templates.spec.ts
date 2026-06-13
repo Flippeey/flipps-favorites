@@ -9,10 +9,10 @@
  * CRITICAL FACTS encoded here (do not remove these comments):
  *
  * 1. Bar-fallback-first rule: On a fresh install with no preSelected folders,
- *    onboarding step-1 defaults to the bookmarks bar ('1'). Every test that asserts
- *    a badge at step 4 FIRST asserts that the bar ('1') is the active step-1
- *    selection by checking its folder button shows the selected check icon — the
- *    badge depends on that selection being in place.
+ *    onboarding's workspace step (step 2) defaults to the bookmarks bar ('1'). Every
+ *    test that asserts a badge at the template step (step 3) FIRST asserts that the
+ *    bar ('1') is the active workspace-step selection by checking its folder button
+ *    shows the selected check icon — the badge depends on that selection being in place.
  *    FolderMultiPicker marks a selected folder visually (accent border + check icon)
  *    but does NOT use aria-pressed or data-* attributes — the check icon is the
  *    DOM signal for selection.
@@ -33,7 +33,7 @@ import {
   seedFlatHoarderTree,
   seedDeepOrganizedTree,
 } from '../fixtures/bookmark-helpers.js';
-import { getWorkspaces } from '../fixtures/seeding.js';
+import { getWorkspaces, patchSettings } from '../fixtures/seeding.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -50,10 +50,10 @@ async function advanceToStep(
 }
 
 /**
- * Assert that the Bookmarks bar folder ('1') is the active selection in step 1.
- * FolderMultiPicker renders an Ico name="check" inside a selected folder button.
- * We find the "Bookmarks bar" button and assert it contains a check icon (svg).
- * WHY: the Hoarder/PowerUser badge at step 4 depends on bar '1' being selected.
+ * Assert that the Bookmarks bar folder ('1') is the active selection in the workspace
+ * step (step 2). FolderMultiPicker renders an Ico name="check" inside a selected folder
+ * button. We find the "Bookmarks bar" button and assert it contains a check icon (svg).
+ * WHY: the Hoarder/PowerUser badge at the template step (step 3) depends on bar '1' being selected.
  */
 async function assertBarFallbackSelected(
   onboard: import('@playwright/test').Locator,
@@ -74,7 +74,7 @@ async function assertBarFallbackSelected(
 // Scenarios
 // ---------------------------------------------------------------------------
 
-test('Hoarder tree: bookmarks bar is the fallback step-1 selection; Hoarder card is badged at step 4', async ({ freshPage }) => {
+test('Hoarder tree: bookmarks bar is the fallback workspace-step selection; Hoarder card is badged at the template step', async ({ freshPage }) => {
   // Seed 120 flat bookmarks under the bookmarks bar ('1').
   // folderedRatio ≈ 0 + volume > 35 → Hoarder classification.
   await seedFlatHoarderTree(freshPage);
@@ -86,16 +86,15 @@ test('Hoarder tree: bookmarks bar is the fallback step-1 selection; Hoarder card
   const onboard = freshPage.locator('.ff-onboard');
   await expect(onboard).toBeVisible();
 
-  // Navigate to step 1 (workspace folder picker).
-  await onboard.getByRole('button', { name: /Next/i }).click();
+  // Navigate to step 2 (workspace folder picker): welcome → appearance → workspace.
+  await onboard.getByRole('button', { name: /Next/i }).click(); // -> appearance
+  await onboard.getByRole('button', { name: /Next/i }).click(); // -> workspace
 
-  // Step 1: BAR-FALLBACK-FIRST — assert the bookmarks bar is the active selection
-  // before advancing. Required before any badge assertion at step 4.
+  // Step 2: BAR-FALLBACK-FIRST — assert the bookmarks bar is the active selection
+  // before advancing. Required before any badge assertion at the template step.
   await assertBarFallbackSelected(onboard);
 
-  // Navigate to template picker (step 4): theme → accent → template.
-  await onboard.getByRole('button', { name: /Next/i }).click(); // -> theme
-  await onboard.getByRole('button', { name: /Next/i }).click(); // -> accent
+  // Navigate to template picker (step 3).
   await onboard.getByRole('button', { name: /Next/i }).click(); // -> template picker
 
   // Hoarder card must be recommended (classifier sees flat structure + high volume).
@@ -127,15 +126,14 @@ test('Large organized tree: Power-user card is badged AND the Researcher hint is
   const onboard = freshPage.locator('.ff-onboard');
   await expect(onboard).toBeVisible();
 
-  // Navigate to step 1 (workspace folder picker).
-  await onboard.getByRole('button', { name: /Next/i }).click();
+  // Navigate to step 2 (workspace folder picker): welcome → appearance → workspace.
+  await onboard.getByRole('button', { name: /Next/i }).click(); // -> appearance
+  await onboard.getByRole('button', { name: /Next/i }).click(); // -> workspace
 
-  // Step 1: BAR-FALLBACK-FIRST — bar '1' is selected (it contains the seeded folders).
+  // Step 2: BAR-FALLBACK-FIRST — bar '1' is selected (it contains the seeded folders).
   await assertBarFallbackSelected(onboard);
 
-  // Navigate to template picker (steps 2→3→4).
-  await onboard.getByRole('button', { name: /Next/i }).click(); // -> theme
-  await onboard.getByRole('button', { name: /Next/i }).click(); // -> accent
+  // Navigate to template picker (step 3).
   await onboard.getByRole('button', { name: /Next/i }).click(); // -> template picker
 
   // Power-user card is recommended (structural signals: high folderedRatio + depth).
@@ -164,8 +162,8 @@ test('Choosing a template then finishing: created workspace carries the template
   const onboard = freshPage.locator('.ff-onboard');
   await expect(onboard).toBeVisible();
 
-  // Advance through steps 0→1→2→3→4 (template picker).
-  await advanceToStep(onboard, 4);
+  // Advance through steps 0→1→2→3 (template picker).
+  await advanceToStep(onboard, 3);
 
   // Explicitly pick the "Researcher" template card (folderMode=list, sort=created/desc).
   const researcherCard = onboard.locator('[data-archetype-id="researcher"]');
@@ -173,7 +171,7 @@ test('Choosing a template then finishing: created workspace carries the template
   // data-selected={selected || undefined} → React renders "true" for boolean true
   await expect(researcherCard).toHaveAttribute('data-selected', 'true');
 
-  // Advance to tips (step 5) and finish.
+  // Advance to tips (step 4) and finish.
   await onboard.getByRole('button', { name: /Next/i }).click();
   await onboard.getByRole('button', { name: /Get started/i }).click();
   await expect(onboard).toHaveCount(0);
@@ -189,6 +187,33 @@ test('Choosing a template then finishing: created workspace carries the template
 
   // The app renders without crashing after onboarding completes.
   await expect(freshPage.locator('.ff-app')).toBeVisible();
+});
+
+test('Preselected preset (no manual card click) is applied: power-user → list view', async ({ freshPage }) => {
+  // REGRESSION: the classifier preselects a template card, but the user accepts it
+  // without clicking. The created workspace must still carry the PRESELECTED preset's
+  // view/sort — not the grid default. (Earlier a stale pending view-mode clobbered it.)
+  await seedDeepOrganizedTree(freshPage); // → power-user preselected (Structured Library, list)
+  await reloadNewtab(freshPage);
+
+  const onboard = freshPage.locator('.ff-onboard');
+  await expect(onboard).toBeVisible();
+
+  // Advance to the template step and confirm power-user is the preselected card,
+  // then finish WITHOUT clicking any card.
+  await advanceToStep(onboard, 3);
+  const powerUserCard = onboard.locator('[data-archetype-id="power-user"]');
+  await expect(powerUserCard).toHaveAttribute('data-selected', 'true');
+
+  await onboard.getByRole('button', { name: /Next/i }).click(); // -> tips
+  await onboard.getByRole('button', { name: /Get started/i }).click();
+  await expect(onboard).toHaveCount(0);
+
+  // Created workspace carries the power-user preset: list view, manual sort.
+  const workspaces = await getWorkspaces(freshPage);
+  expect(workspaces.length).toBeGreaterThan(0);
+  expect(workspaces[0]!.folderMode).toBe('list');
+  expect(workspaces[0]!.bookmarkSortMode).toBe('manual');
 });
 
 test('Skip path: workspace keeps default view/sort (grid/manual/asc)', async ({ freshPage }) => {
@@ -223,7 +248,7 @@ test('Re-run onboarding: with explicit template opt-in, workspace overrides appl
   await expect(onboard).toBeVisible();
 
   // First run: pick Casual template and finish to create the baseline workspace.
-  await advanceToStep(onboard, 4);
+  await advanceToStep(onboard, 3);
   const casualCard = onboard.locator('[data-archetype-id="casual"]');
   await casualCard.click();
   // data-selected={selected || undefined} → React renders "true" for boolean true
@@ -245,7 +270,7 @@ test('Re-run onboarding: with explicit template opt-in, workspace overrides appl
   const onboard2 = freshPage.locator('.ff-onboard');
   await expect(onboard2).toBeVisible();
 
-  await advanceToStep(onboard2, 4);
+  await advanceToStep(onboard2, 3);
   // Explicitly choose Researcher (folderMode=list, sort=created/desc).
   const researcherCard = onboard2.locator('[data-archetype-id="researcher"]');
   await researcherCard.click();
@@ -262,4 +287,57 @@ test('Re-run onboarding: with explicit template opt-in, workspace overrides appl
   expect(wsAfter.folderMode).toBe('list');
   expect(wsAfter.bookmarkSortMode).toBe('created');
   expect(wsAfter.bookmarkSortDirection).toBe('desc');
+});
+
+test('Re-run with multiple workspaces never duplicates or repoints a workspace', async ({ world, newtabPage }) => {
+  // REGRESSION: the reported "a workspace gets duplicated" bug. Completing a re-run
+  // used to retarget the ACTIVE workspace's rootFolderId to the first SELECTED folder.
+  // When the active workspace was not the one owning that first folder, its record was
+  // repointed and its old root orphaned — then recreated as a DUPLICATE. A re-run must
+  // NEVER repoint an existing workspace's root.
+  const personaNames = ['Work', 'Personal', 'AI', 'Design', 'Gaming'];
+  const before = world.workspaces;
+  expect(before.length).toBe(5);
+
+  // Peek which folder is FIRST in the default selection (preSelected[0] == the first
+  // recommendation card). Skip without changing anything — Skip never mutates state.
+  await newtabPage.getByRole('button', { name: 'Replay onboarding' }).click();
+  const peek = newtabPage.locator('.ff-onboard');
+  await expect(peek).toBeVisible();
+  await advanceToStep(peek, 2); // -> workspace step
+  const firstCardText = (await peek.locator('.ff-onboard__body').getByRole('button').first().textContent()) ?? '';
+  const firstFolder = personaNames.find(p => firstCardText.startsWith(p));
+  expect(firstFolder).toBeTruthy(); // the first recommendation is one of the persona folders
+  await peek.getByRole('button', { name: 'Skip' }).click();
+  await expect(peek).toHaveCount(0);
+
+  // Make a DIFFERENT workspace active, so the buggy retarget would necessarily move a
+  // root (active.root !== firstFolder's root). This is what makes the test bite.
+  const target = before.find(w => w.name !== firstFolder)!;
+  const targetRootBefore = target.rootFolderId;
+  await patchSettings(newtabPage, { activeWorkspaceId: target.id });
+  await reloadNewtab(newtabPage);
+
+  // Replay and complete accepting the default selection (no card click) — the path
+  // that triggered the bug.
+  await newtabPage.getByRole('button', { name: 'Replay onboarding' }).click();
+  const onboard = newtabPage.locator('.ff-onboard');
+  await expect(onboard).toBeVisible();
+  await advanceToStep(onboard, 4); // -> tips (welcome→appearance→workspace→template→tips)
+  await onboard.getByRole('button', { name: /Get started/i }).click();
+  await expect(onboard).toHaveCount(0);
+
+  const after = await getWorkspaces(newtabPage);
+
+  // The active workspace was NOT repointed: it keeps its original root.
+  expect(after.find(w => w.id === target.id)?.rootFolderId).toBe(targetRootBefore);
+
+  // No duplicate workspaces: every rootFolderId is still unique across all records.
+  const roots = after.map(w => w.rootFolderId);
+  expect(new Set(roots).size).toBe(roots.length);
+
+  // Every originally-seeded workspace still exists exactly once.
+  for (const w of before) {
+    expect(after.filter(a => a.id === w.id)).toHaveLength(1);
+  }
 });

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { MAX_WORKSPACES } from '@/shared/constants';
-import type { AppSettings, BookmarkNode, ViewMode, ThemeMode, WorkspaceRecord } from '@/shared/messages';
+import type { AppSettings, BookmarkNode, ThemeMode, WorkspaceRecord } from '@/shared/messages';
 import type { ArchetypeId } from '@/shared/organization-templates';
 import { ORGANIZATION_TEMPLATES } from '@/shared/organization-templates';
 import { applyAccent } from '../lib/accent';
@@ -156,9 +156,7 @@ export function WorkspaceRecommendations({
     <div>
       {recommendations.length > 0 && (
         <>
-          <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
-            Recommended based on your bookmarks
-          </div>
+          <FolderSectionDivider label="Recommended" />
           <div style={{ display: 'grid', gap: 4, marginBottom: 14 }}>
             {recommendations.map(f => (
               <RecommendedFolderCard
@@ -286,12 +284,6 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
   const [pendingAccentColor, setPendingAccentColor] = useState(
     activeWorkspace?.accentColor ?? ACCENT_PRESETS[0].value,
   );
-  // View mode is per-workspace now. Hold the pick locally and apply it at finish
-  // via creation overrides (fresh install) / onPatchWorkspace (existing workspace),
-  // mirroring the pendingAccentColor flow — no global settings write.
-  const [pendingFolderMode, setPendingFolderMode] = useState<ViewMode>(
-    activeWorkspace?.folderMode ?? 'grid',
-  );
 
   // Template picker: classify the selected workspace folders' content profile.
   // Recompute whenever the folder selection changes (mirrors scanFolders memo).
@@ -336,10 +328,9 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
 
   const steps = [
     { title: "Welcome to Flipp's Favorites", desc: '' },
-    { title: 'Set up your workspace',        desc: workspaceStepDesc },
-    { title: 'Choose your initial theme',    desc: 'Pick the starting theme for this workspace.' },
-    { title: 'Pick your initial accent',     desc: 'Choose an initial accent color for this workspace.' },
-    { title: 'Choose your organization style', desc: 'Pick the template that fits how you work with bookmarks. You can change any setting later.' },
+    { title: 'Choose your initial appearance', desc: 'Pick a starting theme and accent color for this workspace.' },
+    { title: 'Choose your workspaces',       desc: workspaceStepDesc },
+    { title: 'Pick a starting preset', desc: 'Just a starting point to get you going — choose the one closest to how you use bookmarks. You can change everything later.' },
     { title: "You're all set — here are a few tips", desc: 'A few things that will make your experience even better.' },
   ];
   const s = steps[step];
@@ -361,59 +352,57 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
 
       // Template overrides: spread the chosen template's workspaceOverrides (folderMode,
       // bookmarkSortMode, bookmarkSortDirection) into every workspace created here.
-      // pendingFolderMode stays as the explicit view-toggle override — compose both so
-      // the user's explicit view choice (toggle) wins over the template default.
+      // The chosen preset is the sole source of the workspace view/sort — there is no
+      // separate view-mode control to compose against.
       // Template NEVER sets layoutPreset — layout-recommendation.ts owns that field.
       const templateOverrides = pendingTemplateId
         ? { ...ORGANIZATION_TEMPLATES[pendingTemplateId].workspaceOverrides }
         : {};
-
-      // Explicit view toggle always wins over whatever the template defaulted.
-      const resolvedFolderMode = pendingFolderMode;
 
       const firstOverrides = {
         accentColor: pendingAccentColor,
         themeMode: settings.themeMode,
         layoutPreset,
         ...templateOverrides,
-        folderMode: resolvedFolderMode,
       };
       const restOverrides = {
         themeMode: settings.themeMode,
         layoutPreset,
         ...templateOverrides,
-        folderMode: resolvedFolderMode,
       };
 
-      // Each selected folder becomes a workspace. If a workspace already exists
-      // (re-running onboarding), the first selection retargets it and the rest are
-      // created; on a fresh install all selections are created from scratch.
       const [firstId, ...restIds] = selectedWorkspaceFolderIds;
       if (activeWorkspace) {
-        // Re-run over an existing workspace: template overrides are applied ONLY when
-        // the user explicitly picked a template on this re-run (pendingTemplateId is
-        // non-null). The patch composes template sort fields + the explicit view toggle.
-        // This is the EXPLICIT OPT-IN control — we never silently/immediately patch
-        // the existing workspace outside of handleFinish.
-        if (firstId) {
-          const workspacePatch: Partial<WorkspaceRecord> = {
-            rootFolderId: firstId,
-            folderMode: resolvedFolderMode,
-          };
-          if (pendingTemplateId) {
-            workspacePatch.bookmarkSortMode = templateOverrides.bookmarkSortMode;
-            workspacePatch.bookmarkSortDirection = templateOverrides.bookmarkSortDirection;
-          }
-          await onPatchWorkspace(workspacePatch);
+        // Re-run over existing workspaces.
+        //
+        // NEVER retarget an existing workspace's rootFolderId here. Doing so used to
+        // corrupt the ACTIVE workspace (repointing it at firstId's folder) and orphan
+        // its old root — which the create-if-missing loop below then recreated as a
+        // DUPLICATE workspace (the "last workspace duplicated" bug). Instead:
+        //   1. Apply the chosen preset (opt-in) to the active workspace IN PLACE. This
+        //      is the explicit opt-in control — we only patch view/sort when the user
+        //      actually picked a preset on this re-run.
+        //   2. Create workspaces only for selected folders that don't already have one
+        //      (handleCreateWorkspace dedups by rootFolderId, so existing ones are skipped).
+        if (pendingTemplateId) {
+          await onPatchWorkspace({
+            folderMode: templateOverrides.folderMode,
+            bookmarkSortMode: templateOverrides.bookmarkSortMode,
+            bookmarkSortDirection: templateOverrides.bookmarkSortDirection,
+          });
+        }
+        for (const id of selectedWorkspaceFolderIds) {
+          const folder = findFolder(tree, id);
+          if (folder) await onCreateWorkspace(id, folder.title, restOverrides);
         }
       } else if (firstId) {
+        // Fresh install: create every selected folder as a workspace. The first honors
+        // the user's explicit accent pick; siblings auto-pick a distinct accent.
         const folder = findFolder(tree, firstId);
         await onCreateWorkspace(firstId, folder?.title ?? 'My workspace', firstOverrides);
-      }
-      for (const id of restIds) {
-        const folder = findFolder(tree, id);
-        if (folder) {
-          await onCreateWorkspace(id, folder.title, restOverrides);
+        for (const id of restIds) {
+          const restFolder = findFolder(tree, id);
+          if (restFolder) await onCreateWorkspace(id, restFolder.title, restOverrides);
         }
       }
     } catch {
@@ -468,6 +457,43 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
           )}
 
           {step === 1 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18, marginTop: 16 }}>
+              <div>
+                <FolderSectionDivider label="Theme" />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                  <ThemeChoiceCard id="system" label="System" hint="Follow OS preference."      active={settings.themeMode === 'system'} onSelect={(id) => { onPatch({ themeMode: id }); void onPatchWorkspace({ themeMode: id }); }} preview="system" />
+                  <ThemeChoiceCard id="light"  label="Light"  hint="Bright canvas, dark text."  active={settings.themeMode === 'light'}  onSelect={(id) => { onPatch({ themeMode: id }); void onPatchWorkspace({ themeMode: id }); }} preview="light" />
+                  <ThemeChoiceCard id="dark"   label="Dark"   hint="Dim canvas, light text."    active={settings.themeMode === 'dark'}   onSelect={(id) => { onPatch({ themeMode: id }); void onPatchWorkspace({ themeMode: id }); }} preview="dark" />
+                </div>
+              </div>
+              <div>
+                <FolderSectionDivider label="Accent" />
+                <div className="ff-accents" style={{ maxWidth: 420 }}>
+                  {ACCENT_PRESETS.map(a => (
+                    <button
+                      key={a.id}
+                      className="ff-accentchip"
+                      data-active={pendingAccentColor.toUpperCase() === a.value.toUpperCase()}
+                      onClick={() => {
+                        setPendingAccentColor(a.value);
+                        // Live preview: applyAccent writes the CSS vars immediately. On a fresh
+                        // install there is no workspace yet, so onPatchWorkspace would no-op and
+                        // App's accent effect never fires — drive the preview directly here.
+                        applyAccent(a.value);
+                        if (activeWorkspace) void onPatchWorkspace({ accentColor: a.value });
+                      }}
+                      style={{ background: a.value, color: a.value }}
+                      aria-label={a.label}
+                    >
+                      <span className="ff-accentchip__label">{a.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
             <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
               <WorkspaceRecommendations
                 tree={tree}
@@ -481,85 +507,15 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
             </div>
           )}
 
-          {step === 2 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 16 }}>
-              <ThemeChoiceCard id="system" label="System" hint="Follow OS preference."      active={settings.themeMode === 'system'} onSelect={(id) => { onPatch({ themeMode: id }); void onPatchWorkspace({ themeMode: id }); }} preview="system" />
-              <ThemeChoiceCard id="light"  label="Light"  hint="Bright canvas, dark text."  active={settings.themeMode === 'light'}  onSelect={(id) => { onPatch({ themeMode: id }); void onPatchWorkspace({ themeMode: id }); }} preview="light" />
-              <ThemeChoiceCard id="dark"   label="Dark"   hint="Dim canvas, light text."    active={settings.themeMode === 'dark'}   onSelect={(id) => { onPatch({ themeMode: id }); void onPatchWorkspace({ themeMode: id }); }} preview="dark" />
-            </div>
-          )}
-
           {step === 3 && (
-            <div className="ff-accents" style={{ margin: '24px auto', maxWidth: 420 }}>
-              {ACCENT_PRESETS.map(a => (
-                <button
-                  key={a.id}
-                  className="ff-accentchip"
-                  data-active={pendingAccentColor.toUpperCase() === a.value.toUpperCase()}
-                  onClick={() => {
-                    setPendingAccentColor(a.value);
-                    // Live preview: applyAccent writes the CSS vars immediately. On a fresh
-                    // install there is no workspace yet, so onPatchWorkspace would no-op and
-                    // App's accent effect never fires — drive the preview directly here.
-                    applyAccent(a.value);
-                    if (activeWorkspace) void onPatchWorkspace({ accentColor: a.value });
-                  }}
-                  style={{ background: a.value, color: a.value }}
-                  aria-label={a.label}
-                >
-                  <span className="ff-accentchip__label">{a.label}</span>
-                </button>
-              ))}
-            </div>
+            <TemplatePicker
+              match={archetypeMatch}
+              selectedId={pendingTemplateId}
+              onSelect={setPendingTemplateId}
+            />
           )}
 
-          {step === 4 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <TemplatePicker
-                match={archetypeMatch}
-                selectedId={pendingTemplateId}
-                onSelect={id => {
-                  setPendingTemplateId(id);
-                  // Mirror the template's folderMode into the explicit view toggle
-                  // so the toggle stays in sync when the user picks a card.
-                  if (id !== null) {
-                    const tpl = ORGANIZATION_TEMPLATES[id];
-                    if (tpl.workspaceOverrides.folderMode) {
-                      setPendingFolderMode(tpl.workspaceOverrides.folderMode);
-                    }
-                  }
-                }}
-              />
-              {/* Explicit view toggle — always visible so the user can deviate from
-                  the template's default without having to go to Settings later. */}
-              <div className="ff-template-view-toggle">
-                <span className="ff-template-view-toggle__label">View mode:</span>
-                {([
-                  { id: 'grid' as ViewMode, label: 'Grid' },
-                  { id: 'list' as ViewMode, label: 'List' },
-                ]).map(m => (
-                  <button
-                    key={m.id}
-                    onClick={() => setPendingFolderMode(m.id)}
-                    className="ff-btn ff-btn--ghost"
-                    data-active={pendingFolderMode === m.id || undefined}
-                    style={{
-                      padding: '3px 10px',
-                      fontSize: 12,
-                      borderColor: pendingFolderMode === m.id ? 'var(--accent)' : 'var(--line-1)',
-                      background: pendingFolderMode === m.id
-                        ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))'
-                        : undefined,
-                    }}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {step === 5 && <TipsCarousel />}
+          {step === 4 && <TipsCarousel />}
         </div>
         <footer className="ff-onboard__foot">
           <button className="ff-iconbtn" onClick={() => handleClose()}>Skip</button>
@@ -573,8 +529,8 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
               <button
                 className="ff-btn"
                 onClick={() => setStep(step + 1)}
-                disabled={step === 1 && selectedWorkspaceFolderIds.length === 0}
-                title={step === 1 && selectedWorkspaceFolderIds.length === 0 ? 'Pick at least one folder to continue' : undefined}
+                disabled={step === 2 && selectedWorkspaceFolderIds.length === 0}
+                title={step === 2 && selectedWorkspaceFolderIds.length === 0 ? 'Pick at least one folder to continue' : undefined}
               >
                 Next <Ico name="chevronRight" size={14} />
               </button>
