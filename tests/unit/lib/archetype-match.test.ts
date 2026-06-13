@@ -181,6 +181,44 @@ describe('classify — 300+ bookmark ambiguous tree biases to power-user', () =>
 });
 
 // ---------------------------------------------------------------------------
+// (5b) Non-power-user wins natively at volume >= HIGH_VOLUME_ORGANIZED
+// ---------------------------------------------------------------------------
+// Regression guard for the removed HIGH_VOLUME_ORGANIZED promotion branch.
+// This profile is flat (folderedRatio 0.05) with moderate giant-folder share
+// (0.30 < 0.40) and a duplicate rate just at the hoarder threshold (0.05) — so
+// the old `disorderStrong` gate was FALSE, which meant the dead promotion branch
+// would have force-promoted power-user (native score 0.25) and then NEUTRAL-ed
+// the result via a negative margin. With the branch gone, hoarder wins natively.
+describe('classify — non-power-user wins natively at 300+ bookmarks', () => {
+  const flatHighVolume = profile({
+    totalBookmarks: 350,
+    totalFolders: 3,
+    maxDepth: 1,
+    folderedRatio: 0.05,
+    giantFolderShare: 0.30,
+    duplicateUrlRate: 0.05,
+    domainDiversity: 0.4,
+    recentAdditionRatio: 0.05,
+  });
+
+  it('emits hoarder (not power-user, not null) — no volume force-promotion', () => {
+    const result = classify(flatHighVolume);
+    expect(result.archetype).toBe('hoarder');
+  });
+
+  it('confidence > 0 and reasons non-empty', () => {
+    const result = classify(flatHighVolume);
+    expect(result.confidence).toBeGreaterThan(0);
+    expect(result.reasons.length).toBeGreaterThan(0);
+  });
+
+  it('researcher overlay is false (hoarder base)', () => {
+    const result = classify(flatHighVolume);
+    expect(result.overlays.researcher).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // (6) Tie → null
 // ---------------------------------------------------------------------------
 describe('classify — tie produces null', () => {

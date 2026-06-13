@@ -260,6 +260,68 @@ describe('profileTree — giantFolderShare', () => {
 });
 
 // ---------------------------------------------------------------------------
+// (f) giantFolderShare — no double-counting when parent and child both qualify.
+//
+// WHY this matters: giantFolderShare feeds the hoarder "giant-folder disorder"
+// signal in archetype-match.ts. If a bookmark is counted once for the parent
+// giant folder and again for a nested child giant folder, the share exceeds the
+// real fraction, over-firing the hoarder signal on legitimately-organised trees
+// that happen to have a large sub-folder inside a large folder.
+// ---------------------------------------------------------------------------
+describe('profileTree — giantFolderShare double-counting guard', () => {
+  // Tree shape:
+  //   root (transparent, isRoot=true — direct children NOT recorded in folderBookmarkCounts)
+  //   └─ outerFolder  (count = 100; NOT recorded — direct child of transparent root)
+  //      ├─ parentFolder (count = 90; RECORDED — grandchild of root, isRoot=false context)
+  //      │  ├─ childFolder (count = 50; RECORDED — great-grandchild)
+  //      │  │  └─ 50 bookmarks
+  //      │  └─ 40 direct bookmarks
+  //      └─ 10 direct bookmarks of outerFolder
+  //
+  // Total = 100.  GIANT_FOLDER_MIN = 0.40 → threshold = 40.
+  // parentFolder subtree = 90 → qualifies (90 >= 40)
+  // childFolder  subtree = 50 → qualifies (50 >= 40)
+  //
+  // The 50 bookmarks in childFolder are ALREADY included in parentFolder's 90.
+  // True giant share  = 90 / 100 = 0.90  (only the shallowest qualifying ancestor counts).
+  // Buggy share       = (90 + 50) / 100 → 1.40, clamped to 1.0 — wrong.
+
+  const childBookmarks = Array.from({ length: 50 }, (_, i) =>
+    bm(`child-bm${i}`, `https://child${i}.example.com`, 1_000_000),
+  );
+  const parentDirectBookmarks = Array.from({ length: 40 }, (_, i) =>
+    bm(`parent-direct-bm${i}`, `https://parent${i}.example.com`, 1_000_000),
+  );
+  const outerDirectBookmarks = Array.from({ length: 10 }, (_, i) =>
+    bm(`outer-direct-bm${i}`, `https://outerdirect${i}.example.com`, 1_000_000),
+  );
+
+  const childFolder = folder('childFolder', childBookmarks);
+  const parentFolder = folder('parentFolder', [...parentDirectBookmarks, childFolder]);
+  const outerFolder = folder('outerFolder', [...outerDirectBookmarks, parentFolder]);
+  const root = folder('root', [outerFolder]);
+
+  it('total is 100', () => {
+    const p = profileTree([root]);
+    expect(p.totalBookmarks).toBe(100);
+  });
+
+  it('giantFolderShare reflects the true non-double-counted share (0.90)', () => {
+    // The 50 child bookmarks must not be counted twice.
+    // True share = 90/100 = 0.90 (parentFolder is the shallowest qualifying ancestor;
+    // childFolder's bookmarks are already included in parentFolder's count).
+    const p = profileTree([root]);
+    expect(p.giantFolderShare).toBeCloseTo(0.90, 5);
+  });
+
+  it('giantFolderShare never exceeds 1', () => {
+    // Even if every bookmark is in a qualifying folder, share is capped at 1.
+    const p = profileTree([root]);
+    expect(p.giantFolderShare).toBeLessThanOrEqual(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Additional: domainDiversity
 // ---------------------------------------------------------------------------
 describe('profileTree — domainDiversity', () => {

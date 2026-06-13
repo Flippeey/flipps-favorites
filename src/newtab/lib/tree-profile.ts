@@ -44,14 +44,22 @@ export interface TreeProfile {
 // Internal accumulator
 // ---------------------------------------------------------------------------
 
+/** Per-folder entry for giantFolderShare computation. */
+interface FolderEntry {
+  /** Total bookmarks in this folder's subtree. */
+  count: number;
+  /** Id of the nearest non-root parent folder, or null when the parent is a selected root. */
+  parentId: string | null;
+}
+
 interface WalkState {
   totalBookmarks: number;
   totalFolders: number;
   maxDepth: number;
   /** Bookmarks that are NOT direct children of a selected root. */
   nestedBookmarks: number;
-  /** Per-folder bookmark subtree counts (folder id → subtree count), for giantFolderShare. */
-  folderBookmarkCounts: Map<string, number>;
+  /** Per-folder entries (folder id → FolderEntry), for giantFolderShare. */
+  folderBookmarkCounts: Map<string, FolderEntry>;
   /** Canonical URL → occurrence count, for duplicateUrlRate. */
   urlCounts: Map<string, number>;
   /** Unique brand domains seen. */
@@ -85,6 +93,7 @@ function makeState(): WalkState {
  * @param isRoot       True when `node` IS one of the caller-selected roots (transparent container).
  * @param recentCutoff Epoch ms; dateAdded at or below this is not recent.
  * @param state        Shared accumulator mutated in-place.
+ * @param parentId     Id of the nearest recorded non-root parent folder, or null.
  */
 function walkFolderWithCount(
   node: BookmarkNode,
@@ -92,6 +101,7 @@ function walkFolderWithCount(
   isRoot: boolean,
   recentCutoff: number,
   state: WalkState,
+  parentId: string | null = null,
 ): number {
   let subtreeBookmarks = 0;
 
@@ -108,12 +118,20 @@ function walkFolderWithCount(
       state.totalFolders++;
       if (depth + 1 > state.maxDepth) state.maxDepth = depth + 1;
 
-      const childSubtotal = walkFolderWithCount(child, depth + 1, false, recentCutoff, state);
+      const childSubtotal = walkFolderWithCount(child, depth + 1, false, recentCutoff, state,
+        // The parentId we pass into child's frame is the id of the nearest
+        // ancestor that WILL be recorded in folderBookmarkCounts:
+        //   - if the current node is recorded (!isRoot), child.id will be recorded
+        //     and becomes the nearest recorded ancestor for child's own children.
+        //   - if the current node is NOT recorded (isRoot), propagate the current
+        //     parentId unchanged (the nearest recorded ancestor is further up).
+        isRoot ? parentId : child.id,
+      );
 
       // Record per-folder subtree count only for non-root folders (the selected
       // root is a transparent container; its "share" is not meaningful).
       if (!isRoot) {
-        state.folderBookmarkCounts.set(child.id, childSubtotal);
+        state.folderBookmarkCounts.set(child.id, { count: childSubtotal, parentId });
       }
 
       subtreeBookmarks += childSubtotal;
@@ -191,11 +209,29 @@ export function profileTree(roots: BookmarkNode[], now?: number): TreeProfile {
 
   // giantFolderShare: share of bookmarks residing in folders whose subtree
   // contains >= GIANT_FOLDER_MIN fraction of all bookmarks.
+  // Each bookmark is counted at most once: only the SHALLOWEST qualifying
+  // ancestor in each ancestry chain contributes its count. A qualifying child
+  // nested inside a qualifying parent is skipped — its bookmarks are already
+  // included in the parent's subtree count.
   const giantThreshold = GIANT_FOLDER_MIN * total;
+  const qualifyingIds = new Set<string>();
+  for (const [id, entry] of state.folderBookmarkCounts) {
+    if (entry.count >= giantThreshold) qualifyingIds.add(id);
+  }
   let giantBookmarks = 0;
-  for (const count of state.folderBookmarkCounts.values()) {
-    if (count >= giantThreshold) {
-      giantBookmarks += count;
+  for (const id of qualifyingIds) {
+    // Walk up the parentId chain; if any ancestor also qualifies, skip this folder.
+    let ancestorId = state.folderBookmarkCounts.get(id)?.parentId ?? null;
+    let hasQualifyingAncestor = false;
+    while (ancestorId !== null) {
+      if (qualifyingIds.has(ancestorId)) {
+        hasQualifyingAncestor = true;
+        break;
+      }
+      ancestorId = state.folderBookmarkCounts.get(ancestorId)?.parentId ?? null;
+    }
+    if (!hasQualifyingAncestor) {
+      giantBookmarks += state.folderBookmarkCounts.get(id)!.count;
     }
   }
   const giantFolderShare = Math.min(giantBookmarks / total, 1);

@@ -234,39 +234,17 @@ export function classify(profile: TreeProfile): ArchetypeMatch {
     (a, b) => b[1].score - a[1].score,
   );
   const [first, second] = ranked;
-  const topScore = first[1].score;
+  const winner: BaseClass = first[0];
+  const winnerScore = first[1].score;
+  const winnerReasons = first[1].reasons;
   const runnerUpScore = second[1].score;
 
-  // Apply HIGH_VOLUME_ORGANIZED bias: when totalBookmarks >= threshold and power-user
-  // is NOT already winning, promote it unless disorder signals are overwhelming.
-  let winner: BaseClass = first[0];
-  let winnerScore = topScore;
-  let winnerReasons = first[1].reasons;
-  let promoted = false;
-
-  if (
-    first[0] !== 'power-user' &&
-    profile.totalBookmarks >= HIGH_VOLUME_ORGANIZED &&
-    scores['power-user'].score > 0
-  ) {
-    const disorderStrong =
-      profile.folderedRatio < HOARDER_MAX_FOLDERED_RATIO &&
-      (profile.giantFolderShare >= HOARDER_GIANT_FOLDER_THRESHOLD ||
-        profile.duplicateUrlRate >= HOARDER_MIN_DUPLICATE_RATE * 2);
-
-    if (!disorderStrong) {
-      winner = 'power-user';
-      winnerScore = scores['power-user'].score;
-      winnerReasons = scores['power-user'].reasons;
-      promoted = true;
-    }
-  }
-
-  // Get effective runner-up score (may differ after bias promotion).
-  const effectiveRunnerUpScore = promoted ? topScore : runnerUpScore;
+  // Volume bias toward power-user is handled inside scorePowerUser (the
+  // HIGH_VOLUME_ORGANIZED +0.25, plus the +0.15 well-curated bonus), so at
+  // >=300 organized bookmarks power-user wins natively. No post-hoc promotion.
 
   // Margin rule: winner must beat runner-up by CONFIDENCE_MARGIN AND clear CONFIDENCE_FLOOR.
-  const margin = winnerScore - effectiveRunnerUpScore;
+  const margin = winnerScore - runnerUpScore;
   if (margin < CONFIDENCE_MARGIN || winnerScore < CONFIDENCE_FLOOR) {
     return NEUTRAL;
   }
