@@ -1,6 +1,5 @@
 import { type CSSProperties } from 'react';
 import type {
-  BackgroundColorSource,
   BackgroundFitMode,
   BackgroundMode,
   BackgroundPositionMode,
@@ -13,7 +12,6 @@ import { Ico } from '../Ico';
 import {
   ACCENT_PRESETS,
   BgColorPicker,
-  GRADIENT_PRESETS,
   SectionTitle,
   Segmented,
   Slider,
@@ -199,36 +197,39 @@ function gradientPreviewBg(style: GradientStyle, color: string, intensity: numbe
 function GradientPanel({ workspace, onPatch }: WorkspaceSectionProps) {
   const ws = workspace ?? FALLBACK_WORKSPACE;
   const isAccent = ws.gradientColorSource === 'accent';
-  const currentHex = ws.gradientCustomColor.toUpperCase();
-  const matchingPreset = !isAccent && GRADIENT_PRESETS.find(p => p.value.toUpperCase() === currentHex);
-  const customActive = !isAccent && !matchingPreset;
+  const customActive = !isAccent;
   const resolvedColor = isAccent ? ws.accentColor : ws.gradientCustomColor;
-
-  const chips: BgChip[] = [
-    {
-      id: 'accent',
-      label: 'Accent',
-      background: 'var(--accent)',
-      active: isAccent,
-      onClick: () => onPatch({ gradientColorSource: 'accent' }),
-    },
-    ...GRADIENT_PRESETS.map(p => ({
-      id: p.id,
-      label: p.label,
-      background: p.value,
-      active: !isAccent && currentHex === p.value.toUpperCase(),
-      onClick: () => onPatch({ gradientColorSource: 'custom' as BackgroundColorSource, gradientCustomColor: p.value.toUpperCase() }),
-    })),
-  ];
 
   return (
     <>
-      <BgColorPicker
-        chips={chips}
-        customActive={customActive}
-        customColor={ws.gradientCustomColor}
-        onCustomColorChange={(hex) => onPatch({ gradientColorSource: 'custom', gradientCustomColor: hex.toUpperCase() })}
-      />
+      <div className="ff-bg-row">
+        <div className="ff-accents">
+          <button
+            type="button"
+            className="ff-accentchip"
+            data-active={isAccent}
+            onClick={() => onPatch({ gradientColorSource: 'accent' })}
+            style={{ background: 'var(--accent)', color: 'var(--accent)' }}
+            aria-label="Accent"
+          >
+            <span className="ff-accentchip__label">Accent</span>
+          </button>
+          <label
+            className="ff-accentchip ff-accentchip--custom"
+            data-active={customActive}
+            style={customActive ? { background: ws.gradientCustomColor, color: ws.gradientCustomColor } : undefined}
+            aria-label="Custom color"
+          >
+            <span className="ff-accentchip__label">Custom</span>
+            <input
+              type="color"
+              value={ws.gradientCustomColor}
+              onChange={(e) => onPatch({ gradientColorSource: 'custom', gradientCustomColor: e.target.value.toUpperCase() })}
+              style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
+            />
+          </label>
+        </div>
+      </div>
       <div className="ff-bg-row">
         <div className="ff-row__hint" style={{ marginBottom: 8 }}>Style</div>
         <div className="ff-themegrid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>

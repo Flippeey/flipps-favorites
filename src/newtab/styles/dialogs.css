@@ -273,6 +273,11 @@
   pointer-events: none;
 }
 .ff-accentchip:hover .ff-accentchip__label { opacity: 1; }
+/* Custom-color chip — square that opens the native picker. Rainbow signals
+   "pick any color"; once chosen, an inline style paints it the picked hue. */
+.ff-accentchip--custom {
+  background: conic-gradient(from 0deg, #f87171, #fbbf24, #34d399, #60a5fa, #a78bfa, #f472b6, #f87171);
+}
 .ff-accent-custom-btn {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 6px 10px;
