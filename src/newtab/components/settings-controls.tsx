@@ -34,24 +34,6 @@ export const CUSTOM_LAYOUT_PRESET: { id: LayoutPresetId; label: string; desc: st
   id: 'custom', label: 'Custom', desc: 'Fine-tune',
 };
 
-export const SOLID_PRESETS: { id: string; label: string; value: string }[] = [
-  { id: 'noir',    label: 'Noir',     value: '#0A0908' },
-  { id: 'warm',    label: 'Warm',     value: '#1A1110' },
-  { id: 'navy',    label: 'Navy',     value: '#0F1A2B' },
-  { id: 'slate',   label: 'Slate',    value: '#1F2937' },
-  { id: 'paper',   label: 'Paper',    value: '#FAF7F0' },
-  { id: 'sand',    label: 'Sand',     value: '#E5DDD0' },
-];
-
-export const GRADIENT_PRESETS: { id: string; label: string; value: string }[] = [
-  { id: 'blue',     label: 'Blue',     value: '#3F72DC' },
-  { id: 'teal',     label: 'Teal',     value: '#23867B' },
-  { id: 'purple',   label: 'Purple',   value: '#7D60D8' },
-  { id: 'orange',   label: 'Orange',   value: '#F57C00' },
-  { id: 'pink',     label: 'Pink',     value: '#C85FA4' },
-  { id: 'slate',    label: 'Slate',    value: '#778292' },
-];
-
 export function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
@@ -288,53 +270,6 @@ export function CustomLayoutPreview({ active }: { active?: boolean }) {
             : 'var(--ink-3)',
         }} />
       ))}
-    </div>
-  );
-}
-
-export interface BgChip {
-  id: string;
-  label: string;
-  background: string;   // CSS color value (hex or var)
-  active: boolean;
-  onClick: () => void;
-}
-
-interface BgColorPickerProps {
-  chips: BgChip[];
-  customActive: boolean;
-  customColor: string;
-  onCustomColorChange: (hex: string) => void;
-}
-
-export function BgColorPicker({ chips, customActive, customColor, onCustomColorChange }: BgColorPickerProps) {
-  return (
-    <div className="ff-bg-row">
-      <div className="ff-accents" style={{ gridTemplateColumns: 'repeat(7, 1fr)' }}>
-        {chips.map(c => (
-          <button
-            key={c.id}
-            type="button"
-            className="ff-accentchip"
-            data-active={c.active}
-            onClick={c.onClick}
-            style={{ background: c.background, color: c.background }}
-            aria-label={c.label}
-          >
-            <span className="ff-accentchip__label">{c.label}</span>
-          </button>
-        ))}
-      </div>
-      <label className={`ff-accent-custom-btn${customActive ? ' ff-accent-custom-btn--active' : ''}`} style={{ marginTop: 10 }}>
-        <span className="ff-accent-custom-swatch" style={{ background: customColor }} />
-        <span>{customActive ? `Custom (${customColor.toUpperCase()})` : 'Custom…'}</span>
-        <input
-          type="color"
-          value={customColor}
-          onChange={(e) => onCustomColorChange(e.target.value)}
-          style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
-        />
-      </label>
     </div>
   );
 }

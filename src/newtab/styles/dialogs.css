@@ -310,6 +310,12 @@
 }
 .ff-bg-panel:empty { display: none; }
 .ff-bg-row { display: flex; flex-direction: column; gap: var(--s-2); }
+/* Group subheader inside the background panel — quiet sibling of the section
+   title, so Color / Style / Intensity read as one consistent rhythm. */
+.ff-bg-row__title {
+  font-size: 12px; font-weight: 600; color: var(--fg-2);
+  letter-spacing: 0.02em; margin-bottom: var(--s-2);
+}
 .ff-bg-row + .ff-bg-row {
   padding-top: var(--s-4);
   border-top: 1px solid var(--line-1);

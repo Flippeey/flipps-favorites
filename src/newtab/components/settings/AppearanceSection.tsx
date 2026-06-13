@@ -11,14 +11,11 @@ import { useBlobUrl } from '@/newtab/lib/useBlobUrl';
 import { Ico } from '../Ico';
 import {
   ACCENT_PRESETS,
-  BgColorPicker,
   SectionTitle,
   Segmented,
   Slider,
-  SOLID_PRESETS,
   ThemeCardPreview,
   Toggle,
-  type BgChip,
 } from '../settings-controls';
 import { FALLBACK_WORKSPACE } from './types';
 import type { SectionProps, WorkspaceSectionProps } from './types';
@@ -60,9 +57,7 @@ export function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSe
             <div className="ff-themecard__label">Dark</div>
           </button>
         </div>
-      </div>
 
-      <div className="ff-set-section">
         <SectionTitle>Accent</SectionTitle>
         <div className="ff-accents" style={{ marginBottom: 8 }}>
           {ACCENT_PRESETS.map(a => (
@@ -81,7 +76,7 @@ export function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSe
         {(() => {
           const isCustom = !ACCENT_PRESETS.some(a => a.value.toUpperCase() === ws.accentColor.toUpperCase());
           return (
-            <div style={{ marginBottom: 28 }}>
+            <div>
               <label className={`ff-accent-custom-btn${isCustom ? ' ff-accent-custom-btn--active' : ''}`}>
                 <span className="ff-accent-custom-swatch" style={{ background: ws.accentColor }} />
                 <span>{isCustom ? `Custom (${ws.accentColor.toUpperCase()})` : 'Custom…'}</span>
@@ -95,9 +90,7 @@ export function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSe
             </div>
           );
         })()}
-      </div>
 
-      <div className="ff-set-section">
         <SectionTitle>Background</SectionTitle>
         <div className="ff-themegrid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
           {(['solid', 'gradient', 'wallpaper'] as BackgroundMode[]).map(opt => (
@@ -132,36 +125,40 @@ export function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSe
 
 function SolidPanel({ workspace, onPatch }: WorkspaceSectionProps) {
   const ws = workspace ?? FALLBACK_WORKSPACE;
-  const currentHex = ws.solidBackgroundColor.toUpperCase();
-  const isTheme = currentHex === '';
-  const matchingPreset = SOLID_PRESETS.find(p => p.value.toUpperCase() === currentHex);
-  const customActive = !isTheme && !matchingPreset;
+  const isTheme = ws.solidBackgroundColor.toUpperCase() === '';
+  const customActive = !isTheme;
   const customValue = ws.solidBackgroundColor || '#141414';
 
-  const chips: BgChip[] = [
-    {
-      id: 'theme',
-      label: 'Theme',
-      background: 'var(--ink-0)',
-      active: isTheme,
-      onClick: () => onPatch({ solidBackgroundColor: '' }),
-    },
-    ...SOLID_PRESETS.map(p => ({
-      id: p.id,
-      label: p.label,
-      background: p.value,
-      active: currentHex === p.value.toUpperCase(),
-      onClick: () => onPatch({ solidBackgroundColor: p.value.toUpperCase() }),
-    })),
-  ];
-
   return (
-    <BgColorPicker
-      chips={chips}
-      customActive={customActive}
-      customColor={customValue}
-      onCustomColorChange={(hex) => onPatch({ solidBackgroundColor: hex.toUpperCase() })}
-    />
+    <div className="ff-bg-row">
+      <div className="ff-bg-row__title">Color</div>
+      <div className="ff-accents">
+        <button
+          type="button"
+          className="ff-accentchip"
+          data-active={isTheme}
+          onClick={() => onPatch({ solidBackgroundColor: '' })}
+          style={{ background: 'var(--ink-0)', color: 'var(--ink-0)' }}
+          aria-label="Theme"
+        >
+          <span className="ff-accentchip__label">Theme</span>
+        </button>
+        <label
+          className="ff-accentchip ff-accentchip--custom"
+          data-active={customActive}
+          style={customActive ? { background: customValue, color: customValue } : undefined}
+          aria-label="Custom color"
+        >
+          <span className="ff-accentchip__label">Custom</span>
+          <input
+            type="color"
+            value={customValue}
+            onChange={(e) => onPatch({ solidBackgroundColor: e.target.value.toUpperCase() })}
+            style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
+          />
+        </label>
+      </div>
+    </div>
   );
 }
 
@@ -203,6 +200,7 @@ function GradientPanel({ workspace, onPatch }: WorkspaceSectionProps) {
   return (
     <>
       <div className="ff-bg-row">
+        <div className="ff-bg-row__title">Color</div>
         <div className="ff-accents">
           <button
             type="button"
@@ -231,7 +229,7 @@ function GradientPanel({ workspace, onPatch }: WorkspaceSectionProps) {
         </div>
       </div>
       <div className="ff-bg-row">
-        <div className="ff-row__hint" style={{ marginBottom: 8 }}>Style</div>
+        <div className="ff-bg-row__title">Style</div>
         <div className="ff-themegrid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
           {GRADIENT_STYLES.map(g => (
             <button
