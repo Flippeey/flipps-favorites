@@ -46,7 +46,7 @@ test('one workspace tab on fresh install', async ({ freshPage }) => {
   await expect(tabs).toHaveCount(0);
 });
 
-test('cannot exceed MAX_WORKSPACES (9)', async ({ freshPage }) => {
+test(`cannot exceed MAX_WORKSPACES (${MAX_WORKSPACES})`, async ({ freshPage }) => {
   // The freshPage context triggers the onboarding dialog (install fires
   // markOnboardingPending). Dismiss it first so the nav is accessible.
   const skipBtn = freshPage.getByRole('button', { name: 'Skip' });
@@ -64,12 +64,13 @@ test('cannot exceed MAX_WORKSPACES (9)', async ({ freshPage }) => {
     await createWorkspace(freshPage, makeWorkspaceRecord(`ws-limit-${i}`, `WS ${i + 1}`, folderId));
   }
 
-  // Patch settings so the app knows the active workspace.
-  await freshPage.evaluate(async (id) => {
+  // Patch settings so the app knows the active workspace and the full order.
+  const wsOrder = Array.from({ length: MAX_WORKSPACES }, (_, i) => `ws-limit-${i}`);
+  await freshPage.evaluate(async ([activeId, order]) => {
     const api = (globalThis as unknown as { browser?: { runtime: { sendMessage(m: unknown): Promise<unknown> } }; chrome: { runtime: { sendMessage(m: unknown): Promise<unknown> } } }).browser
       ?? (globalThis as unknown as { chrome: { runtime: { sendMessage(m: unknown): Promise<unknown> } } }).chrome;
-    await api.runtime.sendMessage({ type: 'settings/patch', patch: { activeWorkspaceId: id, workspaceOrder: Array.from({ length: 9 }, (_, i) => `ws-limit-${i}`) } });
-  }, 'ws-limit-0');
+    await api.runtime.sendMessage({ type: 'settings/patch', patch: { activeWorkspaceId: activeId, workspaceOrder: order } });
+  }, ['ws-limit-0', wsOrder] as [string, string[]]);
 
   await freshPage.reload();
   await freshPage.waitForSelector('.ff-app', { timeout: 15_000 });

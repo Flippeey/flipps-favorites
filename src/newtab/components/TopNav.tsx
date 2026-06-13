@@ -92,7 +92,11 @@ function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
   };
 
   return (
-    <div className="ff-ws-tabs-wrap">
+    <div
+      className="ff-ws-tabs-wrap"
+      data-fade-left={canScrollLeft}
+      data-fade-right={canScrollRight}
+    >
       {canScrollLeft && (
         <button className="ff-ws-scroll ff-ws-scroll--left" onClick={() => scroll(-1)} aria-label="Scroll tabs left" title="Scroll tabs left">
           <Ico name="chevronLeft" size={12} />
@@ -153,7 +157,6 @@ function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace }:
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const activeWs = workspaces.find(w => w.id === activeWorkspaceId);
 
   useEffect(() => {
     if (!open) return;
@@ -171,13 +174,19 @@ function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace }:
 
   return (
     <div className="ff-ws-dropdown" ref={ref}>
-      <button className="ff-pill" onClick={() => setOpen(o => !o)} aria-haspopup="listbox" aria-expanded={open} aria-label="Switch workspace" title="Switch workspace">
-        {activeWs && <span className="ff-ws-tab__dot" style={{ background: activeWs.accentColor }} />}
-        <span>{activeWs?.name ?? 'Workspace'}</span>
+      <button
+        className="ff-pill"
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`${workspaces.length} workspaces`}
+        title="Jump to workspace"
+      >
         <Ico name="chevronDown" size={12} />
+        <span className="ff-ws-dropdown__count" aria-hidden="true">{workspaces.length}</span>
       </button>
       {open && (
-        <ul className="ff-sort__panel" role="listbox">
+        <ul className="ff-sort__panel ff-ws-dropdown__panel" role="listbox">
           {workspaces.map((ws, i) => (
             <li
               key={ws.id}
@@ -189,7 +198,7 @@ function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace }:
             >
               <span className="ff-ws-tab__dot" style={{ background: ws.accentColor }} />
               <span>{ws.name}</span>
-              {i < 9 && <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-4)' }}>{altShortcut(String(i + 1))}</span>}
+              {i < 9 && <span className="ff-ws-dropdown__hint">{altShortcut(String(i + 1))}</span>}
             </li>
           ))}
         </ul>
