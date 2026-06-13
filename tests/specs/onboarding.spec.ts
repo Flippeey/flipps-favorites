@@ -65,7 +65,7 @@ test('Next through all steps reaches "Get started" and chosen accent persists', 
   await onboard.getByRole('button', { name: 'Red', exact: true }).click();
 
   // Advance through remaining steps to the finish.
-  await onboard.getByRole('button', { name: /Next/i }).click(); // -> theme cards
+  await onboard.getByRole('button', { name: /Next/i }).click(); // -> template picker (step 4)
   await onboard.getByRole('button', { name: /Next/i }).click(); // -> tips
 
   await onboard.getByRole('button', { name: /Get started/i }).click();

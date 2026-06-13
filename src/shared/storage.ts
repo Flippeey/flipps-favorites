@@ -12,6 +12,7 @@ import {
   writeCachedIcon,
 } from './icon-idb';
 import type { AppSettings, BookmarkSortMode, BookmarkUsageRecord, IconCacheRecord, IconOverrideRecord, SortDirection, ViewMode, WorkspaceRecord } from './messages';
+import type { ArchetypeId } from './organization-templates';
 import { getOverrideLookupKeys } from './icon-scope';
 import { createCachedRecordStore, createCachedValueStore } from './storage-buckets';
 
@@ -58,26 +59,32 @@ const bookmarkUsageStore = createCachedRecordStore<BookmarkUsageRecord>({
 export type OnboardingStatus = 'pending' | 'completed' | 'skipped';
 
 export interface OnboardingState {
-  version: 1;
+  version: 2;
   status: OnboardingStatus;
   updatedAt: number;
   completedAt: number | null;
   skippedAt: number | null;
+  /** Which archetype the classifier preselected (null = no recommendation / not run). */
+  recommendedArchetype: ArchetypeId | null;
+  /** Which archetype the user ultimately picked; 'skipped' = user dismissed the step. */
+  chosenArchetype: ArchetypeId | 'skipped' | null;
 }
 
 const defaultOnboardingState: OnboardingState = {
-  version: 1,
+  version: 2,
   status: 'completed',
   updatedAt: 0,
   completedAt: 0,
   skippedAt: null,
+  recommendedArchetype: null,
+  chosenArchetype: null,
 };
 
 const onboardingStateStore = createCachedValueStore<OnboardingState>({
   storageKey: onboardingStateKey,
   area: 'local',
   deserialize(storedValue) {
-    return normalizeOnboardingState((storedValue as Partial<OnboardingState> | undefined) ?? {});
+    return normalizeOnboardingState(storedValue ?? {});
   },
 });
 
@@ -317,22 +324,28 @@ export async function readOnboardingState(): Promise<OnboardingState> {
 export async function markOnboardingPending(): Promise<OnboardingState> {
   const now = Date.now();
   return onboardingStateStore.write({
-    version: 1,
+    version: 2,
     status: 'pending',
     updatedAt: now,
     completedAt: null,
     skippedAt: null,
+    recommendedArchetype: null,
+    chosenArchetype: null,
   });
 }
 
-export async function markOnboardingCompleted(): Promise<OnboardingState> {
+export async function markOnboardingCompleted(
+  archetypeInfo?: { recommendedArchetype: ArchetypeId | null; chosenArchetype: ArchetypeId | 'skipped' | null },
+): Promise<OnboardingState> {
   const now = Date.now();
   return onboardingStateStore.write({
-    version: 1,
+    version: 2,
     status: 'completed',
     updatedAt: now,
     completedAt: now,
     skippedAt: null,
+    recommendedArchetype: archetypeInfo?.recommendedArchetype ?? null,
+    chosenArchetype: archetypeInfo?.chosenArchetype ?? null,
   });
 }
 
@@ -515,24 +528,47 @@ function asIconOverrideRecordMap(value: unknown): Record<string, IconOverrideRec
   return { ...(value as Record<string, IconOverrideRecord>) };
 }
 
-function normalizeOnboardingState(value: Partial<OnboardingState>): OnboardingState {
-  const status = value.status === 'pending' || value.status === 'completed' || value.status === 'skipped'
-    ? value.status
+const ARCHETYPE_IDS: ReadonlySet<string> = new Set(['hoarder', 'power-user', 'casual', 'researcher']);
+
+function isArchetypeId(value: unknown): value is ArchetypeId {
+  return typeof value === 'string' && ARCHETYPE_IDS.has(value);
+}
+
+function isChosenArchetype(value: unknown): value is ArchetypeId | 'skipped' {
+  return isArchetypeId(value) || value === 'skipped';
+}
+
+function normalizeOnboardingState(value: unknown): OnboardingState {
+  // Accept both Partial<OnboardingState> (v2) and plain objects (v1, or empty).
+  const raw = (value !== null && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+
+  const status = raw['status'] === 'pending' || raw['status'] === 'completed' || raw['status'] === 'skipped'
+    ? (raw['status'] as OnboardingStatus)
     : defaultOnboardingState.status;
-  const updatedAt = normalizeNonNegativeTimestamp(value.updatedAt, defaultOnboardingState.updatedAt);
+  const updatedAt = normalizeNonNegativeTimestamp(raw['updatedAt'], defaultOnboardingState.updatedAt);
   const completedAt = status === 'completed'
-    ? normalizeNullableTimestamp(value.completedAt, updatedAt)
+    ? normalizeNullableTimestamp(raw['completedAt'], updatedAt)
     : null;
   const skippedAt = status === 'skipped'
-    ? normalizeNullableTimestamp(value.skippedAt, updatedAt)
+    ? normalizeNullableTimestamp(raw['skippedAt'], updatedAt)
+    : null;
+
+  // v1 records lack these fields → default to null.
+  const recommendedArchetype = isArchetypeId(raw['recommendedArchetype'])
+    ? raw['recommendedArchetype']
+    : null;
+  const chosenArchetype = isChosenArchetype(raw['chosenArchetype'])
+    ? raw['chosenArchetype']
     : null;
 
   return {
-    version: 1,
+    version: 2,
     status,
     updatedAt,
     completedAt,
     skippedAt,
+    recommendedArchetype,
+    chosenArchetype,
   };
 }
 

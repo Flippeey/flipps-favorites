@@ -1,14 +1,24 @@
 import { useCallback, useMemo, useState } from 'react';
 import { MAX_WORKSPACES } from '@/shared/constants';
 import type { AppSettings, BookmarkNode, ViewMode, ThemeMode, WorkspaceRecord } from '@/shared/messages';
+import type { ArchetypeId } from '@/shared/organization-templates';
+import { ORGANIZATION_TEMPLATES } from '@/shared/organization-templates';
 import { applyAccent } from '../lib/accent';
+import { classify } from '../lib/archetype-match';
 import { formatFolderStats, scanFolders, type ScoredFolder } from '../lib/folder-scoring';
 import { recommendLayout, readViewportMetrics } from '../lib/layout-recommendation';
 import { altShortcut, modShortcut } from '../lib/platform';
+import { profileTree } from '../lib/tree-profile';
 import { findFolder, topLevelFolders } from '../lib/tree';
 import { Ico } from './Ico';
 import { FolderMultiPicker } from './FolderMultiPicker';
 import { ACCENT_PRESETS, ThemeCardPreview } from './settings';
+import { TemplatePicker } from './TemplatePicker';
+
+export interface OnboardingArchetypeResult {
+  recommendedArchetype: ArchetypeId | null;
+  chosenArchetype: ArchetypeId | 'skipped' | null;
+}
 
 interface OnboardingProps {
   settings: AppSettings;
@@ -17,7 +27,7 @@ interface OnboardingProps {
   onPatch: (patch: Partial<AppSettings>) => void;
   onPatchWorkspace: (patch: Partial<WorkspaceRecord>) => Promise<void>;
   onCreateWorkspace: (rootFolderId: string, name: string, overrides?: Partial<WorkspaceRecord>) => Promise<string | undefined>;
-  onFinish: () => void;
+  onFinish: (archetypeResult: OnboardingArchetypeResult) => void;
 }
 
 function ThemeChoiceCard({ id, label, hint, active, onSelect, preview }: {
@@ -282,14 +292,42 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
   const [pendingFolderMode, setPendingFolderMode] = useState<ViewMode>(
     activeWorkspace?.folderMode ?? 'grid',
   );
+
+  // Template picker: classify the selected workspace folders' content profile.
+  // Recompute whenever the folder selection changes (mirrors scanFolders memo).
+  const archetypeMatch = useMemo(() => {
+    const roots = selectedWorkspaceFolderIds
+      .map(id => findFolder(tree, id))
+      .filter((n): n is NonNullable<typeof n> => n !== null);
+    const profile = profileTree(roots);
+    return classify(profile);
+  }, [selectedWorkspaceFolderIds, tree]);
+
+  // Which template the user has chosen. Null = not yet chosen / skip.
+  // When the classifier has a recommendation, preselect it as default.
+  const [pendingTemplateId, setPendingTemplateId] = useState<ArchetypeId | null>(() =>
+    archetypeMatch.archetype,
+  );
+
+  // When the classifier recommends an archetype, mirror its folderMode as the
+  // default view-mode so the two controls stay in sync on first load.
+  // This runs only once at mount (archetypeMatch.archetype is stable for the
+  // initial selection); the user can always override via the explicit toggle.
+  // We don't use an effect here — initial state derivation is enough.
+
   const [finishing, setFinishing] = useState(false);
   const [closing, setClosing] = useState(false);
 
-  const handleClose = useCallback(() => {
+  const handleClose = useCallback((archetypeResult?: OnboardingArchetypeResult) => {
     if (closing) return;
     setClosing(true);
-    setTimeout(() => onFinish(), 200);
-  }, [closing, onFinish]);
+    // Skip path: archetypeResult not provided → user dismissed without completing.
+    const result: OnboardingArchetypeResult = archetypeResult ?? {
+      recommendedArchetype: archetypeMatch.archetype,
+      chosenArchetype: 'skipped',
+    };
+    setTimeout(() => onFinish(result), 200);
+  }, [closing, onFinish, archetypeMatch.archetype]);
 
   const hasRecommendations = scanResult.preSelected.length > 0 || scanResult.suggested.length > 0;
   const workspaceStepDesc = hasRecommendations
@@ -301,7 +339,7 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
     { title: 'Set up your workspace',        desc: workspaceStepDesc },
     { title: 'Choose your initial theme',    desc: 'Pick the starting theme for this workspace.' },
     { title: 'Pick your initial accent',     desc: 'Choose an initial accent color for this workspace.' },
-    { title: 'How do you want to browse?',    desc: 'Choose the layout that fits how you think about your bookmarks.' },
+    { title: 'Choose your organization style', desc: 'Pick the template that fits how you work with bookmarks. You can change any setting later.' },
     { title: "You're all set — here are a few tips", desc: 'A few things that will make your experience even better.' },
   ];
   const s = steps[step];
@@ -320,16 +358,54 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
       // retarget branch below never spreads these overrides, so an existing workspace's
       // user-chosen accent + layout are left untouched.
       const layoutPreset = recommendedLayout.layoutPreset;
-      const firstOverrides = { accentColor: pendingAccentColor, themeMode: settings.themeMode, layoutPreset, folderMode: pendingFolderMode };
-      const restOverrides = { themeMode: settings.themeMode, layoutPreset, folderMode: pendingFolderMode };
+
+      // Template overrides: spread the chosen template's workspaceOverrides (folderMode,
+      // bookmarkSortMode, bookmarkSortDirection) into every workspace created here.
+      // pendingFolderMode stays as the explicit view-toggle override — compose both so
+      // the user's explicit view choice (toggle) wins over the template default.
+      // Template NEVER sets layoutPreset — layout-recommendation.ts owns that field.
+      const templateOverrides = pendingTemplateId
+        ? { ...ORGANIZATION_TEMPLATES[pendingTemplateId].workspaceOverrides }
+        : {};
+
+      // Explicit view toggle always wins over whatever the template defaulted.
+      const resolvedFolderMode = pendingFolderMode;
+
+      const firstOverrides = {
+        accentColor: pendingAccentColor,
+        themeMode: settings.themeMode,
+        layoutPreset,
+        ...templateOverrides,
+        folderMode: resolvedFolderMode,
+      };
+      const restOverrides = {
+        themeMode: settings.themeMode,
+        layoutPreset,
+        ...templateOverrides,
+        folderMode: resolvedFolderMode,
+      };
+
       // Each selected folder becomes a workspace. If a workspace already exists
       // (re-running onboarding), the first selection retargets it and the rest are
       // created; on a fresh install all selections are created from scratch.
       const [firstId, ...restIds] = selectedWorkspaceFolderIds;
       if (activeWorkspace) {
-        // Re-run over an existing workspace: apply the view-mode pick explicitly
-        // (the retarget branch never spreads overrides, by design).
-        if (firstId) await onPatchWorkspace({ rootFolderId: firstId, folderMode: pendingFolderMode });
+        // Re-run over an existing workspace: template overrides are applied ONLY when
+        // the user explicitly picked a template on this re-run (pendingTemplateId is
+        // non-null). The patch composes template sort fields + the explicit view toggle.
+        // This is the EXPLICIT OPT-IN control — we never silently/immediately patch
+        // the existing workspace outside of handleFinish.
+        if (firstId) {
+          const workspacePatch: Partial<WorkspaceRecord> = {
+            rootFolderId: firstId,
+            folderMode: resolvedFolderMode,
+          };
+          if (pendingTemplateId) {
+            workspacePatch.bookmarkSortMode = templateOverrides.bookmarkSortMode;
+            workspacePatch.bookmarkSortDirection = templateOverrides.bookmarkSortDirection;
+          }
+          await onPatchWorkspace(workspacePatch);
+        }
       } else if (firstId) {
         const folder = findFolder(tree, firstId);
         await onCreateWorkspace(firstId, folder?.title ?? 'My workspace', firstOverrides);
@@ -343,7 +419,10 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
     } catch {
       // workspace creation failed — proceed to finish anyway
     } finally {
-      handleClose();
+      handleClose({
+        recommendedArchetype: archetypeMatch.archetype,
+        chosenArchetype: pendingTemplateId ?? 'skipped',
+      });
     }
   };
 
@@ -435,31 +514,47 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
           )}
 
           {step === 4 && (
-            <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <TemplatePicker
+                match={archetypeMatch}
+                selectedId={pendingTemplateId}
+                onSelect={id => {
+                  setPendingTemplateId(id);
+                  // Mirror the template's folderMode into the explicit view toggle
+                  // so the toggle stays in sync when the user picks a card.
+                  if (id !== null) {
+                    const tpl = ORGANIZATION_TEMPLATES[id];
+                    if (tpl.workspaceOverrides.folderMode) {
+                      setPendingFolderMode(tpl.workspaceOverrides.folderMode);
+                    }
+                  }
+                }}
+              />
+              {/* Explicit view toggle — always visible so the user can deviate from
+                  the template's default without having to go to Settings later. */}
+              <div className="ff-template-view-toggle">
+                <span className="ff-template-view-toggle__label">View mode:</span>
                 {([
-                  { id: 'grid', label: 'Grid', desc: 'Folders appear as tiles. Tap one to open it — best when you like to focus on one folder at a time.' },
-                  { id: 'list', label: 'List', desc: 'Folders expand into sections with all their bookmarks visible — best when you want everything at a glance.' },
-                ] as { id: ViewMode; label: string; desc: string }[]).map(m => {
-                  const active = pendingFolderMode === m.id;
-                  return (
-                    <button
-                      key={m.id}
-                      onClick={() => setPendingFolderMode(m.id)}
-                      className="ff-card"
-                      style={{
-                        textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'var(--fg-1)',
-                        borderColor: active ? 'var(--accent)' : 'var(--line-1)',
-                        background: active ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
-                        boxShadow: active ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' : 'none',
-                        padding: 16,
-                      }}
-                    >
-                      <div style={{ fontWeight: 600, marginBottom: 4 }}>{m.label}</div>
-                      <div style={{ fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.45 }}>{m.desc}</div>
-                    </button>
-                  );
-                })}
+                  { id: 'grid' as ViewMode, label: 'Grid' },
+                  { id: 'list' as ViewMode, label: 'List' },
+                ]).map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => setPendingFolderMode(m.id)}
+                    className="ff-btn ff-btn--ghost"
+                    data-active={pendingFolderMode === m.id || undefined}
+                    style={{
+                      padding: '3px 10px',
+                      fontSize: 12,
+                      borderColor: pendingFolderMode === m.id ? 'var(--accent)' : 'var(--line-1)',
+                      background: pendingFolderMode === m.id
+                        ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))'
+                        : undefined,
+                    }}
+                  >
+                    {m.label}
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -467,7 +562,7 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
           {step === 5 && <TipsCarousel />}
         </div>
         <footer className="ff-onboard__foot">
-          <button className="ff-iconbtn" onClick={handleClose}>Skip</button>
+          <button className="ff-iconbtn" onClick={() => handleClose()}>Skip</button>
           <div style={{ display: 'flex', gap: 8 }}>
             {step > 0 && (
               <button className="ff-btn ff-btn--ghost" onClick={() => setStep(step - 1)}>

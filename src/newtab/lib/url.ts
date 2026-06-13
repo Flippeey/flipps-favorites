@@ -14,3 +14,26 @@ export function hasUrlScheme(value: string): boolean {
 export function normalizeBookmarkUrl(url: string): string {
   return hasUrlScheme(url) ? url : `https://${url}`;
 }
+
+// Canonical key used for duplicate-URL detection across a bookmark collection.
+// Strips trailing slashes and normalises http → https so that
+// "http://example.com/" and "https://example.com" map to the same key.
+// Returns null for unparseable or non-http(s) URLs (e.g. chrome://, file://)
+// so callers can skip those rather than treating every chrome:// page as a dup.
+export function canonicalUrlForDedup(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  // Only deduplicate http and https bookmarks; leave special schemes alone.
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return null;
+  }
+  // Normalise to https, remove trailing slash from pathname, preserve rest.
+  const path = parsed.pathname.replace(/\/+$/, '') || '/';
+  const search = parsed.search;
+  const hash = parsed.hash;
+  return `https://${parsed.host}${path}${search}${hash}`;
+}

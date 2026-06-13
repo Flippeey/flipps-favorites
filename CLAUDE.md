@@ -24,7 +24,9 @@ React 19 SPA in newtab; vanilla TS service worker.
 
 - `background/service-worker.ts` — MV3 message router + lifecycle. `background/icons/` — icon resolution pipeline (entry: `icon-service.ts`).
 - `newtab/App.tsx` — owns top-level state; composes hooks from `newtab/state/` (`useSelection`, `useWorkspaceActions`, `useToasts`, `useContextMenuBuilder`, `useOptimisticPatch`). Child components are presentational (props + `on*` callbacks).
-- `newtab/components/` — React components; `components/settings/` holds per-section drawer panels (Appearance, Layout, Clock, Dock, Navigation, Backup, Help).
+- `newtab/components/` — React components; `components/settings/` holds per-section drawer panels (Appearance, Layout, Clock, Dock, Navigation, Backup, Help). `TemplatePicker.tsx` — onboarding template selector.
+- `newtab/lib/tree-profile.ts`, `archetype-match.ts` — archetype classification pipeline (structural profiling + 3-class matcher).
+- `shared/organization-templates.ts` — per-archetype view/sort template bundles.
 - `newtab/interaction/` — pointer/keyboard hooks (`useDrag`/`useDragWiring`, `useMarquee`, `useKeyboardNav`, `useFocusTrap`, `useQuickAddShortcuts`, `useWorkspaceShortcut`, `useEscapeKey`).
 - `newtab/lib/` — utilities (`messaging`, `tree`, `url`, `accent`, `dock-mode`, `folder-scoring`, icon helpers, `platform`, `workspace-transfer`).
 - `shared/` — cross-context code (`messages` = source of truth for contracts, `models`, `browser` shim, `storage` + `storage-buckets`, `icon-idb`, `constants`).

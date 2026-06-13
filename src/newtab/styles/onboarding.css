@@ -61,6 +61,164 @@
   background: var(--ink-0);
 }
 
+/* TemplatePicker — step 4 archetype card grid */
+.ff-template-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  margin-top: var(--s-4);
+}
+.ff-template-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.ff-template-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--fg-1);
+  background: var(--ink-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-lg);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+.ff-template-card[data-selected] {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 7%, var(--ink-2));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent);
+}
+.ff-template-card[data-recommended]:not([data-selected]) {
+  border-color: var(--accent-border);
+}
+.ff-template-card__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.ff-template-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.ff-template-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  flex: 1 1 auto;
+}
+.ff-template-card__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  background: color-mix(in oklab, var(--accent) 15%, var(--ink-3));
+  color: var(--accent-on-surface, var(--accent));
+  flex-shrink: 0;
+}
+.ff-template-card__check {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.ff-template-card__desc {
+  font-size: 12px;
+  color: var(--fg-2);
+  line-height: 1.5;
+  margin: 0;
+}
+.ff-template-card__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ff-template-card__summary-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fg-3);
+}
+.ff-template-card__summary-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.ff-template-card__why {
+  font-size: 11px;
+  color: var(--fg-3);
+  border-top: 1px solid var(--line-1);
+  padding-top: var(--s-2);
+}
+.ff-template-card__why-label {
+  font-weight: 600;
+  display: block;
+  margin-bottom: 4px;
+}
+.ff-template-card__why-list {
+  margin: 0;
+  padding-left: 14px;
+}
+.ff-template-card__why-list li {
+  line-height: 1.4;
+}
+.ff-template-card__hint {
+  font-size: 11px;
+  color: var(--fg-3);
+  font-style: italic;
+  border-top: 1px solid var(--line-1);
+  padding-top: var(--s-2);
+}
+
+/* Professional nudge block below the card grid */
+.ff-template-picker__nudge {
+  padding: var(--s-3) var(--s-4);
+  background: var(--ink-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-lg);
+  font-size: 12px;
+}
+.ff-template-picker__nudge-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--fg-1);
+  margin-bottom: var(--s-1);
+}
+.ff-template-picker__nudge-desc {
+  margin: 0 0 var(--s-2);
+  color: var(--fg-2);
+  line-height: 1.5;
+}
+.ff-template-picker__nudge-list {
+  margin: 0;
+  padding-left: 14px;
+  color: var(--fg-3);
+}
+.ff-template-picker__nudge-list li {
+  line-height: 1.5;
+}
+
+/* View-mode toggle row within the template step */
+.ff-template-view-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  font-size: 12px;
+  color: var(--fg-2);
+}
+.ff-template-view-toggle__label {
+  flex-shrink: 0;
+}
+
 /* Tips carousel (onboarding step 5) */
 .ff-onboard__tips {
   display: flex;
