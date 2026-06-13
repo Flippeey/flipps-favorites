@@ -134,16 +134,17 @@ test.describe('settings-appearance: background solid', () => {
     await expect(newtabPage.locator('.ff-app')).toHaveAttribute('data-bg', 'solid');
   });
 
-  test('Solid preset color chip applies and data-bg stays solid', async ({ newtabPage }) => {
+  test('Solid Theme color option applies and data-bg stays solid', async ({ newtabPage }) => {
     await patchWorkspace(newtabPage, WORK_WS_ID, { backgroundMode: 'solid' });
     await reloadNewtab(newtabPage);
 
     await openAppearance(newtabPage);
-    // Noir preset is the first .ff-accentchip inside the solid panel's BgColorPicker.
-    // We need the chip inside the bg panel, not the accent chips — they share the class,
-    // so filter by aria-label.
-    const noirChip = newtabPage.locator('.ff-accentchip[aria-label="Noir"]');
-    await noirChip.click();
+    // The solid panel's preset swatches were dropped — it now offers a "Theme" chip
+    // (use the theme's ink color) plus a custom color input. Only the active mode's
+    // panel renders, so this Theme chip is the solid panel's, not an accent chip.
+    // Picking it must keep the app in solid background mode.
+    const themeChip = newtabPage.locator('.ff-accentchip[aria-label="Theme"]');
+    await themeChip.click();
     await expect(newtabPage.locator('.ff-app')).toHaveAttribute('data-bg', 'solid');
   });
 });
