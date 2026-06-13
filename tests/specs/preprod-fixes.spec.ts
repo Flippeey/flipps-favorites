@@ -11,6 +11,7 @@
  */
 import { test, expect } from '../fixtures/world.js';
 import type { Page } from '@playwright/test';
+import { MAX_WORKSPACES } from '../../src/shared/constants.js';
 
 const WS_DEFAULTS = {
   themeMode: 'system', accentColor: '#3F72DC', backgroundMode: 'gradient', solidBackgroundColor: '',
@@ -168,10 +169,10 @@ test.describe('preprod fixes', () => {
   });
 
   test('`w` shortcut does nothing at the workspace limit', async ({ freshPage }) => {
-    const specs = Array.from({ length: 9 }, (_, i) => ({ id: `ws-${i}`, name: `WS ${i}`, bookmarks: [{ title: `b${i}`, url: `https://w${i}.example` }] }));
+    const specs = Array.from({ length: MAX_WORKSPACES }, (_, i) => ({ id: `ws-${i}`, name: `WS ${i}`, bookmarks: [{ title: `b${i}`, url: `https://w${i}.example` }] }));
     await seed(freshPage, specs);
     await reload(freshPage);
-    expect(await freshPage.locator('[data-workspace-id]').count()).toBe(9);
+    expect(await freshPage.locator('[data-workspace-id]').count()).toBe(MAX_WORKSPACES);
 
     await freshPage.locator('main.ff-canvas').click({ position: { x: 6, y: 6 } });
     await freshPage.keyboard.press('w');
