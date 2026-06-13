@@ -12,7 +12,7 @@
 .ff-nav {
   height: var(--nav-h);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(auto, 1fr);
   align-items: center;
   padding: 0 var(--s-6);
   gap: var(--s-3);
@@ -26,7 +26,7 @@
   border-bottom: 1px solid var(--line-1);
 }
 .ff-nav__left, .ff-nav__center, .ff-nav__right { display: flex; align-items: center; gap: var(--s-2); }
-.ff-nav__center { justify-self: center; }
+.ff-nav__center { min-width: 0; }
 .ff-nav__right  { justify-self: end; }
 
 .ff-iconbtn {
@@ -246,11 +246,55 @@
 .ff-ws-scroll--left  { left: 0; }
 .ff-ws-scroll--right { right: 0; }
 
-.ff-ws-dropdown { display: none; }
+/* Edge fade — gradient mask on the scroll strip that signals off-screen tabs.
+   Toggled via data-fade-left / data-fade-right attributes set by WorkspaceTabs. */
+.ff-ws-tabs-wrap[data-fade-left="true"] {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 20px, #000 100%);
+  mask-image: linear-gradient(90deg, transparent, #000 20px, #000 100%);
+}
+.ff-ws-tabs-wrap[data-fade-right="true"] {
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 calc(100% - 20px), transparent);
+  mask-image: linear-gradient(90deg, #000 0%, #000 calc(100% - 20px), transparent);
+}
+.ff-ws-tabs-wrap[data-fade-left="true"][data-fade-right="true"] {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 20px, #000 calc(100% - 20px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 20px, #000 calc(100% - 20px), transparent);
+}
+
+/* Desktop jump-menu: always visible alongside the scroll strip. */
+.ff-ws-dropdown {
+  display: flex;
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* Jump-menu panel: open below the trigger, left-aligned. */
+.ff-ws-dropdown__panel {
+  left: 0;
+  right: auto;
+  min-width: 200px;
+}
+
+/* Count badge on the trigger. */
+.ff-ws-dropdown__count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-4);
+  letter-spacing: 0.02em;
+}
+
+/* Keyboard shortcut hint in each row. */
+.ff-ws-dropdown__hint {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-4);
+}
 
 @media (max-width: 480px) {
   .ff-ws-tabs-wrap { display: none; }
-  .ff-ws-dropdown { display: flex; position: relative; }
+  /* On mobile the strip is hidden; the dropdown stays, but now shows name instead of count. */
+  .ff-ws-dropdown__count { display: none; }
 }
 
 .ff-ws-tab {

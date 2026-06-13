@@ -1,4 +1,4 @@
-export const MAX_WORKSPACES = 9;
+export const MAX_WORKSPACES = 20;
 
 // Schemes a bookmark URL may use. http/https plus browser-internal pages and
 // local files. Note: chrome://, edge://, about: bookmarks save + display, but

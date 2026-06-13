@@ -112,6 +112,17 @@ export function createCachedValueStore<T>(args: {
       });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
+      // Sync storage quota exceeded: demote permanently to local for this store
+      // instance and retry. This covers the workspace store when 20 workspaces
+      // exceed Chrome sync's per-item 8 KB limit.
+      if (storageArea.name === 'sync' && /quota/i.test(detail)) {
+        const localArea = getLocalArea();
+        areaPromise = Promise.resolve(localArea);
+        hasCache = false;
+        loadPromise = null;
+        await localArea.api.set({ [storageKey]: value });
+        return;
+      }
       throw new Error(`Failed to write ${storageArea.name} storage key "${storageKey}": ${detail}`);
     }
   }
