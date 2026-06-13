@@ -7,8 +7,8 @@
  * user's mental model and their curated bookmark organisation.
  */
 import { test, expect } from '../fixtures/world.js';
-import { createTestFolder, removeBookmarkTree } from '../fixtures/bookmark-helpers.js';
-import { createWorkspace } from '../fixtures/seeding.js';
+import { createTestFolder, removeBookmarkTree, reloadNewtab } from '../fixtures/bookmark-helpers.js';
+import { createWorkspace, patchWorkspace, waitForWorkspace, getWorkspaces } from '../fixtures/seeding.js';
 import { workspaceTab, contextMenu } from '../fixtures/selectors.js';
 import { DEFAULT_WORKSPACE_SETTINGS } from '../fixtures/test-data.js';
 import { MAX_WORKSPACES } from '../../src/shared/constants.js';
@@ -117,6 +117,44 @@ test('create workspace via NewWorkspaceDialog adds a tab', async ({ newtabPage, 
 
   // A new tab must appear — the tab count increases by 1.
   await expect(newtabPage.locator('.ff-ws-tab')).toHaveCount(countBefore + 1, { timeout: 8_000 });
+
+  await removeBookmarkTree(newtabPage, folderId);
+});
+
+test('new workspace inherits the active workspace density (layoutPreset)', async ({ newtabPage, world }) => {
+  // WHY: density (layoutPreset) is resolution-derived at onboarding and stored per
+  // workspace. A workspace created later via the New Workspace dialog must match
+  // what the user is currently looking at — the active workspace — rather than
+  // snapping back to the fixed 'balanced' default. Set the active workspace to a
+  // non-default density, create a new workspace, and assert the new record copied
+  // that density. This fails if create ever reverts to defaultWorkspaceSettings.
+  const activeId = world.workspaceIds.Work; // active at load
+  await patchWorkspace(newtabPage, activeId, { layoutPreset: 'spacious' });
+  await waitForWorkspace(newtabPage, activeId, (w) => w.layoutPreset === 'spacious');
+  // Reload so the running page's activeWorkspace state carries the new density —
+  // handleCreateWorkspace reads it live from the active workspace, not storage.
+  await reloadNewtab(newtabPage);
+
+  const folderId = await createTestFolder(newtabPage, 'Inherit Density Root');
+  const idsBefore = new Set((await getWorkspaces(newtabPage)).map((w) => w.id));
+
+  await newtabPage.getByRole('button', { name: 'Add', exact: true }).click();
+  const addMenu = contextMenu(newtabPage);
+  await expect(addMenu).toBeVisible();
+  await addMenu.locator('.ff-ctx__item').filter({ hasText: 'Add workspace' }).click();
+
+  const dialog = newtabPage.locator('.ff-dialog, [role="dialog"]').first();
+  await expect(dialog).toBeVisible({ timeout: 5_000 });
+  const createBtn = newtabPage.getByRole('button', { name: 'Create workspace', exact: true });
+  await expect(createBtn).toBeEnabled({ timeout: 5_000 });
+  await createBtn.click();
+
+  // The newly created record must carry the inherited density, not 'balanced'.
+  await expect.poll(async () => {
+    const records = await getWorkspaces(newtabPage);
+    const created = records.find((w) => !idsBefore.has(w.id));
+    return created?.layoutPreset;
+  }, { timeout: 8_000 }).toBe('spacious');
 
   await removeBookmarkTree(newtabPage, folderId);
 });
