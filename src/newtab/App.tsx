@@ -733,6 +733,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       {editTarget && (
         <EditDialog
           target={editTarget}
+          tileShape={activeWorkspace?.tileShape}
           onClose={() => setEditTarget(null)}
           onSaved={() => { setEditTarget(null); refreshTree(); }}
         />
