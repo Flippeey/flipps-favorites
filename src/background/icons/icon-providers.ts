@@ -73,7 +73,16 @@ export interface OriginProbeResult {
   gated: boolean;
 }
 
+// Hosts that serve over http (their https URLs 301 to http://) or are otherwise
+// unreachable to a background fetch. The extension only holds https://*/* host
+// permission, so following the downgrade is blocked by CORS — every same-host
+// origin probe fails identically and floods the console. Once detected, skip the
+// host's origin scrape entirely (no doc fetch, no probes) for the rest of the
+// service-worker session and let S2 / Icon Horse / DDG resolve it instead.
+const originSkipHosts = new Set<string>();
+
 export async function gatherOriginIconProbes(hostname: string): Promise<OriginProbeResult> {
+  if (originSkipHosts.has(hostname)) return { probes: [], gated: false };
   return withCorsBypass(`||${hostname}/`, async () => {
     const origin = `https://${hostname}`;
     let html = '';
@@ -158,7 +167,15 @@ export async function fetchOriginScrape(
   if (!probes.length) return { record: null, gated };
 
   const record = await withCorsBypass(`||${hostname}/`, async () => {
+    // All probes target the same host, so if its https URLs reject (blocked /
+    // https→http downgrade / unreachable) the rest will too. Stop after a couple of
+    // rejections rather than firing all 8 doomed cross-scheme requests, and remember
+    // the host so future resolutions skip its origin scrape outright. A clean miss
+    // (404 / wrong mime / too small) is NOT a rejection — those keep probing, so a
+    // host that lacks apple-touch-icon but serves favicon.ico still resolves.
+    let rejections = 0;
     for (const probe of probes.slice(0, 8)) {
+      let rejected = false;
       const candidate = await fetchAndValidateImage({
         imageUrl: probe.url,
         bookmarkUrl,
@@ -168,8 +185,13 @@ export async function fetchOriginScrape(
         minimumEdge: minimumAutoIconSize,
         requireOpaqueCenter: true,
         allowSvg: true,
+        onFetchRejected: () => { rejected = true; },
       }).catch(() => null);
       if (candidate) return candidate;
+      if (rejected && ++rejections >= 2) {
+        originSkipHosts.add(hostname);
+        return null;
+      }
     }
     return null;
   }).catch(() => null);
