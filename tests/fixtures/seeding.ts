@@ -178,6 +178,25 @@ export async function getWorkspaces(page: Page): Promise<WorkspaceRecord[]> {
 }
 
 /**
+ * Delete all workspace records via the message pipeline so a test that needs
+ * a clean workspace list (e.g. the MAX_WORKSPACES cap test, which dismisses
+ * onboarding first and then seeds its own workspaces) can start from zero
+ * without relaunching the browser or resetting all storage.
+ */
+export async function clearWorkspaces(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
+      ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
+    const res = (await api.runtime.sendMessage({ type: 'workspaces/get-all' })) as {
+      workspaces: { id: string }[];
+    };
+    for (const ws of res.workspaces) {
+      await api.runtime.sendMessage({ type: 'workspaces/delete', id: ws.id });
+    }
+  });
+}
+
+/**
  * Seed the five promo-persona workspaces (Work active), each with its bookmark
  * folder, plus the shared dock folder. Does not reset storage — the caller
  * resets first. Returns everything but `origin`, which the fixture supplies.

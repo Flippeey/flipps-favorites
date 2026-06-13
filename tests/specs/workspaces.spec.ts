@@ -8,7 +8,7 @@
  */
 import { test, expect } from '../fixtures/world.js';
 import { createTestFolder, removeBookmarkTree, reloadNewtab } from '../fixtures/bookmark-helpers.js';
-import { createWorkspace, patchWorkspace, waitForWorkspace, getWorkspaces } from '../fixtures/seeding.js';
+import { createWorkspace, patchWorkspace, waitForWorkspace, getWorkspaces, clearWorkspaces } from '../fixtures/seeding.js';
 import { workspaceTab, contextMenu } from '../fixtures/selectors.js';
 import { DEFAULT_WORKSPACE_SETTINGS } from '../fixtures/test-data.js';
 import { MAX_WORKSPACES } from '../../src/shared/constants.js';
@@ -49,14 +49,19 @@ test('one workspace tab on fresh install', async ({ freshPage }) => {
 test(`cannot exceed MAX_WORKSPACES (${MAX_WORKSPACES})`, async ({ freshPage }) => {
   // The freshPage context triggers the onboarding dialog (install fires
   // markOnboardingPending). Dismiss it first so the nav is accessible.
+  // Clicking Skip on a fresh install creates a default "Favorites" workspace
+  // (by design, so the user has a usable workspace to persist settings to).
+  // Clear it immediately so this test can seed exactly MAX_WORKSPACES workspaces
+  // of its own — the cap, not the skip behaviour, is what's under test here.
   const skipBtn = freshPage.getByRole('button', { name: 'Skip' });
   if (await skipBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
     await skipBtn.click();
     await freshPage.locator('.ff-onboard').waitFor({ state: 'detached', timeout: 5_000 });
   }
+  await clearWorkspaces(freshPage);
 
   // Fill the workspace list to MAX_WORKSPACES via the message pipeline so the
-  // browser doesn't require 9 manual interactions.
+  // browser doesn't require many manual interactions.
   const folderIds: string[] = [];
   for (let i = 0; i < MAX_WORKSPACES; i++) {
     const folderId = await createTestFolder(freshPage, `WS Folder ${i + 1}`);
