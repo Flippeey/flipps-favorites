@@ -216,7 +216,7 @@ test('Preselected preset (no manual card click) is applied: power-user → list 
   expect(workspaces[0]!.bookmarkSortMode).toBe('manual');
 });
 
-test('Skip path: workspace keeps default view/sort (grid/manual/asc)', async ({ freshPage }) => {
+test('Skip path: a default "Favorites" workspace is created with default view/sort', async ({ freshPage }) => {
   // No seeding needed — just skip through onboarding without choosing a template.
   const onboard = freshPage.locator('.ff-onboard');
   await expect(onboard).toBeVisible();
@@ -228,14 +228,17 @@ test('Skip path: workspace keeps default view/sort (grid/manual/asc)', async ({ 
   // The app renders without crashing after skip.
   await expect(freshPage.locator('.ff-app')).toBeVisible();
 
-  // If any workspace was created (by the skip path), verify it has defaults:
-  // grid view, manual sort, ascending direction.
+  // WHY: on a fresh install, skipping must still leave the user with exactly one
+  // usable workspace. Without it, workspace-scoped settings (view mode, sort mode)
+  // have nowhere to persist and can't be changed. The workspace is named "Favorites"
+  // and rooted at the bookmarks bar, carrying default view/sort the user can change.
   const workspaces = await getWorkspaces(freshPage);
-  for (const ws of workspaces) {
-    expect(ws.folderMode).toBe('grid');
-    expect(ws.bookmarkSortMode).toBe('manual');
-    expect(ws.bookmarkSortDirection).toBe('asc');
-  }
+  expect(workspaces.length).toBe(1);
+  const ws = workspaces[0]!;
+  expect(ws.name).toBe('Favorites');
+  expect(ws.folderMode).toBe('grid');
+  expect(ws.bookmarkSortMode).toBe('manual');
+  expect(ws.bookmarkSortDirection).toBe('asc');
 });
 
 test('Re-run onboarding: with explicit template opt-in, workspace overrides apply', async ({ freshPage }) => {
