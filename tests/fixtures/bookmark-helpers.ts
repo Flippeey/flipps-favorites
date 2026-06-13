@@ -166,3 +166,79 @@ export async function openSettingsSection(
 export function tileById(page: Page | Locator, id: string): Locator {
   return page.locator(`.ff-tile[data-item-id="${id}"]`);
 }
+
+// ---------------------------------------------------------------------------
+// Archetype-tree seeders for onboarding-templates.spec.ts
+// ---------------------------------------------------------------------------
+
+/**
+ * Seeds a flat hoarder tree: `count` bookmarks directly under the bookmarks
+ * bar ('1'). No subfolders — the flat structure drives a high Hoarder score.
+ *
+ * Returns the bookmark ids created. The caller does NOT need to track a root
+ * folder id because the tree lives directly under the system bar root ('1').
+ *
+ * WHY: folderedRatio ≈ 0 (all at root) + high volume (>35) → Hoarder wins.
+ */
+export async function seedFlatHoarderTree(
+  page: Page,
+  count = 120,
+): Promise<string[]> {
+  return page.evaluate(async (n) => {
+    const api = (globalThis as any).browser || (globalThis as any).chrome;
+    const ids: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const bm = await api.bookmarks.create({
+        parentId: '1',
+        title: `Saved ${i + 1}`,
+        url: `https://site${i + 1}.example.com/page`,
+      });
+      ids.push(bm.id as string);
+    }
+    return ids;
+  }, count);
+}
+
+/**
+ * Seeds a deeply nested organized tree directly under the bookmarks bar ('1'):
+ * `folderCount` top-level folders under the bar, each containing a sub-folder,
+ * each sub-folder containing `bookmarksPerFolder` bookmarks. Depth=2 + high
+ * folderedRatio → Power-user wins when the bar is the selected root.
+ *
+ * Places folders directly under '1' (bar) so the onboarding step-1 fallback
+ * selection (bar '1') already contains the deep organized content, driving
+ * folderedRatio≈1.0 through the classifier at step 4.
+ *
+ * Researcher overlay fires DETERMINISTICALLY in e2e because chrome.bookmarks.create
+ * stamps dateAdded=now → recentAdditionRatio≈1.0 for all freshly seeded bookmarks.
+ * Callers MUST expect the Researcher hint — do NOT assert its absence.
+ */
+export async function seedDeepOrganizedTree(
+  page: Page,
+  folderCount = 8,
+  bookmarksPerFolder = 8,
+): Promise<void> {
+  await page.evaluate(
+    async (args) => {
+      const api = (globalThis as any).browser || (globalThis as any).chrome;
+      for (let f = 0; f < args.folderCount; f++) {
+        const topFolder = await api.bookmarks.create({
+          parentId: '1',
+          title: `Topic ${f + 1}`,
+        });
+        const subFolder = await api.bookmarks.create({
+          parentId: topFolder.id,
+          title: `Sub ${f + 1}`,
+        });
+        for (let b = 0; b < args.bookmarksPerFolder; b++) {
+          await api.bookmarks.create({
+            parentId: subFolder.id,
+            title: `Article ${f + 1}-${b + 1}`,
+            url: `https://topic${f + 1}.example.com/article-${b + 1}`,
+          });
+        }
+      }
+    },
+    { folderCount, bookmarksPerFolder },
+  );
+}

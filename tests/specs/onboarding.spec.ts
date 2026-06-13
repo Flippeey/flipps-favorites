@@ -38,8 +38,10 @@ test('workspace step requires at least one folder before advancing', async ({ ne
   const onboard = newtabPage.locator('.ff-onboard');
   await expect(onboard).toBeVisible();
 
-  // Step 0 -> step 1 (workspace selection). A folder is seeded by default, so Next is enabled.
-  await onboard.getByRole('button', { name: /Next/i }).click();
+  // Step 0 -> step 1 (appearance) -> step 2 (workspace selection). A folder is seeded
+  // by default, so Next is enabled.
+  await onboard.getByRole('button', { name: /Next/i }).click(); // -> appearance
+  await onboard.getByRole('button', { name: /Next/i }).click(); // -> workspace
   const nextBtn = onboard.getByRole('button', { name: /Next/i });
   await expect(nextBtn).toBeEnabled();
 
@@ -57,15 +59,14 @@ test('Next through all steps reaches "Get started" and chosen accent persists', 
   const onboard = newtabPage.locator('.ff-onboard');
   await expect(onboard).toBeVisible();
 
-  // Advance to the accent picker (step 3).
-  await onboard.getByRole('button', { name: /Next/i }).click(); // -> workspace mode
-  await onboard.getByRole('button', { name: /Next/i }).click(); // -> theme
-  await onboard.getByRole('button', { name: /Next/i }).click(); // -> accent
+  // Advance to the appearance step (step 1) — theme + accent live here now.
+  await onboard.getByRole('button', { name: /Next/i }).click(); // -> appearance
   // Pick "Red" accent (preset chip with aria-label "Red").
   await onboard.getByRole('button', { name: 'Red', exact: true }).click();
 
   // Advance through remaining steps to the finish.
-  await onboard.getByRole('button', { name: /Next/i }).click(); // -> theme cards
+  await onboard.getByRole('button', { name: /Next/i }).click(); // -> workspace
+  await onboard.getByRole('button', { name: /Next/i }).click(); // -> template picker (step 3)
   await onboard.getByRole('button', { name: /Next/i }).click(); // -> tips
 
   await onboard.getByRole('button', { name: /Get started/i }).click();

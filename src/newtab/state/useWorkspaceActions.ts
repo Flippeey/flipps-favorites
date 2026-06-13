@@ -58,6 +58,12 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
   const workspacesRef = useRef(workspaces);
   useEffect(() => { workspacesRef.current = workspaces; }, [workspaces]);
 
+  // Mirror the active workspace too, so a create triggered after a switch reads the
+  // current density (not a stale render-time snapshot). handleCreateWorkspace's deps
+  // intentionally exclude activeWorkspace to keep a stable identity for dialog props.
+  const activeWorkspaceRef = useRef(activeWorkspace);
+  useEffect(() => { activeWorkspaceRef.current = activeWorkspace; }, [activeWorkspace]);
+
   const handleSwitchWorkspace = useCallback(async (id: string) => {
     setIsSwitching(true);
     await new Promise(r => setTimeout(r, 130));
@@ -105,6 +111,11 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
       rootFolderId,
       ...defaultWorkspaceSettings,
       accentColor: pickNextAccent(current.map(w => w.accentColor)),
+      // Density inherits the active workspace so a workspace made via the New
+      // Workspace dialog matches what the user is currently looking at, rather than
+      // snapping to the fixed 'balanced' default. Onboarding passes an explicit
+      // layoutPreset override (resolution-aware) which still wins via the spread below.
+      layoutPreset: activeWorkspaceRef.current?.layoutPreset ?? defaultWorkspaceSettings.layoutPreset,
       ...(overrides ?? {}),
     };
     try {

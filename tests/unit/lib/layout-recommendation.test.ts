@@ -88,13 +88,30 @@ describe('recommendLayout', () => {
     expect(rec.layoutPreset).toBe('spacious');
   });
 
-  // WHY: ultrawide rows fit many more columns; the same width band would look
-  // sparse, so an ultrawide is bumped one band roomier. 2560x1080 (UW-FHD) is
-  // 2560-class width (spacious) but its 2.37 aspect bumps it to presentation.
-  it('ultrawide (2560x1080) -> presentation (bumped one band from spacious)', () => {
+  // WHY: ultrawide rows fit many more columns; a narrower band would look sparse,
+  // so the bump exists — but it is CAPPED at spacious. 2560x1080 (UW-FHD) is
+  // spacious-class width already, so the bump can't push it past spacious into
+  // presentation. Presentation is reserved for true 5K+ base width.
+  it('ultrawide (2560x1080) -> spacious (bump capped, never presentation)', () => {
     const rec = recommendLayout(metrics({ screenWidth: 2560, screenHeight: 1080 }));
-    expect(rec.layoutPreset).toBe('presentation');
-    expect(rec.sizingBucket).toBe('xlarge');
+    expect(rec.layoutPreset).toBe('spacious');
+    expect(rec.sizingBucket).toBe('large');
+  });
+
+  // WHY: the reported case — a 3440x1440 (21:9, aspect 2.39) ultrawide. Spacious
+  // base width + ultrawide aspect previously bumped it to presentation, which is too
+  // large on a single panel. The capped bump must keep it at spacious.
+  it('ultrawide (3440x1440) -> spacious (was presentation before the cap)', () => {
+    const rec = recommendLayout(metrics({ screenWidth: 3440, screenHeight: 1440 }));
+    expect(rec.layoutPreset).toBe('spacious');
+  });
+
+  // WHY: the bump must still lift NARROW ultrawides that would otherwise read sparse.
+  // 1920x800 (21:9) is balanced-class width; the ultrawide aspect bumps it up one
+  // band to spacious (the cap), proving the bump is retained, just ceilinged.
+  it('narrow ultrawide (1920x800) -> spacious (bumped from balanced)', () => {
+    const rec = recommendLayout(metrics({ screenWidth: 1920, screenHeight: 800 }));
+    expect(rec.layoutPreset).toBe('spacious');
   });
 
   // --- boundary locks: pin the exact cutoffs so a threshold change fails a test ---
@@ -126,9 +143,9 @@ describe('recommendLayout', () => {
     expect(recommendLayout(metrics({ screenWidth: 5000, screenHeight: 2500 })).layoutPreset).toBe('presentation');
   });
 
-  // WHY: the ultrawide bump must be capped — a band already at the roomiest preset
-  // stays there rather than overflowing the ladder.
-  it('ultrawide 4K stays at presentation (bump is capped)', () => {
+  // WHY: a 5K+ ultrawide earns presentation from its BASE width (>=5000), not the
+  // bump. The bump's max() guard must not downgrade that base back to spacious.
+  it('ultrawide 5K (5120x1440) stays presentation (base width, bump never downgrades)', () => {
     expect(recommendLayout(metrics({ screenWidth: 5120, screenHeight: 1440 })).layoutPreset).toBe('presentation');
   });
 });

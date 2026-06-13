@@ -890,7 +890,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           onPatch={handlePatch}
           onPatchWorkspace={handlePatchWorkspace}
           onCreateWorkspace={handleCreateWorkspace}
-          onFinish={() => { setOnboardOpen(false); void markOnboardingCompleted(); }}
+          onFinish={(archetypeResult) => { setOnboardOpen(false); void markOnboardingCompleted(archetypeResult); }}
         />
       )}
 

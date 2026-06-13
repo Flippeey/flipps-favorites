@@ -45,7 +45,10 @@ const LARGE_MAX = 5000;          // 2100–4999: 1440p/QHD (2560) through 4K (38
 
 // Aspect ratio at/above which a display is treated as ultrawide. A 21:9 monitor
 // is ~2.33; 16:9 is ~1.78. Ultrawide rows hold far more tiles horizontally, so a
-// sparse preset looks empty — bump such displays one band roomier.
+// sparse preset looks empty — bump such displays one band roomier. The bump is
+// capped at 'spacious' (see SPACIOUS_INDEX): presentation is reserved for true 5K+
+// width and is never reached via the aspect bump, so a 3440x1440 ultrawide lands
+// spacious, not presentation (user report — presentation tiles too large there).
 const ULTRAWIDE_ASPECT = 2.1;
 
 const BUCKET_BY_PRESET: Record<Exclude<LayoutPresetId, 'custom'>, LayoutSizingBucket> = {
@@ -62,6 +65,11 @@ const PRESET_LADDER: Exclude<LayoutPresetId, 'custom'>[] = [
   'spacious',
   'presentation',
 ];
+
+// Ceiling for the ultrawide bump. The aspect nudge may lift a display toward
+// 'spacious' but never into 'presentation' — that band is earned only by 5K+ base
+// width in basePreset().
+const SPACIOUS_INDEX = PRESET_LADDER.indexOf('spacious');
 
 // Effective CSS width, accounting for OS/browser scaling. A 4K panel viewed at
 // 200% scale reports innerWidth ~1920 but screenWidth 3840 @ dpr 2 — physically
@@ -85,11 +93,14 @@ export function recommendLayout(metrics: ViewportMetrics): LayoutRecommendation 
   let preset = basePreset(width);
 
   // Ultrawide displays fit many more columns; nudge one band roomier so the grid
-  // doesn't read as sparse. Capped at the roomiest preset.
+  // doesn't read as sparse. Capped at 'spacious' — never into presentation (that is
+  // 5K+ width only). max() guards against downgrading a base that is already roomier
+  // (a 5K+ ultrawide keeps its presentation base).
   const aspect = metrics.innerHeight > 0 ? metrics.innerWidth / metrics.innerHeight : 0;
   if (aspect >= ULTRAWIDE_ASPECT) {
-    const next = PRESET_LADDER[Math.min(PRESET_LADDER.indexOf(preset) + 1, PRESET_LADDER.length - 1)];
-    preset = next;
+    const baseIndex = PRESET_LADDER.indexOf(preset);
+    const bumped = Math.min(baseIndex + 1, SPACIOUS_INDEX);
+    preset = PRESET_LADDER[Math.max(baseIndex, bumped)];
   }
 
   return { layoutPreset: preset, sizingBucket: BUCKET_BY_PRESET[preset] };
