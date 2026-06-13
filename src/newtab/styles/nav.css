@@ -12,7 +12,7 @@
 .ff-nav {
   height: var(--nav-h);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(auto, 1fr);
   align-items: center;
   padding: 0 var(--s-6);
   gap: var(--s-3);
@@ -26,7 +26,7 @@
   border-bottom: 1px solid var(--line-1);
 }
 .ff-nav__left, .ff-nav__center, .ff-nav__right { display: flex; align-items: center; gap: var(--s-2); }
-.ff-nav__center { justify-self: center; }
+.ff-nav__center { min-width: 0; }
 .ff-nav__right  { justify-self: end; }
 
 .ff-iconbtn {
