@@ -178,6 +178,76 @@ export async function getWorkspaces(page: Page): Promise<WorkspaceRecord[]> {
 }
 
 /**
+ * Delete all workspace records via the message pipeline so a test that needs
+ * a clean workspace list (e.g. the MAX_WORKSPACES cap test, which dismisses
+ * onboarding first and then seeds its own workspaces) can start from zero
+ * without relaunching the browser or resetting all storage.
+ */
+export async function clearWorkspaces(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
+      ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
+    const res = (await api.runtime.sendMessage({ type: 'workspaces/get-all' })) as {
+      workspaces: { id: string }[];
+    };
+    for (const ws of res.workspaces) {
+      await api.runtime.sendMessage({ type: 'workspaces/delete', id: ws.id });
+    }
+  });
+}
+
+/**
+ * Dismiss the onboarding dialog and clear any workspace side-effects it
+ * creates. Use this in tests whose subject is NOT the onboarding Skip
+ * behaviour itself — e.g. workspace-cap tests that must first get past
+ * the dialog before seeding their own deterministic workspace set.
+ *
+ * WHY: clicking Skip on a fresh install creates a default "Favorites"
+ * workspace (PR #29 feature — correct product behaviour). Tests that seed
+ * their own workspaces afterward would otherwise find an extra workspace in
+ * storage that inflates tab counts and breaks ordering assertions.
+ *
+ * IMPLEMENTATION: rather than clicking Skip (which triggers a 200 ms close
+ * animation followed by an async markOnboardingCompleted storage write, both
+ * of which are unreliable under concurrent 3-worker load), we write the
+ * completed state directly to storage and reload. This is deterministic:
+ * the next page boot reads 'completed' and never opens the dialog.
+ * clearWorkspaces follows to ensure no leftover records exist from any prior
+ * session (e.g. a Favorites workspace the component created before this
+ * helper was invoked).
+ */
+export async function dismissOnboarding(page: Page): Promise<void> {
+  // Close the dialog without relying on the async 200 ms animation chain:
+  // write the completed onboarding state directly to storage so the next load
+  // skips the dialog entirely. This avoids the click→animation→setTimeout→
+  // markOnboardingCompleted→chrome.storage.local.set chain that is sensitive
+  // to concurrent load under the 3-worker Playwright setup.
+  await page.evaluate(async () => {
+    const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
+      ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
+    const now = Date.now();
+    await api.storage.local.set({
+      'onboarding-state': {
+        version: 2,
+        status: 'completed',
+        updatedAt: now,
+        completedAt: now,
+        skippedAt: now,
+        recommendedArchetype: null,
+        chosenArchetype: 'skipped',
+      },
+    });
+  });
+  // Reload so the page boots with the committed completed state (avoids
+  // any in-memory 'pending' snapshot the running page still holds).
+  await page.reload();
+  await page.waitForSelector('.ff-app', { timeout: 15_000 });
+  // Delete any workspace records that may have been created before this
+  // helper was called (e.g. from a prior Skip click in the same context).
+  await clearWorkspaces(page);
+}
+
+/**
  * Seed the five promo-persona workspaces (Work active), each with its bookmark
  * folder, plus the shared dock folder. Does not reset storage — the caller
  * resets first. Returns everything but `origin`, which the fixture supplies.

@@ -415,6 +415,27 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
     }
   };
 
+  const handleSkip = async () => {
+    if (finishing || closing) return;
+    setFinishing(true);
+    try {
+      // Fresh install (no workspace yet): skipping must still leave the user with a
+      // usable default workspace. Without one, workspace-scoped settings (view mode,
+      // sort mode) have nowhere to persist and can't be changed. Use the bookmark-bar
+      // root (first top-level folder) so the workspace holds all folders/bookmarks.
+      // Replay (activeWorkspace present) skips creation — handleCreateWorkspace also
+      // dedups by rootFolderId, so this never adds a duplicate.
+      if (!activeWorkspace) {
+        const rootFolderId = topLevelFolders(tree)[0]?.id;
+        if (rootFolderId) await onCreateWorkspace(rootFolderId, 'Favorites');
+      }
+    } catch {
+      // workspace creation failed — close anyway
+    } finally {
+      handleClose();
+    }
+  };
+
   return (
     <div className="ff-modal-scrim" data-closing={closing || undefined}>
       <div className="ff-onboard" data-closing={closing || undefined} onClick={(e) => e.stopPropagation()}>
@@ -518,7 +539,7 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
           {step === 4 && <TipsCarousel />}
         </div>
         <footer className="ff-onboard__foot">
-          <button className="ff-iconbtn" onClick={() => handleClose()}>Skip</button>
+          <button className="ff-iconbtn" onClick={handleSkip}>Skip</button>
           <div style={{ display: 'flex', gap: 8 }}>
             {step > 0 && (
               <button className="ff-btn ff-btn--ghost" onClick={() => setStep(step - 1)}>

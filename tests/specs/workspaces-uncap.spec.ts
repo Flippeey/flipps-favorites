@@ -10,7 +10,7 @@
  */
 import { test, expect } from '../fixtures/world.js';
 import { createTestFolder, removeBookmarkTree } from '../fixtures/bookmark-helpers.js';
-import { createWorkspace } from '../fixtures/seeding.js';
+import { createWorkspace, dismissOnboarding } from '../fixtures/seeding.js';
 import { workspaceTab } from '../fixtures/selectors.js';
 import { DEFAULT_WORKSPACE_SETTINGS } from '../fixtures/test-data.js';
 import { MAX_WORKSPACES } from '../../src/shared/constants.js';
@@ -61,12 +61,9 @@ test('MAX_WORKSPACES constant equals 20', () => {
 });
 
 test('can create workspaces past the old cap of 9 up to 12', async ({ freshPage }) => {
-  // Dismiss onboarding if it appears.
-  const skipBtn = freshPage.getByRole('button', { name: 'Skip' });
-  if (await skipBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
-    await skipBtn.click();
-    await freshPage.locator('.ff-onboard').waitFor({ state: 'detached', timeout: 5_000 });
-  }
+  // Dismiss onboarding and clear the auto-created Favorites workspace so this test
+  // seeds its own deterministic set. Under test: the old cap of 9 is no longer enforced.
+  await dismissOnboarding(freshPage);
 
   const TARGET = 12; // comfortably past the old cap of 9
   const folderIds: string[] = [];
@@ -112,12 +109,9 @@ test('can create workspaces past the old cap of 9 up to 12', async ({ freshPage 
 });
 
 test('Add workspace is disabled at the new cap of 20', async ({ freshPage }) => {
-  // Dismiss onboarding if it appears.
-  const skipBtn = freshPage.getByRole('button', { name: 'Skip' });
-  if (await skipBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
-    await skipBtn.click();
-    await freshPage.locator('.ff-onboard').waitFor({ state: 'detached', timeout: 5_000 });
-  }
+  // Dismiss onboarding and clear the auto-created Favorites workspace so this test
+  // seeds exactly MAX_WORKSPACES. Under test: the Add workspace button is disabled at cap.
+  await dismissOnboarding(freshPage);
 
   const folderIds: string[] = [];
   for (let i = 0; i < MAX_WORKSPACES; i++) {
