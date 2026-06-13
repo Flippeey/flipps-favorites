@@ -16,6 +16,11 @@ interface FetchAndValidateArgs {
   // Accept SVG without bitmap validation. Only set for candidates declared by the
   // bookmark's own origin (<link rel="icon">); rendered via <img>, so scripts are inert.
   allowSvg?: boolean;
+  // Invoked when the underlying fetch is REJECTED (network error / blocked / a
+  // cross-scheme https→http redirect the extension has no host permission to follow)
+  // — as opposed to a clean miss (404, wrong mime, too small). Lets the origin-scrape
+  // loop tell "host unreachable over https" apart from "this path just isn't there".
+  onFetchRejected?: () => void;
 }
 
 export async function fetchAndValidateImage(args: FetchAndValidateArgs): Promise<IconCacheRecord | null> {
@@ -23,6 +28,7 @@ export async function fetchAndValidateImage(args: FetchAndValidateArgs): Promise
   try {
     response = await fetchWithTimeout(args.imageUrl, args.timeoutMs, { cache: 'force-cache' });
   } catch {
+    args.onFetchRejected?.();
     return null;
   }
   if (!response.ok) return null;
