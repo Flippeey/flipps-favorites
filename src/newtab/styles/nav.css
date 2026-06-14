@@ -429,3 +429,36 @@
   text-overflow: ellipsis;
 }
 
+/* Folder-drag-to-tab drop affordance: highlight the whole tab strip when a
+   folder tile is being dragged, signalling "drop here to create workspace".
+   Suppressed at the workspace cap (data-at-workspace-cap) where the drop
+   would be rejected — the strip stays un-highlighted so users aren't misled. */
+.ff-ws-tabs-wrap[data-folder-drag-active]::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: var(--r-md);
+  border: 2px dashed var(--accent);
+  opacity: 0.6;
+  pointer-events: none;
+  animation: ffFolderDropZonePulse 1.4s ease-in-out infinite;
+}
+
+.ff-ws-tabs-wrap[data-folder-drag-active][data-at-workspace-cap]::after {
+  display: none;
+}
+
+@keyframes ffFolderDropZonePulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 0.75; }
+}
+
+/* While a folder is being dragged over any tab, also highlight the specific tab
+   that already has data-drop-hover (set by useDrag's workspace-tab hover logic). */
+.ff-ws-tabs-wrap[data-folder-drag-active] .ff-ws-tab[data-drop-hover="true"] {
+  background: color-mix(in oklab, var(--accent) 18%, transparent);
+  border-color: var(--accent);
+  color: var(--accent-on-surface, var(--accent));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 20%, transparent);
+}
+

@@ -30,6 +30,7 @@ interface UseWorkspaceActionsResult {
     name: string,
     overrides?: Partial<Omit<WorkspaceRecord, 'id' | 'name' | 'rootFolderId'>>,
   ) => Promise<string | undefined>;
+  handleCreateWorkspaceFromFolder: (folderId: string, folderTitle: string) => Promise<'created' | 'at_max' | 'already_exists'>;
   handleDeleteWorkspace: (id: string) => Promise<void>;
   handleDuplicateWorkspace: (id: string) => Promise<void>;
   handleAddWorkspace: () => void;
@@ -166,6 +167,17 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
     }
   }, [workspaces, handlePatch, setWorkspaces]);
 
+  const handleCreateWorkspaceFromFolder = useCallback(async (
+    folderId: string,
+    folderTitle: string,
+  ): Promise<'created' | 'at_max' | 'already_exists'> => {
+    const current = workspacesRef.current;
+    if (current.length >= MAX_WORKSPACES) return 'at_max';
+    if (current.some(w => w.rootFolderId === folderId)) return 'already_exists';
+    const created = await handleCreateWorkspace(folderId, folderTitle);
+    return created !== undefined ? 'created' : 'at_max';
+  }, [handleCreateWorkspace]);
+
   const handleAddWorkspace = useCallback(() => {
     setNewWorkspaceOpen(true);
   }, [setNewWorkspaceOpen]);
@@ -192,6 +204,7 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
     handlePatchWorkspace,
     handleSetWorkspaceWallpaper,
     handleCreateWorkspace,
+    handleCreateWorkspaceFromFolder,
     handleDeleteWorkspace,
     handleDuplicateWorkspace,
     handleAddWorkspace,

@@ -308,6 +308,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     handlePatchWorkspace,
     handleSetWorkspaceWallpaper,
     handleCreateWorkspace,
+    handleCreateWorkspaceFromFolder,
     handleDeleteWorkspace,
     handleDuplicateWorkspace,
     handleAddWorkspace,
@@ -370,6 +371,19 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setFolderNameTarget({ mode: 'create', parentId: selection.scopeFolderId || defaultParentId(), moveIds: ids });
   }, [selection.scopeFolderId, defaultParentId]);
 
+  const handleCreateFromFolderResult = useCallback((
+    result: 'created' | 'at_max' | 'already_exists',
+    folderTitle: string,
+  ) => {
+    if (result === 'created') {
+      pushToast({ kind: 'info', message: `Workspace "${folderTitle}" created.` });
+    } else if (result === 'at_max') {
+      pushToast({ kind: 'error', message: `Workspace limit reached (${MAX_WORKSPACES}).` });
+    } else {
+      pushToast({ kind: 'info', message: `"${folderTitle}" is already a workspace root.` });
+    }
+  }, [pushToast]);
+
   const { buildContextMenuItems, handleOpenAddMenu, handleWorkspaceContextMenu, handleCanvasContextMenu } = useContextMenuBuilder({
     tree,
     rootFolder,
@@ -380,6 +394,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     handleNewBookmark,
     handleNewFolder,
     handleAddWorkspace,
+    handleCreateWorkspaceFromFolder,
     handlePickFolder,
     handlePickBookmark,
     handleEditBookmark,
@@ -393,6 +408,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setRenameWorkspaceTarget,
     setConfirmDeleteWorkspace,
     onDeleteBookmark: handleDeleteBookmark,
+    onCreateFromFolderResult: handleCreateFromFolderResult,
   });
 
   const searchIndex = useMemo(() => buildSearchIndex(tree, workspaces), [tree, workspaces]);
@@ -449,7 +465,16 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     pushToast({ kind: 'info', message: 'Switch to Manual sort to reorder tiles.' });
   }, [pushToast]);
 
-  const { dragPreview, dragEnabled } = useDragWiring({
+  const handleFolderDropOnTab = useCallback(async (
+    folderId: string,
+    folderTitle: string,
+  ): Promise<'created' | 'at_max' | 'already_exists'> => {
+    const result = await handleCreateWorkspaceFromFolder(folderId, folderTitle);
+    handleCreateFromFolderResult(result, folderTitle);
+    return result;
+  }, [handleCreateWorkspaceFromFolder, handleCreateFromFolderResult]);
+
+  const { dragPreview, dragEnabled, folderDragActive } = useDragWiring({
     canvasEl,
     overlayBodyEl,
     dockEl,
@@ -466,6 +491,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     onSwitchWorkspace: handleSwitchWorkspace,
     onReorderBlocked: handleReorderBlocked,
     pushToast,
+    onFolderDropOnTab: handleFolderDropOnTab,
   });
 
   const handleDeleteFocused = useCallback(async (item: BookmarkNode) => {
@@ -591,6 +617,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           onToggleViewMode={handleToggleViewMode}
           onOpenAppSettings={() => openAppSettings()}
           onOpenWorkspaceSettings={() => openWorkspaceSettings('appearance')}
+          folderDragActive={folderDragActive}
+          atWorkspaceCap={workspaces.length >= MAX_WORKSPACES}
         />
       </header>
 
