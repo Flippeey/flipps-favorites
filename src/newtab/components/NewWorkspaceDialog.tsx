@@ -55,8 +55,11 @@ export function NewWorkspaceDialog({ tree, workspaces, onConfirm, onClose }: New
   const handleConfirm = async () => {
     if (!selectedId) return;
     const folder = findFolder(tree, selectedId);
-    await onConfirm(selectedId, name.trim() || folder?.title || 'Workspace');
-    onClose();
+    // Only dismiss on success — onConfirm returns undefined when creation fails
+    // (e.g. storage write rejected). Closing regardless made failures look like
+    // a silent no-op ("dialog closes but no workspace added").
+    const createdId = await onConfirm(selectedId, name.trim() || folder?.title || 'Workspace');
+    if (createdId) onClose();
   };
 
   return (

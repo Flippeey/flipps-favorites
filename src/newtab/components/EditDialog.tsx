@@ -371,8 +371,8 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
                   style={{
                     width: '70%',
                     height: '70%',
-                    borderRadius: iconFit === 'cover' ? radiusForShape(tileShape) : undefined,
-                    overflow: iconFit === 'cover' ? 'hidden' : undefined,
+                    borderRadius: radiusForShape(tileShape),
+                    overflow: 'hidden',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -382,12 +382,11 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
                     src={previewSrc}
                     alt=""
                     referrerPolicy="no-referrer"
-                    style={
-                      iconFit === 'cover'
-                        ? { width: '100%', height: '100%', objectFit: 'cover', display: 'block' }
-                        // contain: cap size, don't stretch — same as before
-                        : { maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }
-                    }
+                    // WYSIWYG: the tile always renders the (already fit-baked) icon
+                    // as objectFit:cover inside a shape-rounded box. Mirror that here
+                    // so contain (letterboxed padding) vs cover (fills) shows the same
+                    // real difference the tile will, instead of a misleading preview.
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                   />
                 </div>
               ) : (

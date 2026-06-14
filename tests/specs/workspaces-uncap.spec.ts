@@ -1,12 +1,13 @@
 /**
- * Workspaces uncap (#19): cap raised to 20, desktop jump-menu, edge fade,
- * Alt+Arrow prev/next cycling.
+ * Workspaces uncap (#19): cap raised past 9, desktop jump-menu, edge fade,
+ * Alt+Arrow prev/next cycling. (Cap is an interim 10 — bounded by storage.sync's
+ * 8 KB/item limit until the per-workspace-key storage refactor lands.)
  *
  * Why these tests matter:
  * - Users need to create more than 9 workspaces without hitting a silent block.
  * - The jump-menu must list all workspaces so high-index ones are reachable
  *   without scrolling the strip.
- * - Alt+Arrow shortcuts are the only keyboard path to workspaces 10–20.
+ * - Alt+Arrow shortcuts are the only keyboard path to workspaces 10+.
  */
 import { test, expect } from '../fixtures/world.js';
 import { createTestFolder, removeBookmarkTree } from '../fixtures/bookmark-helpers.js';
@@ -52,20 +53,21 @@ async function seedExtraWorkspaces(page: Parameters<typeof createWorkspace>[0], 
 }
 
 // ---------------------------------------------------------------------------
-// Cap is now 20 (was 9)
+// Cap is now 10 (was 9; interim sync-safe limit pending per-key storage refactor)
 // ---------------------------------------------------------------------------
 
-test('MAX_WORKSPACES constant equals 20', () => {
-  // Guard against inadvertent regression to the old cap of 9.
-  expect(MAX_WORKSPACES).toBe(20);
+test('MAX_WORKSPACES constant equals 10', () => {
+  // Interim sync-safe cap (storage.sync 8 KB/item). Guard against regressing to
+  // the old cap of 9 or back to the unsafe 20 before the per-key storage refactor.
+  expect(MAX_WORKSPACES).toBe(10);
 });
 
-test('can create workspaces past the old cap of 9 up to 12', async ({ freshPage }) => {
+test('can create workspaces past the old cap of 9 up to the new cap of 10', async ({ freshPage }) => {
   // Dismiss onboarding and clear the auto-created Favorites workspace so this test
   // seeds its own deterministic set. Under test: the old cap of 9 is no longer enforced.
   await dismissOnboarding(freshPage);
 
-  const TARGET = 12; // comfortably past the old cap of 9
+  const TARGET = MAX_WORKSPACES; // 10 — one past the old cap of 9
   const folderIds: string[] = [];
   for (let i = 0; i < TARGET; i++) {
     const folderId = await createTestFolder(freshPage, `Cap Test Folder ${i + 1}`);
@@ -88,19 +90,11 @@ test('can create workspaces past the old cap of 9 up to 12', async ({ freshPage 
   await freshPage.reload();
   await freshPage.waitForSelector('.ff-app', { timeout: 15_000 });
 
-  // All 12 tabs must appear in the strip.
+  // All 10 tabs must appear in the strip.
   await expect(freshPage.locator('.ff-ws-tab')).toHaveCount(TARGET, { timeout: 8_000 });
 
-  // The 10th tab (index 9) must exist — it's beyond the old cap.
+  // The 10th tab (index 9) must exist — it's beyond the old cap of 9.
   await expect(workspaceTab(freshPage, 'cap-test-ws-9')).toBeAttached({ timeout: 5_000 });
-
-  // The Add workspace item must still be enabled (we're at 12, cap is 20).
-  await freshPage.getByRole('button', { name: 'Add', exact: true }).click();
-  const addWorkspaceItem = freshPage.locator('.ff-ctx__item').filter({ hasText: 'Add workspace' });
-  await expect(addWorkspaceItem).toBeVisible();
-  await expect(addWorkspaceItem).toBeEnabled();
-  // Dismiss the menu.
-  await freshPage.keyboard.press('Escape');
 
   // Cleanup.
   for (const id of folderIds) {
@@ -108,7 +102,7 @@ test('can create workspaces past the old cap of 9 up to 12', async ({ freshPage 
   }
 });
 
-test('Add workspace is disabled at the new cap of 20', async ({ freshPage }) => {
+test('Add workspace is disabled at the new cap of 10', async ({ freshPage }) => {
   // Dismiss onboarding and clear the auto-created Favorites workspace so this test
   // seeds exactly MAX_WORKSPACES. Under test: the Add workspace button is disabled at cap.
   await dismissOnboarding(freshPage);
@@ -152,17 +146,27 @@ test('Add workspace is disabled at the new cap of 20', async ({ freshPage }) => 
 // Desktop jump-menu
 // ---------------------------------------------------------------------------
 
-test('jump-menu trigger is visible on desktop alongside the strip', async ({ newtabPage }) => {
-  // The .ff-ws-dropdown should be visible at desktop widths (>480px).
-  // world has 5 promo workspaces — the trigger badge shows 5.
-  await expect(newtabPage.locator('.ff-ws-dropdown')).toBeVisible();
-  const trigger = newtabPage.locator('.ff-ws-dropdown .ff-pill');
-  await expect(trigger).toBeVisible();
+test('jump-menu is hidden when tabs fit and appears once they overflow', async ({ newtabPage }) => {
+  // world has 5 promo workspaces — they fit the centered strip, so no dropdown.
+  await expect(newtabPage.locator('.ff-ws-dropdown')).toBeHidden();
+
+  // Seed enough workspaces to overflow the strip; the jump-menu must appear.
+  const { folderIds } = await seedExtraWorkspaces(newtabPage, 10); // 15 total
+  await newtabPage.reload();
+  await newtabPage.waitForSelector('.ff-app', { timeout: 15_000 });
+
+  await expect(newtabPage.locator('.ff-ws-dropdown')).toBeVisible({ timeout: 5_000 });
+  await expect(newtabPage.locator('.ff-ws-dropdown .ff-pill')).toBeVisible();
+
+  for (const id of folderIds) {
+    await removeBookmarkTree(newtabPage, id);
+  }
 });
 
 test('jump-menu lists all workspaces including extra ones', async ({ newtabPage, world }) => {
-  // Seed extra workspaces (3 more, total 8).
-  const { folderIds } = await seedExtraWorkspaces(newtabPage, 3);
+  // Seed enough extra workspaces to overflow the strip (the jump-menu only
+  // renders on overflow). 10 more → 15 total.
+  const { folderIds } = await seedExtraWorkspaces(newtabPage, 10);
 
   await newtabPage.reload();
   await newtabPage.waitForSelector('.ff-app', { timeout: 15_000 });
@@ -172,9 +176,9 @@ test('jump-menu lists all workspaces including extra ones', async ({ newtabPage,
   const panel = newtabPage.locator('.ff-ws-dropdown__panel');
   await expect(panel).toBeVisible({ timeout: 3_000 });
 
-  // All 8 workspaces (5 promo + 3 extra) must appear in the listbox.
+  // All 15 workspaces (5 promo + 10 extra) must appear in the listbox.
   const options = panel.locator('[role="option"]');
-  await expect(options).toHaveCount(world.workspaces.length + 3, { timeout: 5_000 });
+  await expect(options).toHaveCount(world.workspaces.length + 10, { timeout: 5_000 });
 
   // The active workspace (Work) must be marked data-active=true.
   const activeOption = panel.locator('[data-active="true"]');
@@ -189,6 +193,11 @@ test('jump-menu lists all workspaces including extra ones', async ({ newtabPage,
 });
 
 test('jump-menu can switch to a workspace', async ({ newtabPage, world }) => {
+  // The jump-menu only renders on overflow — seed enough to force it (15 total).
+  const { folderIds } = await seedExtraWorkspaces(newtabPage, 10);
+  await newtabPage.reload();
+  await newtabPage.waitForSelector('.ff-app', { timeout: 15_000 });
+
   // Open the jump-menu and click the Personal workspace option.
   await newtabPage.locator('.ff-ws-dropdown .ff-pill').click();
   const panel = newtabPage.locator('.ff-ws-dropdown__panel');
@@ -203,6 +212,10 @@ test('jump-menu can switch to a workspace', async ({ newtabPage, world }) => {
   });
   // The panel must close.
   await expect(panel).toHaveCount(0);
+
+  for (const id of folderIds) {
+    await removeBookmarkTree(newtabPage, id);
+  }
 });
 
 // ---------------------------------------------------------------------------

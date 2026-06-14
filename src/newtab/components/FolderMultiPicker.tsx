@@ -37,11 +37,15 @@ export function FolderMultiPicker({ tree, selectedIds, onToggle, excludeIds, emb
       return next;
     });
 
-  const rows = flattenFolderTree(tree, expanded).filter(f => !excludeIds?.has(f.id));
+  // Keep excluded folders (folders already used as a workspace root) in the list
+  // so their subfolders stay reachable via expand/collapse — only block them from
+  // being re-selected. Filtering the row out hides its whole subtree (regression).
+  const rows = flattenFolderTree(tree, expanded);
 
   return (
     <div style={{ display: 'grid', gap: 4, ...(embedded ? {} : { maxHeight: 240, overflowY: 'auto' }), paddingRight: 2 }}>
       {rows.map(f => {
+        const excluded = excludeIds?.has(f.id) ?? false;
         const active = selectedIds.includes(f.id);
         const isOpen = expanded.has(f.id);
         return (
@@ -65,11 +69,14 @@ export function FolderMultiPicker({ tree, selectedIds, onToggle, excludeIds, emb
               <span style={{ width: 22, flexShrink: 0 }} />
             )}
             <button
-              onClick={() => onToggle(f.id)}
+              onClick={() => { if (!excluded) onToggle(f.id); }}
+              disabled={excluded}
+              title={excluded ? 'Already used as a workspace root' : undefined}
               className="ff-card"
               style={{
                 flex: 1, minWidth: 0,
-                textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'var(--fg-1)',
+                textAlign: 'left', cursor: excluded ? 'default' : 'pointer', font: 'inherit',
+                color: 'var(--fg-1)', opacity: excluded ? 0.5 : 1,
                 borderColor: active ? 'var(--accent)' : 'var(--line-1)',
                 background: active ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
                 boxShadow: active ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' : 'none',

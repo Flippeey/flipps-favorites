@@ -43,9 +43,10 @@ interface WorkspaceTabsProps {
   onSwitchWorkspace: (id: string) => void;
   onWorkspaceContextMenu: (id: string, x: number, y: number) => void;
   onReorderWorkspaces: (ids: string[]) => void;
+  onOverflowChange: (overflow: boolean) => void;
 }
 
-function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onReorderWorkspaces }: WorkspaceTabsProps) {
+function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onReorderWorkspaces, onOverflowChange }: WorkspaceTabsProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -57,7 +58,8 @@ function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
     if (!el) return;
     setCanScrollLeft(el.scrollLeft > 4);
     setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
-  }, []);
+    onOverflowChange(el.scrollWidth - el.clientWidth > 4);
+  }, [onOverflowChange]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -99,7 +101,7 @@ function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
     >
       {canScrollLeft && (
         <button className="ff-ws-scroll ff-ws-scroll--left" onClick={() => scroll(-1)} aria-label="Scroll tabs left" title="Scroll tabs left">
-          <Ico name="chevronLeft" size={12} />
+          <Ico name="chevronLeft" size={16} />
         </button>
       )}
       <div
@@ -143,17 +145,18 @@ function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
       </div>
       {canScrollRight && (
         <button className="ff-ws-scroll ff-ws-scroll--right" onClick={() => scroll(1)} aria-label="Scroll tabs right" title="Scroll tabs right">
-          <Ico name="chevronRight" size={12} />
+          <Ico name="chevronRight" size={16} />
         </button>
       )}
     </div>
   );
 }
 
-function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace }: {
+function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace, overflow }: {
   workspaces: WorkspaceRecord[];
   activeWorkspaceId: string;
   onSwitchWorkspace: (id: string) => void;
+  overflow: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -173,7 +176,7 @@ function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace }:
   }, [open]);
 
   return (
-    <div className="ff-ws-dropdown" ref={ref}>
+    <div className="ff-ws-dropdown" ref={ref} data-ws-overflow={overflow ? 'true' : 'false'}>
       <button
         className="ff-pill"
         onClick={() => setOpen(o => !o)}
@@ -210,6 +213,7 @@ function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace }:
 export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onReorderWorkspaces, onOpenAddMenu, path, onCrumb, sortValue, onSort, folderMode, onToggleViewMode, onOpenAppSettings, onOpenWorkspaceSettings }: TopNavProps) {
   const scrolled = useScrollCollapsed();
   const [sortOpen, setSortOpen] = useState(false);
+  const [tabsOverflow, setTabsOverflow] = useState(false);
   const sortRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -240,11 +244,13 @@ export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
               onSwitchWorkspace={onSwitchWorkspace}
               onWorkspaceContextMenu={onWorkspaceContextMenu}
               onReorderWorkspaces={onReorderWorkspaces}
+              onOverflowChange={setTabsOverflow}
             />
             <WorkspaceDropdown
               workspaces={workspaces}
               activeWorkspaceId={activeWorkspaceId}
               onSwitchWorkspace={onSwitchWorkspace}
+              overflow={tabsOverflow}
             />
           </>
         ) : (
