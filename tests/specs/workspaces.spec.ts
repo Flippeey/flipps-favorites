@@ -8,7 +8,7 @@
  */
 import { test, expect } from '../fixtures/world.js';
 import { createTestFolder, removeBookmarkTree, reloadNewtab } from '../fixtures/bookmark-helpers.js';
-import { createWorkspace, patchWorkspace, waitForWorkspace, getWorkspaces, dismissOnboarding } from '../fixtures/seeding.js';
+import { createWorkspace, patchSettings, patchWorkspace, waitForSettings, waitForWorkspace, getWorkspaces, dismissOnboarding } from '../fixtures/seeding.js';
 import { workspaceTab, contextMenu } from '../fixtures/selectors.js';
 import { DEFAULT_WORKSPACE_SETTINGS } from '../fixtures/test-data.js';
 import { MAX_WORKSPACES } from '../../src/shared/constants.js';
@@ -328,9 +328,18 @@ test('Alt+1..9 switches workspace', async ({ newtabPage, world }) => {
 test('active workspace persists after reload', async ({ newtabPage, world }) => {
   // Switch to AI workspace, then reload. The same tab must still be active —
   // the active workspace id is stored in settings and restored on boot.
+  // WHY rememberLastFolder=true: this test verifies persistence behaviour which
+  // only applies when the "Remember last workspace" flag is enabled. The promo
+  // world seeds the flag as false (so boot always shows the first workspace),
+  // so we must enable it here before testing the persistence path.
+  await patchSettings(newtabPage, { rememberLastFolder: true });
+  await waitForSettings(newtabPage, (s) => s.rememberLastFolder === true);
+
   const aiTab = workspaceTab(newtabPage, world.workspaceIds.AI);
   await aiTab.click();
   await expect(aiTab).toHaveClass(/is-active/, { timeout: 2_000 });
+
+  await waitForSettings(newtabPage, (s) => s.activeWorkspaceId === world.workspaceIds.AI);
 
   await newtabPage.reload();
   await newtabPage.waitForSelector('.ff-app', { timeout: 15_000 });

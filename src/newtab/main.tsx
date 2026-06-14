@@ -13,12 +13,23 @@ async function bootstrap() {
   let initialWorkspaces;
   let initialOnboardOpen = false;
   try {
-    const [settings, tree, onboardingState, workspaces] = await Promise.all([
+    const [rawSettings, tree, onboardingState, workspaces] = await Promise.all([
       getSettings(),
       getBookmarkTree(),
       readOnboardingState(),
       getWorkspaces(),
     ]);
+    // When "Remember last workspace" is off, boot to the first ordered workspace
+    // rather than the persisted (last-used) one. We resolve this at startup so
+    // the App never needs to distinguish boot-time from runtime switches.
+    let settings = rawSettings;
+    if (!settings.rememberLastFolder && workspaces.length > 0) {
+      const order = settings.workspaceOrder;
+      const firstId = order && order.length > 0 ? order[0] : workspaces[0]?.id;
+      if (firstId != null && firstId !== settings.activeWorkspaceId) {
+        settings = { ...settings, activeWorkspaceId: firstId };
+      }
+    }
     initialSettings = settings;
     initialTree = tree;
     initialWorkspaces = workspaces;
