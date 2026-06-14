@@ -17,6 +17,3 @@ Fixed:
 - The "Remember last workspace" setting is now honoured on startup
 - Cleaner drop indicators when dragging folders onto the Workspace bar
 - More accurate layout density defaults on wide and high-resolution displays
-
-Removed:
-- The unused contain/cover icon fit control
