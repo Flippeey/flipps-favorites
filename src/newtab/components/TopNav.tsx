@@ -35,6 +35,11 @@ interface TopNavProps {
   onToggleViewMode: () => void;
   onOpenAppSettings: () => void;
   onOpenWorkspaceSettings: () => void;
+  // When true, a folder tile is being dragged — show a "drop to create workspace"
+  // zone on the tab strip so users discover the action.
+  folderDragActive?: boolean;
+  // Whether the workspace cap is reached (suppresses the drop affordance).
+  atWorkspaceCap?: boolean;
 }
 
 interface WorkspaceTabsProps {
@@ -44,9 +49,11 @@ interface WorkspaceTabsProps {
   onWorkspaceContextMenu: (id: string, x: number, y: number) => void;
   onReorderWorkspaces: (ids: string[]) => void;
   onOverflowChange: (overflow: boolean) => void;
+  folderDragActive: boolean;
+  atWorkspaceCap: boolean;
 }
 
-function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onReorderWorkspaces, onOverflowChange }: WorkspaceTabsProps) {
+function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onReorderWorkspaces, onOverflowChange, folderDragActive, atWorkspaceCap }: WorkspaceTabsProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -98,6 +105,8 @@ function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
       className="ff-ws-tabs-wrap"
       data-fade-left={canScrollLeft}
       data-fade-right={canScrollRight}
+      data-folder-drag-active={folderDragActive || undefined}
+      data-at-workspace-cap={atWorkspaceCap || undefined}
     >
       {canScrollLeft && (
         <button className="ff-ws-scroll ff-ws-scroll--left" onClick={() => scroll(-1)} aria-label="Scroll tabs left" title="Scroll tabs left">
@@ -210,7 +219,7 @@ function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace, o
   );
 }
 
-export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onReorderWorkspaces, onOpenAddMenu, path, onCrumb, sortValue, onSort, folderMode, onToggleViewMode, onOpenAppSettings, onOpenWorkspaceSettings }: TopNavProps) {
+export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onReorderWorkspaces, onOpenAddMenu, path, onCrumb, sortValue, onSort, folderMode, onToggleViewMode, onOpenAppSettings, onOpenWorkspaceSettings, folderDragActive = false, atWorkspaceCap = false }: TopNavProps) {
   const scrolled = useScrollCollapsed();
   const [sortOpen, setSortOpen] = useState(false);
   const [tabsOverflow, setTabsOverflow] = useState(false);
@@ -245,6 +254,8 @@ export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
               onWorkspaceContextMenu={onWorkspaceContextMenu}
               onReorderWorkspaces={onReorderWorkspaces}
               onOverflowChange={setTabsOverflow}
+              folderDragActive={folderDragActive}
+              atWorkspaceCap={atWorkspaceCap}
             />
             <WorkspaceDropdown
               workspaces={workspaces}

@@ -465,7 +465,16 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     pushToast({ kind: 'info', message: 'Switch to Manual sort to reorder tiles.' });
   }, [pushToast]);
 
-  const { dragPreview, dragEnabled } = useDragWiring({
+  const handleFolderDropOnTab = useCallback(async (
+    folderId: string,
+    folderTitle: string,
+  ): Promise<'created' | 'at_max' | 'already_exists'> => {
+    const result = await handleCreateWorkspaceFromFolder(folderId, folderTitle);
+    handleCreateFromFolderResult(result, folderTitle);
+    return result;
+  }, [handleCreateWorkspaceFromFolder, handleCreateFromFolderResult]);
+
+  const { dragPreview, dragEnabled, folderDragActive } = useDragWiring({
     canvasEl,
     overlayBodyEl,
     dockEl,
@@ -482,6 +491,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     onSwitchWorkspace: handleSwitchWorkspace,
     onReorderBlocked: handleReorderBlocked,
     pushToast,
+    onFolderDropOnTab: handleFolderDropOnTab,
   });
 
   const handleDeleteFocused = useCallback(async (item: BookmarkNode) => {
@@ -607,6 +617,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           onToggleViewMode={handleToggleViewMode}
           onOpenAppSettings={() => openAppSettings()}
           onOpenWorkspaceSettings={() => openWorkspaceSettings('appearance')}
+          folderDragActive={folderDragActive}
+          atWorkspaceCap={workspaces.length >= MAX_WORKSPACES}
         />
       </header>
 

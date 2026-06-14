@@ -4,7 +4,7 @@ import type { PushToastInput } from '../state/useToasts';
 import type { MarqueeSelection } from './useMarquee';
 import { useDrag, type DropTarget, type DragPreviewState } from './useDrag';
 import { moveBookmark } from '../lib/messaging';
-import { findFolder } from '../lib/tree';
+import { findFolder, findNode, isFolder } from '../lib/tree';
 import { captureMoveSnapshots, restoreMoveSnapshots } from '../lib/move-snapshot';
 
 interface UseDragWiringArgs {
@@ -29,11 +29,17 @@ interface UseDragWiringArgs {
   onReorderBlocked: () => void;
   // Pushes the post-relocate "Moved …" toast carrying an Undo action.
   pushToast: (input: PushToastInput) => void;
+  // Called when a single folder tile is dropped onto the workspace tab strip.
+  // Returns the discriminated outcome so the caller can surface a toast.
+  onFolderDropOnTab: (folderId: string, folderTitle: string) => Promise<'created' | 'at_max' | 'already_exists'>;
 }
 
 interface UseDragWiringResult {
   dragPreview: DragPreviewState | null;
   dragEnabled: boolean;
+  // True when exactly one folder tile is being dragged — used by the tab strip
+  // to show the "drop to create workspace" affordance.
+  folderDragActive: boolean;
 }
 
 // Wires the three drag surfaces (canvas, folder overlay, dock) to a single
@@ -43,7 +49,7 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
   const {
     canvasEl, overlayBodyEl, dockEl, rootFolder, settings, bookmarkSortMode, workspaces, tree,
     sortedChildren, selectionRef, setSelection, refreshTree, dragEngagedRef,
-    onSwitchWorkspace, onReorderBlocked, pushToast,
+    onSwitchWorkspace, onReorderBlocked, pushToast, onFolderDropOnTab,
   } = args;
 
   // Spring-loaded tabs: open the hovered workspace mid-drag (skip if already active).
@@ -77,6 +83,17 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
           await moveBookmark(id, dockFolderId);
         }
       } else if (target.kind === 'workspace') {
+        // Single-folder drop on the workspace tab strip → create a new workspace
+        // from the folder instead of moving it. Multiple items or non-folders fall
+        // through to the standard move-to-workspace path.
+        if (dragIds.length === 1) {
+          const node = findNode(tree, dragIds[0]!);
+          if (node && isFolder(node)) {
+            const result = await onFolderDropOnTab(node.id, node.title);
+            void result; // toast surfaced by App.tsx via the onFolderDropOnTab callback
+            return;
+          }
+        }
         const ws = workspaces.find(w => w.id === target.workspaceId);
         if (!ws) return;
         if (ws.rootFolderId === rootFolder?.id) return;
@@ -121,7 +138,7 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
     } finally {
       await refreshTree();
     }
-  }, [tree, refreshTree, rootFolder, settings.dockFolderId, workspaces, setSelection, pushToast]);
+  }, [tree, refreshTree, rootFolder, settings.dockFolderId, workspaces, setSelection, pushToast, onFolderDropOnTab]);
 
   // Drag itself is always live so relocation (into a folder, the dock, or another
   // workspace) works in every sort mode. Only reordering — positioning between
@@ -166,7 +183,15 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
   });
   const dragPreview = canvasDragPreview ?? overlayDragPreview ?? dockDragPreview;
 
+  // True when exactly one folder tile is being dragged. Derived from the live
+  // tree so it's correct even when the node was moved since the drag started.
+  const folderDragActive =
+    dragPreview !== null &&
+    dragPreview.ids.length === 1 &&
+    !!findNode(tree, dragPreview.ids[0]!) &&
+    isFolder(findNode(tree, dragPreview.ids[0]!)!);
+
   // `dragEnabled` drives the section-header drag handle affordance, which is a
   // reorder-only interaction — so it tracks reorderEnabled (manual sort).
-  return { dragPreview, dragEnabled: reorderEnabled };
+  return { dragPreview, dragEnabled: reorderEnabled, folderDragActive };
 }
