@@ -107,6 +107,7 @@ function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
       data-fade-right={canScrollRight}
       data-folder-drag-active={folderDragActive || undefined}
       data-at-workspace-cap={atWorkspaceCap || undefined}
+      data-workspace-drop-zone="true"
     >
       {canScrollLeft && (
         <button className="ff-ws-scroll ff-ws-scroll--left" onClick={() => scroll(-1)} aria-label="Scroll tabs left" title="Scroll tabs left">

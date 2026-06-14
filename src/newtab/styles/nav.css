@@ -210,7 +210,7 @@
 /* Workspace tabs */
 .ff-ws-tabs-wrap {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   flex: 1;
   min-width: 0;
 }
@@ -429,33 +429,36 @@
   text-overflow: ellipsis;
 }
 
-/* Folder-drag-to-tab drop affordance: highlight the whole tab strip when a
-   folder tile is being dragged, signalling "drop here to create workspace".
-   Suppressed at the workspace cap (data-at-workspace-cap) where the drop
-   would be rejected — the strip stays un-highlighted so users aren't misled. */
+/* Folder-drag-to-tab drop affordance.
+   Discovery hint (data-folder-drag-active): subtle dashed ring while a folder
+   is dragged anywhere, so the user discovers the drop zone.
+   Suppressed at the workspace cap where the drop would be rejected. */
 .ff-ws-tabs-wrap[data-folder-drag-active]::after {
   content: '';
   position: absolute;
   inset: -3px;
   border-radius: var(--r-md);
-  border: 2px dashed var(--accent);
-  opacity: 0.6;
+  border: 1.5px dashed color-mix(in oklab, var(--accent) 45%, transparent);
+  opacity: 0.5;
   pointer-events: none;
-  animation: ffFolderDropZonePulse 1.4s ease-in-out infinite;
 }
 
 .ff-ws-tabs-wrap[data-folder-drag-active][data-at-workspace-cap]::after {
   display: none;
 }
 
-@keyframes ffFolderDropZonePulse {
-  0%, 100% { opacity: 0.4; }
-  50%       { opacity: 0.75; }
-}
+/* Workspace gap insertion line (bar-gap drop target).
+   Reuses the SAME data-drop-before / data-drop-after attributes and ::before /
+   ::after pseudo-elements already defined for the HTML5 workspace tab-reorder
+   drag above (.ff-ws-tab[data-drop-before]::before, [data-drop-after]::after).
+   useDrag's pointer-drag path now sets these attributes too so the visual is
+   identical: a vertical 2px accent bar at left:-3px (before) or right:-3px (after).
+   No new CSS rules needed — the reorder lines double as the insertion indicator. */
 
-/* While a folder is being dragged over any tab, also highlight the specific tab
-   that already has data-drop-hover (set by useDrag's workspace-tab hover logic). */
-.ff-ws-tabs-wrap[data-folder-drag-active] .ff-ws-tab[data-drop-hover="true"] {
+/* Pill hover while a tile is dragged over it (move-into-workspace).
+   Accent-outline pattern matches .ff-tile[data-drop-position="inside"]
+   from interactions.css so visual language is consistent. */
+.ff-ws-tab[data-drop-hover="true"] {
   background: color-mix(in oklab, var(--accent) 18%, transparent);
   border-color: var(--accent);
   color: var(--accent-on-surface, var(--accent));

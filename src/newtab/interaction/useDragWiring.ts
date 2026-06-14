@@ -29,9 +29,11 @@ interface UseDragWiringArgs {
   onReorderBlocked: () => void;
   // Pushes the post-relocate "Moved …" toast carrying an Undo action.
   pushToast: (input: PushToastInput) => void;
-  // Called when a single folder tile is dropped onto the workspace tab strip.
+  // Called when a single folder tile is dropped into the workspace bar gap.
+  // insertIndex is the position in the ordered list where the new workspace should
+  // be inserted (0 = before first, workspaces.length = after last).
   // Returns the discriminated outcome so the caller can surface a toast.
-  onFolderDropOnTab: (folderId: string, folderTitle: string) => Promise<'created' | 'at_max' | 'already_exists'>;
+  onFolderDropOnTab: (folderId: string, folderTitle: string, insertIndex: number) => Promise<'created' | 'at_max' | 'already_exists'>;
 }
 
 interface UseDragWiringResult {
@@ -83,23 +85,29 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
           await moveBookmark(id, dockFolderId);
         }
       } else if (target.kind === 'workspace') {
-        // Single-folder drop on the workspace tab strip → create a new workspace
-        // from the folder instead of moving it. Multiple items or non-folders fall
-        // through to the standard move-to-workspace path.
-        if (dragIds.length === 1) {
-          const node = findNode(tree, dragIds[0]!);
-          if (node && isFolder(node)) {
-            const result = await onFolderDropOnTab(node.id, node.title);
-            void result; // toast surfaced by App.tsx via the onFolderDropOnTab callback
-            return;
-          }
-        }
+        // Drop ON an existing workspace pill → always move item(s) into that workspace.
+        // Single-folder drops no longer create a workspace here; that only happens
+        // for bar-gap drops (target.kind === 'workspace-new') below.
         const ws = workspaces.find(w => w.id === target.workspaceId);
         if (!ws) return;
         if (ws.rootFolderId === rootFolder?.id) return;
         for (const id of dragIds) {
           await moveBookmark(id, ws.rootFolderId);
         }
+      } else if (target.kind === 'workspace-new') {
+        // Drop in the workspace bar GAP (not on a pill) → create workspace from
+        // a single folder, inserted at target.insertIndex in the workspace order.
+        // Multi-item and non-folder gap drops are no-ops.
+        if (dragIds.length === 1) {
+          const node = findNode(tree, dragIds[0]!);
+          if (node && isFolder(node)) {
+            const result = await onFolderDropOnTab(node.id, node.title, target.insertIndex);
+            void result; // toast surfaced by App.tsx via the onFolderDropOnTab callback
+            return;
+          }
+        }
+        // Non-folder or multi-item gap drop: no-op.
+        return;
       } else {
         // reorder — preserve drag-source order, increment index as we go for items moving forward in same parent
         let idx = target.index;

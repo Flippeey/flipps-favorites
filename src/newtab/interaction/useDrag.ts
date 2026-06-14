@@ -4,7 +4,10 @@ export type DropTarget =
   | { kind: 'reorder'; parentId: string; index: number }
   | { kind: 'folder'; folderId: string }
   | { kind: 'dock' }
-  | { kind: 'workspace'; workspaceId: string };
+  | { kind: 'workspace'; workspaceId: string }
+  // insertIndex is the position in the ordered workspace list where the new
+  // workspace will be inserted (0 = before first pill, workspaces.length = after last).
+  | { kind: 'workspace-new'; insertIndex: number };
 
 interface UseDragArgs {
   surface: HTMLElement | null;
@@ -64,6 +67,15 @@ function clearDropAttrs({ includeSource }: { includeSource: boolean }): void {
   });
   document.querySelectorAll<HTMLElement>('[data-workspace-id][data-drop-hover]').forEach(el => {
     delete el.dataset.dropHover;
+  });
+  // Workspace gap insertion-line indicators: reuse the same data-drop-before /
+  // data-drop-after attributes that the pill tab-reorder drag already clears via
+  // the HTML5 drag events. We must also clear them here for pointer-drag paths.
+  document.querySelectorAll<HTMLElement>('[data-workspace-id][data-drop-before]').forEach(el => {
+    delete el.dataset.dropBefore;
+  });
+  document.querySelectorAll<HTMLElement>('[data-workspace-id][data-drop-after]').forEach(el => {
+    delete el.dataset.dropAfter;
   });
 }
 
@@ -294,7 +306,7 @@ export function useDrag({
         return;
       }
 
-      // Workspace tab drop target
+      // Workspace tab drop target: pill check MUST precede bar-gap check.
       const wsTabEl = elementUnder?.closest<HTMLElement>('[data-workspace-id]');
       if (wsTabEl) {
         const workspaceId = wsTabEl.dataset.workspaceId ?? '';
@@ -303,6 +315,46 @@ export function useDrag({
           drag.dropTarget = { kind: 'workspace', workspaceId };
           return;
         }
+      }
+
+      // Bar-gap drop target: pointer is over the workspace bar container but NOT
+      // on any pill. Compute the insertion index by comparing pointer-x to each
+      // pill's midpoint — same logic useDragWiring's commit handler uses for
+      // workspace reorder. Render the vertical insertion line on the adjacent pill
+      // using data-drop-before / data-drop-after, which already have CSS in nav.css
+      // (.ff-ws-tab[data-drop-before]::before / [data-drop-after]::after) from the
+      // HTML5 workspace tab-reorder interaction — we reuse exactly that pattern.
+      const dropZoneEl = elementUnder?.closest<HTMLElement>('[data-workspace-drop-zone]');
+      if (dropZoneEl) {
+        const pills = Array.from(
+          dropZoneEl.querySelectorAll<HTMLElement>('[data-workspace-id]')
+        );
+        // Determine insert index: walk pills left-to-right, insert before the first
+        // pill whose center-x is to the right of the pointer. If pointer is past all
+        // pills, insert at the end.
+        let insertIndex = pills.length; // default: after last pill
+        let lineTarget: HTMLElement | null = null;
+        let linePos: 'before' | 'after' = 'after';
+        for (let i = 0; i < pills.length; i++) {
+          const r = pills[i]!.getBoundingClientRect();
+          const midX = r.left + r.width / 2;
+          if (event.clientX < midX) {
+            insertIndex = i;
+            lineTarget = pills[i]!;
+            linePos = 'before';
+            break;
+          }
+        }
+        if (lineTarget === null && pills.length > 0) {
+          // Pointer is right of all pill centers → insert after the last pill.
+          lineTarget = pills[pills.length - 1]!;
+          linePos = 'after';
+        }
+        if (lineTarget) {
+          lineTarget.dataset[linePos === 'before' ? 'dropBefore' : 'dropAfter'] = 'true';
+        }
+        drag.dropTarget = { kind: 'workspace-new', insertIndex };
+        return;
       }
 
       if (drag.dragKind === 'section') {
