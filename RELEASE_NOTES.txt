@@ -1,10 +1,19 @@
-What's new in 2.4.1:
+What's new in 2.5.0:
 
-- Move to new folder: select multiple bookmarks and use the right-click menu to move them into a new folder in one step
-- Undo relocations: moving or dragging a bookmark shows a toast with an Undo button to reverse it instantly
-- Auto-accent per workspace: each new workspace gets a distinct accent colour automatically
-- Double-click icon to apply: in the icon editor, double-clicking a search result applies it and closes the dialog
-- Resolution-aware layout: new installs on high-density or wide displays start with a better-fitting layout density
-- Fixed: bookmarks and folders can now be dragged to a different parent even when a sort mode is active
-- Fixed: drop indicator now appears correctly when dragging to the root under auto-sort
-- Fixed: list-view drag handle no longer triggers on clicks outside the handle icon
+- Persona templates in onboarding: the setup wizard detects how you organise your bookmarks and suggests ready-made Workspaces with matching view and sort layouts
+- Per-Workspace view and sort: each Workspace now remembers its own view mode and sort order independently
+- More Workspaces: the cap is raised to 20, with Alt + arrow keys and a desktop jump-menu for fast switching
+- Create a Workspace from a folder: promote any folder to a full Workspace from its right-click menu, or by dragging it onto the Workspace bar
+- Icon search shows its source: hover an icon search result to see where it came from
+
+Improvements:
+- Simplified the Appearance background picker
+- Clearer Workspace settings drawer with preview cards and consistent headers
+
+Fixed:
+- Faster icon fallback on sites that redirect to insecure (http) addresses, with no more console spam
+- Resolved a sync-storage limit that could be hit with many Workspaces
+- A default Favorites Workspace is now created when you skip onboarding
+- The "Remember last workspace" setting is now honoured on startup
+- Cleaner drop indicators when dragging folders onto the Workspace bar
+- More accurate layout density defaults on wide and high-resolution displays
