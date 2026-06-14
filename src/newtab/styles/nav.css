@@ -218,6 +218,10 @@
 .ff-ws-tabs {
   display: flex;
   align-items: center;
+  /* `safe center` centers the tabs when they fit, but falls back to start
+     alignment once they overflow so the leading tabs stay scroll-reachable
+     (plain `center` would clip + strand the first tab in a scroll container). */
+  justify-content: safe center;
   gap: 2px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
@@ -229,8 +233,9 @@
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  width: 24px;
-  height: 24px;
+  /* Match the nav button height (32px) so the scroll arrows are an easy target. */
+  width: 30px;
+  height: 30px;
   border-radius: var(--r-full);
   background: var(--frost-strong);
   -webkit-backdrop-filter: var(--frost-blur);
@@ -261,11 +266,16 @@
   mask-image: linear-gradient(90deg, transparent, #000 20px, #000 calc(100% - 20px), transparent);
 }
 
-/* Desktop jump-menu: always visible alongside the scroll strip. */
+/* Jump-menu: only shown when the tabs overflow their container (set via
+   data-ws-overflow by WorkspaceTabs). When every workspace fits, the centered
+   strip is enough and the dropdown stays hidden. */
 .ff-ws-dropdown {
-  display: flex;
+  display: none;
   position: relative;
   flex-shrink: 0;
+}
+.ff-ws-dropdown[data-ws-overflow="true"] {
+  display: flex;
 }
 
 /* Jump-menu panel: open below the trigger, left-aligned. */
@@ -273,7 +283,14 @@
   left: 0;
   right: auto;
   min-width: 200px;
+  /* Match the thin accent scrollbar used elsewhere (base.css) instead of the
+     chunky OS default the long workspace list otherwise gets. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
 }
+.ff-ws-dropdown__panel::-webkit-scrollbar { width: 6px; }
+.ff-ws-dropdown__panel::-webkit-scrollbar-track { background: transparent; }
+.ff-ws-dropdown__panel::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
 
 /* Count badge on the trigger. */
 .ff-ws-dropdown__count {
@@ -283,6 +300,12 @@
   letter-spacing: 0.02em;
 }
 
+/* Rows inherit .ff-sort__option's space-between, which keeps the name left only
+   because the Alt-hint's margin-left:auto pulls it there. Workspaces 10+ have no
+   hint (dot + name only) → space-between strands the name at the right edge.
+   Force left alignment; the hint still right-aligns via its own auto margin. */
+.ff-ws-dropdown__panel .ff-sort__option { justify-content: flex-start; }
+
 /* Keyboard shortcut hint in each row. */
 .ff-ws-dropdown__hint {
   margin-left: auto;
@@ -291,9 +314,22 @@
   color: var(--fg-4);
 }
 
+/* Small windows: the empty left spacer (1fr) plus the labeled Customize/Settings
+   buttons (minmax(auto,1fr), won't shrink) used to starve the center column to
+   ~0, hiding BOTH the tab strip and its overflow dropdown. Drop the spacer and
+   collapse the right cluster to icons so the workspace switcher always has room. */
+@media (max-width: 820px) {
+  .ff-nav { grid-template-columns: minmax(0, 1fr) auto; }
+  .ff-nav__left { display: none; }
+  .ff-nav__right .ff-iconbtn span { display: none; }
+  .ff-nav__right .ff-iconbtn { width: 32px; padding: 0; gap: 0; justify-content: center; }
+}
+
 @media (max-width: 480px) {
   .ff-ws-tabs-wrap { display: none; }
-  /* On mobile the strip is hidden; the dropdown stays, but now shows name instead of count. */
+  /* On mobile the strip is hidden, so the dropdown is the only switcher — force it
+     visible regardless of overflow state, and show name instead of count. */
+  .ff-ws-dropdown { display: flex; }
   .ff-ws-dropdown__count { display: none; }
 }
 

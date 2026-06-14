@@ -54,6 +54,30 @@ export function createCachedValueStore<T>(args: {
     api: extensionApi.storage.local as unknown as StorageAreaApi,
   });
 
+  // Persisted marker (in local) recording that this store outgrew sync's
+  // per-item quota and was demoted to local. Without it the demotion is only
+  // in-memory: a service-worker restart re-resolves to sync and reads the stale
+  // pre-overflow copy, silently dropping everything written after the overflow
+  // (e.g. workspaces created past ~12).
+  const demotedMarkerKey = `${storageKey}::demoted-to-local`;
+
+  async function isDemotedToLocal(): Promise<boolean> {
+    try {
+      const stored = await getLocalArea().api.get(demotedMarkerKey);
+      return stored[demotedMarkerKey] === true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function persistDemotion(): Promise<void> {
+    try {
+      await getLocalArea().api.set({ [demotedMarkerKey]: true });
+    } catch {
+      // Best effort: the in-memory demotion (areaPromise) still applies this session.
+    }
+  }
+
   function attachStorageChangeListener(areaName: ResolvedStorageAreaName): void {
     if (listenerAttached || !extensionApi.storage?.onChanged?.addListener) {
       return;
@@ -80,6 +104,13 @@ export function createCachedValueStore<T>(args: {
 
         const syncArea = extensionApi.storage?.sync;
         if (!syncArea?.get || !syncArea?.set) {
+          return getLocalArea();
+        }
+
+        // A prior write demoted this store to local (value outgrew sync's
+        // per-item quota). Honor it permanently so reads don't regress to the
+        // stale sync copy after a service-worker restart.
+        if (await isDemotedToLocal()) {
           return getLocalArea();
         }
 
@@ -112,14 +143,17 @@ export function createCachedValueStore<T>(args: {
       });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      // Sync storage quota exceeded: demote permanently to local for this store
-      // instance and retry. This covers the workspace store when 20 workspaces
-      // exceed Chrome sync's per-item 8 KB limit.
+      // Sync storage quota exceeded: demote to local for this store and retry.
+      // This covers the workspace store once enough workspaces exceed Chrome
+      // sync's per-item 8 KB limit (~12 full records). Persist a marker so the
+      // demotion survives service-worker restarts — otherwise the next read
+      // resolves back to sync and drops everything written past the overflow.
       if (storageArea.name === 'sync' && /quota/i.test(detail)) {
         const localArea = getLocalArea();
         areaPromise = Promise.resolve(localArea);
         hasCache = false;
         loadPromise = null;
+        await persistDemotion();
         await localArea.api.set({ [storageKey]: value });
         return;
       }

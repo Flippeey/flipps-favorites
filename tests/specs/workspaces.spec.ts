@@ -119,6 +119,54 @@ test('create workspace via NewWorkspaceDialog adds a tab', async ({ newtabPage, 
   await removeBookmarkTree(newtabPage, folderId);
 });
 
+test('folder already used as a workspace root stays expandable so its subfolders remain selectable', async ({ newtabPage }) => {
+  // WHY: the recursive folder picker only emits a folder's children when the
+  // parent row is expanded. An earlier build filtered excluded roots (folders
+  // already backing a workspace) out of the list entirely — which also removed
+  // their expand chevron and buried every subfolder beneath them (the user saw
+  // only "Other bookmarks"). The excluded parent must stay visible-but-locked so
+  // its subtree remains reachable. Here the Bookmarks bar itself backs a
+  // workspace; a folder inside it must still be selectable after expanding.
+  const childId = await createTestFolder(newtabPage, 'Reachable Child Folder');
+
+  // Bookmarks bar ('1') becomes a workspace root → it lands in excludeIds.
+  await createWorkspace(newtabPage, makeWorkspaceRecord('ws-bar-root', 'Bar Root', '1'));
+  await reloadNewtab(newtabPage);
+
+  const barTitle = await newtabPage.evaluate(async () => {
+    const api = (globalThis as unknown as { browser?: typeof chrome; chrome: typeof chrome }).browser
+      ?? (globalThis as unknown as { chrome: typeof chrome }).chrome;
+    const [bar] = await api.bookmarks.get('1');
+    return bar.title;
+  });
+
+  // Open the New Workspace dialog.
+  await newtabPage.getByRole('button', { name: 'Add', exact: true }).click();
+  const addMenu = contextMenu(newtabPage);
+  await expect(addMenu).toBeVisible();
+  await addMenu.locator('.ff-ctx__item').filter({ hasText: 'Add workspace' }).click();
+
+  const dialog = newtabPage.locator('.ff-dialog, [role="dialog"]').first();
+  await expect(dialog).toBeVisible({ timeout: 5_000 });
+
+  // The excluded bar row is present but NOT selectable. Pre-fix it was filtered
+  // out, so this row — and its expand chevron — would not exist at all.
+  const barCard = dialog.locator('button.ff-card', { hasText: barTitle });
+  await expect(barCard).toBeVisible();
+  await expect(barCard).toBeDisabled();
+
+  // Its subtree starts collapsed: the child is hidden until the bar is expanded.
+  const childCard = dialog.locator('button.ff-card', { hasText: 'Reachable Child Folder' });
+  await expect(childCard).toHaveCount(0);
+
+  // Expanding the disabled bar row reveals the child, which IS selectable.
+  await dialog.getByRole('button', { name: `Expand ${barTitle}`, exact: true }).click();
+  await expect(childCard).toBeVisible();
+  await expect(childCard).toBeEnabled();
+
+  await removeBookmarkTree(newtabPage, childId);
+});
+
 test('new workspace inherits the active workspace density (layoutPreset)', async ({ newtabPage, world }) => {
   // WHY: density (layoutPreset) is resolution-derived at onboarding and stored per
   // workspace. A workspace created later via the New Workspace dialog must match
