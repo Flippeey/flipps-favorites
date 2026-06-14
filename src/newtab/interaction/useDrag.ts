@@ -66,6 +66,9 @@ function clearDropAttrs({ includeSource }: { includeSource: boolean }): void {
   document.querySelectorAll<HTMLElement>('[data-workspace-id][data-drop-hover]').forEach(el => {
     delete el.dataset.dropHover;
   });
+  document.querySelectorAll<HTMLElement>('[data-workspace-drop-zone][data-drop-active]').forEach(el => {
+    delete el.dataset.dropActive;
+  });
 }
 
 export interface DragPreviewState {
@@ -309,7 +312,9 @@ export function useDrag({
       // Bar-gap drop target: pointer is over the workspace bar container but NOT
       // on any pill. Used to distinguish "drop in gap → create workspace" from
       // "drop on pill → move into workspace".
-      if (elementUnder?.closest('[data-workspace-drop-zone]')) {
+      const dropZoneEl = elementUnder?.closest<HTMLElement>('[data-workspace-drop-zone]');
+      if (dropZoneEl) {
+        dropZoneEl.dataset.dropActive = 'true';
         drag.dropTarget = { kind: 'workspace-new' };
         return;
       }
