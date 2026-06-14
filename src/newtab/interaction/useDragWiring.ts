@@ -83,9 +83,18 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
           await moveBookmark(id, dockFolderId);
         }
       } else if (target.kind === 'workspace') {
-        // Single-folder drop on the workspace tab strip → create a new workspace
-        // from the folder instead of moving it. Multiple items or non-folders fall
-        // through to the standard move-to-workspace path.
+        // Drop ON an existing workspace pill → always move item(s) into that workspace.
+        // Single-folder drops no longer create a workspace here; that only happens
+        // for bar-gap drops (target.kind === 'workspace-new') below.
+        const ws = workspaces.find(w => w.id === target.workspaceId);
+        if (!ws) return;
+        if (ws.rootFolderId === rootFolder?.id) return;
+        for (const id of dragIds) {
+          await moveBookmark(id, ws.rootFolderId);
+        }
+      } else if (target.kind === 'workspace-new') {
+        // Drop in the workspace bar GAP (not on a pill) → create workspace from
+        // a single folder. Multi-item and non-folder gap drops are no-ops.
         if (dragIds.length === 1) {
           const node = findNode(tree, dragIds[0]!);
           if (node && isFolder(node)) {
@@ -94,12 +103,8 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
             return;
           }
         }
-        const ws = workspaces.find(w => w.id === target.workspaceId);
-        if (!ws) return;
-        if (ws.rootFolderId === rootFolder?.id) return;
-        for (const id of dragIds) {
-          await moveBookmark(id, ws.rootFolderId);
-        }
+        // Non-folder or multi-item gap drop: no-op.
+        return;
       } else {
         // reorder — preserve drag-source order, increment index as we go for items moving forward in same parent
         let idx = target.index;

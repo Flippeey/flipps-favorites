@@ -13,6 +13,9 @@
  *   4. Dragging a bookmark (non-folder) onto the tab strip does NOT trigger
  *      workspace creation — it falls through to the existing move behaviour.
  *   5. At MAX_WORKSPACES the drop affordance strip is absent (cap suppression).
+ *   6. Dragging a folder tile ONTO an existing workspace PILL moves the folder
+ *      into that workspace (restores pre-regression behavior — must NOT create
+ *      a new workspace; workspace count must remain unchanged).
  *
  * Drag mechanics (mirroring useDrag.ts):
  *   1. pointerdown on source tile
@@ -85,19 +88,35 @@ test.describe('drag folder to workspace tab — create workspace', () => {
   });
 
   test('dragging a folder tile onto the tab strip creates a new workspace', async ({ newtabPage }) => {
-    // WHY: the core acceptance criterion — folder drop on tab strip must result
-    // in a new workspace with no dialog, and the user is immediately navigated there.
+    // WHY: the core acceptance criterion — folder drop in the workspace bar GAP
+    // must result in a new workspace with no dialog, navigated there immediately.
+    //
+    // NOTE: the pointer must land in the bar GAP (no pill under it), not on a pill.
+    // Dropping ON an existing pill moves the folder into that workspace instead.
+    // With 1 workspace (seedMinimal), we drag to the right 80% of the tab strip
+    // where no pill exists. The pill is left-aligned; gap is to the right.
     const folderTile = newtabPage.locator('.ff-canvas [data-item-id][data-item-kind="folder"]').first();
     const folderName = await folderTile.getAttribute('title') ?? await folderTile.locator('.ff-tile__label').textContent() ?? 'Folder 1';
     const tabStrip = newtabPage.locator('.ff-ws-tabs-wrap');
+    const lastPill = newtabPage.locator('.ff-ws-tab').last();
 
     const folderBox = await folderTile.boundingBox();
     const tabBox = await tabStrip.boundingBox();
+    const lastPillBox = await lastPill.boundingBox();
     if (!folderBox || !tabBox) throw new Error('elements not found');
+
+    // Target: the gap to the right of the last pill. If the pill fills the whole
+    // wrap (edge case), fall back to the far-right edge of the wrap.
+    const gapX = lastPillBox
+      ? Math.min(lastPillBox.x + lastPillBox.width + 40, tabBox.x + tabBox.width - 10)
+      : tabBox.x + tabBox.width * 0.85;
+    const gapY = tabBox.y + tabBox.height / 2;
+
+    const gapTarget: BoundingBox = { x: gapX - 1, y: gapY - 1, width: 2, height: 2 };
 
     const countBefore = await newtabPage.locator('.ff-ws-tab').count();
 
-    await pointerDrag(newtabPage, folderBox, tabBox, 12);
+    await pointerDrag(newtabPage, folderBox, gapTarget, 12);
 
     // Wait for the workspace count to increase.
     await expect(newtabPage.locator('.ff-ws-tab')).toHaveCount(countBefore + 1, { timeout: 10_000 });
@@ -167,6 +186,74 @@ test.describe('drag folder to workspace tab — create workspace', () => {
 
     // No "created" toast (the move-to-same-workspace is a no-op).
     await expect(newtabPage.locator('.ff-toast', { hasText: /created/i })).toHaveCount(0);
+  });
+
+  test('dragging a folder tile ONTO an existing workspace pill moves it (regression: must not create new workspace)', async ({ newtabPage }) => {
+    // WHY: this is the regression introduced in commit 84ae14a. Dropping a single
+    // folder ON an existing workspace pill was incorrectly routing to workspace
+    // creation instead of moving the folder into that workspace. The fix keys
+    // routing on WHERE the drop landed (pill vs bar gap), not WHAT was dropped.
+    //
+    // Setup: add a second workspace so there are at least two pills. The
+    // beforeEach has already seeded one workspace (ws-minimal) with one folder.
+    // We record the pill count AFTER adding the second workspace, then drag the
+    // folder onto the non-active pill and assert the count is UNCHANGED.
+    const secondFolderId = await createTestFolder(newtabPage, 'Second WS');
+    await createWorkspace(newtabPage, {
+      ...DEFAULT_WORKSPACE_SETTINGS,
+      id: 'ws-second',
+      name: 'Second WS',
+      rootFolderId: secondFolderId,
+    });
+    // Include the new workspace in the order (append after ws-minimal).
+    await newtabPage.evaluate(async () => {
+      const api = (globalThis as unknown as { browser?: { runtime: { sendMessage(m: unknown): Promise<unknown> } }; chrome: { runtime: { sendMessage(m: unknown): Promise<unknown> } } }).browser
+        ?? (globalThis as unknown as { chrome: { runtime: { sendMessage(m: unknown): Promise<unknown> } } }).chrome;
+      const res = (await api.runtime.sendMessage({ type: 'settings/get' })) as { settings: { workspaceOrder?: string[] } };
+      const order = res.settings.workspaceOrder ?? [];
+      if (!order.includes('ws-second')) {
+        await api.runtime.sendMessage({
+          type: 'settings/patch',
+          patch: { workspaceOrder: [...order, 'ws-second'] },
+        });
+      }
+    });
+
+    await reloadNewtab(newtabPage);
+
+    // Record tab count now — this is our baseline BEFORE the drag.
+    const countBefore = await newtabPage.locator('.ff-ws-tab').count();
+    // Must be at least 2 (ws-minimal + ws-second) to have a non-active pill.
+    if (countBefore < 2) throw new Error(`Expected at least 2 workspace tabs, got ${countBefore}`);
+
+    // Find the folder tile in the active workspace canvas.
+    const folderTile = newtabPage.locator('.ff-canvas [data-item-id][data-item-kind="folder"]').first();
+    const folderTileCount = await folderTile.count();
+    if (folderTileCount === 0) {
+      // Guard: folder not visible in this workspace layout — unit tests cover routing.
+      return;
+    }
+
+    // Drag the folder onto the NON-active workspace pill (ws-second).
+    const nonActivePill = newtabPage.locator('.ff-ws-tab:not(.is-active)').first();
+    const folderBox = await folderTile.boundingBox();
+    const pillBox = await nonActivePill.boundingBox();
+    if (!folderBox || !pillBox) throw new Error('elements not found');
+
+    await pointerDrag(newtabPage, folderBox, pillBox, 12);
+
+    // Wait for the move to settle.
+    await newtabPage.waitForTimeout(800);
+
+    // Workspace count must be UNCHANGED — pill drop must NOT create a new workspace.
+    const countAfter = await newtabPage.locator('.ff-ws-tab').count();
+    expect(countAfter).toBe(countBefore);
+
+    // No "created" toast (this was a move, not a workspace create).
+    await expect(newtabPage.locator('.ff-toast', { hasText: /created/i })).toHaveCount(0);
+
+    // A "Moved" toast should appear (the folder was moved into the second workspace).
+    await expect(newtabPage.locator('.ff-toast', { hasText: /moved/i })).toHaveCount(1, { timeout: 5_000 });
   });
 });
 

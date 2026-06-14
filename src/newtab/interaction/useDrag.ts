@@ -4,7 +4,8 @@ export type DropTarget =
   | { kind: 'reorder'; parentId: string; index: number }
   | { kind: 'folder'; folderId: string }
   | { kind: 'dock' }
-  | { kind: 'workspace'; workspaceId: string };
+  | { kind: 'workspace'; workspaceId: string }
+  | { kind: 'workspace-new' };
 
 interface UseDragArgs {
   surface: HTMLElement | null;
@@ -294,7 +295,7 @@ export function useDrag({
         return;
       }
 
-      // Workspace tab drop target
+      // Workspace tab drop target: pill check MUST precede bar-gap check.
       const wsTabEl = elementUnder?.closest<HTMLElement>('[data-workspace-id]');
       if (wsTabEl) {
         const workspaceId = wsTabEl.dataset.workspaceId ?? '';
@@ -303,6 +304,14 @@ export function useDrag({
           drag.dropTarget = { kind: 'workspace', workspaceId };
           return;
         }
+      }
+
+      // Bar-gap drop target: pointer is over the workspace bar container but NOT
+      // on any pill. Used to distinguish "drop in gap → create workspace" from
+      // "drop on pill → move into workspace".
+      if (elementUnder?.closest('[data-workspace-drop-zone]')) {
+        drag.dropTarget = { kind: 'workspace-new' };
+        return;
       }
 
       if (drag.dragKind === 'section') {
