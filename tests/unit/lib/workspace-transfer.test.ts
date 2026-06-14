@@ -279,13 +279,14 @@ describe('parseWorkspaceFile — forward-compat guard', () => {
 
 describe('buildWorkspaceExport — schema v3', () => {
   it('emits schemaVersion 3 and per-record view/sort fields', async () => {
+    // Seed using the per-key layout (workspace:<id>) — the storage refactor
+    // stores each workspace record under its own sync key.
     installChromeFake({
       syncSeed: {
         'app-settings': { activeWorkspaceId: 'a' },
-        workspaces: {
-          a: { ...baseRecordBody('a'), folderMode: 'list', bookmarkSortMode: 'name', bookmarkSortDirection: 'desc' },
-        },
+        'workspace:a': { ...baseRecordBody('a'), folderMode: 'list', bookmarkSortMode: 'name', bookmarkSortDirection: 'desc' },
       },
+      localSeed: { 'workspaces-per-key-migrated': true },
     });
     const transfer = await importTransfer();
 

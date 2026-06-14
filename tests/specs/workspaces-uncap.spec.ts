@@ -1,7 +1,6 @@
 /**
- * Workspaces uncap (#19): cap raised past 9, desktop jump-menu, edge fade,
- * Alt+Arrow prev/next cycling. (Cap is an interim 10 — bounded by storage.sync's
- * 8 KB/item limit until the per-workspace-key storage refactor lands.)
+ * Workspaces uncap (#19 + #28): cap raised from 9 → interim 10 → 20 (final).
+ * Per-workspace-key sync storage (#28) lifts the interim 8 KB/item cap.
  *
  * Why these tests matter:
  * - Users need to create more than 9 workspaces without hitting a silent block.
@@ -53,21 +52,23 @@ async function seedExtraWorkspaces(page: Parameters<typeof createWorkspace>[0], 
 }
 
 // ---------------------------------------------------------------------------
-// Cap is now 10 (was 9; interim sync-safe limit pending per-key storage refactor)
+// Cap is now 20 (was 9 → interim 10; now final 20 via per-key storage refactor #28)
 // ---------------------------------------------------------------------------
 
-test('MAX_WORKSPACES constant equals 10', () => {
-  // Interim sync-safe cap (storage.sync 8 KB/item). Guard against regressing to
-  // the old cap of 9 or back to the unsafe 20 before the per-key storage refactor.
-  expect(MAX_WORKSPACES).toBe(10);
+test('MAX_WORKSPACES constant equals 20', () => {
+  // Cap raised to 20 after the per-workspace-key storage refactor (#28):
+  // each workspace lives under its own `workspace:<id>` sync key so the
+  // 8 KB-per-item limit applies per record (~630 B), not to the aggregate.
+  // Guard against regression to the interim cap of 10 or the old cap of 9.
+  expect(MAX_WORKSPACES).toBe(20);
 });
 
-test('can create workspaces past the old cap of 9 up to the new cap of 10', async ({ freshPage }) => {
+test('can create workspaces past the old interim cap of 10 up to the new cap of 20', async ({ freshPage }) => {
   // Dismiss onboarding and clear the auto-created Favorites workspace so this test
   // seeds its own deterministic set. Under test: the old cap of 9 is no longer enforced.
   await dismissOnboarding(freshPage);
 
-  const TARGET = MAX_WORKSPACES; // 10 — one past the old cap of 9
+  const TARGET = MAX_WORKSPACES; // 20 — past the old interim cap of 10
   const folderIds: string[] = [];
   for (let i = 0; i < TARGET; i++) {
     const folderId = await createTestFolder(freshPage, `Cap Test Folder ${i + 1}`);
@@ -102,7 +103,7 @@ test('can create workspaces past the old cap of 9 up to the new cap of 10', asyn
   }
 });
 
-test('Add workspace is disabled at the new cap of 10', async ({ freshPage }) => {
+test('Add workspace is disabled at the new cap of 20', async ({ freshPage }) => {
   // Dismiss onboarding and clear the auto-created Favorites workspace so this test
   // seeds exactly MAX_WORKSPACES. Under test: the Add workspace button is disabled at cap.
   await dismissOnboarding(freshPage);
