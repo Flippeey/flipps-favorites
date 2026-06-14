@@ -6,11 +6,11 @@
  * Requires: `npm run build:chrome` first, then `npm run build:chrome` will place output at dist/chrome.
  *
  * Output:
- *   promo/screenshots/light/  — 12 scenes × 2 resolutions = 24 PNGs
- *   promo/screenshots/dark/   — 12 scenes × 2 resolutions = 24 PNGs
+ *   promo/screenshots/light/  — 16 scenes × 2 resolutions = 32 PNGs
+ *   promo/screenshots/dark/   — 16 scenes × 2 resolutions = 32 PNGs
  *
  * The active workspace's themeMode is patched to 'light' or 'dark' for each
- * capture pass. Creative workspace (already light) is handled specially.
+ * capture pass. Design workspace (already light) is handled specially.
  */
 
 import { mkdir } from 'node:fs/promises';
@@ -200,18 +200,18 @@ async function scene09_gradientMesh(page, workspaceIds) {
 
 async function scene10_creativeWallpaper(page, workspaceIds) {
   console.log('\n── Scene 10: creative-wallpaper');
-  await patchSettings(page, { activeWorkspaceId: workspaceIds.Creative });
+  await patchSettings(page, { activeWorkspaceId: workspaceIds.Design });
   await reloadNewtab(page, 1500);
-  // Creative is natively light — capture light first, then dark override
+  // Design is natively light — capture light first, then dark override
   for (const theme of ['light', 'dark']) {
-    await patchWorkspace(page, workspaceIds.Creative, { themeMode: theme });
+    await patchWorkspace(page, workspaceIds.Design, { themeMode: theme });
     await page.waitForTimeout(400);
     for (const res of RESOLUTIONS) {
       await capture(page, theme, '10-creative-wallpaper', res);
     }
   }
-  // Restore Creative to light
-  await patchWorkspace(page, workspaceIds.Creative, { themeMode: 'light' });
+  // Restore Design to light
+  await patchWorkspace(page, workspaceIds.Design, { themeMode: 'light' });
 }
 
 async function scene11_onboardingWelcome(page, workspaceIds) {
@@ -240,19 +240,21 @@ async function scene12_onboardingWorkspaces(page, workspaceIds) {
     if (await replayBtn.count() > 0) {
       await replayBtn.click();
       await p.waitForSelector('.ff-onboard', { timeout: 3000 });
-      // Navigate to workspace step (step index 1 — one Next click from welcome)
-      for (let i = 0; i < 1; i++) {
+      // Navigate to workspace folder-picker step (step index 2 — two Next clicks
+      // from welcome: step 0 → appearance (1) → workspace picker (2)).
+      for (let i = 0; i < 2; i++) {
         const nextBtn = p.locator('.ff-onboard .ff-btn:has-text("Next")').first();
         if (await nextBtn.count() > 0) {
           await nextBtn.click();
           await p.waitForTimeout(400);
         }
       }
-      // Select "Multiple workspaces"
-      const multiWs = p.locator('.ff-card:has-text("Multiple workspaces")').first();
-      if (await multiWs.count() > 0) {
-        await multiWs.click();
-        await p.waitForTimeout(400);
+      // Workspace step shows recommended folder cards (.ff-card). Click the first
+      // recommended folder to show it selected, if any are visible.
+      const firstCard = p.locator('.ff-onboard .ff-card').first();
+      if (await firstCard.count() > 0) {
+        await firstCard.click();
+        await p.waitForTimeout(300);
       }
     }
   });
@@ -365,8 +367,8 @@ export async function runScreenshots(only = null) {
   await rm(profileDir, { recursive: true, force: true }).catch(() => undefined);
 
   console.log('\n✓ Screenshots complete.');
-  console.log(`  light/: ${15 * RESOLUTIONS.length} PNGs`);
-  console.log(`  dark/:  ${15 * RESOLUTIONS.length} PNGs`);
+  console.log(`  light/: ${16 * RESOLUTIONS.length} PNGs`);
+  console.log(`  dark/:  ${16 * RESOLUTIONS.length} PNGs`);
 }
 
 if (process.argv[1].endsWith('screenshots.mjs')) {

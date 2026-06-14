@@ -60,7 +60,9 @@ async function openRecordingPage(context, origin) {
 
 /** Click a workspace tab by name and let the switch settle. */
 async function switchWorkspace(page, name, ms = 2200) {
-  const tab = page.locator(`.ff-ws-tab[title="${name}"], .ff-ws-tab:has-text("${name}")`).first();
+  // TopNav renders title as "Switch to <name>" or "Switch to <name> (<shortcut>)".
+  // Use prefix match (^=) so both forms match; text fallback covers overflow dropdown.
+  const tab = page.locator(`.ff-ws-tab[title^="Switch to ${name}"], .ff-ws-tab:has-text("${name}")`).first();
   const box = await tab.boundingBox();
   if (!box) return;
   await moveToBox(page, box, 700);
@@ -158,7 +160,7 @@ async function recordOnboarding(context, origin, workspaceIds, control) {
   await control.evaluate(async () => {
     const a = globalThis.browser ?? globalThis.chrome;
     await a.storage.local.set({
-      'onboarding-state': { version: 1, status: 'pending', updatedAt: Date.now(), completedAt: null, skippedAt: null },
+      'onboarding-state': { version: 2, status: 'pending', updatedAt: Date.now(), completedAt: null, skippedAt: null, recommendedArchetype: null, chosenArchetype: null },
     });
   });
 
@@ -169,17 +171,22 @@ async function recordOnboarding(context, origin, workspaceIds, control) {
 
   const next = () => page.locator('.ff-onboard .ff-btn:has-text("Next")').first();
 
-  // Welcome → workspace step.
+  // Welcome (step 0) → appearance (step 1).
   await next().click().catch(() => undefined);
   await hold(page, HOLD.beat);
 
-  // The wow moment: choose Multiple workspaces, pick two suggested folders.
-  const multi = page.locator('.ff-card:has-text("Multiple workspaces")').first();
-  const mb = await multi.boundingBox();
-  if (mb) { await moveToBox(page, mb, 500); await multi.click(); await hold(page, HOLD.beat); }
+  // Appearance (step 1) → workspace folder-picker (step 2).
+  await next().click().catch(() => undefined);
+  await hold(page, HOLD.beat);
+
+  // The wow moment: pick two recommended workspace folders (Work, Personal).
+  // RecommendedFolderCard renders as .ff-card; folder names match the seeded tree.
   for (const name of ['Work', 'Personal']) {
-    const card = page.locator(`.ff-card:has-text("${name}")`).first();
-    if (await card.count()) { await card.click(); await hold(page, HOLD.beat); }
+    const card = page.locator(`.ff-onboard .ff-card:has-text("${name}")`).first();
+    if (await card.count()) {
+      const mb = await card.boundingBox();
+      if (mb) { await moveToBox(page, mb, 500); await card.click(); await hold(page, HOLD.beat); }
+    }
   }
   await hold(page, HOLD.settle); // hold on the populated picker
 
@@ -203,7 +210,7 @@ async function recordOnboarding(context, origin, workspaceIds, control) {
   await control.evaluate(async () => {
     const a = globalThis.browser ?? globalThis.chrome;
     await a.storage.local.set({
-      'onboarding-state': { version: 1, status: 'completed', updatedAt: Date.now(), completedAt: Date.now(), skippedAt: null },
+      'onboarding-state': { version: 2, status: 'completed', updatedAt: Date.now(), completedAt: Date.now(), skippedAt: null, recommendedArchetype: null, chosenArchetype: null },
     });
   });
 }
@@ -256,7 +263,7 @@ async function recordAccentTheme(context, origin, workspaceIds, control) {
   }
 
   // Close drawer to land on the restyled workspace.
-  const close = page.locator('.ff-drawer [aria-label="Close"], .ff-drawer__close').first();
+  const close = page.locator('.ff-drawer [aria-label="Close"]').first();
   if (await close.count()) {
     const b = await close.boundingBox();
     if (b) await moveToBox(page, b, 500);

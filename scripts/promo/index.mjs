@@ -26,7 +26,7 @@ Usage: node scripts/promo [command] [options]
 
 Commands:
   all           Run screenshots then videos
-  screenshots   Capture all 15 scenes in light + dark mode (60 PNGs)
+  screenshots   Capture all 16 scenes in light + dark mode (64 PNGs)
   videos        Record all 7 promo videos (use --only=<names> to filter)
 
 Options:

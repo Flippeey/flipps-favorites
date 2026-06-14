@@ -93,11 +93,13 @@ export async function skipOnboarding(page) {
     const a = (globalThis.browser ?? globalThis.chrome);
     return a.storage.local.set({
       'onboarding-state': {
-        version: 1,
+        version: 2,
         status: 'completed',
         updatedAt: Date.now(),
         completedAt: Date.now(),
         skippedAt: null,
+        recommendedArchetype: null,
+        chosenArchetype: null,
       },
     });
   });
@@ -111,11 +113,13 @@ export async function resetOnboarding(page) {
     const a = (globalThis.browser ?? globalThis.chrome);
     return a.storage.local.set({
       'onboarding-state': {
-        version: 1,
+        version: 2,
         status: 'pending',
         updatedAt: Date.now(),
         completedAt: null,
         skippedAt: null,
+        recommendedArchetype: null,
+        chosenArchetype: null,
       },
     });
   });
@@ -395,12 +399,23 @@ export async function typeSlowly(locator, text, perCharDelayMs = 90) {
 export async function saveVideo(page, basename) {
   await page.close();
   const src = await page.video().path();
-  // Windows holds a brief lock after close.
-  await sleep(1500);
+  // Windows holds a lock after close; antivirus/indexer may touch file during rename.
+  // Retry logic with exponential backoff to handle transient EBUSY locks.
   const dest = join(VIDEO_DIR, `${basename}.webm`);
-  // rename fails on Windows if dest exists — clear a prior run's clip first.
   await rm(dest, { force: true }).catch(() => undefined);
-  await rename(src, dest);
-  console.log(`  ✓ video: videos/${basename}.webm`);
+
+  let lastErr;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      await sleep(2000 + attempt * 1000);
+      await rename(src, dest);
+      console.log(`  ✓ video: videos/${basename}.webm`);
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (err.code !== 'EBUSY' || attempt === 4) throw err;
+    }
+  }
+  throw lastErr;
 }
 
