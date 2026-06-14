@@ -308,6 +308,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     handlePatchWorkspace,
     handleSetWorkspaceWallpaper,
     handleCreateWorkspace,
+    handleCreateWorkspaceFromFolder,
     handleDeleteWorkspace,
     handleDuplicateWorkspace,
     handleAddWorkspace,
@@ -370,6 +371,19 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setFolderNameTarget({ mode: 'create', parentId: selection.scopeFolderId || defaultParentId(), moveIds: ids });
   }, [selection.scopeFolderId, defaultParentId]);
 
+  const handleCreateFromFolderResult = useCallback((
+    result: 'created' | 'at_max' | 'already_exists',
+    folderTitle: string,
+  ) => {
+    if (result === 'created') {
+      pushToast({ kind: 'info', message: `Workspace "${folderTitle}" created.` });
+    } else if (result === 'at_max') {
+      pushToast({ kind: 'error', message: `Workspace limit reached (${MAX_WORKSPACES}).` });
+    } else {
+      pushToast({ kind: 'info', message: `"${folderTitle}" is already a workspace root.` });
+    }
+  }, [pushToast]);
+
   const { buildContextMenuItems, handleOpenAddMenu, handleWorkspaceContextMenu, handleCanvasContextMenu } = useContextMenuBuilder({
     tree,
     rootFolder,
@@ -380,6 +394,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     handleNewBookmark,
     handleNewFolder,
     handleAddWorkspace,
+    handleCreateWorkspaceFromFolder,
     handlePickFolder,
     handlePickBookmark,
     handleEditBookmark,
@@ -393,6 +408,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setRenameWorkspaceTarget,
     setConfirmDeleteWorkspace,
     onDeleteBookmark: handleDeleteBookmark,
+    onCreateFromFolderResult: handleCreateFromFolderResult,
   });
 
   const searchIndex = useMemo(() => buildSearchIndex(tree, workspaces), [tree, workspaces]);

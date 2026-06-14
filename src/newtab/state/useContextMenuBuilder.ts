@@ -19,6 +19,7 @@ interface UseContextMenuBuilderArgs {
   handleNewBookmark: (parentId?: string, parentTitle?: string) => void;
   handleNewFolder: (parentId?: string, parentTitle?: string) => void;
   handleAddWorkspace: () => void;
+  handleCreateWorkspaceFromFolder: (folderId: string, folderTitle: string) => Promise<'created' | 'at_max' | 'already_exists'>;
   handlePickFolder: (folder: BookmarkNode) => void;
   handlePickBookmark: (item: BookmarkNode) => void;
   handleEditBookmark: (item: BookmarkNode) => void;
@@ -32,6 +33,7 @@ interface UseContextMenuBuilderArgs {
   setRenameWorkspaceTarget: (ws: WorkspaceRecord | null) => void;
   setConfirmDeleteWorkspace: (ws: WorkspaceRecord | null) => void;
   onDeleteBookmark: (item: BookmarkNode) => void | Promise<void>;
+  onCreateFromFolderResult: (result: 'created' | 'at_max' | 'already_exists', folderTitle: string) => void;
 }
 
 interface UseContextMenuBuilderResult {
@@ -52,6 +54,7 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
     handleNewBookmark,
     handleNewFolder,
     handleAddWorkspace,
+    handleCreateWorkspaceFromFolder,
     handlePickFolder,
     handlePickBookmark,
     handleEditBookmark,
@@ -65,6 +68,7 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
     setRenameWorkspaceTarget,
     setConfirmDeleteWorkspace,
     onDeleteBookmark,
+    onCreateFromFolderResult,
   } = args;
 
   const buildContextMenuItems = useCallback((target: BookmarkNode | null, sectionFolder: BookmarkNode | null = null): ContextMenuItem[] => {
@@ -82,6 +86,14 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
       ];
     }
     if (isFolder(target)) {
+      const folderAlreadyWorkspace = workspaces.some(w => w.rootFolderId === target.id);
+      const atMax = workspaces.length >= MAX_WORKSPACES;
+      const createWsDisabled = atMax || folderAlreadyWorkspace;
+      const createWsTitle = atMax
+        ? `Workspace limit reached (${MAX_WORKSPACES})`
+        : folderAlreadyWorkspace
+          ? 'This folder is already a workspace root'
+          : undefined;
       return [
         { kind: 'item', icon: 'folder',     label: 'Open folder', kbd: '↵', onClick: () => handlePickFolder(target) },
         { kind: 'item', icon: 'pencil',     label: 'Rename',
@@ -91,6 +103,9 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
           onClick: () => handleNewBookmark(target.id, target.title) },
         { kind: 'item', icon: 'folderPlus', label: 'New folder inside',
           onClick: () => handleNewFolder(target.id, target.title) },
+        { kind: 'separator' },
+        { kind: 'item', icon: 'folderTree', label: 'Create workspace', disabled: createWsDisabled, title: createWsTitle,
+          onClick: () => { void handleCreateWorkspaceFromFolder(target.id, target.title).then(result => onCreateFromFolderResult(result, target.title)); } },
         { kind: 'separator' },
         { kind: 'item', icon: 'trash', label: 'Delete folder', kbd: IS_MAC ? '⌫' : 'Del', destructive: true,
           onClick: () => setConfirmDeleteFolder(target) },
@@ -131,7 +146,7 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
       { kind: 'item', icon: 'trash',        label: deleteLabel,       kbd: IS_MAC ? '⌫' : 'Del', destructive: true,
         onClick: deleteAction },
     ];
-  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, handleAddWorkspace, workspaces.length, selection, onDeleteBookmark, onMoveSelectionToNewFolder]);
+  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, handleAddWorkspace, handleCreateWorkspaceFromFolder, onCreateFromFolderResult, workspaces, selection, onDeleteBookmark, onMoveSelectionToNewFolder]);
 
   const handleOpenAddMenu = useCallback((x: number, y: number) => {
     const atMax = workspaces.length >= MAX_WORKSPACES;
