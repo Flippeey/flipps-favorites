@@ -1,6 +1,6 @@
 import { extensionApi } from '../shared/browser';
 import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type PatchWorkspaceResponse, type WorkspaceRecord } from '../shared/messages';
-import { deleteWorkspace, ensureWorkspaceViewSortMigration, markOnboardingPending, readBookmarkUsageRecords, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
+import { deleteWorkspace, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, readBookmarkUsageRecords, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
 import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl, sweepGeneratedRecords } from './icons/icon-service';
 
 extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }) => {
@@ -59,6 +59,11 @@ function buildErrorEnvelope(error: unknown): AppErrorResponse {
 }
 
 async function handleMessage(message: AppRequest): Promise<AppResponse> {
+  // One-time, idempotent migration: splits the legacy `workspaces` aggregate key
+  // into per-record `workspace:<id>` sync keys. Must run BEFORE view/sort migration
+  // so writeWorkspace (called by that migration) already uses per-key layout.
+  await ensureWorkspacePerKeyMigration();
+
   // One-time, idempotent copy of legacy global view/sort onto every workspace.
   // Memoized + persisted-marker gated, so this is a cheap no-op after the first
   // run. Covers applyWorkspaceImport's direct newtab-side writeSettings, since

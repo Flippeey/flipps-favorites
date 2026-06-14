@@ -294,3 +294,133 @@ export function createCachedRecordStore<T>(args: {
 function identity<T>(value: T): T {
   return value;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-key record store
+//
+// Stores each record under its own chrome.storage key `<keyPrefix>:<id>` so
+// Chrome sync's 8 KB-per-item limit applies per record rather than to the
+// whole set. readAll enumerates by calling get(null) and filtering by prefix —
+// acceptable for small sets (≤ 20 workspace items + small overhead).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PerKeyRecordStore<T> {
+  readAll: () => Promise<Record<string, T>>;
+  readOne: (id: string) => Promise<T | null>;
+  writeOne: (id: string, value: T) => Promise<void>;
+  deleteOne: (id: string) => Promise<void>;
+  /** Remove every key with this prefix from storage (used during migration tests). */
+  clearAll: () => Promise<void>;
+}
+
+export function createPerKeyRecordStore<T>(args: {
+  keyPrefix: string;
+  area?: StorageAreaPreference;
+  deserializeRecord?: (value: unknown) => T | null;
+}): PerKeyRecordStore<T> {
+  const { keyPrefix, area = 'sync-preferred', deserializeRecord } = args;
+
+  // One shared area resolver so all operations in a lifetime agree on the area.
+  let areaPromise: Promise<ResolvedStorageArea> | null = null;
+
+  const getLocalArea = (): ResolvedStorageArea => ({
+    name: 'local',
+    api: extensionApi.storage.local as unknown as StorageAreaApi,
+  });
+
+  async function resolveArea(): Promise<ResolvedStorageArea> {
+    if (!areaPromise) {
+      areaPromise = (async () => {
+        if (area !== 'sync-preferred') {
+          return getLocalArea();
+        }
+        const syncArea = extensionApi.storage?.sync;
+        if (!syncArea?.get || !syncArea?.set) {
+          return getLocalArea();
+        }
+        try {
+          await (syncArea as unknown as StorageAreaApi).get(null);
+          return { name: 'sync', api: syncArea as unknown as StorageAreaApi };
+        } catch {
+          return getLocalArea();
+        }
+      })();
+    }
+    return areaPromise;
+  }
+
+  function storageKey(id: string): string {
+    return `${keyPrefix}:${id}`;
+  }
+
+  function parseId(key: string): string {
+    return key.slice(keyPrefix.length + 1);
+  }
+
+  function deserialize(raw: unknown): T | null {
+    if (deserializeRecord) return deserializeRecord(raw);
+    return raw as T;
+  }
+
+  return {
+    async readAll(): Promise<Record<string, T>> {
+      const { api } = await resolveArea();
+      const all = await api.get(null);
+      const result: Record<string, T> = {};
+      const prefix = keyPrefix + ':';
+      for (const [key, raw] of Object.entries(all)) {
+        if (!key.startsWith(prefix)) continue;
+        const record = deserialize(raw);
+        if (record !== null) {
+          result[parseId(key)] = record;
+        }
+      }
+      return result;
+    },
+
+    async readOne(id: string): Promise<T | null> {
+      const { api } = await resolveArea();
+      const stored = await api.get(storageKey(id));
+      const raw = stored[storageKey(id)];
+      if (raw === undefined) return null;
+      return deserialize(raw);
+    },
+
+    async writeOne(id: string, value: T): Promise<void> {
+      const { api } = await resolveArea();
+      await api.set({ [storageKey(id)]: value });
+    },
+
+    async deleteOne(id: string): Promise<void> {
+      const { api } = await resolveArea();
+      if (api.remove) {
+        await api.remove(storageKey(id));
+      } else {
+        // Fallback: read–modify–write (shouldn't be needed for standard areas).
+        const all = await api.get(null);
+        const next: Record<string, unknown> = {};
+        for (const [key, val] of Object.entries(all)) {
+          if (key !== storageKey(id)) next[key] = val;
+        }
+        await api.set(next);
+      }
+    },
+
+    async clearAll(): Promise<void> {
+      const { api } = await resolveArea();
+      const all = await api.get(null);
+      const prefix = keyPrefix + ':';
+      const keys = Object.keys(all).filter(k => k.startsWith(prefix));
+      if (!keys.length) return;
+      if (api.remove) {
+        await api.remove(keys);
+      } else {
+        const next: Record<string, unknown> = {};
+        for (const [key, val] of Object.entries(all)) {
+          if (!key.startsWith(prefix)) next[key] = val;
+        }
+        await api.set(next);
+      }
+    },
+  };
+}

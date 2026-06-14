@@ -14,7 +14,7 @@ import {
 import type { AppSettings, BookmarkSortMode, BookmarkUsageRecord, IconCacheRecord, IconOverrideRecord, SortDirection, ViewMode, WorkspaceRecord } from './messages';
 import type { ArchetypeId } from './organization-templates';
 import { getOverrideLookupKeys } from './icon-scope';
-import { createCachedRecordStore, createCachedValueStore } from './storage-buckets';
+import { createCachedRecordStore, createCachedValueStore, createPerKeyRecordStore } from './storage-buckets';
 
 const storageKey = 'app-settings';
 const iconCacheKey = 'icon-cache-records';
@@ -96,14 +96,23 @@ const wallpaperStore = createCachedValueStore<string>({
   },
 });
 
+// Legacy aggregate key — only read during migration; never written after refactor.
 const workspacesKey = 'workspaces';
-// Persisted one-shot marker (storage.local) for the view/sort migration. The
-// memoized promise alone resets on every MV3 service-worker restart, so the
-// marker is what keeps the one-time copy idempotent across restarts.
-const workspaceViewSortMigrationMarkerKey = 'workspace-view-sort-migrated';
 
-const workspacesStore = createCachedRecordStore<WorkspaceRecord>({
-  storageKey: workspacesKey,
+// Per-key prefix: each workspace lives under `workspace:<id>` in sync storage.
+// This lets Chrome sync's 8 KB-per-item limit apply per record (~630 B each)
+// rather than to the whole set, lifting the cap from the interim 10 to 20.
+const workspaceKeyPrefix = 'workspace';
+
+// Persisted one-shot markers (storage.local). The memoized promises alone reset
+// on every MV3 service-worker restart; the markers keep the one-time copies
+// idempotent across restarts.
+const workspaceViewSortMigrationMarkerKey = 'workspace-view-sort-migrated';
+const workspacePerKeyMigrationMarkerKey = 'workspaces-per-key-migrated';
+
+// Per-key store: each WorkspaceRecord lives under `workspace:<id>` in sync.
+const workspacesStore = createPerKeyRecordStore<WorkspaceRecord>({
+  keyPrefix: workspaceKeyPrefix,
   area: 'sync-preferred',
   // Permanent normalize-on-read defense: an older sync peer can write a
   // WorkspaceRecord lacking the per-workspace view/sort fields at any time.
@@ -111,6 +120,7 @@ const workspacesStore = createCachedRecordStore<WorkspaceRecord>({
 });
 
 let workspaceViewSortMigrationPromise: Promise<void> | null = null;
+let workspacePerKeyMigrationPromise: Promise<void> | null = null;
 
 function workspaceWallpaperKey(workspaceId: string): string {
   return `app-wallpaper-${workspaceId}`;
@@ -361,10 +371,17 @@ interface MinimalStorageArea {
 interface ResolvedStorageArea {
   get: (keys: string | string[] | null) => Promise<Record<string, unknown>>;
   set: (items: Record<string, unknown>) => Promise<void>;
+  remove?: (keys: string | string[]) => Promise<void>;
 }
 
 function asResolvedArea(area: MinimalStorageArea | undefined): ResolvedStorageArea | null {
-  return area?.get && area?.set ? { get: area.get.bind(area), set: area.set.bind(area) } : null;
+  if (!area?.get || !area?.set) return null;
+  const resolved: ResolvedStorageArea = {
+    get: area.get.bind(area),
+    set: area.set.bind(area),
+  };
+  if (area.remove) resolved.remove = area.remove.bind(area);
+  return resolved;
 }
 
 // Resolve the area the sync-preferred workspaces/settings stores actually use:
@@ -429,8 +446,29 @@ async function runWorkspaceViewSortMigration(): Promise<void> {
   const legacy = extractLegacyViewSort(rawSettings);
 
   if (legacy) {
-    const records = asRecord(stored[workspacesKey]) as Record<string, unknown>;
-    for (const value of Object.values(records)) {
+    // Per-key migration runs first, so the legacy aggregate key may already be
+    // gone. Build the set of raw values to iterate: prefer the legacy aggregate
+    // key if still present (same-lifetime first-ever upgrade), otherwise read
+    // all per-key records directly from the storage area so we can inspect
+    // the RAW stored value (needed to distinguish "field absent → apply global"
+    // from "field explicitly set → keep as-is").
+    const legacyAggregate = asRecord(stored[workspacesKey]) as Record<string, unknown>;
+    const hasLegacyAggregate = Object.keys(legacyAggregate).length > 0;
+
+    let rawValues: unknown[];
+    if (hasLegacyAggregate) {
+      rawValues = Object.values(legacyAggregate);
+    } else {
+      // Read raw per-key values directly so we preserve the "field absent"
+      // signal that normalizeWorkspaceRecord would otherwise erase.
+      const allRaw = await area.get(null);
+      const prefix = `${workspaceKeyPrefix}:`;
+      rawValues = Object.entries(allRaw)
+        .filter(([k]) => k.startsWith(prefix))
+        .map(([, v]) => v);
+    }
+
+    for (const value of rawValues) {
       const record = normalizeWorkspaceRecord(value);
       if (!record) continue;
       const source = asRecord(value);
@@ -481,6 +519,78 @@ function asRecord(value: unknown): Record<string, unknown> {
     return {};
   }
   return { ...(value as Record<string, unknown>) };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-workspace-key storage migration (#28)
+//
+// Splits the legacy single `workspaces` aggregate sync key into one
+// `workspace:<id>` key per record, then deletes the legacy key and sets a
+// one-shot local marker so the migration never re-runs.
+//
+// Design mirrors ensureWorkspaceViewSortMigration:
+//   - Memoized promise  → no-op within a single SW lifetime
+//   - Persisted marker  → no-op across MV3 SW restarts
+//   - normalizeWorkspaceRecord applied to every record during the split
+//   - Legacy key deleted atomically with writing the marker
+//
+// Call order in service-worker: this migration runs BEFORE the view/sort
+// migration so writeWorkspace (called by view/sort) already uses per-key layout.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function ensureWorkspacePerKeyMigration(): Promise<void> {
+  if (!workspacePerKeyMigrationPromise) {
+    workspacePerKeyMigrationPromise = runWorkspacePerKeyMigration().catch(error => {
+      workspacePerKeyMigrationPromise = null;
+      console.warn('Failed to migrate workspaces to per-key storage.', error);
+    });
+  }
+  await workspacePerKeyMigrationPromise;
+}
+
+async function runWorkspacePerKeyMigration(): Promise<void> {
+  const localArea = asResolvedArea(extensionApi.storage?.local as MinimalStorageArea | undefined);
+  if (!localArea) {
+    return;
+  }
+
+  // Cross-restart short-circuit.
+  const markerStored = await localArea.get(workspacePerKeyMigrationMarkerKey);
+  if (markerStored[workspacePerKeyMigrationMarkerKey] === true) {
+    return;
+  }
+
+  const area = await resolveSyncPreferredArea();
+  if (!area) {
+    return;
+  }
+
+  // Read the legacy aggregate key. If absent (fresh install or already migrated
+  // without marker), just set the marker and return — nothing to split.
+  const stored = await area.get(workspacesKey);
+  const rawMap = stored[workspacesKey];
+
+  if (rawMap && typeof rawMap === 'object') {
+    const records = rawMap as Record<string, unknown>;
+    const writes: Record<string, WorkspaceRecord> = {};
+
+    for (const value of Object.values(records)) {
+      const record = normalizeWorkspaceRecord(value);
+      if (!record) continue;
+      writes[`${workspaceKeyPrefix}:${record.id}`] = record;
+    }
+
+    if (Object.keys(writes).length > 0) {
+      await area.set(writes);
+    }
+
+    // Delete the legacy aggregate key.
+    if (area.remove) {
+      await area.remove(workspacesKey);
+    }
+  }
+
+  await localArea.set({ [workspacePerKeyMigrationMarkerKey]: true });
 }
 
 async function ensureIconOverrideRecordsMigratedToLocal(): Promise<void> {

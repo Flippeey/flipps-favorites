@@ -54,6 +54,8 @@ function installChromeFake(opts: { syncSeed?: Record<string, unknown>; localSeed
 
 const STORAGE_KEY = 'app-settings';
 const WORKSPACES_KEY = 'workspaces';
+// Per-key layout (post-refactor): workspace:<id>
+const perKey = (id: string) => `workspace:${id}`;
 
 function makeWorkspace(id: string, overrides: Partial<WorkspaceRecord> = {}): Record<string, unknown> {
   // A minimal record lacking the new view/sort fields, as a legacy stored record would be.
@@ -116,13 +118,13 @@ describe('ensureWorkspaceViewSortMigration — upgrade', () => {
     const storage = await importStorage();
     await storage.ensureWorkspaceViewSortMigration();
 
-    const records = (sync!.data[WORKSPACES_KEY] ?? {}) as Record<string, WorkspaceRecord>;
-    expect(records.a.folderMode).toBe('list');
-    expect(records.a.bookmarkSortMode).toBe('name');
-    expect(records.a.bookmarkSortDirection).toBe('desc');
-    expect(records.b.folderMode).toBe('list');
-    expect(records.b.bookmarkSortMode).toBe('name');
-    expect(records.b.bookmarkSortDirection).toBe('desc');
+    // writeWorkspace now stores per-key (`workspace:<id>`), not aggregate.
+    expect((sync!.data[perKey('a')] as WorkspaceRecord).folderMode).toBe('list');
+    expect((sync!.data[perKey('a')] as WorkspaceRecord).bookmarkSortMode).toBe('name');
+    expect((sync!.data[perKey('a')] as WorkspaceRecord).bookmarkSortDirection).toBe('desc');
+    expect((sync!.data[perKey('b')] as WorkspaceRecord).folderMode).toBe('list');
+    expect((sync!.data[perKey('b')] as WorkspaceRecord).bookmarkSortMode).toBe('name');
+    expect((sync!.data[perKey('b')] as WorkspaceRecord).bookmarkSortDirection).toBe('desc');
   });
 
   it('clears the legacy view/sort keys from raw app-settings after copying', async () => {
@@ -150,22 +152,22 @@ describe('ensureWorkspaceViewSortMigration — upgrade', () => {
   });
 
   it('fresh install — no legacy keys present → no copy, records untouched', async () => {
+    // Seed using per-key layout (the migration has already run on a fresh install).
     const { sync } = installChromeFake({
       syncSeed: {
         [STORAGE_KEY]: { activeWorkspaceId: 'a' },
-        [WORKSPACES_KEY]: {
-          a: makeWorkspace('a', { folderMode: 'grid', bookmarkSortMode: 'manual', bookmarkSortDirection: 'asc' }),
-        },
+        [perKey('a')]: makeWorkspace('a', { folderMode: 'grid', bookmarkSortMode: 'manual', bookmarkSortDirection: 'asc' }),
       },
+      localSeed: { 'workspaces-per-key-migrated': true },
     });
 
     const storage = await importStorage();
     await storage.ensureWorkspaceViewSortMigration();
 
-    const records = (sync!.data[WORKSPACES_KEY] ?? {}) as Record<string, WorkspaceRecord>;
-    expect(records.a.folderMode).toBe('grid');
-    expect(records.a.bookmarkSortMode).toBe('manual');
-    expect(records.a.bookmarkSortDirection).toBe('asc');
+    // No legacy global keys → nothing to copy; per-key record stays untouched.
+    expect((sync.data[perKey('a')] as WorkspaceRecord).folderMode).toBe('grid');
+    expect((sync.data[perKey('a')] as WorkspaceRecord).bookmarkSortMode).toBe('manual');
+    expect((sync.data[perKey('a')] as WorkspaceRecord).bookmarkSortDirection).toBe('asc');
   });
 });
 
@@ -181,14 +183,13 @@ describe('ensureWorkspaceViewSortMigration — idempotency', () => {
     const storage = await importStorage();
     await storage.ensureWorkspaceViewSortMigration();
 
-    // Simulate a sync peer flipping a record's view AFTER migration. A second
-    // call in the same lifetime must NOT re-copy stale globals over it.
-    const records = sync!.data[WORKSPACES_KEY] as Record<string, Record<string, unknown>>;
-    records.a.folderMode = 'grid';
+    // Simulate a sync peer flipping the per-key record's view AFTER migration.
+    // A second call in the same lifetime must NOT re-copy stale globals over it.
+    (sync!.data[perKey('a')] as Record<string, unknown>).folderMode = 'grid';
 
     await storage.ensureWorkspaceViewSortMigration();
 
-    expect((sync!.data[WORKSPACES_KEY] as Record<string, WorkspaceRecord>).a.folderMode).toBe('grid');
+    expect((sync!.data[perKey('a')] as WorkspaceRecord).folderMode).toBe('grid');
   });
 
   it('cross-restart — marker present + legacy keys gone → migration does NOT re-apply', async () => {
@@ -202,13 +203,13 @@ describe('ensureWorkspaceViewSortMigration — idempotency', () => {
     const storage1 = await importStorage();
     await storage1.ensureWorkspaceViewSortMigration();
 
-    // Capture post-migration state (sync data carries records + cleared settings;
-    // local data carries the persisted one-shot marker).
+    // Capture post-migration state (sync data carries per-key records + cleared
+    // settings; local data carries the persisted one-shot view/sort marker).
     const syncData = { ...first.sync!.data };
     const localData = { ...first.local.data };
 
-    // Simulate a sync peer flipping a record AFTER migration, then a SW restart.
-    (syncData[WORKSPACES_KEY] as Record<string, Record<string, unknown>>).a.folderMode = 'grid';
+    // Simulate a sync peer flipping the per-key record AFTER migration.
+    (syncData[perKey('a')] as Record<string, unknown>).folderMode = 'grid';
 
     // Second lifetime: fresh module (memoized promise reset), marker persisted.
     const second = installChromeFake({ syncSeed: syncData, localSeed: localData });
@@ -216,16 +217,19 @@ describe('ensureWorkspaceViewSortMigration — idempotency', () => {
     await storage2.ensureWorkspaceViewSortMigration();
 
     // No flip: the peer's value survives; migration short-circuited on the marker.
-    expect((second.sync!.data[WORKSPACES_KEY] as Record<string, WorkspaceRecord>).a.folderMode).toBe('grid');
+    expect((second.sync!.data[perKey('a')] as WorkspaceRecord).folderMode).toBe('grid');
   });
 });
 
 describe('normalizeWorkspaceRecord (deserialize-on-read) — sync-peer race', () => {
+  // These tests validate that normalizeWorkspaceRecord is applied when reading
+  // from the per-key layout. Seed using workspace:<id> keys (post-refactor).
+
   it('fills missing view/sort fields with defaults on read; never crashes', async () => {
     installChromeFake({
-      syncSeed: {
-        [WORKSPACES_KEY]: { a: makeWorkspace('a') }, // no view/sort fields
-      },
+      // Seed a per-key record lacking the view/sort fields (sync peer on old version).
+      syncSeed: { [perKey('a')]: makeWorkspace('a') },
+      localSeed: { 'workspaces-per-key-migrated': true },
     });
 
     const storage = await importStorage();
@@ -240,15 +244,14 @@ describe('normalizeWorkspaceRecord (deserialize-on-read) — sync-peer race', ()
   it('rejects malformed values, falling back to defaults (unknown narrowing)', async () => {
     installChromeFake({
       syncSeed: {
-        [WORKSPACES_KEY]: {
-          a: makeWorkspace('a', {
-            // Deliberately invalid literals.
-            folderMode: 'sideways' as unknown as WorkspaceRecord['folderMode'],
-            bookmarkSortMode: 42 as unknown as WorkspaceRecord['bookmarkSortMode'],
-            bookmarkSortDirection: null as unknown as WorkspaceRecord['bookmarkSortDirection'],
-          }),
-        },
+        [perKey('a')]: makeWorkspace('a', {
+          // Deliberately invalid literals.
+          folderMode: 'sideways' as unknown as WorkspaceRecord['folderMode'],
+          bookmarkSortMode: 42 as unknown as WorkspaceRecord['bookmarkSortMode'],
+          bookmarkSortDirection: null as unknown as WorkspaceRecord['bookmarkSortDirection'],
+        }),
       },
+      localSeed: { 'workspaces-per-key-migrated': true },
     });
 
     const storage = await importStorage();
@@ -262,11 +265,10 @@ describe('normalizeWorkspaceRecord (deserialize-on-read) — sync-peer race', ()
   it('drops records missing required identity fields (returns null → excluded)', async () => {
     installChromeFake({
       syncSeed: {
-        [WORKSPACES_KEY]: {
-          good: makeWorkspace('good'),
-          bad: { name: 'no id' }, // missing id/rootFolderId
-        },
+        [perKey('good')]: makeWorkspace('good'),
+        [perKey('bad')]: { name: 'no id' }, // missing id/rootFolderId
       },
+      localSeed: { 'workspaces-per-key-migrated': true },
     });
 
     const storage = await importStorage();
@@ -277,10 +279,9 @@ describe('normalizeWorkspaceRecord (deserialize-on-read) — sync-peer race', ()
   it('preserves explicit valid view/sort values from sync peers', async () => {
     installChromeFake({
       syncSeed: {
-        [WORKSPACES_KEY]: {
-          a: makeWorkspace('a', { folderMode: 'list', bookmarkSortMode: 'created', bookmarkSortDirection: 'desc' }),
-        },
+        [perKey('a')]: makeWorkspace('a', { folderMode: 'list', bookmarkSortMode: 'created', bookmarkSortDirection: 'desc' }),
       },
+      localSeed: { 'workspaces-per-key-migrated': true },
     });
 
     const storage = await importStorage();
@@ -293,7 +294,7 @@ describe('normalizeWorkspaceRecord (deserialize-on-read) — sync-peer race', ()
 });
 
 describe('migration on a local-only profile (no sync area)', () => {
-  it('reads raw legacy globals from local and copies into records', async () => {
+  it('reads raw legacy globals from local and copies into per-key records', async () => {
     const { local } = installChromeFake({
       withSync: false,
       localSeed: {
@@ -305,9 +306,10 @@ describe('migration on a local-only profile (no sync area)', () => {
     const storage = await importStorage();
     await storage.ensureWorkspaceViewSortMigration();
 
-    const records = (local.data[WORKSPACES_KEY] ?? {}) as Record<string, WorkspaceRecord>;
-    expect(records.a.folderMode).toBe('list');
-    expect(records.a.bookmarkSortMode).toBe('name');
-    expect(records.a.bookmarkSortDirection).toBe('desc');
+    // writeWorkspace stores per-key in the resolved area (local here).
+    const stored = local.data[perKey('a')] as WorkspaceRecord;
+    expect(stored.folderMode).toBe('list');
+    expect(stored.bookmarkSortMode).toBe('name');
+    expect(stored.bookmarkSortDirection).toBe('desc');
   });
 });
