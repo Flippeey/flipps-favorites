@@ -468,8 +468,9 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const handleFolderDropOnTab = useCallback(async (
     folderId: string,
     folderTitle: string,
+    insertIndex: number,
   ): Promise<'created' | 'at_max' | 'already_exists'> => {
-    const result = await handleCreateWorkspaceFromFolder(folderId, folderTitle);
+    const result = await handleCreateWorkspaceFromFolder(folderId, folderTitle, insertIndex);
     handleCreateFromFolderResult(result, folderTitle);
     return result;
   }, [handleCreateWorkspaceFromFolder, handleCreateFromFolderResult]);

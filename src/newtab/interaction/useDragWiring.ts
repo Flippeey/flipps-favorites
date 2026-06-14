@@ -29,9 +29,11 @@ interface UseDragWiringArgs {
   onReorderBlocked: () => void;
   // Pushes the post-relocate "Moved …" toast carrying an Undo action.
   pushToast: (input: PushToastInput) => void;
-  // Called when a single folder tile is dropped onto the workspace tab strip.
+  // Called when a single folder tile is dropped into the workspace bar gap.
+  // insertIndex is the position in the ordered list where the new workspace should
+  // be inserted (0 = before first, workspaces.length = after last).
   // Returns the discriminated outcome so the caller can surface a toast.
-  onFolderDropOnTab: (folderId: string, folderTitle: string) => Promise<'created' | 'at_max' | 'already_exists'>;
+  onFolderDropOnTab: (folderId: string, folderTitle: string, insertIndex: number) => Promise<'created' | 'at_max' | 'already_exists'>;
 }
 
 interface UseDragWiringResult {
@@ -94,11 +96,12 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
         }
       } else if (target.kind === 'workspace-new') {
         // Drop in the workspace bar GAP (not on a pill) → create workspace from
-        // a single folder. Multi-item and non-folder gap drops are no-ops.
+        // a single folder, inserted at target.insertIndex in the workspace order.
+        // Multi-item and non-folder gap drops are no-ops.
         if (dragIds.length === 1) {
           const node = findNode(tree, dragIds[0]!);
           if (node && isFolder(node)) {
-            const result = await onFolderDropOnTab(node.id, node.title);
+            const result = await onFolderDropOnTab(node.id, node.title, target.insertIndex);
             void result; // toast surfaced by App.tsx via the onFolderDropOnTab callback
             return;
           }

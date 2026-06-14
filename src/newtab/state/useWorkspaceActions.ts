@@ -30,7 +30,7 @@ interface UseWorkspaceActionsResult {
     name: string,
     overrides?: Partial<Omit<WorkspaceRecord, 'id' | 'name' | 'rootFolderId'>>,
   ) => Promise<string | undefined>;
-  handleCreateWorkspaceFromFolder: (folderId: string, folderTitle: string) => Promise<'created' | 'at_max' | 'already_exists'>;
+  handleCreateWorkspaceFromFolder: (folderId: string, folderTitle: string, insertIndex?: number) => Promise<'created' | 'at_max' | 'already_exists'>;
   handleDeleteWorkspace: (id: string) => Promise<void>;
   handleDuplicateWorkspace: (id: string) => Promise<void>;
   handleAddWorkspace: () => void;
@@ -97,6 +97,7 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
     rootFolderId: string,
     name: string,
     overrides?: Partial<Omit<WorkspaceRecord, 'id' | 'name' | 'rootFolderId'>>,
+    insertIndex?: number,
   ): Promise<string | undefined> => {
     // Read the live list (ref, not closure) so a sequential bulk-create loop sees
     // workspaces added by prior iterations before the next render.
@@ -125,7 +126,22 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
       // workspace (and its accent) before React re-renders.
       workspacesRef.current = [...workspacesRef.current, created];
       setWorkspaces(prev => [...prev, created]);
-      await handlePatch({ activeWorkspaceId: created.id });
+      // If an insertion index was specified, splice the new workspace into the order
+      // at that position so it lands exactly where the user's drag indicator was.
+      // Otherwise, fall back to appending (the new workspace appears at the end via
+      // App.tsx's orderedWorkspaces logic, since it's not yet in workspaceOrder).
+      const patch: Partial<AppSettings> = { activeWorkspaceId: created.id };
+      if (insertIndex !== undefined) {
+        const currentOrder = workspacesRef.current.map(w => w.id).filter(id => id !== created.id);
+        const clampedIndex = Math.max(0, Math.min(insertIndex, currentOrder.length));
+        const nextOrder = [
+          ...currentOrder.slice(0, clampedIndex),
+          created.id,
+          ...currentOrder.slice(clampedIndex),
+        ];
+        patch.workspaceOrder = nextOrder;
+      }
+      await handlePatch(patch);
       return created.id;
     } catch {
       return undefined;
@@ -170,11 +186,12 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
   const handleCreateWorkspaceFromFolder = useCallback(async (
     folderId: string,
     folderTitle: string,
+    insertIndex?: number,
   ): Promise<'created' | 'at_max' | 'already_exists'> => {
     const current = workspacesRef.current;
     if (current.length >= MAX_WORKSPACES) return 'at_max';
     if (current.some(w => w.rootFolderId === folderId)) return 'already_exists';
-    const created = await handleCreateWorkspace(folderId, folderTitle);
+    const created = await handleCreateWorkspace(folderId, folderTitle, undefined, insertIndex);
     return created !== undefined ? 'created' : 'at_max';
   }, [handleCreateWorkspace]);
 

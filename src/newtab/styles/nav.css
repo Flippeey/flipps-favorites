@@ -430,14 +430,9 @@
 }
 
 /* Folder-drag-to-tab drop affordance.
-   Two layers:
-   1. Discovery hint (data-folder-drag-active): very subtle dashed ring that
-      appears as soon as a folder drag begins, so the user discovers the zone.
-      Suppressed at cap where the drop would be rejected.
-   2. Active-hover ring (data-drop-active): fires only when the pointer is
-      actually over the bar gap (no pill ancestor) and the drop target is live.
-      Stronger, pulsing — matches the "you are about to drop here" visual used
-      by dock/folder drop targets elsewhere (accent outline + glow). */
+   Discovery hint (data-folder-drag-active): subtle dashed ring while a folder
+   is dragged anywhere, so the user discovers the drop zone.
+   Suppressed at the workspace cap where the drop would be rejected. */
 .ff-ws-tabs-wrap[data-folder-drag-active]::after {
   content: '';
   position: absolute;
@@ -452,28 +447,17 @@
   display: none;
 }
 
-/* Live bar-gap hover: stronger accent outline + glow, mirrors dock drop target. */
-.ff-ws-tabs-wrap[data-drop-active]::after {
-  content: '';
-  position: absolute;
-  inset: -3px;
-  border-radius: var(--r-md);
-  border: 2px solid var(--accent);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 20%, transparent);
-  opacity: 1;
-  pointer-events: none;
-  animation: ffFolderDropZonePulse 1.4s ease-in-out infinite;
-}
+/* Workspace gap insertion line (bar-gap drop target).
+   Reuses the SAME data-drop-before / data-drop-after attributes and ::before /
+   ::after pseudo-elements already defined for the HTML5 workspace tab-reorder
+   drag above (.ff-ws-tab[data-drop-before]::before, [data-drop-after]::after).
+   useDrag's pointer-drag path now sets these attributes too so the visual is
+   identical: a vertical 2px accent bar at left:-3px (before) or right:-3px (after).
+   No new CSS rules needed — the reorder lines double as the insertion indicator. */
 
-@keyframes ffFolderDropZonePulse {
-  0%, 100% { opacity: 0.6; }
-  50%       { opacity: 1; }
-}
-
-/* While a folder is being dragged, highlight the specific pill that has
-   data-drop-hover (set by useDrag when pointer is over that pill).
-   Uses the same accent-outline pattern as .ff-tile[data-drop-position="inside"]
-   so visual language is consistent across all drag-to-target interactions. */
+/* Pill hover while a tile is dragged over it (move-into-workspace).
+   Accent-outline pattern matches .ff-tile[data-drop-position="inside"]
+   from interactions.css so visual language is consistent. */
 .ff-ws-tab[data-drop-hover="true"] {
   background: color-mix(in oklab, var(--accent) 18%, transparent);
   border-color: var(--accent);
