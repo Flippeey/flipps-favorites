@@ -510,27 +510,6 @@ test('workspace bar shows insertion line between pill 1 and pill 2 while folder 
     await freshPage.waitForTimeout(50);
   }
 
-  // Screenshot while pointer is held at the gap — this is the visual proof.
-  // Use an absolute path so it's written regardless of Playwright's working dir.
-  const screenshotPath = new URL('../../tests/.artifacts/ws-insertion-line.png', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
-  // Clip to the workspace bar area (nav height ~56px) so the thin insertion line
-  // is visible in the screenshot without having to zoom in.
-  const tabsWrapBox = await freshPage.locator('.ff-ws-tabs-wrap').boundingBox();
-  if (tabsWrapBox) {
-    const padding = 20;
-    await freshPage.screenshot({
-      path: screenshotPath,
-      clip: {
-        x: Math.max(0, tabsWrapBox.x - padding),
-        y: Math.max(0, tabsWrapBox.y - padding),
-        width: tabsWrapBox.width + padding * 2,
-        height: tabsWrapBox.height + padding * 2,
-      },
-    });
-  } else {
-    await freshPage.screenshot({ path: screenshotPath });
-  }
-
   // Assert the attribute is set (primary gate: did the drop-position logic fire?).
   // Note: if the gap landed on a pill edge (narrow viewport), dropBefore may still be null.
   expect(dropBefore).toBe('true');
@@ -541,6 +520,8 @@ test('workspace bar shows insertion line between pill 1 and pill 2 while folder 
   //   2. The ::before pseudo-element on pill 2 has non-zero width — it is actually rendered.
   // This ensures the CSS fix (overflow:visible on .ff-ws-tabs-wrap) stays in place and the
   // line isn't silently clipped away by a future CSS regression.
+  // NOTE: this runs BEFORE screenshot() — screenshot() flushes queued browser events which
+  // fires clearDropAttrs() in useDrag.ts, removing data-drop-before and hiding ::before.
   const lineVisible = await freshPage.evaluate(() => {
     const pill2 = document.querySelectorAll<HTMLElement>('.ff-ws-tab')[1];
     if (!pill2) return { ok: false, reason: 'pill2 not found' };
@@ -565,6 +546,29 @@ test('workspace bar shows insertion line between pill 1 and pill 2 while folder 
     return { ok: true, reason: `overflow:visible, ::before ${width}px wide` };
   });
   expect(lineVisible.ok, `Insertion line not visible: ${lineVisible.reason}`).toBe(true);
+
+  // Screenshot while pointer is still held — visual proof artifact.
+  // Intentionally placed AFTER the CSS assertions: screenshot() flushes browser
+  // events which clears drop attributes, so assertions must complete first.
+  // Use an absolute path so it's written regardless of Playwright's working dir.
+  const screenshotPath = new URL('../../tests/.artifacts/ws-insertion-line.png', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
+  // Clip to the workspace bar area (nav height ~56px) so the thin insertion line
+  // is visible in the screenshot without having to zoom in.
+  const tabsWrapBox = await freshPage.locator('.ff-ws-tabs-wrap').boundingBox();
+  if (tabsWrapBox) {
+    const padding = 20;
+    await freshPage.screenshot({
+      path: screenshotPath,
+      clip: {
+        x: Math.max(0, tabsWrapBox.x - padding),
+        y: Math.max(0, tabsWrapBox.y - padding),
+        width: tabsWrapBox.width + padding * 2,
+        height: tabsWrapBox.height + padding * 2,
+      },
+    });
+  } else {
+    await freshPage.screenshot({ path: screenshotPath });
+  }
 
   // Release.
   await freshPage.mouse.up();
