@@ -84,7 +84,6 @@ export interface BookmarkUsageRecord {
 }
 
 export type IconSourceKind = 'override' | 'origin' | 'iconhorse' | 'favicon' | 'search' | 'generated';
-export type IconFitMode = 'contain' | 'cover';
 
 export type IconFetchErrorKind =
   | 'network'
@@ -143,8 +142,6 @@ export interface IconOverrideRecord {
   fileName: string;
   mimeType: string;
   updatedAt: number;
-  // How the image fills the tile. Absent on legacy records === 'contain' (current behavior).
-  fit?: IconFitMode;
 }
 
 export interface IconSearchCandidate {

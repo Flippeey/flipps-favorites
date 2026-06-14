@@ -41,7 +41,6 @@ export async function setIconOverride(request: SetIconOverrideRequest): Promise<
     fileName: request.fileName,
     mimeType: request.mimeType,
     scope: normalizeOverrideScope(request.scope),
-    fit: request.fit,
   });
 }
 
@@ -278,7 +277,7 @@ export async function sweepGeneratedRecords(): Promise<void> {
   }
 }
 
-async function persistIconOverride(args: { bookmarkUrl: string; dataUrl: string; fileName: string; mimeType: string; scope: IconOverrideScope; fit?: IconOverrideRecord['fit'] }): Promise<ResolvedIcon> {
+async function persistIconOverride(args: { bookmarkUrl: string; dataUrl: string; fileName: string; mimeType: string; scope: IconOverrideScope }): Promise<ResolvedIcon> {
   const now = Date.now();
   const overrideKey = getOverrideKeyForScope(args.bookmarkUrl, args.scope)
     ?? `exact:${args.bookmarkUrl}`;
@@ -290,7 +289,6 @@ async function persistIconOverride(args: { bookmarkUrl: string; dataUrl: string;
     fileName: args.fileName,
     mimeType: args.mimeType,
     updatedAt: now,
-    fit: args.fit,
   };
 
   await writeIconOverrideRecord(record);

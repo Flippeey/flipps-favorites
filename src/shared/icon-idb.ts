@@ -4,8 +4,7 @@ import { getOverrideKeyForScope } from './icon-scope';
 const DB_NAME = 'ff-icons';
 // v2: overrides store re-keyed from bookmarkUrl to overrideKey so scoped
 // (host/domain) records can coexist with exact-URL ones.
-// v3: IconOverrideRecord gains optional `fit` field ('contain' | 'cover').
-//     Existing records without fit are treated as 'contain' (no data loss).
+// v3: (historical) added optional `fit` field — now removed; ignored on read.
 const DB_VERSION = 3;
 const STORE_CACHE = 'cache';
 const STORE_OVERRIDES = 'overrides';
@@ -40,23 +39,8 @@ function getDB(): Promise<IDBDatabase> {
               ...legacy,
               scope: 'exact',
               overrideKey: getOverrideKeyForScope(legacy.bookmarkUrl, 'exact') ?? `exact:${legacy.bookmarkUrl}`,
-              fit: 'contain',
             };
             nextStore.put(migrated);
-          }
-        };
-      } else if (oldVersion < 3 && req.transaction) {
-        // v2 → v3: backfill `fit: 'contain'` on records that predate the fit field.
-        // The keyPath and store layout are unchanged; only the records need patching.
-        const upgradeTx = req.transaction;
-        const store = upgradeTx.objectStore(STORE_OVERRIDES);
-        const readAll = store.getAll();
-        readAll.onsuccess = () => {
-          const records = readAll.result as IconOverrideRecord[];
-          for (const record of records) {
-            if (record.fit === undefined) {
-              store.put({ ...record, fit: 'contain' });
-            }
           }
         };
       }
