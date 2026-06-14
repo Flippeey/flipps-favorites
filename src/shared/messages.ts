@@ -30,7 +30,6 @@ export type { IconOverrideScope } from './icon-scope';
 import type {
   AppSettings,
   BookmarkNode,
-  IconFitMode,
   IconSearchCandidate,
   ResolvedIcon,
   WorkspaceRecord,
@@ -156,8 +155,6 @@ export interface SetIconOverrideRequest {
   mimeType: string;
   // How broadly the override applies. Absent (older callers) means 'exact'.
   scope?: IconOverrideScope;
-  // How the image fills the tile. Absent (older callers) means 'contain'.
-  fit?: IconFitMode;
 }
 
 export interface SetIconOverrideResponse {

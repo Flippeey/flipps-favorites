@@ -1,6 +1,5 @@
 import { getBrandName } from '@/shared/url-brand';
 import { ALLOWED_BOOKMARK_SCHEMES } from '@/shared/constants';
-import type { IconFitMode } from '@/shared/models';
 
 export function isValidBookmarkUrl(value: string): boolean {
   try {
@@ -23,17 +22,18 @@ export function getHostname(url: string): string {
   }
 }
 
-/** Pure math: compute the drawImage rect for a given fit mode and canvas size. */
+/**
+ * Pure math: compute the drawImage rect for cover scaling.
+ * Cover (Math.max scale) always fills the canvas and matches the tile's
+ * objectFit:cover rendering — chosen as the fixed default when the inert
+ * contain/cover fit control was removed (issue #29).
+ */
 export function computeIconDrawRect(
   naturalWidth: number,
   naturalHeight: number,
   canvasSize: number,
-  fit: IconFitMode,
 ): { x: number; y: number; width: number; height: number } {
-  const scale =
-    fit === 'cover'
-      ? Math.max(canvasSize / naturalWidth, canvasSize / naturalHeight)
-      : Math.min(canvasSize / naturalWidth, canvasSize / naturalHeight);
+  const scale = Math.max(canvasSize / naturalWidth, canvasSize / naturalHeight);
   const width = naturalWidth * scale;
   const height = naturalHeight * scale;
   return { x: (canvasSize - width) / 2, y: (canvasSize - height) / 2, width, height };
@@ -41,7 +41,6 @@ export function computeIconDrawRect(
 
 export async function normalizeUploadedImage(
   file: File,
-  fit: IconFitMode = 'contain',
 ): Promise<string> {
   const sourceDataUrl = await readFileAsDataUrl(file);
   const image = await loadImageElement(sourceDataUrl);
@@ -64,7 +63,6 @@ export async function normalizeUploadedImage(
     image.naturalWidth,
     image.naturalHeight,
     size,
-    fit,
   );
   context.drawImage(image, x, y, width, height);
 

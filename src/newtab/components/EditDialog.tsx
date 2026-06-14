@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useEscapeKey } from '../interaction/useEscapeKey';
 import type { BookmarkNode, IconSearchCandidate, IconSourceKind, ResolvedIcon } from '@/shared/messages';
-import type { IconFitMode, TileShape } from '@/shared/models';
+import type { TileShape } from '@/shared/models';
 import { getRegistrableDomain, getScopeHostname, type IconOverrideScope } from '@/shared/icon-scope';
 import {
   createBookmark,
@@ -97,10 +97,6 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
   // Default to host scope: picking an icon once should fix every bookmark on the
   // same site (5 dev.azure.com bookmarks = 1 override, not 5).
   const [overrideScope, setOverrideScope] = useState<IconOverrideScope>('host');
-  // How the uploaded icon fills the tile. Only applies to user-uploaded overrides.
-  const [iconFit, setIconFit] = useState<IconFitMode>('contain');
-  // Track the raw File so we can re-normalize when the user toggles fit mode.
-  const lastUploadedFileRef = useRef<File | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Tracks an in-flight candidate apply so a double-click (which fires click →
@@ -277,10 +273,9 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file || !target.id || working) return;
-    lastUploadedFileRef.current = file;
     setWorking(true);
     try {
-      const dataUrl = await normalizeUploadedImage(file, iconFit);
+      const dataUrl = await normalizeUploadedImage(file);
       const icon = await setIconOverride({
         bookmarkUrl,
         bookmarkTitle,
@@ -288,37 +283,10 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
         fileName: file.name,
         mimeType: 'image/png',
         scope: overrideScope,
-        fit: iconFit,
       });
       setPreviewIcon(icon);
       invalidateFaviconCacheForScope(bookmarkUrl, overrideScope);
       setStatus({ kind: 'success', message: 'Icon uploaded.' });
-    } catch (e) {
-      setStatus({ kind: 'error', message: iconPersistenceErrorMessage(e, 'upload') });
-    } finally {
-      setWorking(false);
-    }
-  };
-
-  // Re-normalize + re-save the uploaded icon whenever the user toggles fit mode.
-  const handleFitChange = async (fit: IconFitMode) => {
-    setIconFit(fit);
-    const file = lastUploadedFileRef.current;
-    if (!file || !target.id || working) return;
-    setWorking(true);
-    try {
-      const dataUrl = await normalizeUploadedImage(file, fit);
-      const icon = await setIconOverride({
-        bookmarkUrl,
-        bookmarkTitle,
-        dataUrl,
-        fileName: file.name,
-        mimeType: 'image/png',
-        scope: overrideScope,
-        fit,
-      });
-      setPreviewIcon(icon);
-      invalidateFaviconCacheForScope(bookmarkUrl, overrideScope);
     } catch (e) {
       setStatus({ kind: 'error', message: iconPersistenceErrorMessage(e, 'upload') });
     } finally {
@@ -365,8 +333,6 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
 
             <div className="ff-iconpreview" aria-label="Icon preview">
               {previewSrc ? (
-                // WYSIWYG preview: mirror the tile's fit mode + shape so the dialog
-                // shows exactly what the tile will look like after saving.
                 <div
                   style={{
                     width: '70%',
@@ -382,10 +348,6 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
                     src={previewSrc}
                     alt=""
                     referrerPolicy="no-referrer"
-                    // WYSIWYG: the tile always renders the (already fit-baked) icon
-                    // as objectFit:cover inside a shape-rounded box. Mirror that here
-                    // so contain (letterboxed padding) vs cover (fills) shows the same
-                    // real difference the tile will, instead of a misleading preview.
                     style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                   />
                 </div>
@@ -418,34 +380,6 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
               onChange={handleFileChange}
               style={{ display: 'none' }}
             />
-
-            {canManageIcon && (
-              <div className="ff-field">
-                <label className="ff-field__label">Fit</label>
-                <div className="ff-segmented" role="radiogroup" aria-label="Icon fit mode" style={{ alignSelf: 'stretch' }}>
-                  <button
-                    type="button"
-                    className="ff-segmented__option"
-                    data-active={iconFit === 'contain'}
-                    title="Scale the icon to fit within the tile (default)"
-                    onClick={() => { void handleFitChange('contain'); }}
-                    style={{ flex: 1 }}
-                  >
-                    Contain
-                  </button>
-                  <button
-                    type="button"
-                    className="ff-segmented__option"
-                    data-active={iconFit === 'cover'}
-                    title="Scale the icon to fill the tile, cropping any overflow"
-                    onClick={() => { void handleFitChange('cover'); }}
-                    style={{ flex: 1 }}
-                  >
-                    Cover
-                  </button>
-                </div>
-              </div>
-            )}
 
             {canManageIcon && scopeOptions.length > 1 && (
               <div className="ff-field">

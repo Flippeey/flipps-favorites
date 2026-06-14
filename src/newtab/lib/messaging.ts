@@ -8,7 +8,6 @@ import type {
   GetBookmarkTreeResponse,
   GetIconResponse,
   GetSettingsResponse,
-  IconFitMode,
   IconSearchCandidate,
   InvalidateIconResponse,
   PatchSettingsResponse,
@@ -95,7 +94,6 @@ export async function setIconOverride(args: {
   fileName: string;
   mimeType: string;
   scope?: IconOverrideScope;
-  fit?: IconFitMode;
 }): Promise<ResolvedIcon> {
   const res = await send<SetIconOverrideResponse>({ type: messageTypes.setIconOverride, ...args });
   return res.icon;
