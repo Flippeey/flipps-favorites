@@ -531,10 +531,40 @@ test('workspace bar shows insertion line between pill 1 and pill 2 while folder 
     await freshPage.screenshot({ path: screenshotPath });
   }
 
-  // Now assert the attribute after the screenshot (so the screenshot captures the state).
+  // Assert the attribute is set (primary gate: did the drop-position logic fire?).
   // Note: if the gap landed on a pill edge (narrow viewport), dropBefore may still be null.
-  // The screenshot is the primary proof; the attribute check is the secondary guard.
   expect(dropBefore).toBe('true');
+
+  // Assert the insertion line is VISIBLE (not clipped by overflow:hidden).
+  // Checks:
+  //   1. .ff-ws-tabs-wrap has overflow:visible so the -3px pseudo-elements are not clipped.
+  //   2. The ::before pseudo-element on pill 2 has non-zero width — it is actually rendered.
+  // This ensures the CSS fix (overflow:visible on .ff-ws-tabs-wrap) stays in place and the
+  // line isn't silently clipped away by a future CSS regression.
+  const lineVisible = await freshPage.evaluate(() => {
+    const pill2 = document.querySelectorAll<HTMLElement>('.ff-ws-tab')[1];
+    if (!pill2) return { ok: false, reason: 'pill2 not found' };
+    const wrap = pill2.closest<HTMLElement>('.ff-ws-tabs-wrap');
+    if (!wrap) return { ok: false, reason: 'wrap not found' };
+
+    const wrapOverflow = getComputedStyle(wrap).overflow;
+    if (wrapOverflow !== 'visible') {
+      return { ok: false, reason: `wrap overflow is "${wrapOverflow}", not "visible" — line would be clipped` };
+    }
+
+    const pseudoStyle = getComputedStyle(pill2, '::before');
+    const content = pseudoStyle.content;
+    const width = parseFloat(pseudoStyle.width);
+    if (content === 'none' || content === '') {
+      return { ok: false, reason: `::before content is "${content}" — pseudo-element not rendered` };
+    }
+    if (!(width > 0)) {
+      return { ok: false, reason: `::before width is ${width}px — not rendered` };
+    }
+
+    return { ok: true, reason: `overflow:visible, ::before ${width}px wide` };
+  });
+  expect(lineVisible.ok, `Insertion line not visible: ${lineVisible.reason}`).toBe(true);
 
   // Release.
   await freshPage.mouse.up();

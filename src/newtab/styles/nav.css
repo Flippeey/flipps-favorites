@@ -210,7 +210,7 @@
 /* Workspace tabs */
 .ff-ws-tabs-wrap {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   flex: 1;
   min-width: 0;
 }
