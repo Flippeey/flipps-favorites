@@ -1,5 +1,6 @@
 import type { IconSearchCandidate } from '@/shared/messages';
 import { faviconProviderUrl } from './icon-constants';
+import { extractBrandInfo } from '@/shared/url-brand';
 
 // Re-exported under the legacy name so backend callers + tests keep importing it
 // from here. The implementation now lives in shared/url-brand so the edit dialog
@@ -248,6 +249,7 @@ export function isStockPhotoHost(hostname: string | null): boolean {
     'stock.adobe.',
     'canstockphoto.',
     'bigstockphoto.',
+    'vecteezy.',
   ].some(fragment => hostname.includes(fragment));
 }
 
@@ -258,4 +260,36 @@ export function isCollageTitle(title: string): boolean {
 
 export function stripHtml(value: string): string {
   return value.replace(/<[^>]+>/g, '').trim();
+}
+
+/**
+ * Gate for accepting a DDG first-hit as the AUTO-default icon.
+ * Rejects irrelevant stock art for obscure brands by requiring the brand token
+ * to appear in the candidate's title, image URL, or source page URL.
+ * Also rejects candidates sourced from stock-vendor hosts when the brand token
+ * is absent from the title.
+ *
+ * Returns true (accept) when:
+ *  - Brand token is too short (< 3 chars) to match reliably — skip the gate.
+ *  - Brand token appears in the candidate's label, imageUrl, or sourcePageUrl.
+ *
+ * Returns false (reject) when:
+ *  - Brand token (3+ chars) does not appear anywhere in the candidate fields.
+ */
+export function isDdgFirstHitRelevant(
+  candidate: Pick<IconSearchCandidate, 'label' | 'imageUrl' | 'sourcePageUrl'>,
+  bookmarkUrl: string,
+): boolean {
+  const { brand } = extractBrandInfo(bookmarkUrl);
+  // Short brands (< 3 chars) produce too many false positives — skip the gate.
+  if (brand.length < 3) return true;
+
+  const brandLower = brand.toLowerCase();
+  const label = (candidate.label ?? '').toLowerCase();
+  const imageUrl = (candidate.imageUrl ?? '').toLowerCase();
+  const sourcePageUrl = (candidate.sourcePageUrl ?? '').toLowerCase();
+
+  return label.includes(brandLower)
+    || imageUrl.includes(brandLower)
+    || sourcePageUrl.includes(brandLower);
 }
