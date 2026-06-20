@@ -11,9 +11,10 @@ interface BookmarkTileProps {
   focused?: boolean;
   onClick?: (item: BookmarkNode, event: MouseEvent) => void;
   onContextMenu?: (item: BookmarkNode, event: MouseEvent) => void;
+  onMiddleOpen?: (item: BookmarkNode) => void;
 }
 
-export function BookmarkTile({ item, shape, selected = false, focused = false, onClick, onContextMenu }: BookmarkTileProps) {
+export function BookmarkTile({ item, shape, selected = false, focused = false, onClick, onContextMenu, onMiddleOpen }: BookmarkTileProps) {
   return (
     <button
       className="ff-tile"
@@ -23,6 +24,12 @@ export function BookmarkTile({ item, shape, selected = false, focused = false, o
       data-item-kind="bookmark"
       onClick={(e) => onClick?.(item, e)}
       onContextMenu={(e) => onContextMenu?.(item, e)}
+      onAuxClick={(e) => {
+        if (e.button === 1) {
+          e.preventDefault();
+          onMiddleOpen?.(item);
+        }
+      }}
       title={item.title}
     >
       <div className="ff-tile__icon">
@@ -90,6 +97,7 @@ interface TileForProps {
   onPickFolder?: (folder: BookmarkNode, event: MouseEvent) => void;
   onPickItem?: (item: BookmarkNode, event: MouseEvent) => void;
   onContextMenu?: (item: BookmarkNode, event: MouseEvent) => void;
+  onMiddleOpen?: (item: BookmarkNode) => void;
 }
 
 export function TileFor({
@@ -102,13 +110,14 @@ export function TileFor({
   onPickFolder,
   onPickItem,
   onContextMenu,
+  onMiddleOpen,
 }: TileForProps) {
   const selected = selectedIds && selectionScopeFolderId === scopeFolderId && selectedIds.has(item.id);
   const focused = focusedTileId === item.id;
   return isFolder(item) ? (
     <FolderTile folder={item} shape={shape} selected={selected} focused={focused} onClick={onPickFolder} onContextMenu={onContextMenu} />
   ) : (
-    <BookmarkTile item={item} shape={shape} selected={selected} focused={focused} onClick={onPickItem} onContextMenu={onContextMenu} />
+    <BookmarkTile item={item} shape={shape} selected={selected} focused={focused} onClick={onPickItem} onContextMenu={onContextMenu} onMiddleOpen={onMiddleOpen} />
   );
 }
 
