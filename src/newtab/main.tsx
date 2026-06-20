@@ -4,6 +4,8 @@ import './styles/index.css';
 import { App } from './App';
 import { getBookmarkTree, getSettings, getWorkspaces } from './lib/messaging';
 import { readOnboardingState } from '../shared/storage';
+import { EAGER_ICON_PREFETCH } from '../shared/constants';
+import { prefetchAllIconsEager } from './lib/icon-prefetch';
 
 async function bootstrap() {
   const container = document.getElementById('app');
@@ -34,6 +36,15 @@ async function bootstrap() {
     initialTree = tree;
     initialWorkspaces = workspaces;
     initialOnboardOpen = onboardingState.status === 'pending';
+
+    // Start icon fetches BEFORE React mounts the grid so that by the time
+    // <Favicon> components render, results are already in the in-memory
+    // cache or in-flight (deduped by favicon-cache.ts).  The existing
+    // App.tsx useEffect keeps idle-scheduled prefetch as a safety net for
+    // subsequent tree changes.
+    if (EAGER_ICON_PREFETCH) {
+      prefetchAllIconsEager(tree);
+    }
   } catch {
     const fallback = document.createElement('div');
     fallback.style.cssText = 'padding:24px;color:#B8B3AC;font-family:system-ui';
