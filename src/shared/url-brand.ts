@@ -1,3 +1,81 @@
+// ---------------------------------------------------------------------------
+// Minimal RFC 3492 punycode → unicode decoder (xn-- labels only).
+// No Node `punycode` module — unavailable in MV3 service workers.
+// ---------------------------------------------------------------------------
+
+const BASE = 36;
+const TMIN = 1;
+const TMAX = 26;
+const SKEW = 38;
+const DAMP = 700;
+const INITIAL_BIAS = 72;
+const INITIAL_N = 128;
+
+function decodeDigit(cp: number): number {
+  // a-z → 0-25, 0-9 → 26-35
+  if (cp >= 0x61 && cp <= 0x7A) return cp - 0x61;
+  if (cp >= 0x30 && cp <= 0x39) return cp - 0x30 + 26;
+  return BASE; // invalid
+}
+
+function adapt(delta: number, numPoints: number, firstTime: boolean): number {
+  let d = firstTime ? Math.floor(delta / DAMP) : delta >> 1;
+  d += Math.floor(d / numPoints);
+  let k = 0;
+  while (d > ((BASE - TMIN) * TMAX) >> 1) {
+    d = Math.floor(d / (BASE - TMIN));
+    k += BASE;
+  }
+  return k + Math.floor(((BASE - TMIN + 1) * d) / (d + SKEW));
+}
+
+/** Decode a single punycode-encoded string (the part after "xn--"). */
+function decodePunycode(encoded: string): string {
+  const output: number[] = [];
+  const lastDelim = encoded.lastIndexOf('-');
+
+  // Copy the basic (ASCII) portion
+  for (let i = 0; i < (lastDelim > 0 ? lastDelim : 0); i++) {
+    output.push(encoded.charCodeAt(i));
+  }
+
+  let n = INITIAL_N;
+  let bias = INITIAL_BIAS;
+  let i = 0;
+
+  for (let idx = lastDelim > 0 ? lastDelim + 1 : 0; idx < encoded.length;) {
+    const oldi = i;
+    let w = 1;
+    for (let k = BASE; ; k += BASE) {
+      if (idx >= encoded.length) break;
+      const digit = decodeDigit(encoded.charCodeAt(idx++));
+      if (digit >= BASE) break;
+      i += digit * w;
+      const t = k <= bias ? TMIN : k >= bias + TMAX ? TMAX : k - bias;
+      if (digit < t) break;
+      w *= BASE - t;
+    }
+    const len = output.length + 1;
+    bias = adapt(i - oldi, len, oldi === 0);
+    n += Math.floor(i / len);
+    i %= len;
+    output.splice(i, 0, n);
+    i++;
+  }
+
+  return String.fromCodePoint(...output);
+}
+
+/** Decode IDN hostname labels: convert any `xn--*` label to unicode. */
+function decodeIdnHostname(hostname: string): string {
+  return hostname
+    .split('.')
+    .map(label =>
+      label.startsWith('xn--') ? decodePunycode(label.slice(4)) : label,
+    )
+    .join('.');
+}
+
 const REGISTRY_SLDS = new Set(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac', 'ne', 'or']);
 const GENERIC_SUBDOMAIN_RE = /^(?:www2?|m|mobile|app|apps|secure|login|account|accounts|signin|auth|my|portal|dashboard|web)\./i;
 const PERSONAL_INFRA_TLDS = new Set(['local', 'lan', 'home', 'internal', 'intranet']);
@@ -16,10 +94,10 @@ export interface BrandInfo {
 
 function safeHostname(url: string): string | null {
   try {
-    return new URL(url).hostname.toLowerCase() || null;
+    return decodeIdnHostname(new URL(url).hostname.toLowerCase()) || null;
   } catch {
     try {
-      return new URL(`https://${url}`).hostname.toLowerCase() || null;
+      return decodeIdnHostname(new URL(`https://${url}`).hostname.toLowerCase()) || null;
     } catch {
       return null;
     }

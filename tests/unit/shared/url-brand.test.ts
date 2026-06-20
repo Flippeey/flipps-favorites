@@ -36,6 +36,32 @@ describe('getBrandName — unchanged display brand (root only)', () => {
   });
 });
 
+describe('extractBrandInfo — IDN/punycode decode', () => {
+  it('decodes xn-- punycode labels to unicode so brand queries are human-readable', () => {
+    // www.xn--bcher-kva.de → bücher (German bookshop)
+    expect(extractBrandInfo('https://www.xn--bcher-kva.de')).toEqual({ brand: 'bücher', subdomain: '', isPersonalInfra: false });
+    // xn--n3h.example.com → ☃ (snowman, single non-ASCII char)
+    expect(extractBrandInfo('https://xn--n3h.example.com')).toEqual({ brand: 'example', subdomain: '☃', isPersonalInfra: false });
+  });
+
+  it('leaves non-punycode labels untouched', () => {
+    expect(extractBrandInfo('https://example.com')).toEqual({ brand: 'example', subdomain: '', isPersonalInfra: false });
+    expect(extractBrandInfo('https://www.google.com')).toEqual({ brand: 'google', subdomain: '', isPersonalInfra: false });
+  });
+});
+
+describe('buildBrandSearchQuery — IDN/punycode decode', () => {
+  it('produces a unicode brand query instead of xn-- gibberish', () => {
+    expect(buildBrandSearchQuery('https://www.xn--bcher-kva.de')).toBe('bücher logo');
+  });
+
+  it('does not alter non-IDN queries (regression-safe)', () => {
+    expect(buildBrandSearchQuery('https://github.com')).toBe('github logo');
+    expect(buildBrandSearchQuery('https://www.google.com')).toBe('google logo');
+    expect(buildBrandSearchQuery('https://drive.google.com')).toBe('google drive logo');
+  });
+});
+
 describe('buildBrandSearchQuery — shared search seed (auto-resolve + edit dialog)', () => {
   it('combines brand + meaningful subdomain so multi-tenant products resolve themselves', () => {
     // This is the regression the edit dialog had: it seeded "google logo" instead
