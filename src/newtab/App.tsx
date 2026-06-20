@@ -295,6 +295,14 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     else window.location.href = url;
   }, [settings.openLinksInNewTab]);
 
+  const openInNewTab = useCallback((item: BookmarkNode) => {
+    if (!item.url) return;
+    const usedAt = Date.now();
+    setUsage(prev => ({ ...prev, [item.id]: usedAt }));
+    recordBookmarkUse(item.id).catch(() => { /* ignore */ });
+    window.open(normalizeBookmarkUrl(item.url), '_blank', 'noopener');
+  }, []);
+
   const { selection, setSelection, selectionRef, handleTileClick } = useSelection({
     navItems,
     rootFolder,
@@ -657,6 +665,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             shape={tileShape}
             onPickFolder={handleTileClick}
             onPickItem={handleTileClick}
+            onMiddleOpen={openInNewTab}
             selectedIds={selection.ids}
             selectionScopeFolderId={selection.scopeFolderId}
             focusedTileId={focusedTileId}
@@ -671,6 +680,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             onEmptyAdd={() => handleNewBookmark()}
             onPickFolder={handleTileClick}
             onPickItem={handleTileClick}
+            onMiddleOpen={openInNewTab}
             onSectionMenu={(folder, event) => {
               const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
               setContextMenu({
@@ -692,6 +702,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             onEmptyAdd={() => handleNewBookmark()}
             onPickFolder={handleTileClick}
             onPickItem={handleTileClick}
+            onMiddleOpen={openInNewTab}
             selectedIds={selection.ids}
             selectionScopeFolderId={selection.scopeFolderId}
             focusedTileId={focusedTileId}

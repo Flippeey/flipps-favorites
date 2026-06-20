@@ -8,6 +8,7 @@ interface BaseViewProps {
   onPickFolder: (folder: BookmarkNode, event: MouseEvent) => void;
   onPickItem: (item: BookmarkNode, event: MouseEvent) => void;
   onContextMenu?: (target: BookmarkNode, event: MouseEvent) => void;
+  onMiddleOpen?: (item: BookmarkNode) => void;
   selectedIds?: ReadonlySet<string>;
   selectionScopeFolderId?: string;
   focusedTileId?: string | null;
@@ -53,7 +54,7 @@ function isSelectedIn(scope: string, containerScope: string, ids: ReadonlySet<st
   return ids.has(itemId);
 }
 
-export function TilesView({ tree, rootBookmarks, shape, scopeFolderId, onPickFolder, onPickItem, onContextMenu, selectedIds, selectionScopeFolderId, focusedTileId, onEmptyAdd }: TilesViewProps) {
+export function TilesView({ tree, rootBookmarks, shape, scopeFolderId, onPickFolder, onPickItem, onContextMenu, onMiddleOpen, selectedIds, selectionScopeFolderId, focusedTileId, onEmptyAdd }: TilesViewProps) {
   if (tree.length === 0 && (rootBookmarks ?? []).length === 0) {
     return <EmptyRoot scopeFolderId={scopeFolderId} onAdd={onEmptyAdd} />;
   }
@@ -79,13 +80,14 @@ export function TilesView({ tree, rootBookmarks, shape, scopeFolderId, onPickFol
           focused={focusedTileId === item.id}
           onClick={onPickItem}
           onContextMenu={onContextMenu}
+          onMiddleOpen={onMiddleOpen}
         />
       ))}
     </div>
   );
 }
 
-export function SectionsView({ tree, rootBookmarks, shape, scopeFolderId, dragEnabled, onPickFolder, onPickItem, onSectionMenu, onContextMenu, selectedIds, selectionScopeFolderId, focusedTileId, onEmptyAdd }: SectionsViewProps) {
+export function SectionsView({ tree, rootBookmarks, shape, scopeFolderId, dragEnabled, onPickFolder, onPickItem, onSectionMenu, onContextMenu, onMiddleOpen, selectedIds, selectionScopeFolderId, focusedTileId, onEmptyAdd }: SectionsViewProps) {
   if (tree.length === 0 && (rootBookmarks ?? []).length === 0) {
     return <EmptyRoot scopeFolderId={scopeFolderId} onAdd={onEmptyAdd} />;
   }
@@ -105,6 +107,7 @@ export function SectionsView({ tree, rootBookmarks, shape, scopeFolderId, dragEn
               onPickFolder={onPickFolder}
               onPickItem={onPickItem}
               onContextMenu={onContextMenu}
+              onMiddleOpen={onMiddleOpen}
             />
           ))}
         </div>
@@ -129,6 +132,7 @@ export function SectionsView({ tree, rootBookmarks, shape, scopeFolderId, dragEn
                 onPickFolder={onPickFolder}
                 onPickItem={onPickItem}
                 onContextMenu={onContextMenu}
+                onMiddleOpen={onMiddleOpen}
               />
             ))}
           </div>
@@ -142,7 +146,7 @@ interface FolderPageViewProps extends BaseViewProps {
   folder: BookmarkNode;
 }
 
-export function FolderPageView({ folder, shape, onPickFolder, onPickItem, onContextMenu, selectedIds, selectionScopeFolderId, focusedTileId }: FolderPageViewProps) {
+export function FolderPageView({ folder, shape, onPickFolder, onPickItem, onContextMenu, onMiddleOpen, selectedIds, selectionScopeFolderId, focusedTileId }: FolderPageViewProps) {
   const children = folder.children ?? [];
   return (
     <div className="ff-page-view" data-scope-folder-id={folder.id}>
@@ -159,6 +163,7 @@ export function FolderPageView({ folder, shape, onPickFolder, onPickItem, onCont
             onPickFolder={onPickFolder}
             onPickItem={onPickItem}
             onContextMenu={onContextMenu}
+            onMiddleOpen={onMiddleOpen}
           />
         ))}
       </div>

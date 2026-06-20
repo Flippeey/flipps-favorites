@@ -119,3 +119,60 @@ test('renaming a folder updates its tile title', async ({ newtabPage }) => {
 
   await expect(tile).toHaveAttribute('title', 'Renamed Folder', { timeout: 5_000 });
 });
+
+test('middle-click on a bookmark tile opens it in a new tab', async ({ newtabPage }) => {
+  const bmUrl = 'https://middle-click.example.com/page';
+  const bmId = await createTestBookmark(newtabPage, rootId, 'Middle Click Target', bmUrl);
+  await reloadNewtab(newtabPage);
+
+  const tile = tileById(newtabPage, bmId);
+  await tile.waitFor();
+
+  // Intercept window.open and record calls instead of actually opening tabs.
+  const openCalls = await newtabPage.evaluate(() => {
+    const calls: { url: string; target: string }[] = [];
+    (window as any).__openCalls = calls;
+    window.open = (...args: unknown[]) => {
+      calls.push({ url: String(args[0]), target: String(args[1]) });
+      return null;
+    };
+    return calls;
+  });
+
+  // Dispatch a middle-click (button 1) on the bookmark tile.
+  await tile.click({ button: 'middle' });
+
+  // Verify window.open was called with the bookmark URL in a new tab.
+  const captured = await newtabPage.evaluate(() => (window as any).__openCalls as { url: string; target: string }[]);
+  expect(captured).toHaveLength(1);
+  expect(captured[0].url).toBe(bmUrl);
+  expect(captured[0].target).toBe('_blank');
+
+  // Verify selection was NOT changed by the middle-click.
+  const selectedCount = await newtabPage.locator('.ff-tile[data-selected="true"]').count();
+  expect(selectedCount).toBe(0);
+});
+
+test('middle-click on a folder tile does NOT open a new tab', async ({ newtabPage }) => {
+  const folderId = await createSubFolder(newtabPage, rootId, 'Folder No Middle');
+  await reloadNewtab(newtabPage);
+
+  const tile = tileById(newtabPage, folderId);
+  await tile.waitFor();
+
+  // Intercept window.open.
+  await newtabPage.evaluate(() => {
+    const calls: { url: string; target: string }[] = [];
+    (window as any).__openCalls = calls;
+    window.open = (...args: unknown[]) => {
+      calls.push({ url: String(args[0]), target: String(args[1]) });
+      return null;
+    };
+  });
+
+  await tile.click({ button: 'middle' });
+
+  // Folder tile should NOT have triggered window.open.
+  const captured = await newtabPage.evaluate(() => (window as any).__openCalls as { url: string; target: string }[]);
+  expect(captured).toHaveLength(0);
+});
