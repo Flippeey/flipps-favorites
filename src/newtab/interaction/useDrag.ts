@@ -41,7 +41,7 @@ function closestScopeId(el: HTMLElement | null, rootFolderId: string): string {
   return scopeEl?.dataset.scopeFolderId || rootFolderId;
 }
 
-function clearDropAttrs({ includeSource }: { includeSource: boolean }): void {
+export function clearDropAttrs({ includeSource }: { includeSource: boolean }): void {
   document.querySelectorAll<HTMLElement>('[data-item-id][data-drop-position]').forEach(el => {
     delete el.dataset.dropPosition;
   });
@@ -533,6 +533,14 @@ export function useDrag({
     window.addEventListener('keydown', onKey);
     return () => {
       if (stateRef.current?.springTimer) clearTimeout(stateRef.current.springTimer);
+      // Clear any stale drag-source / drop-indicator attributes left on the DOM.
+      // Without this, an in-flight drag whose effect re-runs (surface change,
+      // unmount, or dependency update) leaves tiles with data-drag-source="true"
+      // → they render at 0.35 opacity ("muted favicons" bug).
+      clearDropAttrs({ includeSource: true });
+      setPreview(null);
+      if (dragEngagedRef) dragEngagedRef.current = false;
+      stateRef.current = null;
       canvas.removeEventListener('pointerdown', onDown);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);

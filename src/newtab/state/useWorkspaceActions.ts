@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { AppSettings, WorkspaceRecord } from '@/shared/messages';
 import type { MarqueeSelection } from '../interaction/useMarquee';
+import { clearDropAttrs } from '../interaction/useDrag';
 import { createWorkspace, deleteWorkspace, patchSettings, patchWorkspace } from '../lib/messaging';
 import { defaultWorkspaceSettings, readWorkspaceWallpaper, writeWorkspaceWallpaper } from '@/shared/storage';
 import { MAX_WORKSPACES } from '@/shared/constants';
@@ -67,6 +68,9 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
 
   const handleSwitchWorkspace = useCallback(async (id: string) => {
     setIsSwitching(true);
+    // Defensively wipe any stale drag-source / drop-indicator attributes so tiles
+    // from the outgoing workspace don't render at reduced opacity in the new one.
+    clearDropAttrs({ includeSource: true });
     await new Promise(r => setTimeout(r, 130));
     setFolderPath([]);
     setSelection({ ids: new Set(), scopeFolderId: '' });
