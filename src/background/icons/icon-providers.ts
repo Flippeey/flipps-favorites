@@ -29,6 +29,7 @@ import {
   stripHtml,
   clampFaviconSize,
   isCrossRootRedirect,
+  isDdgFirstHitRelevant,
 } from './icon-classify';
 import {
   parseOriginIconCandidates,
@@ -313,10 +314,14 @@ export async function fetchDuckDuckGoFirstHit(request: GetIconRequest, cacheKey:
   const query = buildSearchQueryFromBookmark(request.bookmarkUrl);
   if (!query) return null;
 
-  const candidates = await Promise.race([
+  const allCandidates = await Promise.race([
     searchDuckDuckGoImages(query, request.bookmarkUrl).catch(() => [] as IconSearchCandidate[]),
     sleep(ddgFirstHitTimeoutMs).then(() => [] as IconSearchCandidate[]),
   ]);
+  // Gate: only try candidates whose title/URL show brand relevance.
+  // Irrelevant stock art (e.g. "Letter TBC Monogram" for tbcarmory.com)
+  // is filtered out so the pipeline falls through to the generated letter-tile.
+  const candidates = allCandidates.filter(c => isDdgFirstHitRelevant(c, request.bookmarkUrl));
   if (!candidates.length) return null;
 
   for (const candidate of candidates.slice(0, 3)) {
