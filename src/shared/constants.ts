@@ -15,3 +15,9 @@ export const MAX_WORKSPACES = 20;
 // local files. Note: chrome://, edge://, about: bookmarks save + display, but
 // an extension page is blocked from opening them via window.open on click.
 export const ALLOWED_BOOKMARK_SCHEMES = ['http:', 'https:', 'chrome:', 'edge:', 'about:', 'file:'] as const;
+
+// When true, icon prefetch fires immediately during bootstrap (before React
+// mounts the grid) instead of deferring via requestIdleCallback.  This
+// eliminates the letter-tile placeholder flash on cold start.  Set to false
+// to revert to the deferred behaviour if startup-latency regressions appear.
+export const EAGER_ICON_PREFETCH = true;

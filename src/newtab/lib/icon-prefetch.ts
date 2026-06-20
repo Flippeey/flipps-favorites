@@ -39,24 +39,39 @@ function scheduleIdle(fn: () => void): void {
   }
 }
 
-export function prefetchAllIcons(tree: BookmarkNode[]): void {
-  scheduleIdle(() => {
-    const items: PrefetchItem[] = [];
-    collectBookmarks(tree, items);
-    const pending = items.filter(item => !prefetchedUrls.has(item.url) && !isFaviconCached(item.url));
-    if (pending.length === 0) return;
+function runPrefetchBatch(tree: BookmarkNode[]): void {
+  const items: PrefetchItem[] = [];
+  collectBookmarks(tree, items);
+  const pending = items.filter(item => !prefetchedUrls.has(item.url) && !isFaviconCached(item.url));
+  if (pending.length === 0) return;
 
-    let cursor = 0;
-    const worker = async () => {
-      while (cursor < pending.length) {
-        const idx = cursor++;
-        const { url, title } = pending[idx];
-        prefetchedUrls.add(url);
-        await prefetchFavicon(url, title);
-      }
-    };
-    for (let i = 0; i < CONCURRENCY; i += 1) {
-      void worker();
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < pending.length) {
+      const idx = cursor++;
+      const { url, title } = pending[idx];
+      prefetchedUrls.add(url);
+      await prefetchFavicon(url, title);
     }
-  });
+  };
+  for (let i = 0; i < CONCURRENCY; i += 1) {
+    void worker();
+  }
+}
+
+/**
+ * Eager prefetch for bootstrap — fires immediately (no idle scheduling).
+ * Call from main.tsx BEFORE createRoot().render() so icon fetches are
+ * in-flight before <Favicon> components mount.
+ */
+export function prefetchAllIconsEager(tree: BookmarkNode[]): void {
+  runPrefetchBatch(tree);
+}
+
+/**
+ * Deferred prefetch for tree-change refreshes — schedules via
+ * requestIdleCallback to avoid blocking user interaction.
+ */
+export function prefetchAllIcons(tree: BookmarkNode[]): void {
+  scheduleIdle(() => runPrefetchBatch(tree));
 }
