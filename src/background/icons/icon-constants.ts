@@ -16,6 +16,10 @@ export const originFetchTimeoutMs = 2000;
 export const iconHorseTimeoutMs = 2500;
 export const s2TimeoutMs = 2000;
 export const ddgFirstHitTimeoutMs = 4000;
+// Total time budget for the candidate fetch loop in fetchDuckDuckGoFirstHit.
+// Caps worst-case latency (8 candidates x 2 fetches x 4s each = 64s) to prevent
+// semaphore starvation. Returns best result found so far / null when exceeded.
+export const ddgCandidateBudgetMs = 15_000;
 export const sweepBatchSize = 4;
 export const sweepBatchSpacingMs = 250;
 export const maxConcurrentResolutions = 6;

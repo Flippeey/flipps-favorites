@@ -716,6 +716,76 @@ describe('brandMatchesAsToken — regex metacharacter safety', () => {
 // ---------------------------------------------------------------------------
 // scoreDuckDuckGoResult — IP and single-label hosts
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// FIX 3 — Same-domain logo-token acceptance without brand substring
+//
+// A same-domain file named *-logo.png / *-brand-logo.png on the brand's own
+// domain should be accepted even when the brand token is NOT in the filename.
+// Example: Firefox-parent-brand-logo.png on mozilla.org with brand "mozilla"
+// is mozilla's own logo file, not a foreign brand.
+// But: Rabobank-logo.png on twinq.nl with brand "twinq" MUST still be rejected
+// (foreign brand detection handles this case).
+// ---------------------------------------------------------------------------
+describe('FIX 3 — same-domain logo-token acceptance without brand substring', () => {
+  it('isDdgFirstHitRelevant accepts same-domain Firefox-parent-brand-logo.png on mozilla.org', () => {
+    expect(isDdgFirstHitRelevant(
+      {
+        label: 'Firefox Browser',
+        imageUrl: 'https://mozilla.org/media/Firefox-parent-brand-logo.png',
+        sourcePageUrl: 'https://mozilla.org/',
+      },
+      'https://addons.mozilla.org/en-US/developers/',
+    )).toBe(true);
+  });
+
+  it('isDdgFirstHitRelevant accepts same-domain logo.svg without brand in filename', () => {
+    // A file literally named "logo.svg" on the brand's domain is always a legit logo
+    expect(isDdgFirstHitRelevant(
+      {
+        label: 'Mozilla Foundation',
+        imageUrl: 'https://mozilla.org/images/logo.svg',
+        sourcePageUrl: 'https://mozilla.org/',
+      },
+      'https://addons.mozilla.org/en-US/developers/',
+    )).toBe(true);
+  });
+
+  it('isDdgFirstHitRelevant accepts same-domain brand-logo.png (logo token with generic prefix)', () => {
+    // "brand-logo.png" has a logo token and "brand" is in the generic tokens set,
+    // so detectForeignBrandInImage returns null (not a foreign brand).
+    expect(isDdgFirstHitRelevant(
+      {
+        label: 'Add-ons for Firefox',
+        imageUrl: 'https://mozilla.org/media/img/brand-logo.png',
+        sourcePageUrl: 'https://addons.mozilla.org/',
+      },
+      'https://addons.mozilla.org/en-US/developers/',
+    )).toBe(true);
+  });
+
+  it('isDdgFirstHitRelevant still rejects Rabobank-logo.png on twinq.nl (foreign brand)', () => {
+    expect(isDdgFirstHitRelevant(
+      {
+        label: 'VvE Portaal - TwinQ',
+        imageUrl: 'https://twinq.nl/wp-content/uploads/2024/08/Rabobank-Logo-937x1080.jpg',
+        sourcePageUrl: 'https://twinq.nl/vve-portaal/',
+      },
+      'https://phidec.twinq.nl/apex/f?p=TPL:101',
+    )).toBe(false);
+  });
+
+  it('isDdgFirstHitRelevant still rejects same-domain staff photos', () => {
+    expect(isDdgFirstHitRelevant(
+      {
+        label: 'Our Team',
+        imageUrl: 'https://mozilla.org/media/team-photo.jpg',
+        sourcePageUrl: 'https://mozilla.org/about/',
+      },
+      'https://addons.mozilla.org/en-US/developers/',
+    )).toBe(false);
+  });
+});
+
 describe('scoreDuckDuckGoResult — IP and single-label hosts', () => {
   it('does not crash and does not false-match domain affinity for an IP bookmark host', () => {
     const terms = tokenizeQuery('homelab logo');

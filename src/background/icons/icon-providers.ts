@@ -16,6 +16,7 @@ import {
   iconHorseTimeoutMs,
   s2TimeoutMs,
   ddgFirstHitTimeoutMs,
+  ddgCandidateBudgetMs,
   getIconCacheKey,
 } from './icon-constants';
 import { getOverrideKeyForScope, normalizeOverrideScope, type IconOverrideScope } from '@/shared/icon-scope';
@@ -30,6 +31,7 @@ import {
   clampFaviconSize,
   isCrossRootRedirect,
   isDdgFirstHitRelevant,
+  rankCandidatesByShape,
 } from './icon-classify';
 import {
   parseOriginIconCandidates,
@@ -306,6 +308,8 @@ export async function searchDuckDuckGoImages(query: string, bookmarkUrl?: string
         label: stripHtml(result.title) || query,
         sourceKind: 'search' as const,
         sourcePageUrl: result.url,
+        width: result.width,
+        height: result.height,
       }));
   });
 }
@@ -321,24 +325,20 @@ export async function fetchDuckDuckGoFirstHit(request: GetIconRequest, cacheKey:
   // Gate: only try candidates whose title/URL show brand relevance.
   // Irrelevant stock art (e.g. "Letter TBC Monogram" for tbcarmory.com)
   // is filtered out so the pipeline falls through to the generated letter-tile.
-  const candidates = allCandidates.filter(c => isDdgFirstHitRelevant(c, request.bookmarkUrl));
-  if (!candidates.length) return null;
+  const gated = allCandidates.filter(c => isDdgFirstHitRelevant(c, request.bookmarkUrl));
+  if (!gated.length) return null;
 
-  for (const candidate of candidates.slice(0, 3)) {
-    const record = await fetchAndValidateImage({
-      imageUrl: candidate.imageUrl,
-      bookmarkUrl: request.bookmarkUrl,
-      cacheKey,
-      sourceKind: 'search',
-      timeoutMs: 4000,
-      minimumEdge: minimumAcceptedIconSize,
-      requireOpaqueCenter: false,
-    }).catch(() => null);
-    if (record) return record;
+  // Pre-rank by shape: try roughly-square candidates before wide/tall ones so
+  // the fetch budget is spent on logo-shaped images, not wide OpenGraph cards.
+  const candidates = rankCandidatesByShape(gated);
 
-    if (candidate.previewUrl && candidate.previewUrl !== candidate.imageUrl) {
-      const previewRecord = await fetchAndValidateImage({
-        imageUrl: candidate.previewUrl,
+  // Wrap the candidate loop in a total time budget so a cluster of slow/failing
+  // hosts can't monopolize a resolutionSemaphore slot indefinitely. Returns the
+  // first valid result or null when the budget expires.
+  const tryAllCandidates = async (): Promise<IconCacheRecord | null> => {
+    for (const candidate of candidates.slice(0, 8)) {
+      const record = await fetchAndValidateImage({
+        imageUrl: candidate.imageUrl,
         bookmarkUrl: request.bookmarkUrl,
         cacheKey,
         sourceKind: 'search',
@@ -346,10 +346,28 @@ export async function fetchDuckDuckGoFirstHit(request: GetIconRequest, cacheKey:
         minimumEdge: minimumAcceptedIconSize,
         requireOpaqueCenter: false,
       }).catch(() => null);
-      if (previewRecord) return previewRecord;
+      if (record) return record;
+
+      if (candidate.previewUrl && candidate.previewUrl !== candidate.imageUrl) {
+        const previewRecord = await fetchAndValidateImage({
+          imageUrl: candidate.previewUrl,
+          bookmarkUrl: request.bookmarkUrl,
+          cacheKey,
+          sourceKind: 'search',
+          timeoutMs: 4000,
+          minimumEdge: minimumAcceptedIconSize,
+          requireOpaqueCenter: false,
+        }).catch(() => null);
+        if (previewRecord) return previewRecord;
+      }
     }
-  }
-  return null;
+    return null;
+  };
+
+  return Promise.race([
+    tryAllCandidates(),
+    sleep(ddgCandidateBudgetMs).then(() => null),
+  ]);
 }
 
 export async function fetchDuckDuckGoJson(

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildBrandSearchQuery, extractBrandInfo, getBrandName } from '@/shared/url-brand';
+import { buildBrandSearchQuery, extractBrandInfo, getBrandName, stripKnownVanityPrefix } from '@/shared/url-brand';
 
 describe('extractBrandInfo — subdomain-aware brand', () => {
   it('keeps a meaningful subdomain distinct from the registrable brand', () => {
@@ -82,3 +82,114 @@ describe('buildBrandSearchQuery — shared search seed (auto-resolve + edit dial
     expect(buildBrandSearchQuery('')).toBe('');
   });
 });
+
+// ---------------------------------------------------------------------------
+// FIX 2 — Curated vanity-prefix stripping
+//
+// extractBrandInfo always returns the RAW brand (no stripping). Vanity stripping
+// is done via a curated allow-list (stripKnownVanityPrefix) used only by
+// buildBrandSearchQuery and isDdgFirstHitRelevant. This avoids false positives
+// like applemusic→lemusic, goodreads→odreads, gopro→pro.
+// ---------------------------------------------------------------------------
+describe('extractBrandInfo — returns raw brand (no vanity stripping)', () => {
+  it('returns raw "tryphotino" for tryphotino.io (strip happens downstream)', () => {
+    expect(extractBrandInfo('https://www.tryphotino.io/').brand).toBe('tryphotino');
+  });
+
+  it('returns raw "applemusic" for applemusic.com (must NOT strip)', () => {
+    expect(extractBrandInfo('https://applemusic.com/').brand).toBe('applemusic');
+  });
+
+  it('returns raw "goodreads" for goodreads.com (must NOT strip)', () => {
+    expect(extractBrandInfo('https://goodreads.com/').brand).toBe('goodreads');
+  });
+
+  it('returns raw "useragent" for useragent.com (must NOT strip)', () => {
+    expect(extractBrandInfo('https://useragent.com/').brand).toBe('useragent');
+  });
+
+  it('returns raw "gopro" for gopro.com (must NOT strip)', () => {
+    expect(extractBrandInfo('https://gopro.com/').brand).toBe('gopro');
+  });
+
+  it('returns raw "golangtools" for golangtools.com (must NOT strip)', () => {
+    expect(extractBrandInfo('https://golangtools.com/').brand).toBe('golangtools');
+  });
+
+  it('returns "google" for google.com unchanged', () => {
+    expect(extractBrandInfo('https://www.google.com/').brand).toBe('google');
+  });
+
+  it('returns "myspace" for myspace.com unchanged', () => {
+    expect(extractBrandInfo('https://www.myspace.com/').brand).toBe('myspace');
+  });
+
+  it('returns "ing" for mijn.ing.nl (mijn is a generic subdomain, not brand)', () => {
+    expect(extractBrandInfo('https://mijn.ing.nl/login/').brand).toBe('ing');
+  });
+});
+
+describe('stripKnownVanityPrefix — curated allow-list', () => {
+  it('strips "try" from tryphotino (in curated list)', () => {
+    expect(stripKnownVanityPrefix('tryphotino')).toBe('photino');
+  });
+
+  it('strips "get" from getpostman (in curated list)', () => {
+    expect(stripKnownVanityPrefix('getpostman')).toBe('postman');
+  });
+
+  it('strips "use" from usefathom (in curated list)', () => {
+    expect(stripKnownVanityPrefix('usefathom')).toBe('fathom');
+  });
+
+  it('strips "my" from myshopify (in curated list)', () => {
+    expect(stripKnownVanityPrefix('myshopify')).toBe('shopify');
+  });
+
+  it('strips "mijn" from mijndomein (in curated list)', () => {
+    expect(stripKnownVanityPrefix('mijndomein')).toBe('domein');
+  });
+
+  it('does NOT strip applemusic (not in curated list)', () => {
+    expect(stripKnownVanityPrefix('applemusic')).toBe('applemusic');
+  });
+
+  it('does NOT strip goodreads (not in curated list)', () => {
+    expect(stripKnownVanityPrefix('goodreads')).toBe('goodreads');
+  });
+
+  it('does NOT strip useragent (not in curated list)', () => {
+    expect(stripKnownVanityPrefix('useragent')).toBe('useragent');
+  });
+
+  it('does NOT strip gopro (not in curated list)', () => {
+    expect(stripKnownVanityPrefix('gopro')).toBe('gopro');
+  });
+
+  it('does NOT strip golangtools (not in curated list)', () => {
+    expect(stripKnownVanityPrefix('golangtools')).toBe('golangtools');
+  });
+
+  it('does NOT strip google (not in curated list)', () => {
+    expect(stripKnownVanityPrefix('google')).toBe('google');
+  });
+
+  it('returns unknown brands unchanged', () => {
+    expect(stripKnownVanityPrefix('github')).toBe('github');
+  });
+});
+
+describe('buildBrandSearchQuery — vanity-prefix stripping in queries', () => {
+  it('produces "photino logo" for tryphotino.io (curated strip)', () => {
+    expect(buildBrandSearchQuery('https://www.tryphotino.io/')).toBe('photino logo');
+  });
+
+  it('produces "applemusic logo" for applemusic.com (NO strip)', () => {
+    expect(buildBrandSearchQuery('https://applemusic.com/')).toBe('applemusic logo');
+  });
+
+  it('produces "goodreads logo" for goodreads.com (NO strip)', () => {
+    expect(buildBrandSearchQuery('https://goodreads.com/')).toBe('goodreads logo');
+  });
+});
+

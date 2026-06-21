@@ -81,6 +81,36 @@ const GENERIC_SUBDOMAIN_RE = /^(?:www2?|m|mobile|app|apps|secure|login|account|a
 const PERSONAL_INFRA_TLDS = new Set(['local', 'lan', 'home', 'internal', 'intranet']);
 const PERSONAL_INFRA_MARKERS = new Set(['local', 'lan', 'home', 'homelab', 'internal', 'intranet', 'lab']);
 
+// Curated set of registrable-domain brand labels with a vanity marketing prefix
+// (try/get/my/app/mijn/use/go) where the REAL brand name is the remainder.
+// Entries are the raw domain-label (e.g. "tryphotino" from tryphotino.io).
+// Used ONLY by buildBrandSearchQuery to improve DDG query relevance and by
+// isDdgFirstHitRelevant to match brand tokens more accurately.
+//
+// A heuristic length-cutoff was tried first but mis-truncated real brands
+// (applemusic→lemusic, goodreads→odreads, gopro→pro). A curated list is safe:
+// every entry is a known vanity-prefixed SaaS domain. Add new entries as needed.
+const VANITY_STRIP_ROOTS: ReadonlyMap<string, string> = new Map([
+  ['tryphotino', 'photino'],
+  ['getpostman', 'postman'],
+  ['usefathom', 'fathom'],
+  ['myshopify', 'shopify'],
+  ['mijndomein', 'domein'],
+  ['getbootstrap', 'bootstrap'],
+  ['tryghost', 'ghost'],
+  ['getsentry', 'sentry'],
+  ['usepanda', 'panda'],
+  ['tryretool', 'retool'],
+]);
+
+/**
+ * If `brand` is a known vanity-prefixed root, returns the stripped brand.
+ * Otherwise returns the brand unchanged. Used only in the DDG search/gate path.
+ */
+export function stripKnownVanityPrefix(brand: string): string {
+  return VANITY_STRIP_ROOTS.get(brand) ?? brand;
+}
+
 export interface BrandInfo {
   brand: string;
   // A meaningful non-generic subdomain that sits left of the registrable brand
@@ -162,8 +192,9 @@ export function getBrandName(url: string): string {
 // yields nothing.
 export function buildBrandSearchQuery(url?: string): string {
   if (!url) return '';
-  const { brand, subdomain, isPersonalInfra } = extractBrandInfo(url);
-  if (brand) {
+  const { brand: rawBrand, subdomain, isPersonalInfra } = extractBrandInfo(url);
+  if (rawBrand) {
+    const brand = stripKnownVanityPrefix(rawBrand);
     return `${subdomain ? `${brand} ${subdomain}` : brand} logo`.trim();
   }
 

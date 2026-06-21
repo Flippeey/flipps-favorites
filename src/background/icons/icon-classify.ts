@@ -1,6 +1,6 @@
 import type { IconSearchCandidate } from '@/shared/messages';
 import { faviconProviderUrl } from './icon-constants';
-import { extractBrandInfo } from '@/shared/url-brand';
+import { extractBrandInfo, stripKnownVanityPrefix } from '@/shared/url-brand';
 import { getRegistrableDomain, getRootLabel } from '@/shared/icon-scope';
 
 // Re-exported under the legacy name so backend callers + tests keep importing it
@@ -593,16 +593,22 @@ function sameDomainImageHasLogoSignal(imageUrl: string, brand: string): boolean 
   const filename = filenameMatch[1].toLowerCase();
   const brandLower = brand.toLowerCase();
 
-  if (!filename.includes(brandLower)) return false;
-
   // Split into tokens
   const tokens = filename
     .replace(/([a-z])([A-Z])/g, '$1-$2')
     .split(/[-_]+/)
     .filter(t => t.length >= 2 && !/^\d+$/.test(t));
 
-  // Explicit logo indicator alongside brand — always accept
+  // Explicit logo/icon/brand token in the filename — accept even when the domain
+  // brand is absent. A file named "Firefox-parent-brand-logo.png" on mozilla.org
+  // is virtually always the site's own logo. Foreign-brand filenames (e.g.
+  // "Rabobank-Logo.png" on twinq.nl) are caught by detectForeignBrandInImage
+  // BEFORE this function runs in isDdgFirstHitRelevant.
   const hasLogoToken = tokens.some(t => /^(logo|icon|favicon|brand|symbol)s?$/.test(t));
+  if (hasLogoToken && !filename.includes(brandLower)) return true;
+  if (!filename.includes(brandLower)) return false;
+
+  // Explicit logo indicator alongside brand — always accept
   if (hasLogoToken) return true;
 
   // Brand-only filename: accept when brand is the sole semantic token (mirrors
@@ -704,7 +710,8 @@ export function isDdgFirstHitRelevant(
   candidate: Pick<IconSearchCandidate, 'label' | 'imageUrl' | 'sourcePageUrl'>,
   bookmarkUrl: string,
 ): boolean {
-  const { brand } = extractBrandInfo(bookmarkUrl);
+  const { brand: rawBrand } = extractBrandInfo(bookmarkUrl);
+  const brand = stripKnownVanityPrefix(rawBrand);
   // Short brands (< 3 chars) produce too many false positives — skip the gate.
   if (brand.length < 3) return true;
 
@@ -782,4 +789,36 @@ export function isDdgFirstHitRelevant(
   }
 
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Shape pre-ranking for auto-selection (FIX 1)
+//
+// Reorders gate-passing DDG candidates so roughly-SQUARE candidates (reported
+// aspect <= 1.4) are tried before wide/tall ones, preserving existing score
+// order within each shape band. Candidates with missing reported dimensions
+// are treated as neutral (between square and wide).
+// ---------------------------------------------------------------------------
+
+const SHAPE_SQUARE_THRESHOLD = 1.4;
+
+function shapeRank(candidate: Pick<IconSearchCandidate, 'width' | 'height'>): number {
+  const { width, height } = candidate;
+  if (width == null || height == null || width === 0 || height === 0) return 1; // neutral
+  const aspect = Math.max(width, height) / Math.min(width, height);
+  return aspect <= SHAPE_SQUARE_THRESHOLD ? 0 : 2; // square: 0, wide/tall: 2
+}
+
+/**
+ * Stable-sort candidates by shape band (square < neutral < wide/tall),
+ * preserving original score order within each band. Returns a new array.
+ * Used only in the auto path (fetchDuckDuckGoFirstHit).
+ */
+export function rankCandidatesByShape<T extends Pick<IconSearchCandidate, 'width' | 'height'>>(
+  candidates: readonly T[],
+): T[] {
+  return candidates
+    .map((c, i) => ({ c, rank: shapeRank(c), i }))
+    .sort((a, b) => a.rank - b.rank || a.i - b.i)
+    .map(({ c }) => c);
 }
