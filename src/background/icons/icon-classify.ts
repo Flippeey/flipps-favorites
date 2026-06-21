@@ -1,7 +1,7 @@
 import type { IconSearchCandidate } from '@/shared/messages';
 import { faviconProviderUrl } from './icon-constants';
 import { extractBrandInfo } from '@/shared/url-brand';
-import { getRegistrableDomain } from '@/shared/icon-scope';
+import { getRegistrableDomain, getRootLabel } from '@/shared/icon-scope';
 
 // Re-exported under the legacy name so backend callers + tests keep importing it
 // from here. The implementation now lives in shared/url-brand so the edit dialog
@@ -738,19 +738,35 @@ export function isDdgFirstHitRelevant(
     && sourceHostname
     && getRegistrableDomain(sourceHostname) === bookmarkRegistrable,
   );
+  const imageRegistrable = getRegistrableDomain(imageHostname);
   const isSameDomainImage = Boolean(
     bookmarkRegistrable
     && imageHostname
-    && getRegistrableDomain(imageHostname) === bookmarkRegistrable,
+    && imageRegistrable === bookmarkRegistrable,
   );
 
-  // H1 gate: when the IMAGE is hosted on the bookmark's own domain, it could
-  // be anything on that site (staff photo, partner logo, screenshot). Require
-  // the image to carry a brand or logo signal in its filename/path.
+  // Cross-TLD same-brand detection: when the image host has a different TLD
+  // but the same root label (e.g. ing.nl vs ing.com → root label "ing"),
+  // treat it as same-brand. Only fires when root label is >= 3 chars to avoid
+  // trivial collisions (e.g. "go.com" vs "go.nl").
+  const bookmarkRootLabel = getRootLabel(bookmarkRegistrable);
+  const imageRootLabel = getRootLabel(imageRegistrable);
+  const isCrossTldSameBrand = Boolean(
+    !isSameDomainImage
+    && bookmarkRootLabel
+    && imageRootLabel
+    && bookmarkRootLabel.length >= 3
+    && bookmarkRootLabel === imageRootLabel,
+  );
+
+  // H1 gate: when the IMAGE is hosted on the bookmark's own domain (or a
+  // cross-TLD sibling CDN), it could be anything on that brand's infrastructure
+  // (staff photo, partner logo, screenshot, content image). Require the image
+  // to carry a brand or logo signal in its filename/path.
   // When only the SOURCE PAGE is same-domain but the image is on a different
   // host (CDN, aggregator), skip the image-content check — the image was
   // explicitly linked from the brand's site.
-  if (isSameDomainImage) {
+  if (isSameDomainImage || isCrossTldSameBrand) {
     const foreignBrand = detectForeignBrandInImage(imageUrl, brand);
     if (foreignBrand) return false;
 
