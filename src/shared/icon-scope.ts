@@ -28,6 +28,21 @@ export function getRegistrableDomain(hostname: string | null): string | null {
   return parts.slice(-2).join('.');
 }
 
+// The brand label of a registrable domain — the registrable domain with its
+// public-suffix/TLD stripped. Used for cross-TLD same-brand detection
+// (e.g. ing.nl → "ing", ing.com → "ing", pogdesign.co.uk → "pogdesign").
+export function getRootLabel(registrableDomain: string | null): string | null {
+  if (!registrableDomain) return null;
+  const parts = registrableDomain.split('.').filter(Boolean);
+  if (parts.length < 2) return null;
+  // For ccSLD registries (pogdesign.co.uk) the root label is the first part
+  if (parts.length >= 3 && REGISTRY_SLDS.has(parts[parts.length - 2])) {
+    return parts[0] || null;
+  }
+  // Standard 2-part domain (ing.nl, ing.com) — root label is the first part
+  return parts[0] || null;
+}
+
 // Storage key for a new override record. Returns null when the URL has no usable
 // host for the requested scope (callers fall back to exact).
 export function getOverrideKeyForScope(bookmarkUrl: string, scope: IconOverrideScope): string | null {

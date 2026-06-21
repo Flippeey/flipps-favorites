@@ -150,4 +150,9 @@ export interface IconSearchCandidate {
   label: string;
   sourceKind: 'favicon' | 'search';
   sourcePageUrl?: string;
+  // Reported dimensions from the image search provider. Used by the auto path
+  // to pre-rank roughly-square candidates above wide/tall ones so the fetch
+  // budget is spent on logo-shaped images first. Not used by the manual grid.
+  width?: number;
+  height?: number;
 }
