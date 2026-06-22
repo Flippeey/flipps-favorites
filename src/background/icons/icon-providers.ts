@@ -253,6 +253,7 @@ export async function fetchIconHorse(bookmarkUrl: string, cacheKey: string): Pro
       timeoutMs: iconHorseTimeoutMs,
       minimumEdge: minimumAutoIconSize,
       requireOpaqueCenter: true,
+      rejectMonotonePlaceholder: true,
     });
   }).catch(() => null);
 }

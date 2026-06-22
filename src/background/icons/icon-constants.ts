@@ -1,4 +1,9 @@
-export const iconPipelineVersion = 'bookmark-icons-v11';
+// Bumped v11->v12 to invalidate all cached IH records so the new placeholder gate
+// applies globally. A surgical sweep of only 'iconhorse' sourceKind records would
+// avoid re-resolving origin/S2/DDG records, but the global bump is the established
+// pattern and simplest to reason about. Surgical IH-only invalidation is a possible
+// future optimization if the full sweep causes noticeable re-resolution latency.
+export const iconPipelineVersion = 'bookmark-icons-v12';
 export const faviconProviderUrl = 'https://www.google.com/s2/favicons';
 export const faviconRequestSize = 256;
 export const duckDuckGoSearchUrl = 'https://duckduckgo.com/';
@@ -20,6 +25,29 @@ export const ddgFirstHitTimeoutMs = 4000;
 // Caps worst-case latency (8 candidates x 2 fetches x 4s each = 64s) to prevent
 // semaphore starvation. Returns best result found so far / null when exceeded.
 export const ddgCandidateBudgetMs = 15_000;
+// Icon Horse placeholder detection constants.
+// Compound gate: few colors + dominant + achromatic LIGHT-grey = placeholder.
+//
+// Calibrated from real Icon Horse responses (16x16 downscaled, 6-bit quantized):
+//   Placeholders:  dela.nl     (5 colors, 89.8% dominant, grey 226,226,226, brightness 226)
+//                  phidec.twinq.nl (4 colors, 93.8% dominant, grey 226,226,226, brightness 226)
+//   Real low-color: YouTube    (4 colors, 93.0%, RED 255,0,51) -- NOT grey (saturated)
+//                   Twitter    (5 colors, 89.1%, BLACK 0,0,0)  -- too dark (brightness 0)
+//                   Spotify    (4 colors, 57.6%, GREEN 30,215,96) -- saturated
+//                   Microsoft  (4 colors, 25.0%, multicolor)   -- no single dominant
+//   Real grey logos (MUST be kept):
+//                   Apple silver  (dominant ~153,153,158, brightness ~155) -- below floor
+//                   Grey "W" logo (dominant ~170,170,170, brightness 170) -- below floor
+//                   Dark grey     (dominant ~85,85,85, brightness 85)     -- below floor
+//
+// Brightness band [200, 240] hugs IH's light-grey (~226) while letting dark/mid greys escape.
+// The achromatic + light-grey brightness check is the key discriminator.
+export const placeholderMaxDistinctColors = 6;
+export const placeholderMinDominantRatio = 0.85;
+export const placeholderMaxSaturation = 20;
+export const placeholderMinBrightness = 200;
+export const placeholderMaxBrightness = 240;
+
 export const sweepBatchSize = 4;
 export const sweepBatchSpacingMs = 250;
 export const maxConcurrentResolutions = 6;
