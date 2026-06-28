@@ -20,7 +20,7 @@ export const cacheTtlMs = 30 * 24 * 60 * 60 * 1000; // 30 days
 // confident resolution. Give them a short TTL so a tile cached during a
 // re-resolution storm (e.g. after a pipeline-version bump invalidates the cache)
 // self-heals on a later, calmer load instead of persisting until browser restart.
-export const generatedTtlMs = 3 * 24 * 60 * 60 * 1000; // 3 days
+export const generatedTtlMs = 24 * 60 * 60 * 1000; // 24 hours
 export const autoSourceTimeoutMs = 3000;
 export const originFetchTimeoutMs = 2000;
 export const iconHorseTimeoutMs = 2500;
