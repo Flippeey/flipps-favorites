@@ -50,6 +50,7 @@ import { withCorsBypass } from './cors-bypass';
 import { sleep } from './concurrency';
 import { extractBrandInfo } from '@/shared/url-brand';
 import { isIcoBytes, extractLargestIcoPng } from './ico-parse';
+import { getS2GlobeSignature, matchesS2GlobeSignature } from './s2-globe-gate';
 
 interface DuckDuckGoSearchResponse {
   results?: Array<{ image: string; thumbnail: string; title: string; url: string; width: number; height: number }>;
@@ -57,6 +58,30 @@ interface DuckDuckGoSearchResponse {
 
 export async function fetchS2Favicon(bookmarkUrl: string, cacheKey: string): Promise<IconCacheRecord | null> {
   const providerRequestUrl = `${faviconProviderUrl}?domain_url=${encodeURIComponent(bookmarkUrl)}&sz=${String(clampFaviconSize(faviconRequestSize))}`;
+
+  // Globe gate: reject S2's generic world-globe placeholder (returned for any
+  // domain S2 has no favicon for). Pre-fetch the image bytes and compare against
+  // the memoized sentinel signature. If it matches, this domain has no real S2
+  // favicon — return null so the pipeline falls through to Icon Horse / DDG.
+  // The pre-fetch uses force-cache, so the subsequent fetchAndValidateImage call
+  // hits the HTTP cache (no extra network round-trip).
+  const globeSignature = await getS2GlobeSignature();
+  if (globeSignature) {
+    try {
+      const prefetch = await fetchWithTimeout(providerRequestUrl, s2TimeoutMs, { cache: 'force-cache' });
+      if (prefetch.ok) {
+        const blob = await prefetch.blob();
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        if (matchesS2GlobeSignature(bytes, globeSignature)) {
+          return null; // globe placeholder — reject
+        }
+      }
+    } catch {
+      // Pre-fetch failed — fall through to fetchAndValidateImage which will
+      // either succeed from cache or fail cleanly.
+    }
+  }
+
   return fetchAndValidateImage({
     imageUrl: providerRequestUrl,
     bookmarkUrl,

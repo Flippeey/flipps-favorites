@@ -1,9 +1,8 @@
-// Bumped v11->v12 to invalidate all cached IH records so the new placeholder gate
-// applies globally. A surgical sweep of only 'iconhorse' sourceKind records would
-// avoid re-resolving origin/S2/DDG records, but the global bump is the established
-// pattern and simplest to reason about. Surgical IH-only invalidation is a possible
-// future optimization if the full sweep causes noticeable re-resolution latency.
-export const iconPipelineVersion = 'bookmark-icons-v12';
+// Bumped v12->v13 to invalidate cached S2 globe placeholders so the new
+// self-calibrating globe gate applies globally. Previously S2's generic globe
+// image passed quality checks and was cached, preventing fallthrough to Icon
+// Horse / DDG for domains with no real S2 favicon.
+export const iconPipelineVersion = 'bookmark-icons-v13';
 export const faviconProviderUrl = 'https://www.google.com/s2/favicons';
 export const faviconRequestSize = 256;
 export const duckDuckGoSearchUrl = 'https://duckduckgo.com/';
