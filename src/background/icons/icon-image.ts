@@ -1,6 +1,6 @@
 import type { IconCacheRecord, IconSourceKind, ResolvedIcon } from '@/shared/messages';
 import { buildFallbackSvgDataUrl } from '@/shared/icon-fallback';
-import { cacheTtlMs, iconPipelineVersion, maxSvgIconBytes, placeholderMaxDistinctColors, placeholderMinDominantRatio, placeholderMaxSaturation, placeholderMinBrightness, placeholderMaxBrightness } from './icon-constants';
+import { cacheTtlMs, generatedTtlMs, iconPipelineVersion, maxSvgIconBytes, placeholderMaxDistinctColors, placeholderMinDominantRatio, placeholderMaxSaturation, placeholderMinBrightness, placeholderMaxBrightness } from './icon-constants';
 import { isDataUrl } from './icon-parse';
 import { getIconLabel } from './icon-classify';
 import { isIcoBytes, extractLargestIcoPng } from './ico-parse';
@@ -283,13 +283,17 @@ export async function blobToDataUrl(blob: Blob, mimeType: string): Promise<strin
 export function createGeneratedRecord(bookmarkUrl: string, bookmarkTitle: string | undefined, cacheKey: string): IconCacheRecord {
   const label = getIconLabel(bookmarkTitle, bookmarkUrl);
   const dataUrl = buildFallbackSvgDataUrl(label);
+  const now = Date.now();
   return {
     cacheKey,
     bookmarkUrl,
     sourceKind: 'generated',
     dataUrl,
     mimeType: 'image/svg+xml',
-    updatedAt: Date.now(),
+    updatedAt: now,
+    // Short TTL so a generated fallback re-resolves on a later calm load rather
+    // than persisting until the next browser restart (sweepGeneratedRecords).
+    expiresAt: now + generatedTtlMs,
     pipelineVersion: iconPipelineVersion,
   };
 }
