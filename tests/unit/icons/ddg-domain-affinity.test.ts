@@ -714,6 +714,32 @@ describe('brandMatchesAsToken — regex metacharacter safety', () => {
 });
 
 // ---------------------------------------------------------------------------
+// brandMatchesAsToken — compound (concatenated) brands
+//
+// WHY: extractBrandInfo returns the registrable label concatenated
+// ("producthunt"), but real DDG metadata renders the word break back in
+// ("Product Hunt", "product-hunt-logo.png"). Without a collapsed-substring
+// fallback the gate rejects EVERY candidate and the host falls to a letter-tile.
+// ---------------------------------------------------------------------------
+describe('brandMatchesAsToken — compound brands', () => {
+  it('matches a concatenated compound brand rendered with separators restored', () => {
+    expect(brandMatchesAsToken('producthunt', 'product-hunt-logo.png')).toBe(true);
+    expect(brandMatchesAsToken('producthunt', 'Product Hunt')).toBe(true);
+    expect(brandMatchesAsToken('lastepochtools', 'Last Epoch Tools — Build Planner')).toBe(true);
+  });
+
+  it('does NOT collide on unrelated text for a compound brand', () => {
+    expect(brandMatchesAsToken('producthunt', 'random-stock-photo.png')).toBe(false);
+  });
+
+  it('does NOT substring-collide for short brands (length-gated to >= 6)', () => {
+    // "art" must not match inside "cart"; the collapsed fallback only runs for 6+ char brands.
+    expect(brandMatchesAsToken('art', 'cart-logo.png')).toBe(false);
+    expect(brandMatchesAsToken('box', 'dropbox-paper.png')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // scoreDuckDuckGoResult — IP and single-label hosts
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
@@ -783,6 +809,38 @@ describe('FIX 3 — same-domain logo-token acceptance without brand substring', 
       },
       'https://addons.mozilla.org/en-US/developers/',
     )).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Layout-prefix logo filenames are NOT foreign brands
+//
+// WHY: detectForeignBrandInImage treated ANY 3+ char token before "logo" as a
+// foreign brand unless denylisted. Common layout/style prefixes (main-, header-,
+// color-, dark-) are not brand names, so a brand's OWN logo file (twinq.nl/
+// main-logo.png) was wrongly rejected and the host fell to a generated letter-
+// tile. Real foreign brand names (Rabobank) must STILL be rejected.
+// ---------------------------------------------------------------------------
+describe('detectForeignBrandInImage — layout-prefix descriptors are not foreign brands', () => {
+  it('returns null for descriptive layout/style prefixes next to "logo"', () => {
+    for (const filename of ['main-logo.png', 'header-logo.svg', 'footer-logo.png', 'site-logo.png', 'color-logo.png', 'dark-logo.png', 'white-logo.png']) {
+      expect(detectForeignBrandInImage(`https://twinq.nl/wp-content/uploads/${filename}`, 'twinq')).toBeNull();
+    }
+  });
+
+  it('still returns the foreign brand for a real competitor logo (Rabobank)', () => {
+    expect(detectForeignBrandInImage('https://twinq.nl/wp-content/uploads/Rabobank-Logo.jpg', 'twinq')).toBe('rabobank');
+  });
+
+  it('isDdgFirstHitRelevant accepts a same-domain main-logo.png (own logo, layout prefix)', () => {
+    expect(isDdgFirstHitRelevant(
+      {
+        label: 'VvE Portaal - TwinQ',
+        imageUrl: 'https://twinq.nl/wp-content/uploads/main-logo.png',
+        sourcePageUrl: 'https://twinq.nl/',
+      },
+      'https://phidec.twinq.nl/apex/f?p=TPL:101',
+    )).toBe(true);
   });
 });
 

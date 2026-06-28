@@ -395,7 +395,19 @@ export function brandMatchesAsToken(brand: string, text: string): boolean {
   // delimiters: start/end of string OR any non-alphanumeric character.
   const escaped = brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pattern = new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, 'i');
-  return pattern.test(text);
+  if (pattern.test(text)) return true;
+
+  // Compound brands whose registrable label is concatenated (e.g. "producthunt",
+  // "lastepochtools") are routinely rendered with the word break restored —
+  // "Product Hunt", "product-hunt-logo.png" — which the token regex above cannot
+  // match. Fall back to a separator-collapsed substring test. Length-gated to
+  // >= 6 chars so short brands can't substring-collide (e.g. "art" in "cart").
+  const collapse = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const collapsedBrand = collapse(brand);
+  if (collapsedBrand.length >= 6) {
+    return collapse(text).includes(collapsedBrand);
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -459,7 +471,18 @@ export function detectForeignBrandInImage(imageUrl: string, brand: string): stri
   // for brand "stripe" is the brand's own product-qualified logo, not foreign.
   if (filename.includes(brandLower)) return null;
 
-  const genericTokens = new Set(['the', 'free', 'vector', 'png', 'svg', 'transparent', 'design', 'icon', 'brand', 'images', 'large', 'small', 'logo', 'new', 'old', 'copy', 'day']);
+  const genericTokens = new Set([
+    // Generic descriptors / file words
+    'the', 'free', 'vector', 'png', 'svg', 'transparent', 'design', 'icon', 'brand',
+    'images', 'large', 'small', 'logo', 'new', 'old', 'copy', 'day',
+    // Layout / placement descriptors (e.g. "main-logo.png", "header-logo.svg").
+    // These are NOT brand names, so an own-domain logo file prefixed with one
+    // must not be misclassified as a foreign brand and rejected.
+    'main', 'header', 'footer', 'site', 'top', 'nav', 'navbar', 'primary', 'secondary', 'default',
+    // Color / style / variant descriptors (e.g. "color-logo", "dark-logo", "white-logo").
+    'color', 'colour', 'white', 'black', 'dark', 'light', 'grey', 'gray', 'mono', 'full', 'flat',
+    'horizontal', 'vertical', 'stacked', 'wordmark', 'inverted', 'official',
+  ]);
 
   // Pattern 1: <token>-logo, <token>_logo, <token>logo
   const beforeLogo = /([a-z]{3,})[-_]?logo/gi;
