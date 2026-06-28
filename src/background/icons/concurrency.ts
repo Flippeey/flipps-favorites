@@ -2,28 +2,6 @@ export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export async function firstSuccessful<T>(promises: Array<Promise<T | null>>): Promise<T | null> {
-  if (!promises.length) return null;
-  return new Promise(resolve => {
-    let pending = promises.length;
-    let settled = false;
-    for (const promise of promises) {
-      promise.then(value => {
-        if (!settled && value !== null && value !== undefined) {
-          settled = true;
-          resolve(value);
-        }
-      }).catch(() => undefined).finally(() => {
-        pending -= 1;
-        if (pending === 0 && !settled) {
-          settled = true;
-          resolve(null);
-        }
-      });
-    }
-  });
-}
-
 export class ResolutionSemaphore {
   private active = 0;
   private readonly queue: Array<() => void> = [];

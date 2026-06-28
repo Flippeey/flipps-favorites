@@ -309,8 +309,9 @@ describe('isMonotoneLetterPlaceholder', () => {
 
   // NOTE: The OffscreenCanvas 16x16 downscale path (where bilinear interpolation
   // may shift pixel ratios toward grey) is not testable in Vitest/Node since
-  // OffscreenCanvas is unavailable. The Playwright spec (icon-horse-gate.spec.ts)
-  // covers the real bitmap-sampling path end-to-end against live Icon Horse data.
+  // OffscreenCanvas is unavailable. The canvas path is exercised live by the
+  // extension in the service worker. The placeholder gate's decision logic is
+  // deterministically tested in tests/unit/icons/placeholder-gate.test.ts.
 });
 
 // -- Constants tests ----------------------------------------------------------

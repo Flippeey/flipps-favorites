@@ -171,6 +171,12 @@ export function countDistinctColorsFromPixels(data: Uint8ClampedArray): number {
  * (fetch icon.horse/icon/<uuid>.invalid, hash the response, compare at gate time).
  */
 export function isMonotoneLetterPlaceholder(data: Uint8ClampedArray): boolean {
+  // 1. Few distinct colors — delegate to the unit-tested helper so the
+  //    existing countDistinctColorsFromPixels tests genuinely cover this
+  //    live gate's color-counting logic. The 16x16 image is tiny, so the
+  //    second pass below is negligible.
+  if (countDistinctColorsFromPixels(data) > placeholderMaxDistinctColors) return false;
+
   const counts = new Map<number, number>();
   const rgbSums = new Map<number, [number, number, number, number]>(); // [sumR, sumG, sumB, count]
   let totalOpaque = 0;
@@ -195,9 +201,6 @@ export function isMonotoneLetterPlaceholder(data: Uint8ClampedArray): boolean {
   }
 
   if (totalOpaque === 0) return false;
-
-  // 1. Few distinct colors
-  if (counts.size > placeholderMaxDistinctColors) return false;
 
   // 2. Find dominant bucket
   let dominantKey = 0;
