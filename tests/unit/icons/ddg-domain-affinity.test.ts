@@ -561,6 +561,46 @@ describe('isPeopleContentImage — people-content detection', () => {
     expect(isPeopleContentImage('https://example.com/our-employees.jpg')).toBe(true);
   });
 
+  it('detects /leadership/ path segment', () => {
+    expect(isPeopleContentImage('https://example.com/leadership/ceo.jpg')).toBe(true);
+  });
+
+  it('detects /management/ path segment', () => {
+    expect(isPeopleContentImage('https://example.com/management/jane.jpg')).toBe(true);
+  });
+
+  it('detects /profile/ path segment', () => {
+    expect(isPeopleContentImage('https://example.com/profile/u1.jpg')).toBe(true);
+  });
+
+  it('detects /avatars/ path segment', () => {
+    expect(isPeopleContentImage('https://example.com/avatars/u1.jpg')).toBe(true);
+  });
+
+  it('detects /avatar/ path segment (singular)', () => {
+    expect(isPeopleContentImage('https://example.com/avatar/u1.jpg')).toBe(true);
+  });
+
+  it('detects /person/ path segment', () => {
+    expect(isPeopleContentImage('https://example.com/person/x.jpg')).toBe(true);
+  });
+
+  it('detects /persons/ path segment', () => {
+    expect(isPeopleContentImage('https://example.com/persons/x.jpg')).toBe(true);
+  });
+
+  it('detects /our-people/ path segment', () => {
+    expect(isPeopleContentImage('https://example.com/our-people/x.jpg')).toBe(true);
+  });
+
+  it('detects /our_people/ path segment', () => {
+    expect(isPeopleContentImage('https://example.com/our_people/x.jpg')).toBe(true);
+  });
+
+  it('detects /ourpeople/ path segment (no separator)', () => {
+    expect(isPeopleContentImage('https://example.com/ourpeople/x.jpg')).toBe(true);
+  });
+
   it('does NOT flag logo.png', () => {
     expect(isPeopleContentImage('https://example.com/logo.png')).toBe(false);
   });

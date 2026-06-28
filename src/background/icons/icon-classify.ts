@@ -433,7 +433,7 @@ export function isPeopleContentImage(imageUrl: string): boolean {
   } catch {
     textToCheck = imageUrl;
   }
-  return /(?:^|[/\-_.])(?:founders?|team|staff|people|headshots?|portraits?|employees?|testimonials?|about[-_]?us|medewerkers?)(?:$|[/\-_.])/i.test(textToCheck);
+  return /(?:^|[/\-_.])(?:founders?|team|staff|people|headshots?|portraits?|employees?|testimonials?|about[-_]?us|medewerkers?|leadership|management|profile|avatars?|persons?|our[-_]?people)(?:$|[/\-_.])/i.test(textToCheck);
 }
 
 // ---------------------------------------------------------------------------

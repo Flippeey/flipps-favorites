@@ -61,6 +61,64 @@ describe('isHardJunkCandidate', () => {
       expect(isHardJunkCandidate(candidate, 'https://acme.com')).toBe(true);
     });
 
+    it('rejects people-content images (leadership page)', () => {
+      const candidate = makeCandidate({
+        imageUrl: 'https://cdn.example.com/leadership/ceo.jpg',
+        label: 'CEO Portrait',
+      });
+      expect(isHardJunkCandidate(candidate, 'https://acme.com')).toBe(true);
+    });
+
+    it('rejects people-content images (management page)', () => {
+      const candidate = makeCandidate({
+        imageUrl: 'https://cdn.example.com/management/jane.jpg',
+        label: 'Jane Smith',
+      });
+      expect(isHardJunkCandidate(candidate, 'https://acme.com')).toBe(true);
+    });
+
+    it('rejects people-content images (profile photo)', () => {
+      const candidate = makeCandidate({
+        imageUrl: 'https://cdn.example.com/profile/u1.jpg',
+        label: 'User Profile',
+      });
+      expect(isHardJunkCandidate(candidate, 'https://acme.com')).toBe(true);
+    });
+
+    it('rejects people-content images (avatar)', () => {
+      const candidate = makeCandidate({
+        imageUrl: 'https://cdn.example.com/avatars/u1.jpg',
+        label: 'User Avatar',
+      });
+      expect(isHardJunkCandidate(candidate, 'https://acme.com')).toBe(true);
+    });
+
+    it('rejects people-content images (person page)', () => {
+      const candidate = makeCandidate({
+        imageUrl: 'https://cdn.example.com/person/x.jpg',
+        label: 'Team Member',
+      });
+      expect(isHardJunkCandidate(candidate, 'https://acme.com')).toBe(true);
+    });
+
+    it('rejects people-content images (our-people page)', () => {
+      const candidate = makeCandidate({
+        imageUrl: 'https://cdn.example.com/our-people/x.jpg',
+        label: 'Our People',
+      });
+      expect(isHardJunkCandidate(candidate, 'https://acme.com')).toBe(true);
+    });
+
+    it('rejects same-domain people-content image (people check is NOT gated behind off-domain)', () => {
+      // People-photo on the bookmark's OWN domain — still hard junk.
+      // Guards against a future refactor that moves isPeopleContentImage behind the off-domain branch.
+      const candidate = makeCandidate({
+        imageUrl: 'https://acme.com/team/x.jpg',
+        label: 'Meet the Team',
+      });
+      expect(isHardJunkCandidate(candidate, 'https://acme.com')).toBe(true);
+    });
+
     it('rejects off-domain foreign-brand logo', () => {
       // Image is on a totally different domain, filename says "Rabobank-Logo"
       // while bookmark is acme.com — this is a competitor logo
@@ -297,6 +355,36 @@ describe('selectBestSafeFallback', () => {
     expect(result.length).toBe(2);
     // seeklogo (logo aggregator) should rank higher due to aggregator bonus + brand match
     expect(result[0].imageUrl).toContain('seeklogo');
+  });
+
+  it('higher-score hard-junk cannot leapfrog a lower-score safe candidate', () => {
+    // A people-photo from a logo-aggregator host with brand-in-label (high score signals)
+    // alongside a lower-scoring safe logo. The hard-junk candidate must be absent from the
+    // result — filtering happens BEFORE ranking, so score cannot rescue junk.
+    const candidates: IconSearchCandidate[] = [
+      // Hard junk: people-photo with aggregator host + brand match = would score high
+      makeCandidate({
+        imageUrl: 'https://seeklogo.com/team/group.jpg',
+        label: 'Acme Team Photo - SeekLogo',
+        sourcePageUrl: 'https://seeklogo.com/acme',
+        width: 800,
+        height: 600,
+      }),
+      // Safe: lower-scoring CDN logo with no brand or people signal
+      makeCandidate({
+        imageUrl: 'https://cdn.random.com/img/icon-flat.png',
+        label: 'Icon Download',
+        sourcePageUrl: 'https://random.com',
+        width: 256,
+        height: 256,
+      }),
+    ];
+
+    const result = selectBestSafeFallback(candidates, bookmarkUrl);
+    expect(result.length).toBe(1);
+    expect(result[0].imageUrl).toContain('icon-flat');
+    // The team photo must NOT appear in the result at all
+    expect(result.every(c => !c.imageUrl.includes('/team/'))).toBe(true);
   });
 
   it('returns empty array for empty input', () => {
