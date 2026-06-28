@@ -412,13 +412,11 @@ describe('H1 — same-domain content-image rejection (phidec.twinq.nl)', () => {
     )).toBe(false);
   });
 
-  it('isDdgFirstHitRelevant accepts brand-only filename even in date-stamped CMS uploads path', () => {
+  it('isDdgFirstHitRelevant rejects brand-only filename in date-stamped CMS uploads path', () => {
     const bookmarkUrl = 'https://phidec.twinq.nl/apex/f?p=TPL:101';
-    // twinq.jpg in /wp-content/uploads/2026/04/ — the CMS upload path is just a
-    // storage detail, not a content-quality signal. A brand-only filename on the
-    // brand's own domain IS the brand's logo regardless of the directory structure.
-    // Content/blog photos have multi-token descriptive filenames that are caught
-    // by the multi-token check (twinq-connect-2025.jpg, twinq-ambassadeurs.jpg).
+    // twinq.jpg in /wp-content/uploads/2026/04/ — a single-token brand-named image
+    // in a date-stamped CMS upload dir is more likely a blog/news hero than a logo.
+    // Rejecting it falls through to other icon sources, which is the safer bias.
     expect(isDdgFirstHitRelevant(
       {
         label: 'E-learning TwinQ',
@@ -426,7 +424,7 @@ describe('H1 — same-domain content-image rejection (phidec.twinq.nl)', () => {
         sourcePageUrl: 'https://www.twinq.nl/nieuws/e-learning',
       },
       bookmarkUrl,
-    )).toBe(true);
+    )).toBe(false);
   });
 });
 
@@ -870,13 +868,28 @@ describe('detectForeignBrandInImage — layout-prefix descriptors are not foreig
 // still be rejected.
 // ---------------------------------------------------------------------------
 describe('Finding (B) — same-domain brand-only-in-host not flagged foreign', () => {
-  it('POSITIVE: same-domain product-logo file accepted when brand is in host only', () => {
-    // acme.com/assets/widget-logo.png for brand "acme" — "widget" is acme's
-    // own product, not a competitor brand. Brand appears in host, not filename.
+  it('POSITIVE: same-domain layout-prefix logo file accepted (brand in host only)', () => {
+    // acme.com/assets/main-logo.png for brand "acme" — "main" is a layout
+    // descriptor (in genericTokens), not a foreign brand. Brand appears only
+    // in the host, not the filename. The logo-token and non-foreign filename
+    // satisfy sameDomainImageHasLogoSignal via same-domain scoping.
     expect(isDdgFirstHitRelevant(
       {
         label: 'Acme Widgets - Home',
-        imageUrl: 'https://acme.com/assets/widget-logo.png',
+        imageUrl: 'https://acme.com/assets/main-logo.png',
+        sourcePageUrl: 'https://acme.com/',
+      },
+      'https://acme.com/products',
+    )).toBe(true);
+  });
+
+  it('POSITIVE: same-domain generic logo.svg accepted (brand in host only)', () => {
+    // acme.com/images/logo.svg — generic logo path, brand only in host.
+    // Well-known logo filename pattern, always accepted.
+    expect(isDdgFirstHitRelevant(
+      {
+        label: 'Acme Corp',
+        imageUrl: 'https://acme.com/images/logo.svg',
         sourcePageUrl: 'https://acme.com/',
       },
       'https://acme.com/products',
@@ -894,18 +907,18 @@ describe('Finding (B) — same-domain brand-only-in-host not flagged foreign', (
 });
 
 // ---------------------------------------------------------------------------
-// Finding (C) — same-domain abbreviation/wordmark filename accepted
+// Finding (C) — same-domain abbreviation/wordmark filename
 //
-// sameDomainImageHasLogoSignal rejects a same-domain image that IS the brand's
-// own mark but uses an abbreviation/wordmark filename: no logo/icon token, no
-// full-brand substring, and not under /assets/(icon|logo|brand)/. The brand's
-// own abbreviation on its own origin should be accepted.
+// The asset-dir abbreviation backdoor and bare "mark" token were removed:
+// /assets|images|img|static|media/ is where sites dump everyone's logos
+// (visa.png, paypal-logo.png) and "mark" is polysemous (headshots: mark.png).
+// These fall through to Icon Horse/DDG, which is fine.
 // ---------------------------------------------------------------------------
-describe('Finding (C) — same-domain abbreviation/wordmark accepted', () => {
-  it('POSITIVE: same-domain abbreviation-named file accepted as brand mark', () => {
-    // corpenergy.com has a logo file named "ce-mark.png" — "ce" is an abbreviation
-    // of the brand. It's on the brand's own domain, so it should be accepted.
-    // Use a well-known path pattern to help (assets directory).
+describe('Finding (C) — same-domain abbreviation/wordmark rejected without logo signal', () => {
+  it('same-domain abbreviation-named file without logo signal is rejected (falls through to other sources)', () => {
+    // corpenergy.com/assets/images/ce-mark.png — "ce" is an abbreviation but
+    // has no logo/icon token in filename, brand not in filename, and "mark" is
+    // no longer a logo token. Rejected by sameDomainImageHasLogoSignal.
     expect(isDdgFirstHitRelevant(
       {
         label: 'CorpEnergy - Green Solutions',
@@ -913,11 +926,10 @@ describe('Finding (C) — same-domain abbreviation/wordmark accepted', () => {
         sourcePageUrl: 'https://corpenergy.com/',
       },
       'https://corpenergy.com/dashboard',
-    )).toBe(true);
+    )).toBe(false);
   });
 
-  it('NEGATIVE guardrail: off-domain abbreviation that is not the brand is not accepted', () => {
-    // An abbreviation on a different domain should not be blindly accepted
+  it('off-domain abbreviation that is not the brand is also rejected', () => {
     expect(isDdgFirstHitRelevant(
       {
         label: 'Random Site',
@@ -930,14 +942,14 @@ describe('Finding (C) — same-domain abbreviation/wordmark accepted', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Finding (D) — CMS upload path must not disqualify same-domain brand logo
+// Finding (D) — CMS upload path disqualifies brand-only same-domain images
 //
-// sameDomainImageHasLogoSignal rejects a brand-only logo file when its path
-// matches /uploads/YYYY/MM/. A CMS-hosted real logo should not be dropped
-// just because of its upload path.
+// A single-token brand-named image in a date-stamped CMS upload directory is
+// more likely a blog/news hero than a logo. Rejecting it falls through to
+// other icon sources (Icon Horse / DDG), which is the safer bias.
 // ---------------------------------------------------------------------------
-describe('Finding (D) — CMS upload path does not disqualify brand logo', () => {
-  it('POSITIVE: same-domain /uploads/2024/03/acme.png accepted when acme is the brand', () => {
+describe('Finding (D) — CMS upload path disqualifies brand-only image', () => {
+  it('same-domain /uploads/2024/03/acme.png rejected (CMS date-stamp disqualifier)', () => {
     expect(isDdgFirstHitRelevant(
       {
         label: 'About Acme Corp',
@@ -945,13 +957,10 @@ describe('Finding (D) — CMS upload path does not disqualify brand logo', () =>
         sourcePageUrl: 'https://acme.com/about/',
       },
       'https://acme.com/products',
-    )).toBe(true);
+    )).toBe(false);
   });
 
-  it('NEGATIVE guardrail: same-domain /uploads/2024/03/someoneelse.png not auto-accepted', () => {
-    // "someoneelse" is NOT the brand "acme" — a CMS-uploaded image with a
-    // non-brand filename should not be accepted just because it's on the brand's
-    // domain. It fails the brand-signal check regardless of path.
+  it('same-domain /uploads/2024/03/someoneelse.png also rejected (no brand signal)', () => {
     expect(isDdgFirstHitRelevant(
       {
         label: 'Partners - Acme Corp',
@@ -960,6 +969,99 @@ describe('Finding (D) — CMS upload path does not disqualify brand logo', () =>
       },
       'https://acme.com/products',
     )).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Negative guardrail: same-domain page hosting a DIFFERENT brand's logo
+//
+// A same-domain image whose filename contains a FOREIGN brand token (not the
+// bookmark brand) next to "logo" must be REJECTED. isDdgFirstHitRelevant
+// suppresses the top-level detectForeignBrandInImage for same-domain images
+// (the brand controls the origin — product names shouldn't trigger rejection),
+// but sameDomainImageHasLogoSignal runs detectForeignBrandInImage internally
+// for the logo-token-without-brand path to catch genuine foreign-brand logos.
+//
+// This test FAILS if the genericTokens leak is reintroduced: adding "square"
+// to genericTokens would make detectForeignBrandInImage return null for
+// "square-logo.png", and the candidate would be wrongly accepted.
+// ---------------------------------------------------------------------------
+describe('same-domain foreign-brand logo rejection (genericTokens guardrail)', () => {
+  it('rejects same-domain image with foreign brand in filename (square-logo.png)', () => {
+    // acme.com hosts square-logo.png — "square" is a foreign brand (Square Inc),
+    // not acme's logo. Brand "acme" is NOT in the filename.
+    // sameDomainImageHasLogoSignal detects "square" as foreign via its internal
+    // detectForeignBrandInImage call → rejects.
+    // This test FAILS if "square" is added back to genericTokens.
+    expect(isDdgFirstHitRelevant(
+      {
+        label: 'Acme Partners - Square Integration',
+        imageUrl: 'https://acme.com/assets/square-logo.png',
+        sourcePageUrl: 'https://acme.com/',
+      },
+      'https://acme.com/products',
+    )).toBe(false);
+  });
+
+  it('off-domain image with former-genericToken brand adjacent to "logo" is rejected (proves genericTokens revert works)', () => {
+    // If "square" were still in genericTokens, detectForeignBrandInImage would
+    // return null for "square-logo.png" and the image would pass. With the
+    // revert, "square" is NOT generic, so it's correctly detected as foreign.
+    expect(detectForeignBrandInImage(
+      'https://partner-site.com/assets/square-logo.png',
+      'acme',
+    )).toBe('square');
+  });
+
+  it('off-domain image with "cloud-logo.png" is rejected (cloud was in expanded genericTokens)', () => {
+    expect(detectForeignBrandInImage(
+      'https://cdn.example.com/images/cloud-logo.png',
+      'acme',
+    )).toBe('cloud');
+  });
+
+  it('off-domain image with "connect-logo.png" is rejected (connect was in expanded genericTokens)', () => {
+    expect(detectForeignBrandInImage(
+      'https://cdn.example.com/images/connect-logo.png',
+      'acme',
+    )).toBe('connect');
+  });
+
+  it('off-domain image with "dashboard-logo.svg" is rejected (dashboard was in expanded genericTokens)', () => {
+    expect(detectForeignBrandInImage(
+      'https://cdn.example.com/images/dashboard-logo.svg',
+      'acme',
+    )).toBe('dashboard');
+  });
+
+  it('off-domain image with "studio-logo.png" is rejected (studio was in expanded genericTokens)', () => {
+    expect(detectForeignBrandInImage(
+      'https://cdn.example.com/images/studio-logo.png',
+      'acme',
+    )).toBe('studio');
+  });
+
+  it('isDdgFirstHitRelevant rejects off-domain foreign-brand logo via source-page same-domain path', () => {
+    // Brand "acme", source page is acme.com (same-domain), but image is on
+    // partner-site.com (off-domain). The off-domain foreign-brand check applies.
+    // "square-logo.png" — "square" detected as foreign brand → rejected.
+    expect(isDdgFirstHitRelevant(
+      {
+        label: 'Acme Partners',
+        imageUrl: 'https://partner-site.com/assets/square-logo.png',
+        sourcePageUrl: 'https://acme.com/partners/',
+      },
+      'https://acme.com/products',
+    )).toBe(false);
+  });
+
+  it('layout-prefix tokens still pass (main-logo.png is NOT a foreign brand)', () => {
+    // Ensure the genericTokens revert did not remove the layout/style descriptors
+    // that were already present pre-005ab46.
+    expect(detectForeignBrandInImage(
+      'https://acme.com/assets/main-logo.png',
+      'notacme',
+    )).toBeNull();
   });
 });
 

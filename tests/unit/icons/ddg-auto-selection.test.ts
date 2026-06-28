@@ -43,21 +43,40 @@ describe('rankCandidatesByShape — shape as bounded tiebreaker', () => {
     expect(squareIdx).toBeLessThan(wideIdx);
   });
 
-  it('does NOT promote square past a much-higher-relevance wide candidate', () => {
-    // Square at position 3+ should not leapfrog wide at position 0
-    // when 3+ positions separate them (relevance gap is significant)
+  it('square within 3 positions of wide CAN surface above it (intended — surfaces correct square logos)', () => {
+    // SHAPE_NUDGE_POSITIONS = 2, so a square at position 3 gets sort key
+    // 3 + 0*2 = 3, while a wide at position 0 gets sort key 0 + 2*2 = 4.
+    // The square (key 3) surfaces above the wide (key 4).
+    const candidates = [
+      makeCandidate({ imageUrl: 'https://a.com/best-wide.png', width: 800, height: 200, label: 'Best Wide' }),
+      makeCandidate({ imageUrl: 'https://b.com/second.png', width: 600, height: 200, label: 'Second' }),
+      makeCandidate({ imageUrl: 'https://c.com/third.png', width: 500, height: 200, label: 'Third' }),
+      makeCandidate({ imageUrl: 'https://d.com/gap3-square.png', width: 200, height: 200, label: 'Gap3 Square' }),
+    ];
+
+    const ranked = rankCandidatesByShape(candidates);
+    const squareIdx = ranked.findIndex(c => c.imageUrl.includes('gap3-square'));
+    const wideIdx = ranked.findIndex(c => c.imageUrl.includes('best-wide'));
+    // Square at position 3 surfaces above wide at position 0 (3-position gap)
+    expect(squareIdx).toBeLessThan(wideIdx);
+  });
+
+  it('relevance wins at 4+ position gap — wide stays ahead of distant square', () => {
+    // SHAPE_NUDGE_POSITIONS = 2, so a square at position 4 gets sort key
+    // 4 + 0*2 = 4, while a wide at position 0 gets sort key 0 + 2*2 = 4.
+    // Equal keys → stable sort by original index → wide (index 0) stays first.
     const candidates = [
       makeCandidate({ imageUrl: 'https://a.com/best-wide.png', width: 800, height: 200, label: 'Best Wide' }),
       makeCandidate({ imageUrl: 'https://b.com/second.png', width: 600, height: 200, label: 'Second' }),
       makeCandidate({ imageUrl: 'https://c.com/third.png', width: 500, height: 200, label: 'Third' }),
       makeCandidate({ imageUrl: 'https://d.com/fourth.png', width: 400, height: 200, label: 'Fourth' }),
-      makeCandidate({ imageUrl: 'https://e.com/low-square.png', width: 200, height: 200, label: 'Low Square' }),
+      makeCandidate({ imageUrl: 'https://e.com/gap4-square.png', width: 200, height: 200, label: 'Gap4 Square' }),
     ];
 
     const ranked = rankCandidatesByShape(candidates);
     const wideIdx = ranked.findIndex(c => c.imageUrl.includes('best-wide'));
-    const squareIdx = ranked.findIndex(c => c.imageUrl.includes('low-square'));
-    // The wide at position 0 must stay ahead of the square at position 4
+    const squareIdx = ranked.findIndex(c => c.imageUrl.includes('gap4-square'));
+    // The wide at position 0 stays ahead of the square at position 4 (4-position gap)
     expect(wideIdx).toBeLessThan(squareIdx);
   });
 

@@ -485,18 +485,6 @@ export function detectForeignBrandInImage(imageUrl: string, brand: string): stri
     // Color / style / variant descriptors (e.g. "color-logo", "dark-logo", "white-logo").
     'color', 'colour', 'white', 'black', 'dark', 'light', 'grey', 'gray', 'mono', 'full', 'flat',
     'horizontal', 'vertical', 'stacked', 'wordmark', 'inverted', 'official',
-    // Product / functional descriptors commonly used in own-domain logo filenames.
-    // A same-domain file named "widget-logo.png" or "portal-logo.png" is the brand's
-    // own product/variant logo, not a foreign brand. Without these, the brand's own
-    // logos are over-rejected when the brand name appears only in the host, not the
-    // filename. Only clearly-generic words here — not words that double as brand names.
-    'widget', 'portal', 'mobile', 'platform', 'connect', 'dashboard', 'console',
-    'studio', 'cloud', 'enterprise', 'corporate', 'global', 'digital', 'online',
-    'social', 'service', 'services', 'solutions', 'tools', 'suite', 'network',
-    'group', 'system', 'systems', 'agency', 'market', 'marketing', 'payments',
-    'square', 'round', 'circle', 'badge', 'mark', 'emblem', 'stamp', 'seal',
-    'original', 'classic', 'modern', 'abstract', 'simple', 'mini', 'plus', 'pro',
-    'premium', 'basic', 'standard',
   ]);
 
   // Only the token IMMEDIATELY adjacent to "logo" is treated as a candidate
@@ -562,22 +550,8 @@ function sameDomainImageHasBrandSignal(imageUrl: string, brand: string): boolean
   const filename = filenameMatch[1].toLowerCase();
   const brandLower = brand.toLowerCase();
 
-  // Brand must appear in the filename — with exceptions for same-domain assets
-  // in standard directories (abbreviation/wordmark files that ARE the brand's
-  // mark but use a shortened name).
-  if (!filename.includes(brandLower)) {
-    // Same-domain image in a standard asset directory without the brand in the
-    // filename. Accept when the path lives under a common static-asset directory
-    // (/assets/, /images/, /static/, /media/, /img/) AND the filename is short
-    // (few tokens — an abbreviation/wordmark, not a content image description).
-    // This covers cases like corpenergy.com/assets/images/ce-mark.png where "ce"
-    // is an abbreviation of the brand. Content images have longer multi-token
-    // filenames that fail this check.
-    const isAssetDir = /\/(assets?|images?|static|media|img)\//i.test(path);
-    const shortFilename = filename.split(/[-_]+/).filter(t => t.length >= 2 && !/^\d+$/.test(t)).length <= 2;
-    if (isAssetDir && shortFilename) return true;
-    return false;
-  }
+  // Brand must appear in the filename
+  if (!filename.includes(brandLower)) return false;
 
   // Split filename into semantic tokens (on hyphens, underscores, camelCase boundaries)
   const tokens = filename
@@ -658,23 +632,24 @@ function sameDomainImageHasLogoSignal(imageUrl: string, brand: string): boolean 
     .filter(t => t.length >= 2 && !/^\d+$/.test(t));
 
   // Explicit logo/icon/brand token in the filename — accept even when the domain
-  // brand is absent. A file named "Firefox-parent-brand-logo.png" on mozilla.org
-  // is virtually always the site's own logo. Foreign-brand filenames (e.g.
-  // "Rabobank-Logo.png" on twinq.nl) are caught by detectForeignBrandInImage
-  // BEFORE this function runs in isDdgFirstHitRelevant.
-  const hasLogoToken = tokens.some(t => /^(logo|icon|favicon|brand|symbol|mark)s?$/.test(t));
-  if (hasLogoToken && !filename.includes(brandLower)) return true;
-  if (!filename.includes(brandLower)) {
-    // Same-domain image without brand in filename. Accept when the path lives
-    // under a common static-asset directory AND the filename is either a pure
-    // abbreviation (1 token) or contains a logo/mark indicator token. This
-    // covers cases like corpenergy.com/assets/images/ce-mark.png where "ce" is
-    // an abbreviation and "mark" signals a brand mark.
-    const isAssetDir = /\/(assets?|images?|static|media|img)\//i.test(path);
-    if (isAssetDir && tokens.length <= 1) return true;
-    if (isAssetDir && hasLogoToken) return true;
-    return false;
+  // brand is absent, UNLESS a foreign brand is detected. A file named
+  // "Firefox-parent-brand-logo.png" on mozilla.org is virtually always the site's
+  // own logo (no foreign brand). But "Rabobank-Logo.png" on twinq.nl has
+  // "rabobank" as a foreign brand adjacent to "logo" — reject it.
+  // This check is needed because isDdgFirstHitRelevant suppresses
+  // detectForeignBrandInImage for same-domain images (the brand controls the
+  // origin, so product names like "widget" shouldn't trigger rejection).
+  // The foreign-brand check here is the secondary defense for genuine competitor
+  // logos hosted on the brand's own site.
+  const hasLogoToken = tokens.some(t => /^(logo|icon|favicon|brand|symbol)s?$/.test(t));
+  if (hasLogoToken && !filename.includes(brandLower)) {
+    // Logo token present, brand absent: accept only if no foreign brand detected.
+    // "Firefox-parent-brand-logo" → no foreign brand → accept
+    // "Rabobank-Logo" → "rabobank" is foreign → reject
+    const foreignBrand = detectForeignBrandInImage(imageUrl, brand);
+    return foreignBrand === null;
   }
+  if (!filename.includes(brandLower)) return false;
 
   // Explicit logo indicator alongside brand — always accept
   if (hasLogoToken) return true;
@@ -691,15 +666,12 @@ function sameDomainImageHasLogoSignal(imageUrl: string, brand: string): boolean 
   const nonBrandAreNumeric = nonBrandTokens.every(t => /^\d+$/.test(t));
 
   if (nonBrandTokens.length === 0 || nonBrandAreNumeric) {
-    // Brand is sole semantic token — accept. A brand-only filename on the
-    // brand's own domain (spotify.png, github.png, acme.png) is overwhelmingly
-    // the brand's actual logo. CMS upload paths (/uploads/YYYY/MM/) are NOT
-    // disqualifying: brands frequently host their own logo via WordPress or
-    // other CMS platforms, and the date-bucketed path is just a storage detail.
-    // Content/blog photos named after the brand have additional descriptive
-    // tokens (twinq-connect-2025.jpg, twinq-ambassadeurs.jpg) which are
-    // already caught by the multi-token check above.
-    return true;
+    // Brand is sole semantic token — but reject if it's in a date-stamped
+    // upload directory (WordPress /uploads/YYYY/MM/ etc.). Real logos live in
+    // /assets/, /images/, /static/ — not date-bucketed CMS upload paths.
+    // Prevents blog/event photos named after the brand from passing.
+    const isDateStampedUpload = /\/uploads\/\d{4}\/\d{2}\//i.test(path);
+    return !isDateStampedUpload;
   }
 
   return false;
@@ -837,24 +809,35 @@ export function isDdgFirstHitRelevant(
     && bookmarkRootLabel === imageRootLabel,
   );
 
-  // H1 gate: when the IMAGE is hosted on the bookmark's own domain (or a
-  // cross-TLD sibling CDN), it could be anything on that brand's infrastructure
-  // (staff photo, partner logo, screenshot, content image). Require the image
-  // to carry a brand or logo signal in its filename/path.
-  // When only the SOURCE PAGE is same-domain but the image is on a different
-  // host (CDN, aggregator), skip the image-content check — the image was
-  // explicitly linked from the brand's site.
-  if (isSameDomainImage || isCrossTldSameBrand) {
-    const foreignBrand = detectForeignBrandInImage(imageUrl, brand);
-    if (foreignBrand) return false;
-
-    // Gate is STRICTER than scoring: require EITHER an explicit logo/icon path
-    // signal OR a brand+logo compound filename. Brand-only filenames (e.g.
-    // "twinq.jpg") are too ambiguous — they're often blog/event photos.
+  // H1 gate: same-domain vs off-domain scoping for foreign-brand rejection.
+  //
+  // SAME-DOMAIN images: the brand controls this origin, so a product/variant
+  // name adjacent to "logo" (e.g. "widget-logo.png") is NOT a foreign brand.
+  // Suppress detectForeignBrandInImage — but still require a positive logo
+  // signal via sameDomainImageHasLogoSignal to accept (don't blanket-accept).
+  //
+  // CROSS-TLD same-brand (e.g. delta.nl image for delta.com bookmark):
+  // suppress foreign-brand rejection (same brand, different TLD) but do NOT
+  // grant the relaxed same-domain acceptance paths. A cross-TLD candidate
+  // must pass on its own merits (brand in metadata already verified above).
+  //
+  // OFF-DOMAIN images: apply detectForeignBrandInImage at full strength —
+  // a foreign brand token next to "logo" in an off-domain filename is a
+  // genuine competitor logo and must be rejected.
+  if (isSameDomainImage) {
+    // Same-domain: skip foreign-brand check (brand owns the origin) but
+    // require a logo signal to weed out staff photos, screenshots, and
+    // content images that happen to live on the brand's own infrastructure.
+    if (!sameDomainImageHasLogoSignal(imageUrl, brand)) return false;
+  } else if (isCrossTldSameBrand) {
+    // Cross-TLD sibling (e.g. assets.ing.com for bookmark mijn.ing.nl):
+    // suppress foreign-brand rejection (same brand, different TLD) but
+    // still require a positive logo signal — a cross-TLD candidate must
+    // clear the same logo-signal bar as same-domain images.
     if (!sameDomainImageHasLogoSignal(imageUrl, brand)) return false;
   } else if (isSameDomainSource && !isSameDomainImage) {
-    // Source page is on the brand's domain, image is elsewhere — still check
-    // for a foreign brand in the image filename (but don't require brand signal)
+    // Source page is on the brand's domain, image is elsewhere — apply
+    // foreign-brand rejection at full strength on the off-domain image.
     const foreignBrand = detectForeignBrandInImage(imageUrl, brand);
     if (foreignBrand) return false;
   }
@@ -868,9 +851,11 @@ export function isDdgFirstHitRelevant(
 // Nudges roughly-SQUARE candidates ahead of wide/tall ones WITHOUT letting
 // shape override a significantly higher relevance score. The input is already
 // sorted by relevance (scoreDuckDuckGoResult descending); shape acts as a
-// bounded tiebreaker — it can promote a square candidate by at most
-// SHAPE_NUDGE_POSITIONS positions, but cannot leapfrog candidates with
-// meaningfully higher relevance.
+// bounded tiebreaker. A square candidate can surface above a wide candidate
+// when they are separated by up to 2 * SHAPE_NUDGE_POSITIONS - 1 = 3
+// positions (the square's nudge is 0, the wide's is 2 * NUDGE = 4, so the
+// wide's effective key exceeds the square's when originalIndex gap <= 3).
+// At a gap of 2 * SHAPE_NUDGE_POSITIONS = 4+ positions, relevance wins.
 // ---------------------------------------------------------------------------
 
 const SHAPE_SQUARE_THRESHOLD = 1.4;
@@ -895,8 +880,8 @@ function shapeRank(candidate: Pick<IconSearchCandidate, 'width' | 'height'>): nu
 export function rankCandidatesByShape<T extends Pick<IconSearchCandidate, 'width' | 'height'>>(
   candidates: readonly T[],
 ): T[] {
-  // A nudge of 2 means shape can swap candidates up to 2 positions apart.
-  // At 3+ positions of relevance separation, relevance always wins.
+  // A nudge of 2 means a square (nudge 0) can surface above a wide (nudge 4)
+  // when they are up to 3 positions apart. At 4+ positions, relevance wins.
   const SHAPE_NUDGE_POSITIONS = 2;
   return candidates
     .map((c, i) => ({ c, key: i + shapeRank(c) * SHAPE_NUDGE_POSITIONS, i }))
