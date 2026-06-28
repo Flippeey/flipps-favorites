@@ -412,11 +412,13 @@ describe('H1 — same-domain content-image rejection (phidec.twinq.nl)', () => {
     )).toBe(false);
   });
 
-  it('isDdgFirstHitRelevant rejects brand-only filename in date-stamped CMS uploads path', () => {
+  it('isDdgFirstHitRelevant accepts brand-only filename even in date-stamped CMS uploads path', () => {
     const bookmarkUrl = 'https://phidec.twinq.nl/apex/f?p=TPL:101';
-    // twinq.jpg in /wp-content/uploads/2026/04/ — date-stamped upload directory
-    // is a strong signal this is blog/CMS content, not a logo file.
-    // Real logos live in /assets/, /images/, /static/ — not date-bucketed paths.
+    // twinq.jpg in /wp-content/uploads/2026/04/ — the CMS upload path is just a
+    // storage detail, not a content-quality signal. A brand-only filename on the
+    // brand's own domain IS the brand's logo regardless of the directory structure.
+    // Content/blog photos have multi-token descriptive filenames that are caught
+    // by the multi-token check (twinq-connect-2025.jpg, twinq-ambassadeurs.jpg).
     expect(isDdgFirstHitRelevant(
       {
         label: 'E-learning TwinQ',
@@ -424,7 +426,7 @@ describe('H1 — same-domain content-image rejection (phidec.twinq.nl)', () => {
         sourcePageUrl: 'https://www.twinq.nl/nieuws/e-learning',
       },
       bookmarkUrl,
-    )).toBe(false);
+    )).toBe(true);
   });
 });
 
@@ -854,6 +856,110 @@ describe('detectForeignBrandInImage — layout-prefix descriptors are not foreig
       },
       'https://phidec.twinq.nl/apex/f?p=TPL:101',
     )).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Finding (B) — same-domain logo with brand only in host, not filename
+//
+// detectForeignBrandInImage flags ANY 3+ char token adjacent to "logo" as
+// foreign when the brand is absent from the filename. For SAME-DOMAIN images,
+// the brand controls that origin, so product/variant names next to "logo"
+// (e.g. "widget-logo.png") should not be treated as foreign brands. BUT
+// genuine off-domain competitor logos (Rabobank-Logo on random.com) must
+// still be rejected.
+// ---------------------------------------------------------------------------
+describe('Finding (B) — same-domain brand-only-in-host not flagged foreign', () => {
+  it('POSITIVE: same-domain product-logo file accepted when brand is in host only', () => {
+    // acme.com/assets/widget-logo.png for brand "acme" — "widget" is acme's
+    // own product, not a competitor brand. Brand appears in host, not filename.
+    expect(isDdgFirstHitRelevant(
+      {
+        label: 'Acme Widgets - Home',
+        imageUrl: 'https://acme.com/assets/widget-logo.png',
+        sourcePageUrl: 'https://acme.com/',
+      },
+      'https://acme.com/products',
+    )).toBe(true);
+  });
+
+  it('NEGATIVE guardrail: off-domain competitor brand adjacent to "logo" still rejected', () => {
+    // competitor.com/images/acme-logo.png for brand "notacme" on bookmark notacme.com
+    // — "acme" is a genuine foreign brand on this off-domain image
+    expect(detectForeignBrandInImage(
+      'https://competitor.com/images/acme-logo.png',
+      'notacme',
+    )).toBe('acme');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Finding (C) — same-domain abbreviation/wordmark filename accepted
+//
+// sameDomainImageHasLogoSignal rejects a same-domain image that IS the brand's
+// own mark but uses an abbreviation/wordmark filename: no logo/icon token, no
+// full-brand substring, and not under /assets/(icon|logo|brand)/. The brand's
+// own abbreviation on its own origin should be accepted.
+// ---------------------------------------------------------------------------
+describe('Finding (C) — same-domain abbreviation/wordmark accepted', () => {
+  it('POSITIVE: same-domain abbreviation-named file accepted as brand mark', () => {
+    // corpenergy.com has a logo file named "ce-mark.png" — "ce" is an abbreviation
+    // of the brand. It's on the brand's own domain, so it should be accepted.
+    // Use a well-known path pattern to help (assets directory).
+    expect(isDdgFirstHitRelevant(
+      {
+        label: 'CorpEnergy - Green Solutions',
+        imageUrl: 'https://corpenergy.com/assets/images/ce-mark.png',
+        sourcePageUrl: 'https://corpenergy.com/',
+      },
+      'https://corpenergy.com/dashboard',
+    )).toBe(true);
+  });
+
+  it('NEGATIVE guardrail: off-domain abbreviation that is not the brand is not accepted', () => {
+    // An abbreviation on a different domain should not be blindly accepted
+    expect(isDdgFirstHitRelevant(
+      {
+        label: 'Random Site',
+        imageUrl: 'https://random.com/images/xyz-mark.png',
+        sourcePageUrl: 'https://random.com/',
+      },
+      'https://corpenergy.com/dashboard',
+    )).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Finding (D) — CMS upload path must not disqualify same-domain brand logo
+//
+// sameDomainImageHasLogoSignal rejects a brand-only logo file when its path
+// matches /uploads/YYYY/MM/. A CMS-hosted real logo should not be dropped
+// just because of its upload path.
+// ---------------------------------------------------------------------------
+describe('Finding (D) — CMS upload path does not disqualify brand logo', () => {
+  it('POSITIVE: same-domain /uploads/2024/03/acme.png accepted when acme is the brand', () => {
+    expect(isDdgFirstHitRelevant(
+      {
+        label: 'About Acme Corp',
+        imageUrl: 'https://acme.com/wp-content/uploads/2024/03/acme.png',
+        sourcePageUrl: 'https://acme.com/about/',
+      },
+      'https://acme.com/products',
+    )).toBe(true);
+  });
+
+  it('NEGATIVE guardrail: same-domain /uploads/2024/03/someoneelse.png not auto-accepted', () => {
+    // "someoneelse" is NOT the brand "acme" — a CMS-uploaded image with a
+    // non-brand filename should not be accepted just because it's on the brand's
+    // domain. It fails the brand-signal check regardless of path.
+    expect(isDdgFirstHitRelevant(
+      {
+        label: 'Partners - Acme Corp',
+        imageUrl: 'https://acme.com/wp-content/uploads/2024/03/someoneelse.png',
+        sourcePageUrl: 'https://acme.com/partners/',
+      },
+      'https://acme.com/products',
+    )).toBe(false);
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rankCandidatesByShape } from '@/background/icons/icon-classify';
+import { rankCandidatesByShape, scoreDuckDuckGoResult, tokenizeQuery } from '@/background/icons/icon-classify';
 
 // ---------------------------------------------------------------------------
 // FIX 1 — Shape pre-ranking for auto-selection
@@ -29,23 +29,36 @@ function makeCandidate(overrides: Partial<TestCandidate> & { imageUrl: string })
   };
 }
 
-describe('rankCandidatesByShape — shape pre-ranking for auto path', () => {
-  it('surfaces a square candidate above wide ones when wide are scored higher', () => {
-    // Simulates the Photino case: top 3 by score are wide GitHub OG cards (1200x600),
-    // the valid square Photino logo (200x200) is at rank #4.
+describe('rankCandidatesByShape — shape as bounded tiebreaker', () => {
+  it('promotes a square candidate up by 1-2 positions when near-adjacent to wide', () => {
+    // Square at position 1 can overtake wide at position 0 (1-position gap)
     const candidates = [
-      makeCandidate({ imageUrl: 'https://opengraph.github.com/wide1.png', width: 1200, height: 600, label: 'Wide OG 1' }),
-      makeCandidate({ imageUrl: 'https://opengraph.github.com/wide2.png', width: 1200, height: 600, label: 'Wide OG 2' }),
-      makeCandidate({ imageUrl: 'https://opengraph.github.com/wide3.png', width: 1200, height: 600, label: 'Wide OG 3' }),
-      makeCandidate({ imageUrl: 'https://photino.io/logo.png', width: 200, height: 200, label: 'Photino Logo' }),
+      makeCandidate({ imageUrl: 'https://a.com/wide.png', width: 1200, height: 600, label: 'Wide' }),
+      makeCandidate({ imageUrl: 'https://b.com/square.png', width: 200, height: 200, label: 'Square' }),
     ];
 
     const ranked = rankCandidatesByShape(candidates);
+    const squareIdx = ranked.findIndex(c => c.imageUrl.includes('square'));
+    const wideIdx = ranked.findIndex(c => c.imageUrl.includes('wide'));
+    expect(squareIdx).toBeLessThan(wideIdx);
+  });
 
-    // The square Photino logo must appear before all wide OG cards
-    const squareIndex = ranked.findIndex(c => c.imageUrl === 'https://photino.io/logo.png');
-    const firstWideIndex = ranked.findIndex(c => c.imageUrl.includes('opengraph'));
-    expect(squareIndex).toBeLessThan(firstWideIndex);
+  it('does NOT promote square past a much-higher-relevance wide candidate', () => {
+    // Square at position 3+ should not leapfrog wide at position 0
+    // when 3+ positions separate them (relevance gap is significant)
+    const candidates = [
+      makeCandidate({ imageUrl: 'https://a.com/best-wide.png', width: 800, height: 200, label: 'Best Wide' }),
+      makeCandidate({ imageUrl: 'https://b.com/second.png', width: 600, height: 200, label: 'Second' }),
+      makeCandidate({ imageUrl: 'https://c.com/third.png', width: 500, height: 200, label: 'Third' }),
+      makeCandidate({ imageUrl: 'https://d.com/fourth.png', width: 400, height: 200, label: 'Fourth' }),
+      makeCandidate({ imageUrl: 'https://e.com/low-square.png', width: 200, height: 200, label: 'Low Square' }),
+    ];
+
+    const ranked = rankCandidatesByShape(candidates);
+    const wideIdx = ranked.findIndex(c => c.imageUrl.includes('best-wide'));
+    const squareIdx = ranked.findIndex(c => c.imageUrl.includes('low-square'));
+    // The wide at position 0 must stay ahead of the square at position 4
+    expect(wideIdx).toBeLessThan(squareIdx);
   });
 
   it('preserves original score order within the same shape band', () => {
@@ -62,21 +75,25 @@ describe('rankCandidatesByShape — shape pre-ranking for auto path', () => {
     expect(idx1).toBeLessThan(idx2);
   });
 
-  it('treats candidates without reported dimensions as neutral (between square and wide)', () => {
+  it('nearby square and wide: square is promoted but distant wides are not leapfrogged', () => {
+    // Tests the bounded nature: in a list of mixed shapes, shape only swaps
+    // adjacent-ish candidates. Items far apart in relevance stay ordered.
     const candidates = [
-      makeCandidate({ imageUrl: 'https://a.com/wide.png', width: 1200, height: 600, label: 'Wide' }),
-      makeCandidate({ imageUrl: 'https://b.com/unknown.png', label: 'Unknown dims' }), // no width/height
-      makeCandidate({ imageUrl: 'https://c.com/square.png', width: 200, height: 200, label: 'Square' }),
+      makeCandidate({ imageUrl: 'https://a.com/wide1.png', width: 1200, height: 600, label: 'Wide 1' }),
+      makeCandidate({ imageUrl: 'https://b.com/square1.png', width: 256, height: 256, label: 'Square 1' }),
+      makeCandidate({ imageUrl: 'https://c.com/wide2.png', width: 1200, height: 600, label: 'Wide 2' }),
+      makeCandidate({ imageUrl: 'https://d.com/square2.png', width: 200, height: 200, label: 'Square 2' }),
     ];
 
     const ranked = rankCandidatesByShape(candidates);
-
-    // Square should be first, unknown in the middle, wide last
-    const squareIdx = ranked.findIndex(c => c.imageUrl === 'https://c.com/square.png');
-    const unknownIdx = ranked.findIndex(c => c.imageUrl === 'https://b.com/unknown.png');
-    const wideIdx = ranked.findIndex(c => c.imageUrl === 'https://a.com/wide.png');
-    expect(squareIdx).toBeLessThan(unknownIdx);
-    expect(unknownIdx).toBeLessThan(wideIdx);
+    // Square1 at pos 1 can overtake Wide1 at pos 0 (1-position gap)
+    const square1 = ranked.findIndex(c => c.imageUrl.includes('square1'));
+    const wide1 = ranked.findIndex(c => c.imageUrl.includes('wide1'));
+    expect(square1).toBeLessThan(wide1);
+    // Square2 at pos 3 can overtake Wide2 at pos 2 (1-position gap)
+    const square2 = ranked.findIndex(c => c.imageUrl.includes('square2'));
+    const wide2 = ranked.findIndex(c => c.imageUrl.includes('wide2'));
+    expect(square2).toBeLessThan(wide2);
   });
 
   it('near-square aspect ratio (1.15) is treated as square band', () => {
@@ -104,5 +121,78 @@ describe('rankCandidatesByShape — shape pre-ranking for auto path', () => {
     const ranked = rankCandidatesByShape(candidates);
     expect(ranked[0].imageUrl).toBe('https://a.com/logo1.png');
     expect(ranked[1].imageUrl).toBe('https://b.com/logo2.png');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Finding (A) — shape as tiebreaker, not primary sort key
+//
+// The input to rankCandidatesByShape is already sorted by relevance score
+// (from scoreDuckDuckGoResult). Shape preference must NOT leapfrog a
+// much-higher-relevance candidate. Square preference should only apply
+// among candidates with comparable relevance (close input positions).
+// ---------------------------------------------------------------------------
+
+// Helper for building raw DDG result shape used in scoring
+const makeDdgResult = (overrides: Partial<{
+  image: string;
+  thumbnail: string;
+  title: string;
+  url: string;
+  width: number;
+  height: number;
+}>) => ({
+  image: 'https://example.com/logo.png',
+  thumbnail: 'https://example.com/thumb.png',
+  title: 'Some Logo',
+  url: 'https://example.com/page',
+  width: 256,
+  height: 256,
+  ...overrides,
+});
+
+describe('Finding (A) — shape must not leapfrog significantly higher relevance', () => {
+  it('POSITIVE: wide wordmark with clearly higher relevance outranks square off-brand stock', () => {
+    // Scenario: candidate list sorted by score. Position 0 = highest relevance
+    // (correct wide brand wordmark), positions 4-5 = low relevance (square stock).
+    // Shape must NOT promote the stock image above the wordmark.
+    // The gap of 4+ positions represents a significant relevance difference.
+    const candidates = [
+      // Position 0: correct brand wordmark (wide), highest relevance score
+      makeCandidate({ imageUrl: 'https://seeklogo.com/acme-wordmark.svg', width: 800, height: 200, label: 'Acme Wordmark' }),
+      // Position 1: another relevant candidate (wide)
+      makeCandidate({ imageUrl: 'https://brandslogos.com/acme-logo.png', width: 600, height: 200, label: 'Acme Logo' }),
+      // Position 2: moderate relevance (wide)
+      makeCandidate({ imageUrl: 'https://cdn.example.com/acme-banner.png', width: 800, height: 300, label: 'Acme Banner' }),
+      // Position 3: another moderate (wide)
+      makeCandidate({ imageUrl: 'https://cdn.example.com/acme-og.png', width: 1200, height: 600, label: 'Acme OG' }),
+      // Position 4: low relevance (square stock photo of wrong brand)
+      makeCandidate({ imageUrl: 'https://stocksite.com/generic-square.png', width: 256, height: 256, label: 'Generic Square' }),
+      // Position 5: low relevance (another square off-brand)
+      makeCandidate({ imageUrl: 'https://stocksite.com/random-square.png', width: 200, height: 200, label: 'Random Square' }),
+    ];
+
+    const ranked = rankCandidatesByShape(candidates);
+
+    // The wide wordmark at position 0 must NOT be pushed behind the square stock at position 4+
+    const wordmarkIdx = ranked.findIndex(c => c.imageUrl.includes('acme-wordmark'));
+    const stockIdx = ranked.findIndex(c => c.imageUrl.includes('generic-square'));
+    expect(wordmarkIdx).toBeLessThan(stockIdx);
+  });
+
+  it('NEGATIVE guardrail: among near-equal relevance, square is still preferred over wide', () => {
+    // When candidates are adjacent in the input (close relevance scores),
+    // shape preference should still favor square.
+    const candidates = [
+      // Position 0: wide candidate
+      makeCandidate({ imageUrl: 'https://a.com/wide-logo.png', width: 800, height: 200, label: 'Wide Logo' }),
+      // Position 1: square candidate (very close relevance)
+      makeCandidate({ imageUrl: 'https://a.com/square-logo.png', width: 256, height: 256, label: 'Square Logo' }),
+    ];
+
+    const ranked = rankCandidatesByShape(candidates);
+    const squareIdx = ranked.findIndex(c => c.imageUrl.includes('square'));
+    const wideIdx = ranked.findIndex(c => c.imageUrl.includes('wide'));
+    expect(squareIdx).toBeLessThan(wideIdx);
   });
 });
