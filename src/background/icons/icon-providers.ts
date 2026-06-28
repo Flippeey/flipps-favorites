@@ -32,6 +32,7 @@ import {
   isCrossRootRedirect,
   isDdgFirstHitRelevant,
   rankCandidatesByShape,
+  selectBestSafeFallback,
 } from './icon-classify';
 import {
   parseOriginIconCandidates,
@@ -352,11 +353,21 @@ export async function fetchDuckDuckGoFirstHit(request: GetIconRequest, cacheKey:
   // Irrelevant stock art (e.g. "Letter TBC Monogram" for tbcarmory.com)
   // is filtered out so the pipeline falls through to the generated letter-tile.
   const gated = allCandidates.filter(c => isDdgFirstHitRelevant(c, request.bookmarkUrl));
-  if (!gated.length) return null;
+
+  // When the strict gate rejects ALL candidates, fall back to the best
+  // non-hard-junk candidate rather than immediately producing a letter-tile.
+  // Hard junk (people photos, off-domain foreign-brand logos) is still excluded;
+  // only soft rejections (missing brand signal, low relevance) are rescued.
+  const candidatePool = gated.length > 0
+    ? gated
+    : selectBestSafeFallback(allCandidates, request.bookmarkUrl);
+  if (!candidatePool.length) return null;
 
   // Pre-rank by shape: try roughly-square candidates before wide/tall ones so
   // the fetch budget is spent on logo-shaped images, not wide OpenGraph cards.
-  const candidates = rankCandidatesByShape(gated);
+  // (selectBestSafeFallback already applies score + shape ranking, but the
+  // primary path needs it too, and re-ranking is cheap on a small list.)
+  const candidates = rankCandidatesByShape(candidatePool);
 
   // Wrap the candidate loop in a total time budget so a cluster of slow/failing
   // hosts can't monopolize a resolutionSemaphore slot indefinitely. Returns the

@@ -888,3 +888,113 @@ export function rankCandidatesByShape<T extends Pick<IconSearchCandidate, 'width
     .sort((a, b) => a.key - b.key || a.i - b.i)
     .map(({ c }) => c);
 }
+
+// ---------------------------------------------------------------------------
+// Hard-junk predicate for DDG fallback path
+//
+// Returns true ONLY for candidates that are genuinely wrong and should produce
+// a letter-tile rather than being used as an icon. Two classes:
+//   (1) People-content images (team photos, headshots, founders)
+//   (2) Off-domain foreign-brand logos (competitor logo on a different domain,
+//       not same-domain and not cross-TLD same-brand)
+//
+// Soft signals (missing brand token, low relevance, same-domain content images
+// without logo signal) are NOT hard junk — the fallback path rescues those.
+// ---------------------------------------------------------------------------
+
+export function isHardJunkCandidate(
+  candidate: Pick<IconSearchCandidate, 'imageUrl' | 'sourcePageUrl'>,
+  bookmarkUrl: string,
+): boolean {
+  const imageUrl = candidate.imageUrl ?? '';
+
+  // (1) People-content: always hard junk regardless of domain relationship
+  if (isPeopleContentImage(imageUrl)) return true;
+
+  // (2) Off-domain foreign-brand: only when the image is NOT on the bookmark's
+  // own domain and NOT a cross-TLD sibling of the same brand.
+  const { brand: rawBrand } = extractBrandInfo(bookmarkUrl);
+  const brand = stripKnownVanityPrefix(rawBrand);
+  // Short brands can't be reliably detected — skip foreign-brand check
+  if (brand.length < 3) return false;
+
+  const imageHostname = extractHostname(imageUrl);
+  const bookmarkRegistrable = getRegistrableDomain(extractHostname(bookmarkUrl));
+
+  // Same-domain: brand controls this origin, not hard junk
+  const imageRegistrable = getRegistrableDomain(imageHostname);
+  const isSameDomain = Boolean(
+    bookmarkRegistrable
+    && imageHostname
+    && imageRegistrable === bookmarkRegistrable,
+  );
+  if (isSameDomain) return false;
+
+  // Cross-TLD same-brand (e.g. ing.com image for ing.nl bookmark): not hard junk
+  const bookmarkRootLabel = getRootLabel(bookmarkRegistrable);
+  const imageRootLabel = getRootLabel(imageRegistrable);
+  const isCrossTldSameBrand = Boolean(
+    bookmarkRootLabel
+    && imageRootLabel
+    && bookmarkRootLabel.length >= 3
+    && bookmarkRootLabel === imageRootLabel,
+  );
+  if (isCrossTldSameBrand) return false;
+
+  // Off-domain: check for foreign brand adjacent to "logo" in the filename
+  const foreignBrand = detectForeignBrandInImage(imageUrl, brand);
+  if (foreignBrand) return true;
+
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Fallback candidate selection for DDG auto-resolution
+//
+// When isDdgFirstHitRelevant rejects ALL candidates (strict gate empties),
+// this function selects the best non-hard-junk candidate. Filters out hard
+// junk, ranks by relevance (scoreDuckDuckGoResult) then shape tiebreaker
+// (rankCandidatesByShape). Returns an ordered list; the caller iterates it,
+// calling fetchAndValidateImage on each until one validates.
+// ---------------------------------------------------------------------------
+
+export function selectBestSafeFallback(
+  candidates: readonly IconSearchCandidate[],
+  bookmarkUrl: string,
+): IconSearchCandidate[] {
+  if (candidates.length === 0) return [];
+
+  // Filter out hard junk
+  const safe = candidates.filter(c => !isHardJunkCandidate(c, bookmarkUrl));
+  if (safe.length === 0) return [];
+
+  // Rank by relevance score (descending), then shape tiebreaker
+  const hostname = extractHostname(bookmarkUrl);
+  const { brand: rawBrand } = extractBrandInfo(bookmarkUrl);
+  const queryTerms = tokenizeQuery(rawBrand);
+  const { isPersonalInfra } = extractBrandInfo(bookmarkUrl);
+  const bookmarkHostname = isPersonalInfra ? null : hostname;
+
+  const scored = safe
+    .map(c => ({
+      candidate: c,
+      score: scoreDuckDuckGoResult(
+        {
+          image: c.imageUrl,
+          thumbnail: c.previewUrl ?? c.imageUrl,
+          title: c.label ?? '',
+          url: c.sourcePageUrl ?? '',
+          width: c.width ?? 0,
+          height: c.height ?? 0,
+        },
+        bookmarkHostname ?? null,
+        queryTerms,
+      ),
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  const sortedCandidates = scored.map(({ candidate }) => candidate);
+
+  // Apply shape tiebreaker (bounded — does not override large relevance gaps)
+  return rankCandidatesByShape(sortedCandidates);
+}

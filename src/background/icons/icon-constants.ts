@@ -1,8 +1,8 @@
-// Bumped v12->v13 to invalidate cached S2 globe placeholders so the new
-// self-calibrating globe gate applies globally. Previously S2's generic globe
-// image passed quality checks and was cached, preventing fallthrough to Icon
-// Horse / DDG for domains with no real S2 favicon.
-export const iconPipelineVersion = 'bookmark-icons-v13';
+// Bumped v13->v14 to invalidate cached letter-tiles that were produced when
+// the DDG relevance gate rejected all candidates with no fallback. The new
+// fallback path rescues soft-rejected candidates (missing brand signal) while
+// still excluding hard junk (people photos, off-domain foreign-brand logos).
+export const iconPipelineVersion = 'bookmark-icons-v14';
 export const faviconProviderUrl = 'https://www.google.com/s2/favicons';
 export const faviconRequestSize = 256;
 export const duckDuckGoSearchUrl = 'https://duckduckgo.com/';
