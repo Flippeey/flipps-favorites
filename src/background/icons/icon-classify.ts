@@ -402,7 +402,10 @@ export function brandMatchesAsToken(brand: string, text: string): boolean {
   // "Product Hunt", "product-hunt-logo.png" — which the token regex above cannot
   // match. Fall back to a separator-collapsed substring test. Length-gated to
   // >= 6 chars so short brands can't substring-collide (e.g. "art" in "cart").
-  const collapse = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  // Strip ONLY intra-word joiners (hyphen, underscore, whitespace), never path or
+  // host separators ('/', '.', ':') — otherwise a brand could match across URL
+  // boundaries (e.g. "foobar" inside ".../foo/bar.png").
+  const collapse = (value: string): string => value.toLowerCase().replace(/[-_\s]+/g, '');
   const collapsedBrand = collapse(brand);
   if (collapsedBrand.length >= 6) {
     return collapse(text).includes(collapsedBrand);
@@ -484,6 +487,12 @@ export function detectForeignBrandInImage(imageUrl: string, brand: string): stri
     'horizontal', 'vertical', 'stacked', 'wordmark', 'inverted', 'official',
   ]);
 
+  // Only the token IMMEDIATELY adjacent to "logo" is treated as a candidate
+  // foreign brand. Scanning further back wrongly flags own-product tokens in a
+  // legit same-domain logo file (e.g. "firefox" in "firefox-parent-brand-logo"
+  // on mozilla.org). The trade-off: a competitor brand separated from "logo" by a
+  // (now-generic) descriptor — "rabobank-white-logo" — slips through. That edge
+  // case is far rarer than the layout-prefix false-positives the denylist fixes.
   // Pattern 1: <token>-logo, <token>_logo, <token>logo
   const beforeLogo = /([a-z]{3,})[-_]?logo/gi;
   let match: RegExpExecArray | null;

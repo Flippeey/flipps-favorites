@@ -732,6 +732,13 @@ describe('brandMatchesAsToken — compound brands', () => {
     expect(brandMatchesAsToken('producthunt', 'random-stock-photo.png')).toBe(false);
   });
 
+  it('does NOT match a compound brand across URL path/host boundaries', () => {
+    // WHY: the collapsed fallback must strip only intra-word joiners, never '/'
+    // or '.', so "foobar" cannot match ".../foo/bar.png" across a path boundary.
+    expect(brandMatchesAsToken('foobar', 'https://example.com/foo/bar-icon.png')).toBe(false);
+    expect(brandMatchesAsToken('foobar', 'https://foo.bar.com/logo.png')).toBe(false);
+  });
+
   it('does NOT substring-collide for short brands (length-gated to >= 6)', () => {
     // "art" must not match inside "cart"; the collapsed fallback only runs for 6+ char brands.
     expect(brandMatchesAsToken('art', 'cart-logo.png')).toBe(false);
@@ -831,6 +838,12 @@ describe('detectForeignBrandInImage — layout-prefix descriptors are not foreig
   it('still returns the foreign brand for a real competitor logo (Rabobank)', () => {
     expect(detectForeignBrandInImage('https://twinq.nl/wp-content/uploads/Rabobank-Logo.jpg', 'twinq')).toBe('rabobank');
   });
+
+  // KNOWN LIMITATION: only the token adjacent to "logo" is inspected, so a
+  // competitor brand separated from "logo" by a now-generic descriptor
+  // ("rabobank-white-logo") slips through. Catching it would wrongly reject
+  // legit same-domain own-product logos ("firefox-parent-brand-logo" on
+  // mozilla.org), which is the worse regression — see the FIX 3 acceptance tests.
 
   it('isDdgFirstHitRelevant accepts a same-domain main-logo.png (own logo, layout prefix)', () => {
     expect(isDdgFirstHitRelevant(
