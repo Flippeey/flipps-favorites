@@ -1,6 +1,6 @@
 import type { IconCacheRecord, IconSourceKind, ResolvedIcon } from '@/shared/messages';
 import { buildFallbackSvgDataUrl } from '@/shared/icon-fallback';
-import { cacheTtlMs, iconPipelineVersion, maxSvgIconBytes } from './icon-constants';
+import { cacheTtlMs, generatedTtlMs, iconPipelineVersion, maxSvgIconBytes, placeholderMaxDistinctColors, placeholderMinDominantRatio, placeholderMaxSaturation, placeholderMinBrightness, placeholderMaxBrightness } from './icon-constants';
 import { isDataUrl } from './icon-parse';
 import { getIconLabel } from './icon-classify';
 import { isIcoBytes, extractLargestIcoPng } from './ico-parse';
@@ -13,6 +13,9 @@ interface FetchAndValidateArgs {
   timeoutMs: number;
   minimumEdge: number;
   requireOpaqueCenter: boolean;
+  // When true, reject images that look like Icon Horse letter-placeholders:
+  // few distinct colors + dominant achromatic grey. Only set on the IH path.
+  rejectMonotonePlaceholder?: boolean;
   // Accept SVG without bitmap validation. Only set for candidates declared by the
   // bookmark's own origin (<link rel="icon">); rendered via <img>, so scripts are inert.
   allowSvg?: boolean;
@@ -73,6 +76,7 @@ export async function fetchAndValidateImage(args: FetchAndValidateArgs): Promise
     if (minEdge < args.minimumEdge) return null;
     if (aspectRatio > 1.4) return null;
     if (args.requireOpaqueCenter && !hasOpaqueCenter(bitmap)) return null;
+    if (args.rejectMonotonePlaceholder && looksLikeLetterPlaceholder(bitmap)) return null;
   } finally {
     bitmap.close();
   }
@@ -122,6 +126,132 @@ export function hasOpaqueCenter(bitmap: ImageBitmap): boolean {
   }
 }
 
+/**
+ * Count distinct quantized color buckets in raw RGBA pixel data.
+ * Exported for unit-testing without OffscreenCanvas (which is unavailable in
+ * Vitest/Node).
+ *
+ * Quantization: each RGB channel >> 2 (6-bit), giving 64^3 = 262144 possible
+ * buckets. Only opaque pixels (alpha >= 128) are counted — transparent regions
+ * (rounded corners, shadows) don't contribute.
+ */
+export function countDistinctColorsFromPixels(data: Uint8ClampedArray): number {
+  const seen = new Set<number>();
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 128) continue;
+    const r = data[i] >> 2;
+    const g = data[i + 1] >> 2;
+    const b = data[i + 2] >> 2;
+    seen.add((r << 12) | (g << 6) | b);
+  }
+  return seen.size;
+}
+
+/**
+ * Detect Icon Horse letter-placeholders from raw RGBA pixel data.
+ * Exported for unit-testing without OffscreenCanvas.
+ *
+ * Compound condition (ALL must be true):
+ *   1. Few distinct colors (<= placeholderMaxDistinctColors)
+ *   2. Dominant color covers >= placeholderMinDominantRatio of opaque pixels
+ *   3. Dominant color is achromatic (channel spread <= placeholderMaxSaturation)
+ *   4. Dominant color is light-grey (brightness in [placeholderMinBrightness, placeholderMaxBrightness])
+ *      — narrow band hugging IH's actual placeholder at ~226; dark/mid grey logos escape.
+ *
+ * Calibrated from real Icon Horse responses:
+ *   Placeholders: dela.nl (5 colors, 89.8%, grey 226,226,226, brightness 226),
+ *                 phidec.twinq.nl (4 colors, 93.8%, grey 226,226,226, brightness 226)
+ *   Kept: YouTube (RED, saturated), Twitter (BLACK, brightness 0), Apple silver
+ *         (brightness ~155, below floor), grey "W" (brightness 170, below floor)
+ *
+ * LIMITATION: This gate keys on Icon Horse's CURRENT light-grey placeholder palette.
+ * If icon.horse changes its fallback style (different background color, glyph, or
+ * layout), the gate silently misses and the bug returns. A more robust future
+ * alternative: fingerprint IH's fallback bytes via a bogus-host probe at startup
+ * (fetch icon.horse/icon/<uuid>.invalid, hash the response, compare at gate time).
+ */
+export function isMonotoneLetterPlaceholder(data: Uint8ClampedArray): boolean {
+  // 1. Few distinct colors — delegate to the unit-tested helper so the
+  //    existing countDistinctColorsFromPixels tests genuinely cover this
+  //    live gate's color-counting logic. The 16x16 image is tiny, so the
+  //    second pass below is negligible.
+  if (countDistinctColorsFromPixels(data) > placeholderMaxDistinctColors) return false;
+
+  const counts = new Map<number, number>();
+  const rgbSums = new Map<number, [number, number, number, number]>(); // [sumR, sumG, sumB, count]
+  let totalOpaque = 0;
+
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 128) continue;
+    totalOpaque++;
+    const r = data[i] >> 2;
+    const g = data[i + 1] >> 2;
+    const b = data[i + 2] >> 2;
+    const key = (r << 12) | (g << 6) | b;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+    const existing = rgbSums.get(key);
+    if (existing) {
+      existing[0] += data[i];
+      existing[1] += data[i + 1];
+      existing[2] += data[i + 2];
+      existing[3]++;
+    } else {
+      rgbSums.set(key, [data[i], data[i + 1], data[i + 2], 1]);
+    }
+  }
+
+  if (totalOpaque === 0) return false;
+
+  // 2. Find dominant bucket
+  let dominantKey = 0;
+  let dominantCount = 0;
+  for (const [key, count] of counts) {
+    if (count > dominantCount) {
+      dominantKey = key;
+      dominantCount = count;
+    }
+  }
+  if (dominantCount / totalOpaque < placeholderMinDominantRatio) return false;
+
+  // 3. Dominant color is achromatic light-grey
+  const sums = rgbSums.get(dominantKey);
+  if (!sums || sums[3] === 0) return false;
+  const avgR = sums[0] / sums[3];
+  const avgG = sums[1] / sums[3];
+  const avgB = sums[2] / sums[3];
+
+  const maxChannel = Math.max(avgR, avgG, avgB);
+  const minChannel = Math.min(avgR, avgG, avgB);
+  const spread = maxChannel - minChannel;
+  if (spread > placeholderMaxSaturation) return false;
+
+  // Brightness check: narrow light-grey band [200, 240] hugs IH's placeholder at ~226.
+  // Dark grey (85), mid-grey (170), silver (155), black (0), and white (255) all escape.
+  const brightness = (avgR + avgG + avgB) / 3;
+  if (brightness < placeholderMinBrightness || brightness > placeholderMaxBrightness) return false;
+
+  return true;
+}
+
+/**
+ * Downscale a bitmap to 16x16 and check if it looks like a letter placeholder.
+ * Reuses the same OffscreenCanvas pattern as `hasOpaqueCenter`.
+ */
+function looksLikeLetterPlaceholder(bitmap: ImageBitmap): boolean {
+  if (typeof OffscreenCanvas === 'undefined') return false;
+  try {
+    const sampleSize = 16;
+    const canvas = new OffscreenCanvas(sampleSize, sampleSize);
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return false;
+    context.drawImage(bitmap, 0, 0, sampleSize, sampleSize);
+    const imageData = context.getImageData(0, 0, sampleSize, sampleSize);
+    return isMonotoneLetterPlaceholder(imageData.data);
+  } catch {
+    return false;
+  }
+}
+
 export async function fetchWithTimeout(url: string, timeoutMs: number, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -156,13 +286,17 @@ export async function blobToDataUrl(blob: Blob, mimeType: string): Promise<strin
 export function createGeneratedRecord(bookmarkUrl: string, bookmarkTitle: string | undefined, cacheKey: string): IconCacheRecord {
   const label = getIconLabel(bookmarkTitle, bookmarkUrl);
   const dataUrl = buildFallbackSvgDataUrl(label);
+  const now = Date.now();
   return {
     cacheKey,
     bookmarkUrl,
     sourceKind: 'generated',
     dataUrl,
     mimeType: 'image/svg+xml',
-    updatedAt: Date.now(),
+    updatedAt: now,
+    // Short TTL so a generated fallback re-resolves on a later calm load rather
+    // than persisting until the next browser restart (sweepGeneratedRecords).
+    expiresAt: now + generatedTtlMs,
     pipelineVersion: iconPipelineVersion,
   };
 }

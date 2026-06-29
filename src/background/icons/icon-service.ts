@@ -4,6 +4,7 @@ import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRec
 import { evictExpiredCachedIcons } from '@/shared/icon-idb';
 import { getOverrideKeyForScope, normalizeOverrideScope, type IconOverrideScope } from '@/shared/icon-scope';
 import { iconPipelineVersion, maxDuckDuckGoResults, autoSourceTimeoutMs, sweepBatchSize, sweepBatchSpacingMs, maxConcurrentResolutions, getIconCacheKey } from './icon-constants';
+import { isRecordStale, restampedGeneratedRecord } from './icon-cache-policy';
 import { ResolutionSemaphore, sleep } from './concurrency';
 import { createGeneratedRecord, toResolvedIcon } from './icon-image';
 import { dedupeIconCandidates, getDomainCandidates, buildSearchQueryFromBookmark } from './icon-classify';
@@ -142,8 +143,10 @@ async function resolveIcon(request: GetIconRequest, cacheKey: string): Promise<R
 
   const cached = await readIconCacheRecord(cacheKey);
   if (cached && cached.pipelineVersion === iconPipelineVersion && isDataUrl(cached.dataUrl)) {
-    const isStale = typeof cached.expiresAt === 'number' && Date.now() > cached.expiresAt;
-    if (isStale && cached.sourceKind !== 'generated') {
+    if (isRecordStale(cached, Date.now())) {
+      // Generated letter-tiles now carry a short TTL and ARE eligible for refresh
+      // (no sourceKind exclusion), so a tile cached during a re-resolution storm
+      // self-heals on a later calm load instead of sticking until restart.
       scheduleBackgroundRefresh(request, cacheKey);
     }
     return toResolvedIcon(cached);
@@ -237,6 +240,14 @@ function scheduleBackgroundRefresh(request: GetIconRequest, cacheKey: string): v
         const fresh = await resolveAutomaticIcon(request, cacheKey);
         if (fresh) {
           await writeIconCacheRecord(fresh);
+        } else {
+          // Still nothing better than the cached tile. If it's a generated
+          // fallback, re-stamp its TTL so an icon-less host doesn't re-trigger a
+          // background refresh on every subsequent load.
+          const restamped = restampedGeneratedRecord(await readIconCacheRecord(cacheKey), Date.now());
+          if (restamped) {
+            await writeIconCacheRecord(restamped);
+          }
         }
       } finally {
         release();

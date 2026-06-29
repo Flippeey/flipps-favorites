@@ -1,4 +1,8 @@
-export const iconPipelineVersion = 'bookmark-icons-v11';
+// Bumped v13->v14 to invalidate cached letter-tiles that were produced when
+// the DDG relevance gate rejected all candidates with no fallback. The new
+// fallback path rescues soft-rejected candidates (missing brand signal) while
+// still excluding hard junk (people photos, off-domain foreign-brand logos).
+export const iconPipelineVersion = 'bookmark-icons-v14';
 export const faviconProviderUrl = 'https://www.google.com/s2/favicons';
 export const faviconRequestSize = 256;
 export const duckDuckGoSearchUrl = 'https://duckduckgo.com/';
@@ -11,6 +15,11 @@ export const maxDuckDuckGoResults = 30;
 export const ddgPrimaryFilter = '&f=,clipart,Square,Transparent';
 export const ddgFallbackFilter = '&f=,,Medium,Square';
 export const cacheTtlMs = 30 * 24 * 60 * 60 * 1000; // 30 days
+// Generated letter-tiles are a low-confidence "nothing found yet" state, not a
+// confident resolution. Give them a short TTL so a tile cached during a
+// re-resolution storm (e.g. after a pipeline-version bump invalidates the cache)
+// self-heals on a later, calmer load instead of persisting until browser restart.
+export const generatedTtlMs = 24 * 60 * 60 * 1000; // 24 hours
 export const autoSourceTimeoutMs = 3000;
 export const originFetchTimeoutMs = 2000;
 export const iconHorseTimeoutMs = 2500;
@@ -20,6 +29,29 @@ export const ddgFirstHitTimeoutMs = 4000;
 // Caps worst-case latency (8 candidates x 2 fetches x 4s each = 64s) to prevent
 // semaphore starvation. Returns best result found so far / null when exceeded.
 export const ddgCandidateBudgetMs = 15_000;
+// Icon Horse placeholder detection constants.
+// Compound gate: few colors + dominant + achromatic LIGHT-grey = placeholder.
+//
+// Calibrated from real Icon Horse responses (16x16 downscaled, 6-bit quantized):
+//   Placeholders:  dela.nl     (5 colors, 89.8% dominant, grey 226,226,226, brightness 226)
+//                  phidec.twinq.nl (4 colors, 93.8% dominant, grey 226,226,226, brightness 226)
+//   Real low-color: YouTube    (4 colors, 93.0%, RED 255,0,51) -- NOT grey (saturated)
+//                   Twitter    (5 colors, 89.1%, BLACK 0,0,0)  -- too dark (brightness 0)
+//                   Spotify    (4 colors, 57.6%, GREEN 30,215,96) -- saturated
+//                   Microsoft  (4 colors, 25.0%, multicolor)   -- no single dominant
+//   Real grey logos (MUST be kept):
+//                   Apple silver  (dominant ~153,153,158, brightness ~155) -- below floor
+//                   Grey "W" logo (dominant ~170,170,170, brightness 170) -- below floor
+//                   Dark grey     (dominant ~85,85,85, brightness 85)     -- below floor
+//
+// Brightness band [200, 240] hugs IH's light-grey (~226) while letting dark/mid greys escape.
+// The achromatic + light-grey brightness check is the key discriminator.
+export const placeholderMaxDistinctColors = 6;
+export const placeholderMinDominantRatio = 0.85;
+export const placeholderMaxSaturation = 20;
+export const placeholderMinBrightness = 200;
+export const placeholderMaxBrightness = 240;
+
 export const sweepBatchSize = 4;
 export const sweepBatchSpacingMs = 250;
 export const maxConcurrentResolutions = 6;

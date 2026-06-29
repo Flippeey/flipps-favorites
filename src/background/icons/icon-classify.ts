@@ -395,7 +395,22 @@ export function brandMatchesAsToken(brand: string, text: string): boolean {
   // delimiters: start/end of string OR any non-alphanumeric character.
   const escaped = brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pattern = new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, 'i');
-  return pattern.test(text);
+  if (pattern.test(text)) return true;
+
+  // Compound brands whose registrable label is concatenated (e.g. "producthunt",
+  // "lastepochtools") are routinely rendered with the word break restored —
+  // "Product Hunt", "product-hunt-logo.png" — which the token regex above cannot
+  // match. Fall back to a separator-collapsed substring test. Length-gated to
+  // >= 6 chars so short brands can't substring-collide (e.g. "art" in "cart").
+  // Strip ONLY intra-word joiners (hyphen, underscore, whitespace), never path or
+  // host separators ('/', '.', ':') — otherwise a brand could match across URL
+  // boundaries (e.g. "foobar" inside ".../foo/bar.png").
+  const collapse = (value: string): string => value.toLowerCase().replace(/[-_\s]+/g, '');
+  const collapsedBrand = collapse(brand);
+  if (collapsedBrand.length >= 6) {
+    return collapse(text).includes(collapsedBrand);
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -418,7 +433,7 @@ export function isPeopleContentImage(imageUrl: string): boolean {
   } catch {
     textToCheck = imageUrl;
   }
-  return /(?:^|[/\-_.])(?:founders?|team|staff|people|headshots?|portraits?|employees?|testimonials?|about[-_]?us|medewerkers?)(?:$|[/\-_.])/i.test(textToCheck);
+  return /(?:^|[/\-_.])(?:founders?|team|staff|people|headshots?|portraits?|employees?|testimonials?|about[-_]?us|medewerkers?|leadership|management|profile|avatars?|persons?|our[-_]?people)(?:$|[/\-_.])/i.test(textToCheck);
 }
 
 // ---------------------------------------------------------------------------
@@ -459,8 +474,25 @@ export function detectForeignBrandInImage(imageUrl: string, brand: string): stri
   // for brand "stripe" is the brand's own product-qualified logo, not foreign.
   if (filename.includes(brandLower)) return null;
 
-  const genericTokens = new Set(['the', 'free', 'vector', 'png', 'svg', 'transparent', 'design', 'icon', 'brand', 'images', 'large', 'small', 'logo', 'new', 'old', 'copy', 'day']);
+  const genericTokens = new Set([
+    // Generic descriptors / file words
+    'the', 'free', 'vector', 'png', 'svg', 'transparent', 'design', 'icon', 'brand',
+    'images', 'large', 'small', 'logo', 'new', 'old', 'copy', 'day',
+    // Layout / placement descriptors (e.g. "main-logo.png", "header-logo.svg").
+    // These are NOT brand names, so an own-domain logo file prefixed with one
+    // must not be misclassified as a foreign brand and rejected.
+    'main', 'header', 'footer', 'site', 'top', 'nav', 'navbar', 'primary', 'secondary', 'default',
+    // Color / style / variant descriptors (e.g. "color-logo", "dark-logo", "white-logo").
+    'color', 'colour', 'white', 'black', 'dark', 'light', 'grey', 'gray', 'mono', 'full', 'flat',
+    'horizontal', 'vertical', 'stacked', 'wordmark', 'inverted', 'official',
+  ]);
 
+  // Only the token IMMEDIATELY adjacent to "logo" is treated as a candidate
+  // foreign brand. Scanning further back wrongly flags own-product tokens in a
+  // legit same-domain logo file (e.g. "firefox" in "firefox-parent-brand-logo"
+  // on mozilla.org). The trade-off: a competitor brand separated from "logo" by a
+  // (now-generic) descriptor — "rabobank-white-logo" — slips through. That edge
+  // case is far rarer than the layout-prefix false-positives the denylist fixes.
   // Pattern 1: <token>-logo, <token>_logo, <token>logo
   const beforeLogo = /([a-z]{3,})[-_]?logo/gi;
   let match: RegExpExecArray | null;
@@ -600,12 +632,23 @@ function sameDomainImageHasLogoSignal(imageUrl: string, brand: string): boolean 
     .filter(t => t.length >= 2 && !/^\d+$/.test(t));
 
   // Explicit logo/icon/brand token in the filename — accept even when the domain
-  // brand is absent. A file named "Firefox-parent-brand-logo.png" on mozilla.org
-  // is virtually always the site's own logo. Foreign-brand filenames (e.g.
-  // "Rabobank-Logo.png" on twinq.nl) are caught by detectForeignBrandInImage
-  // BEFORE this function runs in isDdgFirstHitRelevant.
+  // brand is absent, UNLESS a foreign brand is detected. A file named
+  // "Firefox-parent-brand-logo.png" on mozilla.org is virtually always the site's
+  // own logo (no foreign brand). But "Rabobank-Logo.png" on twinq.nl has
+  // "rabobank" as a foreign brand adjacent to "logo" — reject it.
+  // This check is needed because isDdgFirstHitRelevant suppresses
+  // detectForeignBrandInImage for same-domain images (the brand controls the
+  // origin, so product names like "widget" shouldn't trigger rejection).
+  // The foreign-brand check here is the secondary defense for genuine competitor
+  // logos hosted on the brand's own site.
   const hasLogoToken = tokens.some(t => /^(logo|icon|favicon|brand|symbol)s?$/.test(t));
-  if (hasLogoToken && !filename.includes(brandLower)) return true;
+  if (hasLogoToken && !filename.includes(brandLower)) {
+    // Logo token present, brand absent: accept only if no foreign brand detected.
+    // "Firefox-parent-brand-logo" → no foreign brand → accept
+    // "Rabobank-Logo" → "rabobank" is foreign → reject
+    const foreignBrand = detectForeignBrandInImage(imageUrl, brand);
+    return foreignBrand === null;
+  }
   if (!filename.includes(brandLower)) return false;
 
   // Explicit logo indicator alongside brand — always accept
@@ -766,24 +809,35 @@ export function isDdgFirstHitRelevant(
     && bookmarkRootLabel === imageRootLabel,
   );
 
-  // H1 gate: when the IMAGE is hosted on the bookmark's own domain (or a
-  // cross-TLD sibling CDN), it could be anything on that brand's infrastructure
-  // (staff photo, partner logo, screenshot, content image). Require the image
-  // to carry a brand or logo signal in its filename/path.
-  // When only the SOURCE PAGE is same-domain but the image is on a different
-  // host (CDN, aggregator), skip the image-content check — the image was
-  // explicitly linked from the brand's site.
-  if (isSameDomainImage || isCrossTldSameBrand) {
-    const foreignBrand = detectForeignBrandInImage(imageUrl, brand);
-    if (foreignBrand) return false;
-
-    // Gate is STRICTER than scoring: require EITHER an explicit logo/icon path
-    // signal OR a brand+logo compound filename. Brand-only filenames (e.g.
-    // "twinq.jpg") are too ambiguous — they're often blog/event photos.
+  // H1 gate: same-domain vs off-domain scoping for foreign-brand rejection.
+  //
+  // SAME-DOMAIN images: the brand controls this origin, so a product/variant
+  // name adjacent to "logo" (e.g. "widget-logo.png") is NOT a foreign brand.
+  // Suppress detectForeignBrandInImage — but still require a positive logo
+  // signal via sameDomainImageHasLogoSignal to accept (don't blanket-accept).
+  //
+  // CROSS-TLD same-brand (e.g. delta.nl image for delta.com bookmark):
+  // suppress foreign-brand rejection (same brand, different TLD) but do NOT
+  // grant the relaxed same-domain acceptance paths. A cross-TLD candidate
+  // must pass on its own merits (brand in metadata already verified above).
+  //
+  // OFF-DOMAIN images: apply detectForeignBrandInImage at full strength —
+  // a foreign brand token next to "logo" in an off-domain filename is a
+  // genuine competitor logo and must be rejected.
+  if (isSameDomainImage) {
+    // Same-domain: skip foreign-brand check (brand owns the origin) but
+    // require a logo signal to weed out staff photos, screenshots, and
+    // content images that happen to live on the brand's own infrastructure.
+    if (!sameDomainImageHasLogoSignal(imageUrl, brand)) return false;
+  } else if (isCrossTldSameBrand) {
+    // Cross-TLD sibling (e.g. assets.ing.com for bookmark mijn.ing.nl):
+    // suppress foreign-brand rejection (same brand, different TLD) but
+    // still require a positive logo signal — a cross-TLD candidate must
+    // clear the same logo-signal bar as same-domain images.
     if (!sameDomainImageHasLogoSignal(imageUrl, brand)) return false;
   } else if (isSameDomainSource && !isSameDomainImage) {
-    // Source page is on the brand's domain, image is elsewhere — still check
-    // for a foreign brand in the image filename (but don't require brand signal)
+    // Source page is on the brand's domain, image is elsewhere — apply
+    // foreign-brand rejection at full strength on the off-domain image.
     const foreignBrand = detectForeignBrandInImage(imageUrl, brand);
     if (foreignBrand) return false;
   }
@@ -794,14 +848,19 @@ export function isDdgFirstHitRelevant(
 // ---------------------------------------------------------------------------
 // Shape pre-ranking for auto-selection (FIX 1)
 //
-// Reorders gate-passing DDG candidates so roughly-SQUARE candidates (reported
-// aspect <= 1.4) are tried before wide/tall ones, preserving existing score
-// order within each shape band. Candidates with missing reported dimensions
-// are treated as neutral (between square and wide).
+// Nudges roughly-SQUARE candidates ahead of wide/tall ones WITHOUT letting
+// shape override a significantly higher relevance score. The input is already
+// sorted by relevance (scoreDuckDuckGoResult descending); shape acts as a
+// bounded tiebreaker. A square candidate can surface above a wide candidate
+// when they are separated by up to 2 * SHAPE_NUDGE_POSITIONS - 1 = 3
+// positions (the square's nudge is 0, the wide's is 2 * NUDGE = 4, so the
+// wide's effective key exceeds the square's when originalIndex gap <= 3).
+// At a gap of 2 * SHAPE_NUDGE_POSITIONS = 4+ positions, relevance wins.
 // ---------------------------------------------------------------------------
 
 const SHAPE_SQUARE_THRESHOLD = 1.4;
 
+/** 0 = square, 1 = neutral (unknown dims), 2 = wide/tall. */
 function shapeRank(candidate: Pick<IconSearchCandidate, 'width' | 'height'>): number {
   const { width, height } = candidate;
   if (width == null || height == null || width === 0 || height === 0) return 1; // neutral
@@ -810,15 +869,132 @@ function shapeRank(candidate: Pick<IconSearchCandidate, 'width' | 'height'>): nu
 }
 
 /**
- * Stable-sort candidates by shape band (square < neutral < wide/tall),
- * preserving original score order within each band. Returns a new array.
+ * Stable-sort candidates with shape as a bounded tiebreaker. Each candidate's
+ * sort key is `originalIndex + shapeNudge`, where shapeNudge is 0 for square,
+ * SHAPE_NUDGE_POSITIONS for neutral, and 2*SHAPE_NUDGE_POSITIONS for wide.
+ * This lets a square candidate move up by at most SHAPE_NUDGE_POSITIONS places
+ * but never leapfrog a candidate many positions higher in relevance.
+ *
  * Used only in the auto path (fetchDuckDuckGoFirstHit).
  */
 export function rankCandidatesByShape<T extends Pick<IconSearchCandidate, 'width' | 'height'>>(
   candidates: readonly T[],
 ): T[] {
+  // A nudge of 2 means a square (nudge 0) can surface above a wide (nudge 4)
+  // when they are up to 3 positions apart. At 4+ positions, relevance wins.
+  const SHAPE_NUDGE_POSITIONS = 2;
   return candidates
-    .map((c, i) => ({ c, rank: shapeRank(c), i }))
-    .sort((a, b) => a.rank - b.rank || a.i - b.i)
+    .map((c, i) => ({ c, key: i + shapeRank(c) * SHAPE_NUDGE_POSITIONS, i }))
+    .sort((a, b) => a.key - b.key || a.i - b.i)
     .map(({ c }) => c);
+}
+
+// ---------------------------------------------------------------------------
+// Hard-junk predicate for DDG fallback path
+//
+// Returns true ONLY for candidates that are genuinely wrong and should produce
+// a letter-tile rather than being used as an icon. Two classes:
+//   (1) People-content images (team photos, headshots, founders)
+//   (2) Off-domain foreign-brand logos (competitor logo on a different domain,
+//       not same-domain and not cross-TLD same-brand)
+//
+// Soft signals (missing brand token, low relevance, same-domain content images
+// without logo signal) are NOT hard junk — the fallback path rescues those.
+// ---------------------------------------------------------------------------
+
+export function isHardJunkCandidate(
+  candidate: Pick<IconSearchCandidate, 'imageUrl' | 'sourcePageUrl'>,
+  bookmarkUrl: string,
+): boolean {
+  const imageUrl = candidate.imageUrl ?? '';
+
+  // (1) People-content: always hard junk regardless of domain relationship
+  if (isPeopleContentImage(imageUrl)) return true;
+
+  // (2) Off-domain foreign-brand: only when the image is NOT on the bookmark's
+  // own domain and NOT a cross-TLD sibling of the same brand.
+  const { brand: rawBrand } = extractBrandInfo(bookmarkUrl);
+  const brand = stripKnownVanityPrefix(rawBrand);
+  // Short brands can't be reliably detected — skip foreign-brand check
+  if (brand.length < 3) return false;
+
+  const imageHostname = extractHostname(imageUrl);
+  const bookmarkRegistrable = getRegistrableDomain(extractHostname(bookmarkUrl));
+
+  // Same-domain: brand controls this origin, not hard junk
+  const imageRegistrable = getRegistrableDomain(imageHostname);
+  const isSameDomain = Boolean(
+    bookmarkRegistrable
+    && imageHostname
+    && imageRegistrable === bookmarkRegistrable,
+  );
+  if (isSameDomain) return false;
+
+  // Cross-TLD same-brand (e.g. ing.com image for ing.nl bookmark): not hard junk
+  const bookmarkRootLabel = getRootLabel(bookmarkRegistrable);
+  const imageRootLabel = getRootLabel(imageRegistrable);
+  const isCrossTldSameBrand = Boolean(
+    bookmarkRootLabel
+    && imageRootLabel
+    && bookmarkRootLabel.length >= 3
+    && bookmarkRootLabel === imageRootLabel,
+  );
+  if (isCrossTldSameBrand) return false;
+
+  // Off-domain: check for foreign brand adjacent to "logo" in the filename
+  const foreignBrand = detectForeignBrandInImage(imageUrl, brand);
+  if (foreignBrand) return true;
+
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Fallback candidate selection for DDG auto-resolution
+//
+// When isDdgFirstHitRelevant rejects ALL candidates (strict gate empties),
+// this function selects the best non-hard-junk candidate. Filters out hard
+// junk, ranks by relevance (scoreDuckDuckGoResult) then shape tiebreaker
+// (rankCandidatesByShape). Returns an ordered list; the caller iterates it,
+// calling fetchAndValidateImage on each until one validates.
+// ---------------------------------------------------------------------------
+
+export function selectBestSafeFallback(
+  candidates: readonly IconSearchCandidate[],
+  bookmarkUrl: string,
+): IconSearchCandidate[] {
+  if (candidates.length === 0) return [];
+
+  // Filter out hard junk
+  const safe = candidates.filter(c => !isHardJunkCandidate(c, bookmarkUrl));
+  if (safe.length === 0) return [];
+
+  // Rank by relevance score (descending), then shape tiebreaker
+  const hostname = extractHostname(bookmarkUrl);
+  const { brand: rawBrand } = extractBrandInfo(bookmarkUrl);
+  const queryTerms = tokenizeQuery(rawBrand);
+  const { isPersonalInfra } = extractBrandInfo(bookmarkUrl);
+  const bookmarkHostname = isPersonalInfra ? null : hostname;
+
+  const scored = safe
+    .map(c => ({
+      candidate: c,
+      score: scoreDuckDuckGoResult(
+        {
+          image: c.imageUrl,
+          thumbnail: c.previewUrl ?? c.imageUrl,
+          title: c.label ?? '',
+          url: c.sourcePageUrl ?? '',
+          width: c.width ?? 0,
+          height: c.height ?? 0,
+        },
+        bookmarkHostname ?? null,
+        queryTerms,
+      ),
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  const sortedCandidates = scored.map(({ candidate }) => candidate);
+
+  // Apply shape tiebreaker (bounded — does not override large relevance gaps)
+  return rankCandidatesByShape(sortedCandidates);
 }
