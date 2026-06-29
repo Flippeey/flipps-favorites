@@ -1,19 +1,10 @@
-What's new in 2.5.0:
+What's new in 2.6.0:
 
-- Persona templates in onboarding: the setup wizard detects how you organise your bookmarks and suggests ready-made Workspaces with matching view and sort layouts
-- Per-Workspace view and sort: each Workspace now remembers its own view mode and sort order independently
-- More Workspaces: the cap is raised to 20, with Alt + arrow keys and a desktop jump-menu for fast switching
-- Create a Workspace from a folder: promote any folder to a full Workspace from its right-click menu, or by dragging it onto the Workspace bar
-- Icon search shows its source: hover an icon search result to see where it came from
-
-Improvements:
-- Simplified the Appearance background picker
-- Clearer Workspace settings drawer with preview cards and consistent headers
-
-Fixed:
-- Faster icon fallback on sites that redirect to insecure (http) addresses, with no more console spam
-- Resolved a sync-storage limit that could be hit with many Workspaces
-- A default Favorites Workspace is now created when you skip onboarding
-- The "Remember last workspace" setting is now honoured on startup
-- Cleaner drop indicators when dragging folders onto the Workspace bar
-- More accurate layout density defaults on wide and high-resolution displays
+- Middle-click opens in new tab: middle-clicking a bookmark tile now opens it in a new background tab
+- Icon prefetching at startup: bookmark icons load during bootstrap, eliminating the placeholder flash on first load
+- Smarter icon selection: DuckDuckGo image results are now scored for brand relevance, color diversity, and domain affinity
+- Icon Horse placeholder gate: generic letter-placeholder icons from Icon Horse are rejected so the pipeline finds a real icon
+- Google S2 globe gate: generic globe icons from S2 are skipped in favour of better sources
+- Fixed IDN/punycode brand queries: internationalized domain names are decoded before icon search
+- Fixed stale drag-source styling: switching Workspaces no longer leaves tiles visually muted
+- Fixed DDG default-icon gate: DuckDuckGo's own placeholder is filtered out of results
