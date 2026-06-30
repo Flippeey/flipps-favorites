@@ -8,18 +8,23 @@ if (!target || !outDir) {
   throw new Error('Usage: node scripts/write-manifest.mjs <chrome|firefox> <outDir>');
 }
 
-const extensionVersion = process.env.EXTENSION_VERSION ?? '2.6.0';
+const extensionVersion = process.env.EXTENSION_VERSION ?? '2.6.1';
 const firefoxExtensionId = process.env.FIREFOX_EXTENSION_ID ?? 'com.flipps-favorites@flippflix.com';
 const firefoxStrictMinVersion = process.env.FIREFOX_STRICT_MIN_VERSION ?? '140.0';
 const firefoxUpdateUrl = process.env.FIREFOX_UPDATE_URL;
 const includeHttpHosts = process.env.INCLUDE_HTTP_HOSTS === '1';
 
-// https://duckduckgo.com/* and https://icon.horse/* are listed explicitly because
-// Firefox MV3 does not honour the https://*/* wildcard for CORS bypass on
-// extension background fetches.
-const hostPermissions = includeHttpHosts
+// Chrome uses declarativeNetRequest for CORS bypass and requires explicit host entries
+// for each favicon service. Firefox uses XMLHttpRequest via host_permissions on a
+// background page, where the https://*/* wildcard IS honoured for cross-origin XHR —
+// so duckduckgo.com and icon.horse are already covered by it and don't need explicit listing.
+const chromeHostPermissions = includeHttpHosts
   ? ['https://*/*', 'http://*/*', 'https://duckduckgo.com/*', 'https://icon.horse/*']
   : ['https://*/*', 'https://duckduckgo.com/*', 'https://icon.horse/*'];
+
+const firefoxHostPermissions = includeHttpHosts
+  ? ['https://*/*', 'http://*/*']
+  : ['https://*/*'];
 
 const homepageUrl = process.env.EXTENSION_HOMEPAGE_URL;
 const extensionIcons = {
@@ -36,6 +41,8 @@ const actionIcons = {
   24: 'icons/ff-icon-24.png',
   32: 'icons/ff-icon-32.png',
 };
+
+const hostPermissions = target === 'firefox' ? firefoxHostPermissions : chromeHostPermissions;
 
 const baseManifest = {
   manifest_version: 3,
