@@ -21,6 +21,7 @@ import {
 } from '../lib/icon-helpers';
 import { buildBrandSearchQuery } from '@/shared/url-brand';
 import { invalidateFaviconCache, invalidateFaviconCacheForScope } from '../lib/favicon-cache';
+import { IS_FIREFOX } from '@/newtab/lib/platform';
 import { Ico } from './Ico';
 import { ModalDialog } from './ModalDialog';
 
@@ -502,7 +503,7 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
                       <img
                         src={candidate.previewUrl}
                         alt=""
-                        referrerPolicy="no-referrer"
+                        referrerPolicy={IS_FIREFOX ? 'origin' : 'no-referrer'}
                         onLoad={(e) => handlePreviewLoad(candidate.imageUrl, e.currentTarget)}
                         style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                       />

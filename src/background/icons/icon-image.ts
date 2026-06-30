@@ -4,6 +4,7 @@ import { cacheTtlMs, generatedTtlMs, iconPipelineVersion, maxSvgIconBytes, place
 import { isDataUrl } from './icon-parse';
 import { getIconLabel } from './icon-classify';
 import { isIcoBytes, extractLargestIcoPng } from './ico-parse';
+import { firefoxSafeFetch, isFirefox } from './platform';
 
 interface FetchAndValidateArgs {
   imageUrl: string;
@@ -253,6 +254,13 @@ function looksLikeLetterPlaceholder(bitmap: ImageBitmap): boolean {
 }
 
 export async function fetchWithTimeout(url: string, timeoutMs: number, init?: RequestInit): Promise<Response> {
+  // On Firefox the background page uses XHR (host_permissions CORS bypass).
+  // XHR handles its own timeout via xhr.timeout, so AbortController is not needed.
+  if (isFirefox()) {
+    return firefoxSafeFetch(url, init, timeoutMs);
+  }
+  // Chrome path: fetch() + AbortController timeout (declarativeNetRequest
+  // session rules inject Access-Control-Allow-Origin for cross-origin requests).
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {

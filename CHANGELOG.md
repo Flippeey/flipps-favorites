@@ -6,6 +6,14 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## [Unreleased]
 
+## [2.6.1] — Firefox icon loading restored
+
+### Fixed
+
+- **Firefox icon loading** — icons now load correctly on Firefox. Switches to XMLHttpRequest via a background page so that host_permissions CORS bypass is honoured (Firefox service workers do not get this bypass, causing all icon sources to fail in 2.6.0).
+- **Firefox DDG icon-search picker** — thumbnail images in the Edit Icon dialog now render on Firefox. The edit dialog sets `referrerPolicy="origin"` on Firefox, matching the XHR referrer policy used for icon search requests.
+- **Firefox host permissions** — removed redundant explicit entries (`duckduckgo.com`, `icon.horse`) from the Firefox manifest; the `https://*/*` wildcard already covers them via XHR.
+
 ## [2.2.0] — Polish & shortcuts
 
 ### Added

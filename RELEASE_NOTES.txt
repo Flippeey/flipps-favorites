@@ -1,10 +1,5 @@
-What's new in 2.6.0:
+What's new in 2.6.1:
 
-- Middle-click opens in new tab: middle-clicking a bookmark tile now opens it in a new background tab
-- Icon prefetching at startup: bookmark icons load during bootstrap, eliminating the placeholder flash on first load
-- Smarter icon selection: DuckDuckGo image results are now scored for brand relevance, color diversity, and domain affinity
-- Icon Horse placeholder gate: generic letter-placeholder icons from Icon Horse are rejected so the pipeline finds a real icon
-- Google S2 globe gate: generic globe icons from S2 are skipped in favour of better sources
-- Fixed IDN/punycode brand queries: internationalized domain names are decoded before icon search
-- Fixed stale drag-source styling: switching Workspaces no longer leaves tiles visually muted
-- Fixed DDG default-icon gate: DuckDuckGo's own placeholder is filtered out of results
+- Firefox icon loading restored — icons now load correctly on Firefox after a regression in 2.6.0 that blocked all icon sources due to a service-worker CORS restriction
+- Firefox icon picker fixed — thumbnail images in the Edit Icon dialog now display correctly on Firefox
+- Firefox manifest cleanup — removed redundant host-permission entries; the existing wildcard already covers all favicon services via XHR

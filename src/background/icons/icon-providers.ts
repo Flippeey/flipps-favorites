@@ -47,7 +47,7 @@ import {
   getImageDimensions,
   blobToDataUrl,
 } from './icon-image';
-import { withCorsBypass } from './cors-bypass';
+import { withCorsBypass, firefoxSafeFetch } from './cors-bypass';
 import { sleep } from './concurrency';
 import { extractBrandInfo } from '@/shared/url-brand';
 import { isIcoBytes, extractLargestIcoPng } from './ico-parse';
@@ -289,7 +289,7 @@ export async function searchDuckDuckGoImages(query: string, bookmarkUrl?: string
   const searchPageUrl = `${duckDuckGoSearchUrl}?q=${encodeURIComponent(queryText)}&ia=images&iax=images`;
 
   return withCorsBypass('||duckduckgo.com/', async () => {
-    const html = await fetch(searchPageUrl, {
+    const html = await firefoxSafeFetch(searchPageUrl, {
       cache: 'no-store',
       headers: {
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -414,7 +414,7 @@ export async function fetchDuckDuckGoJson(
   filterParams: string,
 ): Promise<DuckDuckGoSearchResponse> {
   const requestUrl = `${duckDuckGoSearchUrl}i.js?q=${encodeURIComponent(queryText)}&o=json&vqd=${encodeURIComponent(vqd)}${filterParams}&p=1&l=us-en`;
-  const response = await fetch(requestUrl, {
+  const response = await firefoxSafeFetch(requestUrl, {
     cache: 'no-store',
     headers: {
       Accept: 'application/json',
@@ -437,7 +437,7 @@ export async function downloadAndPersistOverride(
 ): Promise<ResolvedIcon> {
   let response: Response;
   try {
-    response = await fetch(imageUrl, { cache: 'force-cache' });
+    response = await firefoxSafeFetch(imageUrl, { cache: 'force-cache' });
   } catch (error) {
     throw new IconFetchError('network', `Could not reach the icon URL: ${describeError(error)}`);
   }

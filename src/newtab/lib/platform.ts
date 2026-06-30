@@ -4,6 +4,9 @@
 export const IS_MAC: boolean =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 
+export const IS_FIREFOX: boolean =
+  typeof navigator !== 'undefined' && /firefox/i.test(navigator.userAgent);
+
 export const MOD_KEY: string = IS_MAC ? '⌘' : 'Ctrl';
 export const ALT_KEY: string = IS_MAC ? '⌥' : 'Alt';
 
