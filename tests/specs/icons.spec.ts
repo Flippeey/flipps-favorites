@@ -63,7 +63,24 @@ test.describe('icon pipeline', () => {
   });
 
   test('mocked Google S2 favicon flows through to a tile <img>', async ({ context, newtabPage }) => {
+    // Block Icon Horse + DDG so the pipeline can't silently fall through to a
+    // live network hit if S2 resolution fails for any reason (deterministic).
+    await context.route('https://icon.horse/**', (route) => route.abort('failed'));
+    await context.route('https://duckduckgo.com/**', (route) => route.abort('failed'));
     await context.route('https://www.google.com/s2/favicons**', async (route) => {
+      // The globe-gate sentinel probe (s2-globe-gate.ts) also hits this route with
+      // a `.invalid` TLD domain to fingerprint Google's generic globe placeholder.
+      // If it gets fulfilled with the same mock bytes as the real favicon below,
+      // the gate memoizes the mock as "the globe" and rejects the real response,
+      // causing the pipeline to fall through past S2 entirely. Fail the sentinel
+      // open (network error) instead, matching s2-globe-gate.ts's documented
+      // fail-open behavior for a failed probe.
+      const url = new URL(route.request().url());
+      const domainUrl = url.searchParams.get('domain_url') ?? '';
+      if (domainUrl.includes('ff-sentinel-probe.invalid')) {
+        await route.abort('failed');
+        return;
+      }
       await route.fulfill({
         status: 200,
         contentType: 'image/png',
