@@ -56,6 +56,14 @@ interface ExtApi {
  * (`app-wallpaper-*`, which CachedValueStore never tracks).
  */
 export async function resetStorage(page: Page): Promise<void> {
+  // Delete every workspace record via the message pipeline first. Production
+  // stores each WorkspaceRecord under its own per-item sync key
+  // (`workspace:<id>`, see src/shared/storage.ts) rather than the legacy
+  // aggregate `keys.workspaces` key cleared below — the sync.remove([...,
+  // keys.workspaces]) call never touches those per-item keys, so ad-hoc
+  // workspaces (e.g. seedMinimal's 'ws-minimal') would otherwise leak into
+  // the next test in this worker-scoped context.
+  await clearWorkspaces(page);
   await page.evaluate(async (keys) => {
     const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
       ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
