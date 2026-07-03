@@ -28,6 +28,7 @@ import type {
   CreateWorkspaceResponse,
   PatchWorkspaceResponse,
   DeleteWorkspaceResponse,
+  OpenTabResponse,
 } from '@/shared/messages';
 import { IconFetchError, messageTypes } from '@/shared/messages';
 
@@ -147,4 +148,8 @@ export async function patchWorkspace(id: string, patch: Partial<WorkspaceRecord>
 
 export async function deleteWorkspace(id: string): Promise<void> {
   await send<DeleteWorkspaceResponse>({ type: messageTypes.deleteWorkspace, id });
+}
+
+export async function openTab(url: string): Promise<void> {
+  await send<OpenTabResponse>({ type: messageTypes.openTab, url });
 }

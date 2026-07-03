@@ -121,32 +121,25 @@ test('renaming a folder updates its tile title', async ({ newtabPage }) => {
 });
 
 test('middle-click on a bookmark tile opens it in a new tab', async ({ newtabPage }) => {
-  const bmUrl = 'https://middle-click.example.com/page';
+  // example.com (bare, no subdomain) is the IANA reserved test domain and
+  // resolves for real in this sandbox; arbitrary subdomains of it (the
+  // previous "middle-click.example.com") do NOT resolve, which surfaced only
+  // once this test started asserting on a real navigation instead of a
+  // stubbed window.open call.
+  const bmUrl = 'https://example.com/';
   const bmId = await createTestBookmark(newtabPage, rootId, 'Middle Click Target', bmUrl);
   await reloadNewtab(newtabPage);
 
   const tile = tileById(newtabPage, bmId);
   await tile.waitFor();
 
-  // Intercept window.open and record calls instead of actually opening tabs.
-  const openCalls = await newtabPage.evaluate(() => {
-    const calls: { url: string; target: string }[] = [];
-    (window as any).__openCalls = calls;
-    window.open = (...args: unknown[]) => {
-      calls.push({ url: String(args[0]), target: String(args[1]) });
-      return null;
-    };
-    return calls;
-  });
-
-  // Dispatch a middle-click (button 1) on the bookmark tile.
-  await tile.click({ button: 'middle' });
-
-  // Verify window.open was called with the bookmark URL in a new tab.
-  const captured = await newtabPage.evaluate(() => (window as any).__openCalls as { url: string; target: string }[]);
-  expect(captured).toHaveLength(1);
-  expect(captured[0].url).toBe(bmUrl);
-  expect(captured[0].target).toBe('_blank');
+  const [newPage] = await Promise.all([
+    newtabPage.context().waitForEvent('page', { timeout: 10_000 }),
+    tile.click({ button: 'middle' }),
+  ]);
+  await newPage.waitForLoadState('domcontentloaded');
+  expect(newPage.url()).toBe(bmUrl);
+  await newPage.close();
 
   // Verify selection was NOT changed by the middle-click.
   const selectedCount = await newtabPage.locator('.ff-tile[data-selected="true"]').count();
@@ -160,19 +153,16 @@ test('middle-click on a folder tile does NOT open a new tab', async ({ newtabPag
   const tile = tileById(newtabPage, folderId);
   await tile.waitFor();
 
-  // Intercept window.open.
-  await newtabPage.evaluate(() => {
-    const calls: { url: string; target: string }[] = [];
-    (window as any).__openCalls = calls;
-    window.open = (...args: unknown[]) => {
-      calls.push({ url: String(args[0]), target: String(args[1]) });
-      return null;
-    };
-  });
+  const context = newtabPage.context();
+  let newPageOpened = false;
+  const onPage = () => { newPageOpened = true; };
+  context.on('page', onPage);
 
   await tile.click({ button: 'middle' });
+  // No message round-trip is involved for a no-op folder middle-click, so a
+  // short settle window is enough to prove nothing opened.
+  await newtabPage.waitForTimeout(500);
 
-  // Folder tile should NOT have triggered window.open.
-  const captured = await newtabPage.evaluate(() => (window as any).__openCalls as { url: string; target: string }[]);
-  expect(captured).toHaveLength(0);
+  context.off('page', onPage);
+  expect(newPageOpened).toBe(false);
 });

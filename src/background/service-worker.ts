@@ -1,5 +1,5 @@
 import { extensionApi } from '../shared/browser';
-import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type PatchWorkspaceResponse, type WorkspaceRecord } from '../shared/messages';
+import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type WorkspaceRecord } from '../shared/messages';
 import { deleteWorkspace, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, readBookmarkUsageRecords, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
 import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl, sweepGeneratedRecords } from './icons/icon-service';
 
@@ -170,6 +170,10 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
     case messageTypes.deleteWorkspace: {
       await deleteWorkspace(message.id);
       return { ok: true } satisfies DeleteWorkspaceResponse;
+    }
+    case messageTypes.openTab: {
+      await extensionApi.tabs.create({ url: message.url });
+      return { ok: true } satisfies OpenTabResponse;
     }
     default:
       throw new Error(`Unhandled message type: ${(message as AppRequest).type}`);

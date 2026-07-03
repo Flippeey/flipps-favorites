@@ -20,6 +20,7 @@ export const messageTypes = {
   createWorkspace: 'workspaces/create',
   patchWorkspace: 'workspaces/patch',
   deleteWorkspace: 'workspaces/delete',
+  openTab: 'tabs/open',
 } as const;
 
 // Domain models + unions now live in models.ts. Re-export so existing
@@ -248,6 +249,15 @@ export interface DeleteWorkspaceResponse {
   ok: true;
 }
 
+export interface OpenTabRequest {
+  type: typeof messageTypes.openTab;
+  url: string;
+}
+
+export interface OpenTabResponse {
+  ok: true;
+}
+
 export type AppRequest =
   | PingRequest
   | GetSettingsRequest
@@ -269,7 +279,8 @@ export type AppRequest =
   | GetWorkspacesRequest
   | CreateWorkspaceRequest
   | PatchWorkspaceRequest
-  | DeleteWorkspaceRequest;
+  | DeleteWorkspaceRequest
+  | OpenTabRequest;
 
 export type AppResponse =
   | PingResponse
@@ -292,4 +303,5 @@ export type AppResponse =
   | GetWorkspacesResponse
   | CreateWorkspaceResponse
   | PatchWorkspaceResponse
-  | DeleteWorkspaceResponse;
+  | DeleteWorkspaceResponse
+  | OpenTabResponse;
