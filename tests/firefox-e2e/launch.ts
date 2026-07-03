@@ -45,6 +45,8 @@ export interface FirefoxSession {
 export interface LaunchOptions {
   /** Override headless mode. Defaults to true; the suite falls back to headed if headless misbehaves. */
   headless?: boolean;
+  /** Extra Firefox prefs merged into the launch profile (e.g. to blackhole specific hosts for a hermetic test). */
+  extraPrefsFirefox?: Record<string, string | number | boolean>;
 }
 
 /**
@@ -60,6 +62,7 @@ export async function launchFirefoxWithExtension(opts: LaunchOptions = {}): Prom
     headless,
     extraPrefsFirefox: {
       'extensions.webextensions.uuids': JSON.stringify({ [GECKO_ID]: FF_UUID }),
+      ...opts.extraPrefsFirefox,
     },
   });
 
