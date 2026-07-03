@@ -16,7 +16,7 @@
     "test:group": "playwright test --project=chrome -g",
     "test:report": "playwright test --project=chrome --reporter=html",
     "test:headed": "playwright test --project=chrome --headed",
-    "test:ci": "npm run build && playwright test --reporter=github,html",
+    "test:ci": "npm run build && playwright test",
     "test:build": "npm run build && npm test",
     "promo": "node scripts/promo/index.mjs all",
     "promo:screenshots": "node scripts/promo/index.mjs screenshots",
@@ -30,6 +30,7 @@
     "test:all": "npm run build && npm test && npm run test:firefox:e2e"
   },
   "devDependencies": {
+    "@estruyf/github-actions-reporter": "^1.12.0",
     "@playwright/test": "^1.58.2",
     "@types/chrome": "^0.1.42",
     "@types/firefox-webext-browser": "^143.0.0",

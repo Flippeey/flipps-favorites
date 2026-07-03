@@ -34,8 +34,10 @@ jobs:
 
       # The extension loads via a persistent context in headed mode (Chrome MV3
       # extensions cannot run headless), so wrap the run in a virtual display.
+      # Reporter config (github + job-summary table + html) comes from
+      # playwright.config.ts — don't override it with a CLI --reporter flag.
       - name: Run Playwright tests
-        run: xvfb-run -a npx playwright test --reporter=github,html
+        run: xvfb-run -a npx playwright test
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
@@ -44,3 +46,11 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 14
+
+      - name: Install Puppeteer Firefox
+        if: ${{ !cancelled() }}
+        run: npx puppeteer browsers install firefox
+
+      - name: Run Firefox E2E (Puppeteer)
+        if: ${{ !cancelled() }}
+        run: npm run test:firefox:e2e
