@@ -28,3 +28,7 @@ playwright-report/
 
 # Ignore editor settings
 .vscode
+# Firefox E2E spike (throwaway, has own node_modules)
+tests/spike-firefox-puppeteer/
+# Playwright test artifacts
+tests/.artifacts/
