@@ -2,7 +2,7 @@
  * Icon pipeline + Firefox MV3 manifest assertion.
  */
 import { test, expect } from '../fixtures/extension-context.js';
-import { MOCK_FAVICON_PNG } from '../fixtures/test-data.js';
+import { MOCK_FAVICON_PNG, MOCK_GLOBE_PLACEHOLDER_PNG } from '../fixtures/test-data.js';
 import {
   clearExtensionStorage,
   clickMenuItem,
@@ -63,30 +63,30 @@ test.describe('icon pipeline', () => {
   });
 
   test('mocked Google S2 favicon flows through to a tile <img>', async ({ context, newtabPage }) => {
-    // Block Icon Horse + DDG so the pipeline can't silently fall through to a
-    // live network hit if S2 resolution fails for any reason (deterministic).
-    await context.route('https://icon.horse/**', (route) => route.abort('failed'));
-    await context.route('https://duckduckgo.com/**', (route) => route.abort('failed'));
+    // The pipeline self-calibrates a "globe placeholder" signature once per
+    // service-worker lifetime by probing S2 with a `.invalid` sentinel domain
+    // (see src/background/icons/s2-globe-gate.ts), then rejects any real S2
+    // result whose bytes match that signature. A route mock that fulfills
+    // every s2/favicons request identically — sentinel included — makes the
+    // mocked favicon match its own sentinel and get rejected as a "globe",
+    // falling through to origin scrape / Icon Horse / DuckDuckGo. Give the
+    // sentinel request a distinct body so its signature never collides with
+    // the real mocked favicon.
     await context.route('https://www.google.com/s2/favicons**', async (route) => {
-      // The globe-gate sentinel probe (s2-globe-gate.ts) also hits this route with
-      // a `.invalid` TLD domain to fingerprint Google's generic globe placeholder.
-      // If it gets fulfilled with the same mock bytes as the real favicon below,
-      // the gate memoizes the mock as "the globe" and rejects the real response,
-      // causing the pipeline to fall through past S2 entirely. Fail the sentinel
-      // open (network error) instead, matching s2-globe-gate.ts's documented
-      // fail-open behavior for a failed probe.
       const url = new URL(route.request().url());
-      const domainUrl = url.searchParams.get('domain_url') ?? '';
-      if (domainUrl.includes('ff-sentinel-probe.invalid')) {
-        await route.abort('failed');
-        return;
-      }
+      const isSentinelProbe = url.searchParams.get('domain_url')?.includes('.invalid');
       await route.fulfill({
         status: 200,
         contentType: 'image/png',
-        body: MOCK_FAVICON_PNG,
+        body: isSentinelProbe ? MOCK_GLOBE_PLACEHOLDER_PNG : MOCK_FAVICON_PNG,
       });
     });
+    // Block the fallback sources so the assertion proves S2 specifically flowed
+    // through, rather than incidentally passing via a live network fallback
+    // (origin scrape / Icon Horse / DuckDuckGo) that isn't this test's concern.
+    await context.route('https://example.com/**', (route) => route.abort('failed'));
+    await context.route('https://icon.horse/**', (route) => route.abort('failed'));
+    await context.route('https://duckduckgo.com/**', (route) => route.abort('failed'));
     await reloadNewtab(newtabPage);
     const img = newtabPage.locator('.ff-tile[data-item-kind="bookmark"] .ff-favicon img').first();
     await expect(img).toBeVisible({ timeout: 10_000 });

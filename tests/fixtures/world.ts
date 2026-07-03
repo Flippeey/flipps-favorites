@@ -24,9 +24,18 @@ const chromeExtPath = join(rootDir, 'dist', 'chrome');
 
 async function launchChrome(): Promise<{ context: BrowserContext; profileDir: string }> {
   const profileDir = await mkdtemp(join(tmpdir(), 'cr-ext-'));
+  // Chrome's new headless mode (--headless=new) supports MV3 extensions,
+  // unlike legacy headless. Set HEADED=1 to force a visible window for
+  // local debugging.
+  const headed = process.env.HEADED === '1';
+  // headless:false + the `--headless=new` arg drives Chrome's new headless
+  // mode, which loads MV3 extensions. Passing headless:true instead makes
+  // Playwright inject legacy `--headless`, under which the extension service
+  // worker never registers (waitForEvent('serviceworker') times out).
   const context = await chromium.launchPersistentContext(profileDir, {
     headless: false,
     args: [
+      ...(headed ? [] : ['--headless=new']),
       `--disable-extensions-except=${chromeExtPath}`,
       `--load-extension=${chromeExtPath}`,
       '--no-first-run',
