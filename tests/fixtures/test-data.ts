@@ -44,6 +44,16 @@ function createSolidPng(width: number, height: number, r: number, g: number, b: 
  */
 export const MOCK_FAVICON_PNG = createSolidPng(64, 64, 0, 128, 0);
 
+/**
+ * A 32×32 solid grey PNG with different dimensions (and therefore a different
+ * byte length/signature) than MOCK_FAVICON_PNG. Used to mock Google S2's
+ * `.invalid`-domain sentinel probe (src/background/icons/s2-globe-gate.ts)
+ * separately from a real S2 favicon response — the two must never share a
+ * byte signature, or the globe-detection gate treats the real mocked favicon
+ * as the generic placeholder and rejects it.
+ */
+export const MOCK_GLOBE_PLACEHOLDER_PNG = createSolidPng(32, 32, 200, 200, 200);
+
 /** Storage key constants mirroring src/shared/storage.ts */
 export const STORAGE_KEYS = {
   appSettings: 'app-settings',

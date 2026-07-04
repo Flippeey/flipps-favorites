@@ -8,6 +8,7 @@ import { findFolder, findNode, isFolder } from '../lib/tree';
 import { IS_MAC } from '../lib/platform';
 import { MAX_WORKSPACES } from '@/shared/constants';
 import { normalizeBookmarkUrl } from '../lib/url';
+import { openTab } from '../lib/messaging';
 
 interface UseContextMenuBuilderArgs {
   tree: BookmarkNode[];
@@ -125,7 +126,7 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
     const newTabLabel = multi ? `Open ${bookmarkUrls.length} in new tabs` : 'Open in new tab';
     const newWindowLabel = multi ? `Open ${bookmarkUrls.length} in new window` : 'Open in new window';
     const openInNewTabs = () => {
-      for (const url of bookmarkUrls) window.open(url, '_blank', 'noopener');
+      for (const url of bookmarkUrls) openTab(url).catch(() => { /* ignore */ });
     };
     const openInNewWindow = () => {
       if (bookmarkUrls.length === 0) return;

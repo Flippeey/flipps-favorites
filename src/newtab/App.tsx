@@ -21,7 +21,7 @@ import { useWorkspaceShortcut } from './interaction/useWorkspaceShortcut';
 import { useKeyboardNav, useDeleteShortcut } from './interaction/useKeyboardNav';
 import { useQuickAddShortcuts } from './interaction/useQuickAddShortcuts';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
-import { createBookmark, getBookmarkTree, getBookmarkUsage, moveBookmark, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
+import { createBookmark, getBookmarkTree, getBookmarkUsage, moveBookmark, openTab, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
 import { useScrollCollapsed } from './lib/useScrollCollapsed';
 import { normalizeBookmarkUrl } from './lib/url';
@@ -291,7 +291,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     recordBookmarkUse(item.id).catch(() => { /* ignore */ });
     const url = normalizeBookmarkUrl(item.url);
     const newTab = settings.openLinksInNewTab !== Boolean(event?.metaKey || event?.ctrlKey);
-    if (newTab) window.open(url, '_blank', 'noopener');
+    if (newTab) openTab(url).catch(() => { /* ignore */ });
     else window.location.href = url;
   }, [settings.openLinksInNewTab]);
 
@@ -300,7 +300,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     const usedAt = Date.now();
     setUsage(prev => ({ ...prev, [item.id]: usedAt }));
     recordBookmarkUse(item.id).catch(() => { /* ignore */ });
-    window.open(normalizeBookmarkUrl(item.url), '_blank', 'noopener');
+    openTab(normalizeBookmarkUrl(item.url)).catch(() => { /* ignore */ });
   }, []);
 
   const { selection, setSelection, selectionRef, handleTileClick } = useSelection({

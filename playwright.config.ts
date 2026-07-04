@@ -20,7 +20,13 @@ export default defineConfig({
   // A true fix would force chrome.storage.local under test (build flag).
   retries: 1,
   workers: process.env.CI ? 2 : 3,
-  reporter: process.env.CI ? 'github' : 'list',
+  reporter: process.env.CI
+    ? [
+        ['github'],
+        ['@estruyf/github-actions-reporter', { title: 'Playwright results', useDetails: true, showError: true }],
+        ['html', { open: 'never' }],
+      ]
+    : 'list',
   globalSetup: './tests/global-setup.ts',
 
   projects: [
