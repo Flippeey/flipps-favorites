@@ -1,5 +1,3 @@
-What's new in 2.6.1:
+What's new in 2.6.2:
 
-- Firefox icon loading restored — icons now load correctly on Firefox after a regression in 2.6.0 that blocked all icon sources due to a service-worker CORS restriction
-- Firefox icon picker fixed — thumbnail images in the Edit Icon dialog now display correctly on Firefox
-- Firefox manifest cleanup — removed redundant host-permission entries; the existing wildcard already covers all favicon services via XHR
+- Open in new tab now works on Firefox - middle-click, Ctrl/Cmd-click, and the context-menu "Open in new tab" / "Open all in new tabs" actions now correctly open bookmarks in a new tab (previously they did nothing on Firefox). Chrome is unchanged.
