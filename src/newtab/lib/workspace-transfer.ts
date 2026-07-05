@@ -125,7 +125,14 @@ export async function parseWorkspaceFile(file: File): Promise<WorkspaceExportPay
   } catch {
     throw new Error('Import file is not valid JSON.');
   }
+  return normalizeWorkspaceExportPayload(parsed);
+}
 
+// Shared shape validation + normalization for a parsed (untrusted) export
+// payload, used by both the file-import path (parseWorkspaceFile) and the
+// settings-sync pull path (sync-now.ts), which receives the same shape
+// decrypted from the server rather than read from a File.
+export function normalizeWorkspaceExportPayload(parsed: unknown): WorkspaceExportPayload {
   if (!parsed || typeof parsed !== 'object') {
     throw new Error('Import file has an invalid structure.');
   }

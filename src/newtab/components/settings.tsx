@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AppSettings, BookmarkNode, WorkspaceRecord } from '@/shared/messages';
+import type { PushToastInput } from '../state/useToasts';
 import { useFocusTrap } from '../interaction/useFocusTrap';
 import { Ico } from './Ico';
 import {
@@ -45,10 +46,11 @@ interface AppSettingsDrawerProps {
   initialSection?: AppSectionId;
   onPatchGlobal: (patch: Partial<AppSettings>) => void;
   onAfterImport: (settings: AppSettings) => void;
+  pushToast: (input: PushToastInput) => void;
   onClose: () => void;
 }
 
-export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation', onPatchGlobal, onAfterImport, onClose }: AppSettingsDrawerProps) {
+export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation', onPatchGlobal, onAfterImport, pushToast, onClose }: AppSettingsDrawerProps) {
   const [section, setSection] = useState<AppSectionId>(initialSection);
   const [closing, setClosing] = useState(false);
   const drawerRef = useRef<HTMLElement | null>(null);
@@ -97,7 +99,7 @@ export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation
             {section === 'navigation' && <NavigationSection settings={settings} onPatch={onPatchGlobal} />}
             {section === 'dock'       && <DockSection settings={settings} tree={tree} onPatch={onPatchGlobal} />}
             {section === 'clock'      && <ClockSection settings={settings} onPatch={onPatchGlobal} />}
-            {section === 'backup'     && <BackupSection onAfterImport={onAfterImport} />}
+            {section === 'backup'     && <BackupSection onAfterImport={onAfterImport} pushToast={pushToast} />}
             {section === 'help'       && <HelpSection />}
           </div>
         </div>

@@ -85,3 +85,24 @@
 .ff-set-section__desc {
   font-size: 13px; color: var(--fg-3); margin: 0 0 var(--s-4);
 }
+
+/* Settings sync (#7) */
+.ff-sync-pairing {
+  display: flex; align-items: center; gap: var(--s-2);
+  margin-top: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  background: var(--ink-1);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-md);
+}
+.ff-sync-pairing__code {
+  flex: 1;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  user-select: all;
+}
+.ff-sync-warning {
+  font-size: 12px; color: var(--warning);
+  margin: var(--s-3) 0 0;
+}

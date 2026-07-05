@@ -1,5 +1,9 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import type { AppSettings } from '@/shared/messages';
+import { SyncFetchError } from '@/shared/messages';
+import { adoptSyncSecret, getSyncPairingCode } from '@/newtab/lib/messaging';
+import { runSyncNow } from '@/newtab/lib/sync-now';
+import type { PushToastInput } from '@/newtab/state/useToasts';
 import {
   applyWorkspaceImport,
   buildWorkspaceExport,
@@ -12,15 +16,47 @@ import { Segmented } from '../settings-controls';
 
 interface BackupSectionProps {
   onAfterImport: (settings: AppSettings) => void;
+  pushToast: (input: PushToastInput) => void;
 }
 
 type BackupStatus = { kind: 'success' | 'error'; text: string } | null;
 
-export function BackupSection({ onAfterImport }: BackupSectionProps) {
+// Human copy for each SyncFetchError kind (issue #7 handoff). Kept as a plain
+// map rather than a switch so every kind is exhaustively covered in one place.
+const SYNC_ERROR_COPY: Record<string, string> = {
+  offline: 'Can’t reach the sync server — you appear to be offline.',
+  network: 'Can’t reach the sync server. Check your connection and try again.',
+  'payload-too-large': 'Your synced data is too large for the server to accept.',
+  'rate-limited': 'Too many sync attempts — try again in a bit.',
+  'not-found': 'Nothing has been synced yet.',
+};
+
+function describeSyncError(error: unknown): string {
+  if (error instanceof SyncFetchError) {
+    const known = SYNC_ERROR_COPY[error.kind];
+    if (known) return known;
+    if (error.kind === 'http-status') {
+      return `Sync server error${error.httpStatus ? ` (${String(error.httpStatus)})` : ''}. Try again later.`;
+    }
+    return 'Something went wrong while syncing. Try again later.';
+  }
+  return error instanceof Error ? error.message : 'Something went wrong while syncing.';
+}
+
+export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) {
   const [busy, setBusy] = useState<'idle' | 'exporting' | 'importing'>('idle');
   const [status, setStatus] = useState<BackupStatus>(null);
   const [importMode, setImportMode] = useState<WorkspaceImportMode>('merge');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [pairingRevealed, setPairingRevealed] = useState(false);
+  const [pairingCodeBusy, setPairingCodeBusy] = useState(false);
+  const [linkInput, setLinkInput] = useState('');
+  const [linkConfirming, setLinkConfirming] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [linkBusy, setLinkBusy] = useState(false);
 
   useEffect(() => {
     if (!status) return;
@@ -79,6 +115,80 @@ export function BackupSection({ onAfterImport }: BackupSectionProps) {
       });
     } finally {
       setBusy('idle');
+    }
+  };
+
+  const handleSyncNow = async () => {
+    if (syncBusy) return;
+    setSyncBusy(true);
+    try {
+      const result = await runSyncNow();
+      if (result.merged) {
+        onAfterImport(result.settings);
+      }
+      pushToast({ kind: 'info', message: 'Synced.' });
+    } catch (error) {
+      pushToast({ kind: 'error', message: describeSyncError(error) });
+    } finally {
+      setSyncBusy(false);
+    }
+  };
+
+  const handleRevealPairingCode = async () => {
+    if (pairingRevealed) { setPairingRevealed(false); return; }
+    if (pairingCode) { setPairingRevealed(true); return; }
+    setPairingCodeBusy(true);
+    try {
+      const code = await getSyncPairingCode();
+      setPairingCode(code);
+      setPairingRevealed(true);
+    } catch (error) {
+      pushToast({ kind: 'error', message: describeSyncError(error) });
+    } finally {
+      setPairingCodeBusy(false);
+    }
+  };
+
+  const handleCopyPairingCode = async () => {
+    if (!pairingCode) return;
+    try {
+      await navigator.clipboard.writeText(pairingCode);
+      pushToast({ kind: 'info', message: 'Pairing code copied.' });
+    } catch {
+      pushToast({ kind: 'error', message: 'Couldn’t copy the pairing code.' });
+    }
+  };
+
+  const handleLinkSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (linkBusy || !linkInput.trim()) return;
+    if (!linkConfirming) {
+      setLinkConfirming(true);
+      return;
+    }
+    setLinkBusy(true);
+    setLinkError(null);
+    try {
+      await adoptSyncSecret(linkInput.trim());
+      const result = await runSyncNow();
+      if (result.merged) {
+        onAfterImport(result.settings);
+      }
+      setLinkInput('');
+      setLinkConfirming(false);
+      // A newly adopted pairing means any cached code/reveal state is stale.
+      setPairingCode(null);
+      setPairingRevealed(false);
+      pushToast({ kind: 'info', message: 'Linked and synced with the other browser.' });
+    } catch (error) {
+      if (error instanceof SyncFetchError && error.kind === 'validation') {
+        setLinkError('That pairing code doesn’t look right. Double-check it and try again.');
+      } else {
+        pushToast({ kind: 'error', message: describeSyncError(error) });
+      }
+      setLinkConfirming(false);
+    } finally {
+      setLinkBusy(false);
     }
   };
 
@@ -154,6 +264,102 @@ export function BackupSection({ onAfterImport }: BackupSectionProps) {
           {status.text}
         </div>
       )}
+
+      <h3 className="ff-set-section__title" style={{ marginTop: 32 }}>Sync</h3>
+      <p className="ff-set-section__desc">
+        End-to-end encrypted sync between your own browsers, via our server. The server only ever
+        stores encrypted bytes — it can never read your workspaces, bookmarks, or icons.
+      </p>
+
+      <div className="ff-card" style={{ marginBottom: 16 }}>
+        <div className="ff-row">
+          <div>
+            <div className="ff-row__label">Sync now</div>
+            <div className="ff-row__hint">Pulls the latest synced data, merges it with what&rsquo;s here, then pushes the result.</div>
+          </div>
+          <button
+            type="button"
+            className="ff-btn ff-btn--ghost"
+            onClick={handleSyncNow}
+            disabled={syncBusy}
+            data-testid="sync-now-button"
+          >
+            <Ico name="refresh" size={14} /> {syncBusy ? 'Syncing…' : 'Sync now'}
+          </button>
+        </div>
+      </div>
+
+      <div className="ff-card" style={{ marginBottom: 16 }}>
+        <div className="ff-row">
+          <div>
+            <div className="ff-row__label">Pairing code</div>
+            <div className="ff-row__hint">Use this on another browser to link it to this sync data.</div>
+          </div>
+          <button
+            type="button"
+            className="ff-btn ff-btn--ghost"
+            onClick={handleRevealPairingCode}
+            disabled={pairingCodeBusy}
+            data-testid="reveal-pairing-code-button"
+          >
+            <Ico name={pairingRevealed ? 'eyeOff' : 'eye'} size={14} />
+            {pairingCodeBusy ? 'Loading…' : pairingRevealed ? 'Hide' : 'Reveal'}
+          </button>
+        </div>
+        {pairingRevealed && pairingCode && (
+          <div className="ff-sync-pairing" data-testid="pairing-code-value">
+            <code className="ff-sync-pairing__code">{pairingCode}</code>
+            <button type="button" className="ff-iconbtn ff-iconbtn--icon" aria-label="Copy pairing code" title="Copy" onClick={handleCopyPairingCode}>
+              <Ico name="copy" size={14} />
+            </button>
+          </div>
+        )}
+        <p className="ff-sync-warning">
+          Treat this code like a password. Anyone who has it can read <em>and overwrite</em> your synced data.
+        </p>
+      </div>
+
+      <div className="ff-card">
+        <form onSubmit={handleLinkSubmit}>
+          <div className="ff-stackrow">
+            <div className="ff-row__label">Link another browser</div>
+            <div className="ff-row__hint" style={{ marginBottom: 8 }}>
+              Paste a pairing code from another browser to link it to this data. Linking merges that
+              browser&rsquo;s synced data with what&rsquo;s here — it does not replace it.
+            </div>
+            <div className="ff-field">
+              <input
+                className="ff-input"
+                type="text"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="XXXX-XXXX-XXXX-XXXX"
+                value={linkInput}
+                onChange={(e) => { setLinkInput(e.target.value); setLinkError(null); setLinkConfirming(false); }}
+                disabled={linkBusy}
+                data-testid="link-pairing-code-input"
+              />
+            </div>
+            {linkError && <div className="ff-status" data-kind="error" role="alert">{linkError}</div>}
+            {linkConfirming && !linkError && (
+              <div className="ff-status" data-kind="warning" role="alert">
+                This links to another browser&rsquo;s sync data and merges it with your data here. Continue?
+              </div>
+            )}
+            <div className="ff-dialog__actions" style={{ marginTop: 8 }}>
+              <button
+                type="submit"
+                className="ff-btn ff-btn--ghost"
+                disabled={linkBusy || !linkInput.trim()}
+                data-testid="link-browser-submit"
+              >
+                <Ico name="link" size={14} />
+                {linkBusy ? 'Linking…' : linkConfirming ? 'Confirm link' : 'Link browser'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
