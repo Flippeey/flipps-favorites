@@ -249,11 +249,16 @@ describe('sync-crypto: pairing code encode/decode', () => {
     const secret = mod.generateSecret();
     const code = await mod.encodePairingCode(secret);
 
-    // Flip the last character to corrupt the checksum tail while keeping valid
-    // base32 alphabet and length.
-    const lastChar = code[code.length - 1];
-    const replacement = lastChar === 'A' ? 'B' : 'A';
-    const tampered = code.slice(0, -1) + replacement;
+    // Flip a character within the first block (full secret-byte region) rather
+    // than the final char: the last base32 char only carries 2 significant
+    // bits (the low 3 are discarded on decode), so tampering it is often a
+    // no-op and made this test ~25% flaky. A secret-region char change alters
+    // the decoded secret, so the checksum (derived from the original secret)
+    // is deterministically rejected.
+    const idx = 1;
+    const orig = code[idx];
+    const repl = orig === 'A' ? 'B' : 'A';
+    const tampered = code.slice(0, idx) + repl + code.slice(idx + 1);
 
     await expect(mod.decodePairingCode(tampered)).rejects.toThrow(mod.SyncCryptoError);
   });
