@@ -87,3 +87,65 @@ export async function firefoxSafeFetch(url: string, init?: RequestInit, timeoutM
   }
   return fetch(url, init);
 }
+
+/**
+ * XHR-backed fetch shim for arbitrary methods + binary bodies (settings sync,
+ * #7). Unlike xhrFetch() above (icon pipeline: GET-only, blob response), this
+ * supports PUT with an ArrayBuffer/Blob body and reads the response back as
+ * an ArrayBuffer — what the sync push/pull paths need.
+ */
+export function xhrFetchRequest(
+  url: string,
+  init: { method: string; headers?: Record<string, string>; body?: BodyInit },
+  timeoutMs?: number,
+): Promise<Response> {
+  return new Promise<Response>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.responseType = 'arraybuffer';
+    if (timeoutMs !== undefined && timeoutMs > 0) {
+      xhr.timeout = timeoutMs;
+    }
+    xhr.open(init.method, url, true);
+
+    if (init.headers) {
+      for (const [key, value] of Object.entries(init.headers)) {
+        xhr.setRequestHeader(key, value);
+      }
+    }
+
+    xhr.onload = () => {
+      const body = (xhr.response as ArrayBuffer) ?? new ArrayBuffer(0);
+      resolve(new Response(body, { status: xhr.status, statusText: xhr.statusText }));
+    };
+
+    xhr.onerror = () => {
+      reject(new TypeError(`XHR network error requesting ${url}`));
+    };
+
+    xhr.ontimeout = () => {
+      reject(new DOMException(`XHR timeout requesting ${url}`, 'TimeoutError'));
+    };
+
+    xhr.send(init.body as XMLHttpRequestBodyInit | undefined);
+  });
+}
+
+/**
+ * Cross-origin fetch for arbitrary methods (PUT/GET with binary bodies), used
+ * by the settings-sync client. Same Chrome-fetch / Firefox-XHR branch as
+ * firefoxSafeFetch, but supports the request shapes sync needs.
+ */
+export async function firefoxSafeFetchRequest(
+  url: string,
+  init: { method: string; headers?: Record<string, string>; body?: BodyInit },
+  timeoutMs?: number,
+): Promise<Response> {
+  if (isFirefox()) {
+    return xhrFetchRequest(url, init, timeoutMs);
+  }
+  return fetch(url, {
+    method: init.method,
+    headers: init.headers,
+    body: init.body,
+  });
+}

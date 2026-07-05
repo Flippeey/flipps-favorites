@@ -21,3 +21,9 @@ export const ALLOWED_BOOKMARK_SCHEMES = ['http:', 'https:', 'chrome:', 'edge:', 
 // eliminates the letter-tile placeholder flash on cold start.  Set to false
 // to revert to the deferred behaviour if startup-latency regressions appear.
 export const EAGER_ICON_PREFETCH = true;
+
+// Settings-sync server endpoint (#7). Owner-operated Cloudflare Worker + R2;
+// no API key needed here — auth is the HKDF-derived authToken sent as a
+// Bearer header (see shared/sync-crypto.ts). https://*/* host permission
+// already covers this host, so no manifest change is required.
+export const SYNC_ENDPOINT = 'https://api.flippflix.com/sync';

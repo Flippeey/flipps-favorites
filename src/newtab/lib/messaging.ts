@@ -29,11 +29,21 @@ import type {
   PatchWorkspaceResponse,
   DeleteWorkspaceResponse,
   OpenTabResponse,
+  SyncErrorResponse,
+  SyncPushResponse,
+  SyncPullResponse,
+  SyncPullNotFoundResponse,
+  GetSyncPairingCodeResponse,
+  AdoptSyncSecretResponse,
 } from '@/shared/messages';
-import { IconFetchError, messageTypes } from '@/shared/messages';
+import { IconFetchError, SyncFetchError, messageTypes } from '@/shared/messages';
 
 async function send<T extends AppResponse>(req: AppRequest): Promise<T> {
-  const res = (await extensionApi.runtime.sendMessage(req)) as T | AppErrorResponse | undefined;
+  const res = (await extensionApi.runtime.sendMessage(req)) as T | AppErrorResponse | SyncErrorResponse | undefined;
+  if (res && typeof res === 'object' && '__syncError' in res) {
+    const { kind, message, httpStatus } = (res as SyncErrorResponse).__syncError;
+    throw new SyncFetchError(kind, message, httpStatus);
+  }
   if (res && typeof res === 'object' && '__error' in res) {
     const { kind, message, httpStatus } = (res as AppErrorResponse).__error;
     throw new IconFetchError(kind, message, httpStatus);
@@ -152,4 +162,29 @@ export async function deleteWorkspace(id: string): Promise<void> {
 
 export async function openTab(url: string): Promise<void> {
   await send<OpenTabResponse>({ type: messageTypes.openTab, url });
+}
+
+// Settings sync (#7). `bundle` is the WorkspaceExportPayload from
+// newtab/lib/workspace-transfer.ts's buildWorkspaceExport(); typed as unknown
+// at the message boundary (see messages.ts comment) and narrowed by the caller.
+export async function syncPush(bundle: unknown): Promise<void> {
+  await send<SyncPushResponse>({ type: messageTypes.syncPush, bundle });
+}
+
+// Returns the decrypted export payload (untyped — caller narrows/validates,
+// same shape parseWorkspaceFile expects) or null when the server has nothing
+// stored yet for this device's pairing (404). Applying it via
+// applyWorkspaceImport(payload, 'merge') is the UI wave's responsibility.
+export async function syncPull(): Promise<unknown | null> {
+  const res = await send<SyncPullResponse | SyncPullNotFoundResponse>({ type: messageTypes.syncPull });
+  return res.found ? res.payload : null;
+}
+
+export async function getSyncPairingCode(): Promise<string> {
+  const res = await send<GetSyncPairingCodeResponse>({ type: messageTypes.getSyncPairingCode });
+  return res.pairingCode;
+}
+
+export async function adoptSyncSecret(pairingCode: string): Promise<void> {
+  await send<AdoptSyncSecretResponse>({ type: messageTypes.adoptSyncSecret, pairingCode });
 }

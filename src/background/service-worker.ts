@@ -1,7 +1,8 @@
 import { extensionApi } from '../shared/browser';
-import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type WorkspaceRecord } from '../shared/messages';
+import { IconFetchError, SyncFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetSyncPairingCodeResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type SyncErrorResponse, type SyncPullResponse, type SyncPullNotFoundResponse, type SyncPushResponse, type AdoptSyncSecretResponse, type WorkspaceRecord } from '../shared/messages';
 import { deleteWorkspace, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, readBookmarkUsageRecords, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
 import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl, sweepGeneratedRecords } from './icons/icon-service';
+import { adoptSyncSecret, getSyncPairingCode, syncPull, syncPush } from './sync-client';
 
 extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }) => {
   const reason = details.reason ?? 'unknown';
@@ -31,10 +32,14 @@ function scheduleGeneratedRecordSweep(): Promise<void> {
   });
 }
 
-extensionApi.runtime.onMessage.addListener((message: AppRequest, _sender: unknown, sendResponse: (response: AppResponse | AppErrorResponse | undefined) => void) => {
+extensionApi.runtime.onMessage.addListener((message: AppRequest, _sender: unknown, sendResponse: (response: AppResponse | AppErrorResponse | SyncErrorResponse | undefined) => void) => {
   handleMessage(message)
     .then(sendResponse)
     .catch((error: unknown) => {
+      if (error instanceof SyncFetchError) {
+        sendResponse(buildSyncErrorEnvelope(error));
+        return;
+      }
       sendResponse(buildErrorEnvelope(error));
     });
   return true; // Keep the message channel open for the async response
@@ -56,6 +61,10 @@ function buildErrorEnvelope(error: unknown): AppErrorResponse {
   }
 
   return { __error: { kind, message, httpStatus } };
+}
+
+function buildSyncErrorEnvelope(error: SyncFetchError): SyncErrorResponse {
+  return { __syncError: { kind: error.kind, message: error.message, httpStatus: error.httpStatus } };
 }
 
 async function handleMessage(message: AppRequest): Promise<AppResponse> {
@@ -174,6 +183,24 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
     case messageTypes.openTab: {
       await extensionApi.tabs.create({ url: message.url });
       return { ok: true } satisfies OpenTabResponse;
+    }
+    case messageTypes.syncPush: {
+      await syncPush(message.bundle);
+      return { ok: true } satisfies SyncPushResponse;
+    }
+    case messageTypes.syncPull: {
+      const result = await syncPull();
+      return result.found
+        ? ({ found: true, payload: result.payload } satisfies SyncPullResponse)
+        : ({ found: false } satisfies SyncPullNotFoundResponse);
+    }
+    case messageTypes.getSyncPairingCode: {
+      const pairingCode = await getSyncPairingCode();
+      return { pairingCode } satisfies GetSyncPairingCodeResponse;
+    }
+    case messageTypes.adoptSyncSecret: {
+      await adoptSyncSecret(message.pairingCode);
+      return { ok: true } satisfies AdoptSyncSecretResponse;
     }
     default:
       throw new Error(`Unhandled message type: ${(message as AppRequest).type}`);

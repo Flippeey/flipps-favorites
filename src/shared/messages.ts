@@ -21,6 +21,10 @@ export const messageTypes = {
   patchWorkspace: 'workspaces/patch',
   deleteWorkspace: 'workspaces/delete',
   openTab: 'tabs/open',
+  syncPush: 'sync/push',
+  syncPull: 'sync/pull',
+  getSyncPairingCode: 'sync/get-pairing-code',
+  adoptSyncSecret: 'sync/adopt-secret',
 } as const;
 
 // Domain models + unions now live in models.ts. Re-export so existing
@@ -258,6 +262,53 @@ export interface OpenTabResponse {
   ok: true;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Settings sync (#7). The export bundle carried by SyncPushRequest is the
+// WorkspaceExportPayload built by newtab/lib/workspace-transfer.ts's
+// buildWorkspaceExport() — typed here as `unknown` to avoid a messages.ts ->
+// newtab import (messages.ts is shared/background-safe); callers narrow on
+// their own side.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SyncPushRequest {
+  type: typeof messageTypes.syncPush;
+  bundle: unknown;
+}
+
+export interface SyncPushResponse {
+  ok: true;
+}
+
+export interface SyncPullRequest {
+  type: typeof messageTypes.syncPull;
+}
+
+export interface SyncPullResponse {
+  found: true;
+  payload: unknown;
+}
+
+export interface SyncPullNotFoundResponse {
+  found: false;
+}
+
+export interface GetSyncPairingCodeRequest {
+  type: typeof messageTypes.getSyncPairingCode;
+}
+
+export interface GetSyncPairingCodeResponse {
+  pairingCode: string;
+}
+
+export interface AdoptSyncSecretRequest {
+  type: typeof messageTypes.adoptSyncSecret;
+  pairingCode: string;
+}
+
+export interface AdoptSyncSecretResponse {
+  ok: true;
+}
+
 export type AppRequest =
   | PingRequest
   | GetSettingsRequest
@@ -280,7 +331,11 @@ export type AppRequest =
   | CreateWorkspaceRequest
   | PatchWorkspaceRequest
   | DeleteWorkspaceRequest
-  | OpenTabRequest;
+  | OpenTabRequest
+  | SyncPushRequest
+  | SyncPullRequest
+  | GetSyncPairingCodeRequest
+  | AdoptSyncSecretRequest;
 
 export type AppResponse =
   | PingResponse
@@ -304,4 +359,8 @@ export type AppResponse =
   | CreateWorkspaceResponse
   | PatchWorkspaceResponse
   | DeleteWorkspaceResponse
-  | OpenTabResponse;
+  | OpenTabResponse
+  | SyncPushResponse
+  | (SyncPullResponse | SyncPullNotFoundResponse)
+  | GetSyncPairingCodeResponse
+  | AdoptSyncSecretResponse;
