@@ -58,6 +58,7 @@ export function FolderPicker({ tree, selectedId, onSelect, embedded, autoExpand 
               <span style={{ width: 22, flexShrink: 0 }} />
             )}
             <button
+              type="button"
               onClick={() => onSelect(f.id)}
               className="ff-card"
               data-folder-id={f.id}

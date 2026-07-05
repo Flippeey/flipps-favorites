@@ -88,13 +88,22 @@ test.describe('add-bookmark destination picker', () => {
     await expect(tile).toBeVisible();
   });
 
-  test.skip('selecting a different folder in picker creates bookmark there', async ({ newtabPage }) => {
-    // SKIPPED: Requires investigation into FolderPicker implementation.
-    // The current FolderPicker shows top-level folders (Bookmarks bar, BM Root, Other bookmarks)
-    // but may not support nested folder selection without expand buttons. This test is skipped
-    // pending clarification of whether nested selection is a supported feature.
-    const subFolderId = await createSubFolder(newtabPage, rootId, 'Sub Folder');
+  test('selecting a different folder in picker creates bookmark there', async ({ newtabPage }) => {
+    // Users must be able to change the destination in the picker; the bookmark
+    // should land in the newly selected folder rather than the default.
+    await createSubFolder(newtabPage, rootId, 'Sub Folder');
     await reloadNewtab(newtabPage);
+
+    await newtabPage.getByRole('button', { name: 'Add', exact: true }).click();
+    await newtabPage.locator('.ff-ctx').getByRole('menuitem', { name: /Add bookmark/i }).click();
+
+    const dialog = newtabPage.locator('.ff-dialog');
+    await expect(dialog).toBeVisible({ timeout: 5_000 });
+
+    // "Sub Folder" is nested under "BM Root"; expand BM Root's chevron first
+    // so the row is rendered, then select it via data-folder-title.
+    await dialog.locator('button[aria-label="Expand BM Root"]').click();
+    await dialog.locator('[data-folder-title="Sub Folder"]').click();
 
     // Add the bookmark with the new destination selected.
     const urlInput = dialog.locator('input[type="url"]');
@@ -118,14 +127,11 @@ test.describe('add-bookmark destination picker', () => {
     await expect(overlay.locator('.ff-tile[data-item-kind="bookmark"]')).toHaveCount(1);
   });
 
-  test.skip('picker expands nested folders to show selected deep destination', async ({ newtabPage }) => {
-    // SKIPPED: FolderPicker DOM interaction issue - buttons created with expanded state aren't
-    // discoverable via Playwright's getByRole or standard selectors. Needs investigation.
-    return;
+  test('picker expands nested folders to show selected deep destination', async ({ newtabPage }) => {
     // Users may select deeply nested folders; the picker must allow expansion
     // to reach deeply nested destinations.
     const level1 = await createSubFolder(newtabPage, rootId, 'Level 1');
-    const level2 = await createSubFolder(newtabPage, level1, 'Level 2');
+    await createSubFolder(newtabPage, level1, 'Level 2');
     await reloadNewtab(newtabPage);
 
     // Open add-bookmark from root.
@@ -135,15 +141,10 @@ test.describe('add-bookmark destination picker', () => {
     const dialog = newtabPage.locator('.ff-dialog');
     await expect(dialog).toBeVisible({ timeout: 5_000 });
 
-    // Click the expand button for Level 1 by role.
-    const level1ExpandButton = newtabPage.getByRole('button', { name: /Expand Level 1/ });
-    await expect(level1ExpandButton.first()).toBeVisible({ timeout: 5_000 });
-    await level1ExpandButton.first().click();
-
-    // Now Level 2 button should be visible. Click it by role.
-    const level2Button = newtabPage.getByRole('button', { name: 'Level 2' });
-    await expect(level2Button.first()).toBeVisible({ timeout: 5_000 });
-    await level2Button.first().click();
+    // Level 1 is nested under BM Root; expand BM Root, then Level 1, then select Level 2.
+    await dialog.locator('button[aria-label="Expand BM Root"]').click();
+    await dialog.locator('button[aria-label="Expand Level 1"]').click();
+    await dialog.locator('[data-folder-title="Level 2"]').click();
 
     // Add the bookmark with deep destination selected.
     const urlInput = dialog.locator('input[type="url"]');
@@ -152,7 +153,7 @@ test.describe('add-bookmark destination picker', () => {
 
     await expect(dialog).toBeHidden({ timeout: 5_000 });
 
-    // Navigate to Level 2 and verify the bookmark is there.
+    // Navigate to Level 1 > Level 2 and verify the bookmark is there.
     const level1Tile = newtabPage.locator('.ff-tile[data-item-kind="folder"]').filter({ hasText: 'Level 1' });
     await expect(level1Tile).toBeVisible();
     await level1Tile.click();
@@ -171,13 +172,11 @@ test.describe('add-bookmark destination picker', () => {
     await expect(overlay.locator('.ff-tile[data-item-kind="bookmark"]')).toHaveCount(1);
   });
 
-  test.skip('picker remembers selection within a single dialog session', async ({ newtabPage }) => {
-    // SKIPPED: Requires nested folder selection which depends on expand button interaction.
-    return;
+  test('picker remembers selection within a single dialog session', async ({ newtabPage }) => {
     // If a user opens the picker, selects a folder, then cancels, the picker
     // state within that dialog session should be independent (not persist to
     // app state).
-    const subFolder = await createSubFolder(newtabPage, rootId, 'Test Folder');
+    await createSubFolder(newtabPage, rootId, 'Test Folder');
     await reloadNewtab(newtabPage);
 
     // First dialog: select the subfolder and cancel.
@@ -187,10 +186,11 @@ test.describe('add-bookmark destination picker', () => {
     let dialog = newtabPage.locator('.ff-dialog');
     await expect(dialog).toBeVisible({ timeout: 5_000 });
 
-    // Click Test Folder button by role.
-    const testFolderButton = newtabPage.getByRole('button', { name: 'Test Folder' });
-    await expect(testFolderButton.first()).toBeVisible({ timeout: 5_000 });
-    await testFolderButton.first().click();
+    // "Test Folder" is nested under BM Root; expand BM Root first, then select it.
+    await dialog.locator('button[aria-label="Expand BM Root"]').click();
+    const testFolderButton = dialog.locator('[data-folder-title="Test Folder"]');
+    await expect(testFolderButton).toBeVisible({ timeout: 5_000 });
+    await testFolderButton.click();
 
     // Cancel the dialog.
     const cancelButton = dialog.getByRole('button', { name: /Cancel/i }).first();
@@ -205,8 +205,8 @@ test.describe('add-bookmark destination picker', () => {
     await expect(dialog).toBeVisible({ timeout: 5_000 });
 
     // Verify the root folder is present (picker has reset).
-    const rootButton = newtabPage.getByRole('button', { name: 'BM Root' });
-    await expect(rootButton.first()).toBeVisible({ timeout: 5_000 });
+    const rootButton = dialog.locator('[data-folder-title="BM Root"]');
+    await expect(rootButton).toBeVisible({ timeout: 5_000 });
   });
 });
 
@@ -253,11 +253,9 @@ test.describe('add-folder create mode parent picker', () => {
     await expect(newtabPage.locator('.ff-tile[data-item-kind="folder"]:has-text("New Folder")')).toBeVisible();
   });
 
-  test.skip('selecting different parent in create-folder picker creates folder there', async ({ newtabPage }) => {
-    // SKIPPED: Same FolderPicker DOM interaction issue as add-bookmark tests.
-    return;
+  test('selecting different parent in create-folder picker creates folder there', async ({ newtabPage }) => {
     // Users must be able to change the parent destination in create mode.
-    const subFolder = await createSubFolder(newtabPage, rootId, 'Destination Folder');
+    await createSubFolder(newtabPage, rootId, 'Destination Folder');
     await reloadNewtab(newtabPage);
 
     const menu = await openContextMenu(newtabPage, newtabPage.locator('.ff-canvas'));
@@ -266,10 +264,11 @@ test.describe('add-folder create mode parent picker', () => {
     const dialog = newtabPage.locator('.ff-dialog');
     await expect(dialog).toBeVisible({ timeout: 5_000 });
 
-    // Click "Destination Folder" in the picker by role.
-    const destFolderButton = newtabPage.getByRole('button', { name: 'Destination Folder' });
-    await expect(destFolderButton.first()).toBeVisible({ timeout: 5_000 });
-    await destFolderButton.first().click();
+    // "Destination Folder" is nested under BM Root; expand BM Root first.
+    await dialog.locator('button[aria-label="Expand BM Root"]').click();
+    const destFolderButton = dialog.locator('[data-folder-title="Destination Folder"]');
+    await expect(destFolderButton).toBeVisible({ timeout: 5_000 });
+    await destFolderButton.click();
 
     // Create the folder with the new parent selected.
     const nameInput = dialog.locator('input[type="text"]');
@@ -293,13 +292,11 @@ test.describe('add-folder create mode parent picker', () => {
     await expect(childInDest).toBeVisible({ timeout: 5_000 });
   });
 
-  test.skip('add-folder create mode picker expands to show nested parent destinations', async ({ newtabPage }) => {
-    // SKIPPED: Same FolderPicker DOM interaction issue as other nested folder tests.
-    return;
+  test('add-folder create mode picker expands to show nested parent destinations', async ({ newtabPage }) => {
     // Users may want to create a folder deep in the tree; the picker must
     // allow expansion to reach nested targets.
     const level1 = await createSubFolder(newtabPage, rootId, 'Parent Level 1');
-    const level2 = await createSubFolder(newtabPage, level1, 'Parent Level 2');
+    await createSubFolder(newtabPage, level1, 'Parent Level 2');
     await reloadNewtab(newtabPage);
 
     const menu = await openContextMenu(newtabPage, newtabPage.locator('.ff-canvas'));
@@ -308,15 +305,10 @@ test.describe('add-folder create mode parent picker', () => {
     const dialog = newtabPage.locator('.ff-dialog');
     await expect(dialog).toBeVisible({ timeout: 5_000 });
 
-    // Click the expand button for Parent Level 1 by role.
-    const level1ExpandButton = newtabPage.getByRole('button', { name: /Expand Parent Level 1/ });
-    await expect(level1ExpandButton.first()).toBeVisible({ timeout: 5_000 });
-    await level1ExpandButton.first().click();
-
-    // Now Parent Level 2 button should be visible. Click it by role.
-    const level2Button = newtabPage.getByRole('button', { name: 'Parent Level 2' });
-    await expect(level2Button.first()).toBeVisible({ timeout: 5_000 });
-    await level2Button.first().click();
+    // Parent Level 1 is nested under BM Root; expand BM Root, then Parent Level 1, then select Parent Level 2.
+    await dialog.locator('button[aria-label="Expand BM Root"]').click();
+    await dialog.locator('button[aria-label="Expand Parent Level 1"]').click();
+    await dialog.locator('[data-folder-title="Parent Level 2"]').click();
 
     // Create the folder under Level 2.
     const nameInput = dialog.locator('input[type="text"]');

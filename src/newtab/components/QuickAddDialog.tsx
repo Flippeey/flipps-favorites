@@ -5,8 +5,10 @@ import { getHostname, getSearchName, isValidBookmarkUrl } from '../lib/icon-help
 import { hasUrlScheme } from '../lib/url';
 import { Ico } from './Ico';
 import { ModalDialog } from './ModalDialog';
+import { FolderPicker } from './FolderPicker';
 
 interface QuickAddDialogProps {
+  tree: BookmarkNode[];
   parentId: string;
   parentTitle?: string;
   onClose: () => void;
@@ -19,8 +21,9 @@ function inferTitle(url: string): string {
   return seed.charAt(0).toUpperCase() + seed.slice(1);
 }
 
-export function QuickAddDialog({ parentId, parentTitle, onClose, onSaved }: QuickAddDialogProps) {
+export function QuickAddDialog({ tree, parentId, parentTitle, onClose, onSaved }: QuickAddDialogProps) {
   const [value, setValue] = useState('https://www.');
+  const [targetId, setTargetId] = useState(parentId);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -55,7 +58,7 @@ export function QuickAddDialog({ parentId, parentTitle, onClose, onSaved }: Quic
     setSaving(true);
     setError(null);
     try {
-      const bookmark = await createBookmark(parentId, inferTitle(url), url);
+      const bookmark = await createBookmark(targetId, inferTitle(url), url);
       onSaved(bookmark);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save bookmark.');
@@ -86,6 +89,10 @@ export function QuickAddDialog({ parentId, parentTitle, onClose, onSaved }: Quic
           onChange={(e) => { setValue(e.target.value); if (error) setError(null); }}
           placeholder="https://example.com"
         />
+      </div>
+      <div className="ff-field">
+        <label className="ff-field__label">Location</label>
+        <FolderPicker tree={tree} selectedId={targetId} onSelect={setTargetId} />
       </div>
       {error && <div className="ff-status" data-kind="error" role="alert">{error}</div>}
       <div className="ff-dialog__actions">
