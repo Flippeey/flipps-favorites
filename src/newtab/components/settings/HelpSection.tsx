@@ -1,6 +1,11 @@
 import { MOD_KEY } from '@/newtab/lib/platform';
+import { Ico } from '../Ico';
 
-export function HelpSection() {
+interface HelpSectionProps {
+  onReplaySetup: () => void;
+}
+
+export function HelpSection({ onReplaySetup }: HelpSectionProps) {
   const mod = MOD_KEY;
   const shortcuts: ReadonlyArray<readonly [string, string]> = [
     [`${mod}+K  or  S  or  /`,    'Focus search'],
@@ -19,7 +24,7 @@ export function HelpSection() {
   ];
 
   const tips: ReadonlyArray<readonly [string, string]> = [
-    ['Drag & drop',        'Drag bookmarks to reorder, move into folders, or drop on workspace tabs to move between workspaces. Requires "Manual" sort mode.'],
+    ['Drag & drop',        'Drag bookmarks into folders, onto the dock, or onto workspace tabs to move them — works in any sort mode. Reordering tiles in place needs "Manual" sort mode.'],
     ['Marquee select',     'Click and drag on empty space to rubber-band select multiple bookmarks at once.'],
     ['Right-click anywhere','Context menu adapts to what you click — bookmark, folder, or empty space. Quick way to add, edit, or delete.'],
     ['Custom icons',       'Edit any bookmark to swap its icon. Search for alternatives, upload your own, or paste an image URL.'],
@@ -51,6 +56,18 @@ export function HelpSection() {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="ff-card" style={{ marginBottom: 16 }}>
+        <div className="ff-row">
+          <div>
+            <div className="ff-row__label">Replay setup</div>
+            <div className="ff-row__hint">Re-run the onboarding flow to re-pick your bookmark roots and organization template.</div>
+          </div>
+          <button type="button" className="ff-btn ff-btn--ghost" onClick={onReplaySetup}>
+            <Ico name="zap" size={14} /> Replay
+          </button>
+        </div>
       </div>
 
       <h3 className="ff-set-section__title">About</h3>
