@@ -185,9 +185,11 @@ test.describe('preprod fixes', () => {
 
     await freshPage.locator('main.ff-canvas').click({ position: { x: 6, y: 6 } });
     await freshPage.keyboard.press('w');
-    // Assert that pressing 'w' does NOT create a new workspace when at the limit.
-    // This is an absence assertion: no "New workspace" dialog should appear.
-    // Give a brief window for any dialog to appear, then verify it hasn't.
+    // REVIEWED, INTENTIONAL exception to the no-blind-wait convention: this is an
+    // absence assertion (the 'w' shortcut must NOT open "New workspace" at the cap),
+    // so there is no positive event to poll/wait on instead — a fixed settle window
+    // is the only way to give a would-be (buggy) dialog open time to happen before
+    // asserting it didn't.
     await freshPage.waitForTimeout(400);
     expect(await freshPage.getByText('New workspace', { exact: false }).count()).toBe(0);
   });

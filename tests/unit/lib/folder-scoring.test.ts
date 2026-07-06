@@ -113,7 +113,7 @@ describe('scanFolders — size sub-score scales with total bookmark count', () =
   const oldSameDomain = (count: number): BookmarkNode[] =>
     bookmarks('x', count, { domain: 'same.com', dateAdded: NOW - 200 * DAY_MS });
 
-  it('a 3-bookmark folder scores lowest non-zero size tier (>=3 tier)', () => {
+  it('excludes folders below the minimum bookmark threshold', () => {
     const f = folder('f3', oldSameDomain(3));
     const result = scanFolders(wrapTree([f]));
     // 3 bookmarks < MIN_BOOKMARKS_TO_SCORE(5) so it won't even be scored — use 5 to be scoreable.

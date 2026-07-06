@@ -9,8 +9,8 @@ export async function clearExtensionStorage(page: Page): Promise<void> {
     const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
       ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
     await api.storage.local.remove(Object.values(keys));
-    // Settings use sync-preferred storage; clear both so state
-    // never leaks between tests.
+    // Settings use sync-preferred storage; also clear the sync copy (falling
+    // back to local if sync is unavailable) so state never leaks between tests.
     try {
       await api.storage.sync.remove([keys.appSettings]);
     } catch {
