@@ -10,18 +10,10 @@ export default defineConfig({
   // from doing ~95 sequential reseeds, which degrades a long-lived context.
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
-  // Historical note: a few "persists after reload" tests used to be
-  // intermittently flaky (~4 per run, rotating; each passed alone and on
-  // retry). Root cause: settings/workspaces used chrome.storage.sync
-  // (sync-preferred), whose writes flush asynchronously, so a reload-boot
-  // re-read of sync under parallel reseed-heavy load could see stale state.
-  // Fixed by tests/fixtures/launch.ts's Chrome specs loading dist/chrome-test
-  // (npm run build:chrome:test), a build with __FF_TEST_STORAGE_LOCAL__ forced
-  // true (vite.config.mjs), which routes the storage seam
-  // (src/shared/storage-buckets.ts) onto chrome.storage.local unconditionally
-  // — no async sync flush, no race. Validated: 3 consecutive full runs (177 tests
-  // each) all passed clean with retries:0 (task t10, 2026-07-06), confirming the
-  // storage.local fix eliminated the flake. Retries dropped to 0.
+  // Storage test flag: Chrome specs load dist/chrome-test (npm run build:chrome:test),
+  // built with __FF_TEST_STORAGE_LOCAL__ = true (vite.config.mjs), routing all storage
+  // writes to chrome.storage.local instead of sync-preferred. Eliminates the persists-after-reload
+  // race from async sync flush under parallel reseed load. Retries: 0.
   retries: 0,
   workers: process.env.CI ? 2 : 3,
   reporter: process.env.CI

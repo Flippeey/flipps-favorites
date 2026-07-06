@@ -22,7 +22,7 @@ For browser API access from background or shared code, import `extensionApi` fro
 
 ## State Ownership (App.tsx)
 
-`App.tsx` is the single owner of: `settings`, `tree`, `usage`, `workspaces`, `workspaceWallpaper`, `openFolderId`, `editTarget`, `quickAddTarget`, `folderNameTarget`, `appSettingsOpen`, `workspaceSettingsOpen`, `appSettingsInitialSection`, `workspaceSettingsInitialSection`, `onboardOpen`, `newWorkspaceOpen`, `folderPath`, `contextMenu`, `confirmDeleteFolder`, `confirmDeleteBatch`, `selection`, `focusedTileId`.
+`App.tsx` owns ALL top-level state. Representative groups: **Data** (`settings`, `tree`, `usage`, `workspaces`); **UI state** (`openFolderId`, `contextMenu`, `selection`); **Dialog targets** (`editTarget`, `quickAddTarget`, `folderNameTarget`); **Surface refs** (element refs for interaction hooks); etc. See source for complete inventory.
 
 Child components are presentational — they receive props and call back via `on*` handlers. If state is shared by multiple sibling components, lift to `App.tsx` rather than introducing context providers or a state library.
 
@@ -30,7 +30,7 @@ Child components are presentational — they receive props and call back via `on
 
 Each `WorkspaceRecord` stores `viewMode` and `sortMode` overrides (default: app-level `layoutPreset`/`sortMode`). Applied by `LayoutSection` when workspace-scoped setting is present. Onboarding templates set per-workspace view/sort via creation overrides, not app-level settings. Re-running templates over an existing workspace requires explicit user opt-in (no silent patch).
 
-App.tsx stays the owner, but the bulkier slices are factored into hooks under `src/newtab/state/` that it composes: `useSelection`, `useWorkspaceActions`, `useToasts`, `useContextMenuBuilder`, and `useOptimisticPatch` (the `runOptimistic` helper). Add new state-owning logic as a `state/` hook consumed by App rather than growing `App.tsx` inline.
+Bulkier state slices are factored into hooks under `src/newtab/state/` (see structure.md for full inventory). Add new state-owning logic as a `state/` hook consumed by App rather than growing `App.tsx` inline.
 
 Optimistic update pattern (`handlePatch` in `App.tsx`):
 ```typescript
@@ -43,7 +43,7 @@ Refresh-after-mutation pattern: call `refreshTree()` in the `onSaved` / `finally
 
 ## Interaction Hooks
 
-`useDrag` and `useMarquee` take a `surface: HTMLElement | null` and a `selectionRef: RefObject<...>`. The owning component uses `setCanvasEl` / `setOverlayBodyEl` via ref callback so the hook re-binds when the element mounts. `useDragWiring` bundles the `useDrag` setup App needs; keyboard interactions live in `useKeyboardNav`, `useQuickAddShortcuts`, `useWorkspaceShortcut`, and `useFocusTrap`.
+`useDrag` and `useMarquee` take a `surface: HTMLElement | null` and a `selectionRef: RefObject<...>`. The owning component uses `setCanvasEl` / `setOverlayBodyEl` via ref callback so the hook re-binds when the element mounts. `useDragWiring` bundles the `useDrag` setup App needs; keyboard interactions are also hooked (see structure.md for full interaction-hook inventory).
 
 When adding a new interaction hook: accept `surface` + refs, return a render-state object (e.g. `{ x, y, ids }` for drag preview, a rect for marquee), and let `App.tsx` route the result into JSX.
 
@@ -79,7 +79,7 @@ Onboarding classifies the user's selected bookmark roots via two-stage pipeline:
 ## Icon Pipeline
 
 Resolution order in `resolveAutomaticIcon` (`src/background/icons/icon-service.ts`); providers live in `icon-providers.ts`:
-1. User override (persisted, never expires). **Scoped** since v9 (`shared/icon-scope.ts`): lookup order `exact:<url>` > `host:<hostname>` > `domain:<registrable root>`. Stored in IDB keyed by `overrideKey` (`ff-icons` DB v2; v1 per-URL records migrate to exact scope on upgrade). Edit dialog has an "Apply icon to" segmented control (default: host).
+1. User override (persisted, never expires). **Scoped** since v9 (`shared/icon-scope.ts`): lookup order `exact:<url>` > `host:<hostname>` > `domain:<registrable root>`. Stored in IDB keyed by `overrideKey` (`ff-icons` DB v3; v1→v2 migrates per-URL to scope-keyed, v2→v3 removes unused `fit` field). Edit dialog has an "Apply icon to" segmented control (default: host).
 2. Cache — in-memory in-flight dedup + persisted record (30-day TTL; stale non-generated records trigger a background refresh). **Keyed per host** (`icon:host:<hostname>`) since auto-resolution is purely host-derived — N bookmarks on a host share one resolution.
 3. **Origin scrape** — fetch the site's own `https://<host>/` HTML, parse `<link rel>` icons + web-app manifest, then probe `apple-touch-icon*` / `android-chrome-192x192.png` / `favicon.ico` paths. Primary source; awaited first within `autoSourceTimeoutMs`. Guards: a cross-root redirect (login SSO page) discards the landed HTML and marks the host **gated**; same-host SVG icons are accepted without bitmap decode (capped at `maxSvgIconBytes`); ICO containers get their largest embedded PNG extracted (`ico-parse.ts`) since `createImageBitmap` can't decode ICO/SVG in workers.
 4. **Google S2** — `google.com/s2/favicons`. Skipped for personal-infra hosts (S2 returns a generic globe for unreachable private domains) and when the `google.com` host permission is absent.
@@ -110,6 +110,6 @@ Feature code MUST NOT have target-aware branches. All conditional logic funnels 
 
 ## XSS / Security
 
-- JSX text children handle escaping automatically — prefer them. The React migration eliminated every `innerHTML` path; if a new one becomes unavoidable, reintroduce a focused escape helper rather than copy-pasting `replaceAll` chains. Verified 2026-05: no `innerHTML` remains in `src/`.
+- JSX text children handle escaping automatically — prefer them. If a new `innerHTML` becomes unavoidable, reintroduce a focused escape helper rather than copy-pasting `replaceAll` chains. No `innerHTML` in `src/`.
 - Manifest permissions stay least-privilege. Justify any new permission in the PR.
 - No secrets, no env-injected API keys. Extension calls only public favicon services.

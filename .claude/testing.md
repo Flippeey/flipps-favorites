@@ -4,7 +4,7 @@
 
 - **Vitest unit tests** — `tests/unit/**/*.test.ts`. Pure logic only: utilities, helpers, pure functions (e.g. icon parsing, dock-mode resolution, URL normalization). Fast, no browser. Run with `npm run test:unit` or `npm run test:unit:watch`.
 - **Playwright E2E (Chrome)** — `tests/specs/*.spec.ts`. User flows, integration, DOM + cross-context messaging. Chrome project runs all specs; Firefox project runs `icons.spec.ts` only. Playwright's built-in esbuild TS transform wires `@/` path alias (tsconfig `paths` resolved at runtime with zero extra config). Run with `npm test` (default: chrome) or `npm run test:chrome` / `npm run test:firefox`.
-- **Puppeteer WebDriver BiDi suite (Firefox)** — `tests/firefox-e2e/specs/**/*.test.ts` (9 spec files). Broad Firefox E2E coverage — bookmarks, boot, context-menu, icons, middle-click, onboarding, search, settings, workspaces. Uses Puppeteer + Firefox WebDriver BiDi (the only way to load a MV3 extension in headless Firefox; Playwright's juggler backend cannot). Separate Vitest config + separate `vitest run -c` invocation so it doesn't get picked up by `npm run test:unit`. Run with `npm run test:firefox:e2e` or `npm run test:firefox:e2e:build`.
+- **Puppeteer WebDriver BiDi suite (Firefox)** — `tests/firefox-e2e/specs/**/*.test.ts`. Broad Firefox E2E coverage — bookmarks, boot, context-menu, icons, middle-click, onboarding, search, settings, workspaces. Uses Puppeteer + Firefox WebDriver BiDi (the only way to load a MV3 extension in headless Firefox; Playwright's juggler backend cannot). Separate Vitest config + separate `vitest run -c` invocation so it doesn't get picked up by `npm run test:unit`. Run with `npm run test:firefox:e2e` or `npm run test:firefox:e2e:build`.
 
 ### Why Three?
 
@@ -21,7 +21,7 @@ Chrome Playwright specs load a **test build** to eliminate flake from `chrome.st
 - `npm run build:chrome:test` — builds `dist/chrome-test` with `__FF_TEST_STORAGE_LOCAL__` define true (set in vite.config.mjs). This compile-time flag forces all storage writes onto `chrome.storage.local` instead of sync-preferred, eliminating the persists-after-reload race under parallel test load. `dist/chrome-test` is gitignored test-only output.
 - `tests/fixtures/launch.ts` — Chrome specs launch `dist/chrome-test`, NOT `dist/chrome`. Firefox specs launch `dist/firefox` (not built with the flag; no sync race on Firefox's async storage model).
 - `dist/chrome` (the real release artifact used by `ff-release` / publish) stays unmodified and byte-identical to before. The flag is compile-time only, not a runtime toggle.
-- **Flake elimination validated** (wave 5/t10, 2026-07-06): 3 consecutive full runs (177 tests each = 531+ test executions) all passed clean with `retries: 0`, confirming the storage.local fix eliminated the flake that previously required `retries: 1`.
+- **Flake eliminated** by the storage.local test build. Suite runs with `retries: 0`.
 
 ## Component/React Testing: Intentionally Out of Scope
 
