@@ -51,7 +51,16 @@ export function xhrFetch(url: string, init?: RequestInit, timeoutMs?: number): P
 
     xhr.onload = () => {
       const blob = xhr.response as Blob ?? new Blob([]);
-      resolve(new Response(blob, { status: xhr.status }));
+      const response = new Response(blob, { status: xhr.status });
+      // Response.url isn't settable via the constructor — it's a read-only
+      // property normally populated by the fetch machinery from the final
+      // (post-redirect) URL. XHR auto-follows redirects and exposes the landed
+      // URL via responseURL, so redefine the property to carry it through.
+      // Callers (e.g. the origin-scrape cross-root-redirect guard in
+      // icon-providers.ts) read response.url to detect a login/SSO redirect;
+      // without this it's always '' on the XHR path and the guard never fires.
+      Object.defineProperty(response, 'url', { value: xhr.responseURL || url, configurable: true });
+      resolve(response);
     };
 
     xhr.onerror = () => {

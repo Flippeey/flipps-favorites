@@ -41,6 +41,20 @@ function closestScopeId(el: HTMLElement | null, rootFolderId: string): string {
   return scopeEl?.dataset.scopeFolderId || rootFolderId;
 }
 
+// Bookmark/folder ids are opaque strings (not guaranteed to be simple
+// alphanumerics) — interpolating one raw into a CSS attribute selector can
+// throw a SyntaxError (e.g. an id containing an unescaped `"`), which would
+// abort the pointermove handler mid-drag and leave tiles stuck with
+// data-drag-source="true" (muted favicons). Always escape via CSS.escape,
+// matching the pattern already used in App.tsx's keyboard-nav scroll effect.
+export function itemIdSelector(id: string): string {
+  return `[data-item-id="${CSS.escape(id)}"]`;
+}
+
+export function scopeFolderSelector(folderId: string): string {
+  return `section[data-scope-folder-id="${CSS.escape(folderId)}"]`;
+}
+
 export function clearDropAttrs({ includeSource }: { includeSource: boolean }): void {
   document.querySelectorAll<HTMLElement>('[data-item-id][data-drop-position]').forEach(el => {
     delete el.dataset.dropPosition;
@@ -218,7 +232,7 @@ export function useDrag({
         if (dragEngagedRef) dragEngagedRef.current = true;
         // Mark source tiles
         for (const id of drag.dragIds) {
-          const el = canvas.querySelector<HTMLElement>(`[data-item-id="${id}"]`);
+          const el = canvas.querySelector<HTMLElement>(itemIdSelector(id));
           if (el) el.dataset.dragSource = 'true';
         }
         // Cache candidate tile list once per drag session (DOM is stable at engage time).
@@ -403,7 +417,7 @@ export function useDrag({
           if (origIdx !== -1 && dropIndex === origIdx) { drag.dropTarget = null; return; }
         }
 
-        const targetSec = canvas.querySelector<HTMLElement>(`section[data-scope-folder-id="${targetSectionId}"]`);
+        const targetSec = canvas.querySelector<HTMLElement>(scopeFolderSelector(targetSectionId));
         setReorder(rootFolderIdRef.current, dropIndex, targetSec ? { el: targetSec, pos: placeAfter ? 'after' : 'before' } : undefined);
         return;
       }

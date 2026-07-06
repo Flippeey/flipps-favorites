@@ -175,9 +175,12 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       const keys = Object.keys(patch) as (keyof AppSettings)[];
       setSettings(prev => ({ ...prev, ...Object.fromEntries(keys.map(k => [k, next[k]])) }));
     } catch {
-      // keep optimistic value
+      // Keep the optimistic value (don't revert abruptly) but surface the
+      // failure — otherwise the setting looks applied and silently reverts
+      // on next open.
+      pushToast({ kind: 'error', message: 'Couldn’t save that setting — it may not persist.' });
     }
-  }, []);
+  }, [pushToast]);
 
   const openAppSettings = useCallback((section: AppSectionId = 'navigation') => {
     setWorkspaceSettingsOpen(false);
