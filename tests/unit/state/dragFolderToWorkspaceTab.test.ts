@@ -18,136 +18,86 @@
  *    into that workspace, not create a new one. Only drops in the bar GAP
  *    (target.kind === 'workspace-new') trigger workspace creation.
  *
- * Strategy: we test the pure decision function extracted from the commit
- * handler, mirroring the branching in useDragWiring. The Playwright spec
- * covers the integrated path end-to-end.
+ * Strategy: we test the production routing function directly (imported from
+ * useDragWiring, not a local mirror) so these tests and the implementation
+ * can never silently diverge. The Playwright spec covers the integrated path
+ * end-to-end.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MAX_WORKSPACES } from '@/shared/constants';
-import type { WorkspaceRecord } from '@/shared/messages';
+import type { BookmarkNode, WorkspaceRecord } from '@/shared/messages';
+
+// useDragWiring imports lib/messaging.ts, which throws at module-eval time
+// outside a real extension context (no browser/chrome runtime in Vitest).
+// Stub it so importing routeFolderTabDrop doesn't pull in that side effect —
+// none of these tests exercise moveBookmark.
+vi.mock('@/newtab/lib/messaging', () => ({ moveBookmark: vi.fn() }));
+
+import { routeFolderTabDrop } from '@/newtab/interaction/useDragWiring';
 
 // ---------------------------------------------------------------------------
-// Pure helper mirroring the routing in useDragWiring's handleDragCommit.
-// Any change to the hook's branching must be reflected here (Rule 9).
+// Tree fixtures — production isFolder() checks Array.isArray(node.children),
+// so a folder node needs a `children` array (empty is fine) and a bookmark
+// node must omit `children` entirely.
 // ---------------------------------------------------------------------------
 
-type FolderDropResult = 'create' | 'move' | 'skip';
-
-/**
- * Drop target kind as produced by useDrag.ts:
- *  'workspace'     — pointer landed ON an existing workspace pill
- *  'workspace-new' — pointer landed in the bar gap (no pill ancestor)
- */
-type WorkspaceDropKind = 'workspace' | 'workspace-new';
-
-interface BookmarkNodeStub {
-  id: string;
-  url?: string;
-  children?: BookmarkNodeStub[];
-}
-
-function isNodeFolder(node: BookmarkNodeStub): boolean {
-  return !node.url;
-}
-
-/**
- * Decide what should happen when dragIds are dropped on the workspace bar.
- *
- * The `dropKind` parameter encodes WHERE the drop landed:
- *  'workspace'     → the pointer was over an existing pill → always MOVE
- *  'workspace-new' → the pointer was in the bar gap → may CREATE
- *
- * Returns:
- *  'create'  — single folder in bar gap, not at cap, not already a ws root → create ws
- *  'skip'    — single folder in bar gap but at cap or already a ws root
- *  'move'    — pill drop (any payload), OR non-folder/multi-item gap drop
- */
-function routeFolderTabDrop(
-  dragIds: string[],
-  nodeMap: Map<string, BookmarkNodeStub>,
-  workspaces: Pick<WorkspaceRecord, 'rootFolderId'>[],
-  dropKind: WorkspaceDropKind = 'workspace-new',
-): FolderDropResult {
-  // Pill drop: always move into the existing workspace (regardless of payload).
-  if (dropKind === 'workspace') return 'move';
-
-  // Bar-gap drop: only a single folder triggers workspace creation.
-  // Multiple items → always move (not workspace creation)
-  if (dragIds.length !== 1) return 'move';
-
-  const node = nodeMap.get(dragIds[0]!);
-  if (!node || !isNodeFolder(node)) return 'move';
-
-  const folderId = node.id;
-  if (workspaces.length >= MAX_WORKSPACES) return 'skip';
-  if (workspaces.some(w => w.rootFolderId === folderId)) return 'skip';
-  return 'create';
-}
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+const folder = (id: string): BookmarkNode => ({ id, title: id, children: [] });
+const bookmark = (id: string): BookmarkNode => ({ id, title: id, url: 'https://example.com' });
 
 const makeWorkspaces = (count: number): Pick<WorkspaceRecord, 'rootFolderId'>[] =>
   Array.from({ length: count }, (_, i) => ({ rootFolderId: `folder-${i}` }));
 
 describe('routeFolderTabDrop — workspace creation routing', () => {
   it('routes to "create" when a single new folder is dropped at below-cap count', () => {
-    const nodes = new Map([['f1', { id: 'f1' }]]);
-    const result = routeFolderTabDrop(['f1'], nodes, makeWorkspaces(1));
+    const tree = [folder('f1')];
+    const result = routeFolderTabDrop(['f1'], tree, makeWorkspaces(1), 'workspace-new');
     expect(result).toBe('create');
   });
 
   it('routes to "move" when the dragged item is a bookmark (has url)', () => {
-    const nodes = new Map([['bm1', { id: 'bm1', url: 'https://example.com' }]]);
-    const result = routeFolderTabDrop(['bm1'], nodes, makeWorkspaces(1));
+    const tree = [bookmark('bm1')];
+    const result = routeFolderTabDrop(['bm1'], tree, makeWorkspaces(1), 'workspace-new');
     expect(result).toBe('move');
   });
 
   it('routes to "move" when multiple items are dragged (even if first is a folder)', () => {
-    const nodes = new Map<string, BookmarkNodeStub>([
-      ['f1', { id: 'f1' }],
-      ['bm1', { id: 'bm1', url: 'https://example.com' }],
-    ]);
-    const result = routeFolderTabDrop(['f1', 'bm1'], nodes, makeWorkspaces(1));
+    const tree = [folder('f1'), bookmark('bm1')];
+    const result = routeFolderTabDrop(['f1', 'bm1'], tree, makeWorkspaces(1), 'workspace-new');
     expect(result).toBe('move');
   });
 
   it('routes to "move" when multiple folders are dragged', () => {
-    const nodes = new Map<string, BookmarkNodeStub>([
-      ['f1', { id: 'f1' }],
-      ['f2', { id: 'f2' }],
-    ]);
-    const result = routeFolderTabDrop(['f1', 'f2'], nodes, makeWorkspaces(1));
+    const tree = [folder('f1'), folder('f2')];
+    const result = routeFolderTabDrop(['f1', 'f2'], tree, makeWorkspaces(1), 'workspace-new');
     expect(result).toBe('move');
   });
 
   it('routes to "skip" at MAX_WORKSPACES cap', () => {
-    const nodes = new Map([['f1', { id: 'f1' }]]);
-    const result = routeFolderTabDrop(['f1'], nodes, makeWorkspaces(MAX_WORKSPACES));
+    const tree = [folder('f1')];
+    const result = routeFolderTabDrop(['f1'], tree, makeWorkspaces(MAX_WORKSPACES), 'workspace-new');
     expect(result).toBe('skip');
   });
 
   it('routes to "skip" at exactly one below MAX_WORKSPACES, then "create" one below that', () => {
-    const nodes = new Map([['f1', { id: 'f1' }]]);
+    const tree = [folder('f1')];
     // At MAX_WORKSPACES - 1: should still create (cap not yet reached)
-    const atAlmostCap = routeFolderTabDrop(['f1'], nodes, makeWorkspaces(MAX_WORKSPACES - 1));
+    const atAlmostCap = routeFolderTabDrop(['f1'], tree, makeWorkspaces(MAX_WORKSPACES - 1), 'workspace-new');
     expect(atAlmostCap).toBe('create');
     // At MAX_WORKSPACES: should skip
-    const atCap = routeFolderTabDrop(['f1'], nodes, makeWorkspaces(MAX_WORKSPACES));
+    const atCap = routeFolderTabDrop(['f1'], tree, makeWorkspaces(MAX_WORKSPACES), 'workspace-new');
     expect(atCap).toBe('skip');
   });
 
   it('routes to "skip" when the folder is already a workspace root', () => {
-    const nodes = new Map([['taken', { id: 'taken' }]]);
+    const tree = [folder('taken')];
     const workspaces = [{ rootFolderId: 'taken' }];
-    const result = routeFolderTabDrop(['taken'], nodes, workspaces);
+    const result = routeFolderTabDrop(['taken'], tree, workspaces, 'workspace-new');
     expect(result).toBe('skip');
   });
 
   it('routes to "move" when the node is not found in the tree', () => {
-    const nodes = new Map<string, BookmarkNodeStub>();
-    const result = routeFolderTabDrop(['unknown'], nodes, makeWorkspaces(1));
+    const tree: BookmarkNode[] = [];
+    const result = routeFolderTabDrop(['unknown'], tree, makeWorkspaces(1), 'workspace-new');
     expect(result).toBe('move');
   });
 });
@@ -163,45 +113,39 @@ describe('routeFolderTabDrop — drop location: pill vs bar-gap', () => {
   it('routes a single folder dropped ON an existing pill to "move" (not "create")', () => {
     // WHY: this is the regression — dropping a folder onto a real workspace pill
     // should MOVE it into that workspace, not create a new workspace.
-    const nodes = new Map([['f1', { id: 'f1' }]]);
-    const result = routeFolderTabDrop(['f1'], nodes, makeWorkspaces(1), 'workspace');
+    const tree = [folder('f1')];
+    const result = routeFolderTabDrop(['f1'], tree, makeWorkspaces(1), 'workspace');
     expect(result).toBe('move');
   });
 
   it('routes a single folder dropped in the bar GAP to "create"', () => {
     // WHY: gap drops (no pill ancestor) are the intended trigger for workspace creation.
-    const nodes = new Map([['f1', { id: 'f1' }]]);
-    const result = routeFolderTabDrop(['f1'], nodes, makeWorkspaces(1), 'workspace-new');
+    const tree = [folder('f1')];
+    const result = routeFolderTabDrop(['f1'], tree, makeWorkspaces(1), 'workspace-new');
     expect(result).toBe('create');
   });
 
   it('routes a bookmark dropped ON an existing pill to "move" (pill always moves)', () => {
-    const nodes = new Map([['bm1', { id: 'bm1', url: 'https://example.com' }]]);
-    const result = routeFolderTabDrop(['bm1'], nodes, makeWorkspaces(1), 'workspace');
+    const tree = [bookmark('bm1')];
+    const result = routeFolderTabDrop(['bm1'], tree, makeWorkspaces(1), 'workspace');
     expect(result).toBe('move');
   });
 
   it('routes a bookmark dropped in the bar GAP to "move" (non-folder gap drop = move)', () => {
-    const nodes = new Map([['bm1', { id: 'bm1', url: 'https://example.com' }]]);
-    const result = routeFolderTabDrop(['bm1'], nodes, makeWorkspaces(1), 'workspace-new');
+    const tree = [bookmark('bm1')];
+    const result = routeFolderTabDrop(['bm1'], tree, makeWorkspaces(1), 'workspace-new');
     expect(result).toBe('move');
   });
 
   it('routes multiple folders dropped ON a pill to "move"', () => {
-    const nodes = new Map<string, BookmarkNodeStub>([
-      ['f1', { id: 'f1' }],
-      ['f2', { id: 'f2' }],
-    ]);
-    const result = routeFolderTabDrop(['f1', 'f2'], nodes, makeWorkspaces(1), 'workspace');
+    const tree = [folder('f1'), folder('f2')];
+    const result = routeFolderTabDrop(['f1', 'f2'], tree, makeWorkspaces(1), 'workspace');
     expect(result).toBe('move');
   });
 
   it('routes multiple folders dropped in bar gap to "move" (multi-item gap = move)', () => {
-    const nodes = new Map<string, BookmarkNodeStub>([
-      ['f1', { id: 'f1' }],
-      ['f2', { id: 'f2' }],
-    ]);
-    const result = routeFolderTabDrop(['f1', 'f2'], nodes, makeWorkspaces(1), 'workspace-new');
+    const tree = [folder('f1'), folder('f2')];
+    const result = routeFolderTabDrop(['f1', 'f2'], tree, makeWorkspaces(1), 'workspace-new');
     expect(result).toBe('move');
   });
 });
