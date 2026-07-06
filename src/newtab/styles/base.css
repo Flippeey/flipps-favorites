@@ -141,7 +141,7 @@ html {
 .ff-app[data-bg="wallpaper"]::after {
   content: '';
   position: fixed; inset: 0;
-  background: color-mix(in oklab, var(--ink-0) max(32%, calc(100% - var(--wallpaper-alpha, 70%))), transparent);
+  background: color-mix(in oklab, var(--ink-0) calc(100% - var(--wallpaper-alpha, 70%)), transparent);
   pointer-events: none; z-index: 0;
   transition: background var(--dur-base) var(--ease-out);
 }
