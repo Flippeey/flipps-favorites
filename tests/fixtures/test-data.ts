@@ -1,5 +1,5 @@
 import { deflateSync } from 'node:zlib';
-import type { WorkspaceRecord } from '../../src/shared/models';
+import type { WorkspaceRecord } from '@/shared/models';
 
 /**
  * Create a solid-color PNG of the given dimensions.

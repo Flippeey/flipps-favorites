@@ -11,7 +11,7 @@
  */
 import { test, expect } from '../fixtures/world.js';
 import type { Page } from '@playwright/test';
-import { MAX_WORKSPACES } from '../../src/shared/constants.js';
+import { MAX_WORKSPACES } from '@/shared/constants.js';
 
 const WS_DEFAULTS = {
   themeMode: 'system', accentColor: '#3F72DC', backgroundMode: 'gradient', solidBackgroundColor: '',

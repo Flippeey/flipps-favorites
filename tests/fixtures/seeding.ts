@@ -3,9 +3,9 @@
 // so the service worker's stores stay the source of truth. Typed against the
 // shared models — no `any` at the page.evaluate boundary.
 import type { Page } from '@playwright/test';
-import type { AppSettings, WorkspaceRecord } from '../../src/shared/models';
-import { messageTypes } from '../../src/shared/messages.js';
-import { PROMO_WORKSPACES, DOCK_BOOKMARKS } from '../../src/shared/seed-data.js';
+import type { AppSettings, WorkspaceRecord } from '@/shared/models';
+import { messageTypes } from '@/shared/messages.js';
+import { PROMO_WORKSPACES, DOCK_BOOKMARKS } from '@/shared/seed-data.js';
 import { DEFAULT_WORKSPACE_SETTINGS, STORAGE_KEYS } from './test-data.js';
 
 export type PromoPersona = 'Work' | 'Personal' | 'AI' | 'Design' | 'Gaming';

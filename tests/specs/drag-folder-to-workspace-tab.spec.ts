@@ -26,8 +26,8 @@
 import { test, expect } from '../fixtures/world.js';
 import { resetStorage, seedMinimal, dismissOnboarding, createWorkspace } from '../fixtures/seeding.js';
 import { reloadNewtab, patchWorkspace, createTestFolder } from '../fixtures/bookmark-helpers.js';
-import { MAX_WORKSPACES } from '../../src/shared/constants.js';
-import type { WorkspaceRecord } from '../../src/shared/models.js';
+import { MAX_WORKSPACES } from '@/shared/constants.js';
+import type { WorkspaceRecord } from '@/shared/models.js';
 import { DEFAULT_WORKSPACE_SETTINGS } from '../fixtures/test-data.js';
 import type { Page } from '@playwright/test';
 

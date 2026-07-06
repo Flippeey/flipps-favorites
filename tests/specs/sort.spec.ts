@@ -157,8 +157,8 @@ async function titlesInScope(
  */
 async function applySort(
   page: import('@playwright/test').Page,
-  mode: import('../../src/shared/models').BookmarkSortMode,
-  direction: import('../../src/shared/models').SortDirection,
+  mode: import('@/shared/models').BookmarkSortMode,
+  direction: import('@/shared/models').SortDirection,
 ): Promise<void> {
   await sortPill(page).click();
   await sortOption(page, mode, direction).click();

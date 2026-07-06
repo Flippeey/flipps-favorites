@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
-import type { WorkspaceRecord } from '../../src/shared/models';
-import { messageTypes } from '../../src/shared/messages.js';
+import type { WorkspaceRecord } from '@/shared/models';
+import { messageTypes } from '@/shared/messages.js';
 import { DEFAULT_WORKSPACE_SETTINGS, STORAGE_KEYS } from './test-data.js';
 import type { ExtApi } from './seeding.js';
 
