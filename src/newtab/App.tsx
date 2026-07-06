@@ -565,6 +565,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     onNewWorkspace: handleOpenNewWorkspace,
     onRenameFolder: handleRenameFolder,
     onEditBookmark: handleEditBookmark,
+    onOpenHelp: () => openAppSettings('help'),
   });
 
   const wallpaperBlobUrl = useBlobUrl(workspaceWallpaper);
@@ -879,6 +880,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           initialSection={appSettingsInitialSection}
           onPatchGlobal={handlePatch}
           onAfterImport={(next: AppSettings) => { setSettings(next); refreshTree(); }}
+          onReplaySetup={() => { setAppSettingsOpen(false); setOnboardOpen(true); }}
           onClose={() => { setAppSettingsOpen(false); setAppSettingsInitialSection('navigation'); }}
         />
       )}

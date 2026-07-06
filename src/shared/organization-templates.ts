@@ -61,7 +61,7 @@ const powerUser: OrganizationTemplate = {
     bookmarkSortMode: 'manual' satisfies BookmarkSortMode,
     bookmarkSortDirection: 'asc' satisfies SortDirection,
   },
-  settingsSummary: ['List view (compact)', 'Manual order', 'Folder-first navigation'],
+  settingsSummary: ['List view', 'Manual order', 'Folder-first navigation'],
 };
 
 // Casual: grid view; name sort gives predictable alphabetical access for small
@@ -93,7 +93,7 @@ const researcher: OrganizationTemplate = {
     bookmarkSortMode: 'created' satisfies BookmarkSortMode,
     bookmarkSortDirection: 'desc' satisfies SortDirection,
   },
-  settingsSummary: ['List view (compact)', 'Newest first', 'Folder-first navigation'],
+  settingsSummary: ['List view', 'Newest first', 'Folder-first navigation'],
 };
 
 // ---------------------------------------------------------------------------

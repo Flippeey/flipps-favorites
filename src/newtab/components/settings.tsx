@@ -45,10 +45,11 @@ interface AppSettingsDrawerProps {
   initialSection?: AppSectionId;
   onPatchGlobal: (patch: Partial<AppSettings>) => void;
   onAfterImport: (settings: AppSettings) => void;
+  onReplaySetup: () => void;
   onClose: () => void;
 }
 
-export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation', onPatchGlobal, onAfterImport, onClose }: AppSettingsDrawerProps) {
+export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation', onPatchGlobal, onAfterImport, onReplaySetup, onClose }: AppSettingsDrawerProps) {
   const [section, setSection] = useState<AppSectionId>(initialSection);
   const [closing, setClosing] = useState(false);
   const drawerRef = useRef<HTMLElement | null>(null);
@@ -98,7 +99,7 @@ export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation
             {section === 'dock'       && <DockSection settings={settings} tree={tree} onPatch={onPatchGlobal} />}
             {section === 'clock'      && <ClockSection settings={settings} onPatch={onPatchGlobal} />}
             {section === 'backup'     && <BackupSection onAfterImport={onAfterImport} />}
-            {section === 'help'       && <HelpSection />}
+            {section === 'help'       && <HelpSection onReplaySetup={onReplaySetup} />}
           </div>
         </div>
       </aside>

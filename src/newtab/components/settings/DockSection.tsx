@@ -29,7 +29,7 @@ export function DockSection({ settings, tree, onPatch }: SectionProps & { tree: 
         </div>
         <div style={{ padding: 'var(--s-3) 0' }}>
           <div className="ff-row__label" style={{ marginBottom: 4 }}>Source folder</div>
-          <div className="ff-row__hint" style={{ marginBottom: 8 }}>Show items from this folder.</div>
+          <div className="ff-row__hint" style={{ marginBottom: 8 }}>Show items from this folder. Only the first 8 items are shown.</div>
           <FolderMultiPicker
             tree={tree}
             selectedIds={settings.dockFolderId ? [settings.dockFolderId] : []}
