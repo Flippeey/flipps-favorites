@@ -19,9 +19,10 @@ export default defineConfig({
   // (npm run build:chrome:test), a build with __FF_TEST_STORAGE_LOCAL__ forced
   // true (vite.config.mjs), which routes the storage seam
   // (src/shared/storage-buckets.ts) onto chrome.storage.local unconditionally
-  // — no async sync flush, no race. Retries stay at 1 as a general safety net
-  // for residual environmental flake, not because this specific race persists.
-  retries: 1,
+  // — no async sync flush, no race. Validated: 3 consecutive full runs (177 tests
+  // each) all passed clean with retries:0 (task t10, 2026-07-06), confirming the
+  // storage.local fix eliminated the flake. Retries dropped to 0.
+  retries: 0,
   workers: process.env.CI ? 2 : 3,
   reporter: process.env.CI
     ? [

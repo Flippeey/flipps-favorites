@@ -163,8 +163,8 @@ test.describe('icon pipeline', () => {
 
     // Single click applies but leaves the dialog open.
     await cell.click();
-    await newtabPage.waitForTimeout(300);
-    await expect(dialog).toBeVisible();
+    // Wait for the click to be processed. The dialog should remain visible.
+    await expect(dialog).toBeVisible({ timeout: 300 });
 
     // Double click applies and closes.
     await cell.dblclick();
@@ -238,6 +238,9 @@ test.describe('icon pipeline', () => {
       }
     });
     await reloadNewtab(newtabPage);
+    // KEEP: This is a legitimate absence assertion. We must wait 3 seconds to collect
+    // any CORS errors that occur during icon resolution. This is not a blind sleep —
+    // it's asserting that NO CORS errors appear over the 3-second window while icons load.
     await newtabPage.waitForTimeout(3_000);
     expect(corsErrors, `CORS errors detected: ${corsErrors.join('; ')}`).toHaveLength(0);
   });

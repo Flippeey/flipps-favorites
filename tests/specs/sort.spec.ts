@@ -238,6 +238,8 @@ test.describe('sort modes', () => {
       }, bookmarkId);
     };
     await recordUse(id01);
+    // Wait 20ms between use recordings to ensure timestamps are distinct.
+    // This is necessary for the usage sort order to be deterministic.
     await newtabPage.waitForTimeout(20);
     await recordUse(id02);
     await newtabPage.waitForTimeout(20);

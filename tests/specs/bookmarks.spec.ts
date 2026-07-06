@@ -160,7 +160,8 @@ test('middle-click on a folder tile does NOT open a new tab', async ({ newtabPag
 
   await tile.click({ button: 'middle' });
   // No message round-trip is involved for a no-op folder middle-click, so a
-  // short settle window is enough to prove nothing opened.
+  // short settle window is enough to prove nothing opened. Wait for any potential
+  // navigation to settle, then verify no new page was created.
   await newtabPage.waitForTimeout(500);
 
   context.off('page', onPage);
