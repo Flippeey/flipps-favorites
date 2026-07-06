@@ -781,6 +781,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
 
       {quickAddTarget && (
         <QuickAddDialog
+          tree={tree}
           parentId={quickAddTarget.parentId}
           parentTitle={quickAddTarget.parentTitle}
           onClose={() => setQuickAddTarget(null)}
@@ -790,6 +791,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
 
       {folderNameTarget && (
         <FolderNameDialog
+          tree={tree}
           target={folderNameTarget}
           siblingNames={folderSiblingNames}
           onClose={() => setFolderNameTarget(null)}
