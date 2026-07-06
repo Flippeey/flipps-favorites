@@ -12,6 +12,7 @@
 import { writeFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/extension-context.js';
 import { MOCK_FAVICON_PNG } from '../fixtures/test-data.js';
 import {
@@ -24,6 +25,24 @@ import {
   removeBookmarkTree,
   setupDefaultWorkspace,
 } from '../fixtures/bookmark-helpers.js';
+
+// Reads all records from the 'overrides' IDB store. Shared by the pre-reload
+// durability poll and the post-reload assertion below.
+async function readIconOverrideRecords(page: Page): Promise<Array<Record<string, unknown>>> {
+  return page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open('ff-icons');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const records: Array<Record<string, unknown>> = await new Promise((resolve, reject) => {
+      const req = db.transaction('overrides', 'readonly').objectStore('overrides').getAll();
+      req.onsuccess = () => resolve(req.result as Array<Record<string, unknown>>);
+      req.onerror = () => reject(req.error);
+    });
+    return records;
+  });
+}
 
 test.describe('icon upload after fit control removal', () => {
   let rootId: string;
@@ -106,6 +125,14 @@ test.describe('icon upload after fit control removal', () => {
     await newtabPage.keyboard.press('Escape');
     await expect(dialog).toBeHidden({ timeout: 5_000 });
 
+    // WHY: the IDB write's onsuccess is JS-visible before the backing store is
+    // durably flushed to disk (a known MV3 SW race). Racing a reload against
+    // that flush can read an empty 'overrides' store, so assert durability
+    // explicitly here instead of relying on the awaited write chain alone.
+    await expect.poll(() => readIconOverrideRecords(newtabPage).then((records) => records.length), {
+      timeout: 10_000,
+    }).toBeGreaterThanOrEqual(1);
+
     // Reload and reopen.
     await reloadNewtab(newtabPage);
 
@@ -121,22 +148,13 @@ test.describe('icon upload after fit control removal', () => {
     // The override persists — preview img is visible after reload.
     await expect(dialog2.locator('.ff-iconpreview img')).toBeVisible({ timeout: 8_000 });
 
-    // Confirm the stored IDB record has no `fit` field (new records don't write it).
-    const storedRecords = await newtabPage.evaluate(async () => {
-      const db = await new Promise<IDBDatabase>((resolve, reject) => {
-        const req = indexedDB.open('ff-icons');
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      });
-      const records: Array<Record<string, unknown>> = await new Promise((resolve, reject) => {
-        const req = db.transaction('overrides', 'readonly').objectStore('overrides').getAll();
-        req.onsuccess = () => resolve(req.result as Array<Record<string, unknown>>);
-        req.onerror = () => reject(req.error);
-      });
-      return records;
-    });
+    // Poll for the record post-reload too, absorbing any residual flush lag,
+    // then fetch once and assert on its shape.
+    await expect.poll(() => readIconOverrideRecords(newtabPage).then((records) => records.length), {
+      timeout: 10_000,
+    }).toBeGreaterThan(0);
+    const storedRecords = await readIconOverrideRecords(newtabPage);
 
-    expect(storedRecords.length).toBeGreaterThan(0);
     // New records written after the removal must not carry a `fit` field.
     for (const record of storedRecords) {
       expect('fit' in record).toBe(false);
