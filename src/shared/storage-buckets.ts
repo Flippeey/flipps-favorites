@@ -98,7 +98,10 @@ export function createCachedValueStore<T>(args: {
   async function resolveStorageArea(): Promise<ResolvedStorageArea> {
     if (!areaPromise) {
       areaPromise = (async () => {
-        if (area !== 'sync-preferred') {
+        // Test-only escape hatch: force local storage to eliminate the async
+        // sync-preferred flush race (see vite.config.mjs). Dead-code-eliminated
+        // in every non-test build since the constant is a literal `false`.
+        if (__FF_TEST_STORAGE_LOCAL__ || area !== 'sync-preferred') {
           return getLocalArea();
         }
 
@@ -331,7 +334,8 @@ export function createPerKeyRecordStore<T>(args: {
   async function resolveArea(): Promise<ResolvedStorageArea> {
     if (!areaPromise) {
       areaPromise = (async () => {
-        if (area !== 'sync-preferred') {
+        // Test-only escape hatch: see resolveStorageArea above.
+        if (__FF_TEST_STORAGE_LOCAL__ || area !== 'sync-preferred') {
           return getLocalArea();
         }
         const syncArea = extensionApi.storage?.sync;

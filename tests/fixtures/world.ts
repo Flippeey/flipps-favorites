@@ -17,7 +17,7 @@ import { closeLaunched, launchChrome, originFrom } from './launch.js';
 export type { SeededWorld, PromoPersona } from './seeding.js';
 
 export interface WorldFixtures {
-  /** Worker-scoped persistent context loading `dist/chrome`. */
+  /** Worker-scoped persistent context loading `dist/chrome-test`. */
   extensionContext: BrowserContext;
   /** Extension origin (`chrome-extension://<id>`) for the worker context. */
   extensionOrigin: string;

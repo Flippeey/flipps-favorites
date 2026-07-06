@@ -10,14 +10,17 @@ export default defineConfig({
   // from doing ~95 sequential reseeds, which degrades a long-lived context.
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
-  // A few "persists after reload" tests are intermittently flaky (~4 per run,
-  // rotating; each passes alone and on retry). Root cause: settings/workspaces
-  // use chrome.storage.sync (sync-preferred), whose writes flush asynchronously.
-  // The app re-reads sync on reload-boot, so under parallel reseed-heavy load a
-  // mutate->reload can read stale state. Gating reloads on the persisted value
-  // is not viable — sync read-back itself lags past any sane timeout here. One
-  // retry absorbs it; Playwright reports the flaky count so it stays visible.
-  // A true fix would force chrome.storage.local under test (build flag).
+  // Historical note: a few "persists after reload" tests used to be
+  // intermittently flaky (~4 per run, rotating; each passed alone and on
+  // retry). Root cause: settings/workspaces used chrome.storage.sync
+  // (sync-preferred), whose writes flush asynchronously, so a reload-boot
+  // re-read of sync under parallel reseed-heavy load could see stale state.
+  // Fixed by tests/fixtures/launch.ts's Chrome specs loading dist/chrome-test
+  // (npm run build:chrome:test), a build with __FF_TEST_STORAGE_LOCAL__ forced
+  // true (vite.config.mjs), which routes the storage seam
+  // (src/shared/storage-buckets.ts) onto chrome.storage.local unconditionally
+  // — no async sync flush, no race. Retries stay at 1 as a general safety net
+  // for residual environmental flake, not because this specific race persists.
   retries: 1,
   workers: process.env.CI ? 2 : 3,
   reporter: process.env.CI

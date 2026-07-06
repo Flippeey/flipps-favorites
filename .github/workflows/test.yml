@@ -32,12 +32,20 @@ jobs:
       - name: Build both targets
         run: npm run build
 
+      # Chrome specs load this dedicated dist/chrome-test build, not dist/chrome
+      # above — it forces chrome.storage.local (see vite.config.mjs,
+      # tests/fixtures/launch.ts) so the sync-preferred flush race can't cause
+      # the "persists after reload" flake. dist/chrome (the release artifact)
+      # stays untouched.
+      - name: Build Chrome test target
+        run: npm run build:chrome:test
+
       # Run headed under a virtual display (xvfb). Chrome's new headless
       # (--headless=new, the LOCAL default — see tests/fixtures/extension-context.ts)
-      # loads MV3 extensions fine, but in CI its tighter timing worsens the
-      # documented sync-storage-race flake on "persists after reload" specs past
-      # what retries:1 absorbs. Headed-in-xvfb is CI's stable path; HEADED=1
-      # forces it. Locals stay headless to avoid stealing window focus.
+      # loads MV3 extensions fine, but in CI its tighter timing worsens under
+      # load; the dist/chrome-test build above removes the previously
+      # documented sync-storage-race flake. Headed-in-xvfb is CI's stable path;
+      # HEADED=1 forces it. Locals stay headless to avoid stealing window focus.
       # Reporter config (github + job-summary table + html) comes from
       # playwright.config.ts — don't override it with a CLI --reporter flag.
       - name: Run Playwright tests

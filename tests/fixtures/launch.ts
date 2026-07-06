@@ -10,7 +10,13 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const rootDir = resolve(fileURLToPath(import.meta.url), '..', '..', '..');
-export const chromeExtPath = join(rootDir, 'dist', 'chrome');
+// Chrome specs load the dedicated `chrome-test` build (npm run build:chrome:test),
+// not the release dist/chrome — it's built with __FF_TEST_STORAGE_LOCAL__ true,
+// forcing settings/workspaces onto chrome.storage.local so the async
+// sync-preferred flush race can't cause "persists after reload" flakes (see
+// playwright.config.ts + storage-buckets.ts). dist/chrome itself stays the
+// unmodified release artifact.
+export const chromeExtPath = join(rootDir, 'dist', 'chrome-test');
 export const firefoxExtPath = join(rootDir, 'dist', 'firefox');
 
 export interface LaunchedContext {

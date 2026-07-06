@@ -389,6 +389,13 @@ function asResolvedArea(area: MinimalStorageArea | undefined): ResolvedStorageAr
 // resolveStorageArea so the migration reads/writes the same raw bytes the
 // stores do.
 async function resolveSyncPreferredArea(): Promise<ResolvedStorageArea | null> {
+  // Test-only escape hatch: mirrors storage-buckets.ts's resolveStorageArea /
+  // resolveArea so the one-shot migrations agree with the stores on which
+  // area is authoritative under test. Dead-code-eliminated otherwise.
+  if (__FF_TEST_STORAGE_LOCAL__) {
+    return asResolvedArea(extensionApi.storage?.local as MinimalStorageArea | undefined);
+  }
+
   const syncArea = asResolvedArea(extensionApi.storage?.sync as MinimalStorageArea | undefined);
   if (syncArea) {
     try {
