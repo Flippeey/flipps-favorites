@@ -8,6 +8,23 @@ import { MAX_WORKSPACES } from '@/shared/constants';
 import { pickNextAccent } from '../lib/workspace-accent';
 import { runOptimistic } from './useOptimisticPatch';
 
+export type CreateFromFolderGuardResult = 'proceed' | 'at_max' | 'already_exists';
+
+/**
+ * Guard checked before attempting to create a workspace from a folder: the cap
+ * check and the duplicate-root check both short-circuit the actual create call.
+ * Order matters — at_max is checked before already_exists (documented in
+ * handleCreateWorkspaceFromFolder's caller-facing outcome contract).
+ */
+export function checkCreateFromFolderGuard(
+  workspaces: Pick<WorkspaceRecord, 'rootFolderId'>[],
+  folderId: string,
+): CreateFromFolderGuardResult {
+  if (workspaces.length >= MAX_WORKSPACES) return 'at_max';
+  if (workspaces.some(w => w.rootFolderId === folderId)) return 'already_exists';
+  return 'proceed';
+}
+
 interface UseWorkspaceActionsArgs {
   workspaces: WorkspaceRecord[];
   setWorkspaces: React.Dispatch<React.SetStateAction<WorkspaceRecord[]>>;
@@ -192,9 +209,8 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
     folderTitle: string,
     insertIndex?: number,
   ): Promise<'created' | 'at_max' | 'already_exists'> => {
-    const current = workspacesRef.current;
-    if (current.length >= MAX_WORKSPACES) return 'at_max';
-    if (current.some(w => w.rootFolderId === folderId)) return 'already_exists';
+    const guard = checkCreateFromFolderGuard(workspacesRef.current, folderId);
+    if (guard !== 'proceed') return guard;
     const created = await handleCreateWorkspace(folderId, folderTitle, undefined, insertIndex);
     return created !== undefined ? 'created' : 'at_max';
   }, [handleCreateWorkspace]);

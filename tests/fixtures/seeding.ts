@@ -3,8 +3,9 @@
 // so the service worker's stores stay the source of truth. Typed against the
 // shared models — no `any` at the page.evaluate boundary.
 import type { Page } from '@playwright/test';
-import type { AppSettings, WorkspaceRecord } from '../../src/shared/models';
-import { PROMO_WORKSPACES, DOCK_BOOKMARKS } from '../../src/shared/seed-data.js';
+import type { AppSettings, WorkspaceRecord } from '@/shared/models';
+import { messageTypes } from '@/shared/messages.js';
+import { PROMO_WORKSPACES, DOCK_BOOKMARKS } from '@/shared/seed-data.js';
 import { DEFAULT_WORKSPACE_SETTINGS, STORAGE_KEYS } from './test-data.js';
 
 export type PromoPersona = 'Work' | 'Personal' | 'AI' | 'Design' | 'Gaming';
@@ -28,12 +29,14 @@ export interface SeededWorld {
 
 // Minimal shape of the extension API surface used inside page.evaluate. Casting
 // `globalThis` to this (via `unknown`) keeps the boundary typed without `any`.
-interface ExtBookmarkNode {
+// Exported so other fixture modules (bookmark-helpers.ts) share one typed
+// surface instead of re-declaring their own `any`-cast shape.
+export interface ExtBookmarkNode {
   id: string;
   title: string;
   url?: string;
 }
-interface ExtApi {
+export interface ExtApi {
   bookmarks: {
     create(b: { parentId: string; title: string; url?: string }): Promise<ExtBookmarkNode>;
     removeTree(id: string): Promise<void>;
@@ -59,10 +62,12 @@ export async function resetStorage(page: Page): Promise<void> {
   // Delete every workspace record via the message pipeline first. Production
   // stores each WorkspaceRecord under its own per-item sync key
   // (`workspace:<id>`, see src/shared/storage.ts) rather than the legacy
-  // aggregate `keys.workspaces` key cleared below — the sync.remove([...,
-  // keys.workspaces]) call never touches those per-item keys, so ad-hoc
-  // workspaces (e.g. seedMinimal's 'ws-minimal') would otherwise leak into
-  // the next test in this worker-scoped context.
+  // aggregate `keys.workspaces` key — the sync.remove([keys.appSettings])
+  // call below never touches those per-item keys, so ad-hoc workspaces
+  // (e.g. seedMinimal's 'ws-minimal') would otherwise leak into the next
+  // test in this worker-scoped context. `keys.workspaces` itself is still
+  // included in the local.remove sweep a few lines down as a defensive
+  // clear of the legacy key, in case it's ever present from an old profile.
   await clearWorkspaces(page);
   await page.evaluate(async (keys) => {
     const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
@@ -71,9 +76,9 @@ export async function resetStorage(page: Page): Promise<void> {
     const wallpaperKeys = Object.keys(all).filter((k) => k.startsWith('app-wallpaper'));
     await api.storage.local.remove([...Object.values(keys), ...wallpaperKeys]);
     try {
-      await api.storage.sync.remove([keys.appSettings, keys.workspaces]);
+      await api.storage.sync.remove([keys.appSettings]);
     } catch {
-      await api.storage.local.remove([keys.appSettings, keys.workspaces]);
+      await api.storage.local.remove([keys.appSettings]);
     }
     // Purge the bookmark tree too. Seeders create folders under the bookmarks
     // bar ('1') and other-bookmarks ('2'); without this, every reseed stacks
@@ -90,11 +95,11 @@ export async function resetStorage(page: Page): Promise<void> {
 
 /** Patch global app settings via the message pipeline. Caller must reload. */
 export async function patchSettings(page: Page, patch: Partial<AppSettings>): Promise<void> {
-  await page.evaluate(async (p) => {
+  await page.evaluate(async (args) => {
     const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
       ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
-    await api.runtime.sendMessage({ type: 'settings/patch', patch: p });
-  }, patch);
+    await api.runtime.sendMessage({ type: args.messageType, patch: args.patch });
+  }, { messageType: messageTypes.patchSettings, patch });
 }
 
 /** Patch a workspace record's visual/layout fields. Caller must reload. */
@@ -106,29 +111,29 @@ export async function patchWorkspace(
   await page.evaluate(async (args) => {
     const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
       ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
-    await api.runtime.sendMessage({ type: 'workspaces/patch', id: args.id, patch: args.patch });
-  }, { id, patch });
+    await api.runtime.sendMessage({ type: args.messageType, id: args.id, patch: args.patch });
+  }, { messageType: messageTypes.patchWorkspace, id, patch });
 }
 
 /** Create a workspace record via the message pipeline. */
 export async function createWorkspace(page: Page, workspace: WorkspaceRecord): Promise<void> {
-  await page.evaluate(async (ws) => {
+  await page.evaluate(async (args) => {
     const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
       ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
-    await api.runtime.sendMessage({ type: 'workspaces/create', workspace: ws });
-  }, workspace);
+    await api.runtime.sendMessage({ type: args.messageType, workspace: args.workspace });
+  }, { messageType: messageTypes.createWorkspace, workspace });
 }
 
 /** Read the settings the service worker currently holds (committed state). */
 export async function getSettings(page: Page): Promise<AppSettings> {
-  return page.evaluate(async () => {
+  return page.evaluate(async (messageType) => {
     const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
       ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
-    const res = (await api.runtime.sendMessage({ type: 'settings/get' })) as {
+    const res = (await api.runtime.sendMessage({ type: messageType })) as {
       settings: AppSettings;
     };
     return res.settings;
-  });
+  }, messageTypes.getSettings);
 }
 
 /**
@@ -175,14 +180,14 @@ export async function waitForWorkspace(
 
 /** Read all workspace records the service worker currently holds. */
 export async function getWorkspaces(page: Page): Promise<WorkspaceRecord[]> {
-  return page.evaluate(async () => {
+  return page.evaluate(async (messageType) => {
     const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
       ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
-    const res = (await api.runtime.sendMessage({ type: 'workspaces/get-all' })) as {
+    const res = (await api.runtime.sendMessage({ type: messageType })) as {
       workspaces: WorkspaceRecord[];
     };
     return res.workspaces;
-  });
+  }, messageTypes.getWorkspaces);
 }
 
 /**
@@ -192,16 +197,16 @@ export async function getWorkspaces(page: Page): Promise<WorkspaceRecord[]> {
  * without relaunching the browser or resetting all storage.
  */
 export async function clearWorkspaces(page: Page): Promise<void> {
-  await page.evaluate(async () => {
+  await page.evaluate(async (args) => {
     const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
       ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
-    const res = (await api.runtime.sendMessage({ type: 'workspaces/get-all' })) as {
+    const res = (await api.runtime.sendMessage({ type: args.getAll })) as {
       workspaces: { id: string }[];
     };
     for (const ws of res.workspaces) {
-      await api.runtime.sendMessage({ type: 'workspaces/delete', id: ws.id });
+      await api.runtime.sendMessage({ type: args.deleteOne, id: ws.id });
     }
-  });
+  }, { getAll: messageTypes.getWorkspaces, deleteOne: messageTypes.deleteWorkspace });
 }
 
 /**
@@ -264,7 +269,7 @@ export async function seedPromoWorld(page: Page): Promise<Omit<SeededWorld, 'ori
   const seed = await page.evaluate(async (data) => {
     const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
       ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
-    const { workspaces, defaults, dock } = data;
+    const { workspaces, defaults, dock, messages } = data;
     const workspaceIds: Record<string, string> = {};
     const bookmarkIds: Record<string, string> = {};
     let activeRootId = '';
@@ -300,7 +305,7 @@ export async function seedPromoWorld(page: Page): Promise<Omit<SeededWorld, 'ori
         gradientIntensity: ws.gradientIntensity,
         tileShape: ws.tileShape,
       };
-      await api.runtime.sendMessage({ type: 'workspaces/create', workspace: record });
+      await api.runtime.sendMessage({ type: messages.createWorkspace, workspace: record });
     }
 
     const dockFolder = await api.bookmarks.create({ parentId: '2', title: 'Dock' });
@@ -310,7 +315,7 @@ export async function seedPromoWorld(page: Page): Promise<Omit<SeededWorld, 'ori
 
     const order = workspaces.map((w) => `promo-${w.name.toLowerCase()}`);
     await api.runtime.sendMessage({
-      type: 'settings/patch',
+      type: messages.patchSettings,
       patch: {
         activeWorkspaceId: order[0],
         workspaceOrder: order,
@@ -321,7 +326,12 @@ export async function seedPromoWorld(page: Page): Promise<Omit<SeededWorld, 'ori
     });
 
     return { workspaceIds, bookmarkIds, dockFolderId: dockFolder.id, activeRootId };
-  }, { workspaces: PROMO_WORKSPACES, defaults: DEFAULT_WORKSPACE_SETTINGS, dock: DOCK_BOOKMARKS });
+  }, {
+    workspaces: PROMO_WORKSPACES,
+    defaults: DEFAULT_WORKSPACE_SETTINGS,
+    dock: DOCK_BOOKMARKS,
+    messages: { createWorkspace: messageTypes.createWorkspace, patchSettings: messageTypes.patchSettings },
+  });
 
   const workspaces = await getWorkspaces(page);
   const personas: PromoPersona[] = ['Work', 'Personal', 'AI', 'Design', 'Gaming'];
@@ -361,7 +371,7 @@ export async function seedMinimal(page: Page, opts: SeedMinimalOptions = {}): Pr
   const seed = await page.evaluate(async (data) => {
     const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
       ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
-    const { defaults, counts } = data;
+    const { defaults, counts, messages } = data;
     const bookmarkIds: Record<string, string> = {};
     const root = await api.bookmarks.create({ parentId: '2', title: 'Minimal' });
 
@@ -389,14 +399,18 @@ export async function seedMinimal(page: Page, opts: SeedMinimalOptions = {}): Pr
 
     const id = 'ws-minimal';
     const record = { ...defaults, id, name: 'Minimal', rootFolderId: root.id };
-    await api.runtime.sendMessage({ type: 'workspaces/create', workspace: record });
+    await api.runtime.sendMessage({ type: messages.createWorkspace, workspace: record });
     await api.runtime.sendMessage({
-      type: 'settings/patch',
+      type: messages.patchSettings,
       patch: { activeWorkspaceId: id, workspaceOrder: [id], rememberLastFolder: false },
     });
 
     return { rootId: root.id, bookmarkIds };
-  }, { defaults: DEFAULT_WORKSPACE_SETTINGS, counts: { folders, bookmarksPerFolder, rootBookmarks } });
+  }, {
+    defaults: DEFAULT_WORKSPACE_SETTINGS,
+    counts: { folders, bookmarksPerFolder, rootBookmarks },
+    messages: { createWorkspace: messageTypes.createWorkspace, patchSettings: messageTypes.patchSettings },
+  });
 
   const workspaces = await getWorkspaces(page);
   return {

@@ -157,8 +157,8 @@ async function titlesInScope(
  */
 async function applySort(
   page: import('@playwright/test').Page,
-  mode: import('../../src/shared/models').BookmarkSortMode,
-  direction: import('../../src/shared/models').SortDirection,
+  mode: import('@/shared/models').BookmarkSortMode,
+  direction: import('@/shared/models').SortDirection,
 ): Promise<void> {
   await sortPill(page).click();
   await sortOption(page, mode, direction).click();
@@ -238,6 +238,8 @@ test.describe('sort modes', () => {
       }, bookmarkId);
     };
     await recordUse(id01);
+    // Wait 20ms between use recordings to ensure timestamps are distinct.
+    // This is necessary for the usage sort order to be deterministic.
     await newtabPage.waitForTimeout(20);
     await recordUse(id02);
     await newtabPage.waitForTimeout(20);

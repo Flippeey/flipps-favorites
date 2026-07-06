@@ -8,30 +8,48 @@
  * discriminated return to route a toast. Incorrect routing would silently
  * mislead the user about what happened.
  *
- * Strategy: we cannot mount the full hook in Vitest (no DOM, no React). We
- * instead test the decision logic extracted into the same branching shape as
- * the real implementation — then the Playwright spec covers the integrated
- * path end-to-end.
+ * Strategy: we test checkCreateFromFolderGuard directly — the production guard
+ * function extracted from useWorkspaceActions.ts's handleCreateWorkspaceFromFolder
+ * — so this test and the implementation can never silently diverge. The final
+ * 'created' vs. 'at_max' branch (when the guard says 'proceed' but the create
+ * call itself fails) is simulated here since it depends on the async
+ * createWorkspace call, not the guard; the Playwright spec covers the fully
+ * integrated path end-to-end.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MAX_WORKSPACES } from '@/shared/constants';
 import type { WorkspaceRecord } from '@/shared/messages';
 
-// ---------------------------------------------------------------------------
-// Pure helper that mirrors the real handleCreateWorkspaceFromFolder logic.
-// Any change to the hook's branching must be reflected here to keep the test
-// meaningful (Rule 9 — tests encode WHY behaviour matters).
-// ---------------------------------------------------------------------------
+// useWorkspaceActions imports lib/messaging.ts and shared/storage.ts, both of
+// which import shared/browser.ts, which throws at module-eval time outside a
+// real extension context (no browser/chrome runtime in Vitest). Stub both so
+// importing checkCreateFromFolderGuard doesn't pull in that side effect —
+// none of these tests exercise messaging or storage.
+vi.mock('@/newtab/lib/messaging', () => ({
+  createWorkspace: vi.fn(),
+  deleteWorkspace: vi.fn(),
+  patchSettings: vi.fn(),
+  patchWorkspace: vi.fn(),
+}));
+vi.mock('@/shared/storage', () => ({
+  defaultWorkspaceSettings: {},
+  readWorkspaceWallpaper: vi.fn(),
+  writeWorkspaceWallpaper: vi.fn(),
+}));
+
+import { checkCreateFromFolderGuard } from '@/newtab/state/useWorkspaceActions';
 
 type CreateResult = 'created' | 'at_max' | 'already_exists';
 
+// Mirrors handleCreateWorkspaceFromFolder's own composition: guard first, then
+// (if 'proceed') the create call, whose success/failure maps to created/at_max.
 function simulateCreateFromFolder(
   workspaces: Pick<WorkspaceRecord, 'rootFolderId'>[],
   folderId: string,
   createWorkspaceSucceeds: boolean,
 ): CreateResult {
-  if (workspaces.length >= MAX_WORKSPACES) return 'at_max';
-  if (workspaces.some(w => w.rootFolderId === folderId)) return 'already_exists';
+  const guard = checkCreateFromFolderGuard(workspaces, folderId);
+  if (guard !== 'proceed') return guard;
   return createWorkspaceSucceeds ? 'created' : 'at_max';
 }
 

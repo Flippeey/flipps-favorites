@@ -5,8 +5,17 @@ releases/
 docs/*
 
 # Claude Code (config, agents, runtime data)
-# Root CLAUDE.md is tracked (shared project instructions); .claude/ detail docs stay local.
-.claude/
+# Ignore .claude/ contents by default; selectively track shared docs + safe settings.
+# NOTE: must be `.claude/*` (not `.claude/`) — a dir/ ignore can't be undone by `!` negation.
+.claude/*
+!.claude/settings.json
+!.claude/CLAUDE.md
+!.claude/structure.md
+!.claude/architecture.md
+!.claude/conventions.md
+!.claude/testing.md
+# Explicitly keep ignored (defense-in-depth; already covered by .claude/* since these are top-level):
+.claude/settings.local.json
 .mcp.json
 
 # Runtime / generated data

@@ -17,8 +17,8 @@ import { openContextMenu } from '../fixtures/bookmark-helpers.js';
 import { tileById, contextMenu } from '../fixtures/selectors.js';
 import { createTestFolder, removeBookmarkTree } from '../fixtures/bookmark-helpers.js';
 import { createWorkspace, dismissOnboarding, getWorkspaces } from '../fixtures/seeding.js';
-import { MAX_WORKSPACES } from '../../src/shared/constants.js';
-import type { WorkspaceRecord } from '../../src/shared/models.js';
+import { MAX_WORKSPACES } from '@/shared/constants.js';
+import type { WorkspaceRecord } from '@/shared/models.js';
 import { DEFAULT_WORKSPACE_SETTINGS } from '../fixtures/test-data.js';
 
 // ---------------------------------------------------------------------------
