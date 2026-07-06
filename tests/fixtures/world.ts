@@ -9,50 +9,12 @@
 //   freshContext / freshPage — a throwaway function-scoped context with no
 //                              seed, for fresh-install / onboarding / error flows.
 import { test as base, expect } from '@playwright/test';
-import { chromium, type BrowserContext, type Page } from '@playwright/test';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { type BrowserContext, type Page } from '@playwright/test';
 import { resetStorage, seedPromoWorld } from './seeding.js';
 import type { SeededWorld } from './seeding.js';
+import { closeLaunched, launchChrome, originFrom } from './launch.js';
 
 export type { SeededWorld, PromoPersona } from './seeding.js';
-
-const rootDir = resolve(fileURLToPath(import.meta.url), '..', '..', '..');
-const chromeExtPath = join(rootDir, 'dist', 'chrome');
-
-async function launchChrome(): Promise<{ context: BrowserContext; profileDir: string }> {
-  const profileDir = await mkdtemp(join(tmpdir(), 'cr-ext-'));
-  // Chrome's new headless mode (--headless=new) supports MV3 extensions,
-  // unlike legacy headless. Set HEADED=1 to force a visible window for
-  // local debugging.
-  const headed = process.env.HEADED === '1';
-  // headless:false + the `--headless=new` arg drives Chrome's new headless
-  // mode, which loads MV3 extensions. Passing headless:true instead makes
-  // Playwright inject legacy `--headless`, under which the extension service
-  // worker never registers (waitForEvent('serviceworker') times out).
-  const context = await chromium.launchPersistentContext(profileDir, {
-    headless: false,
-    args: [
-      ...(headed ? [] : ['--headless=new']),
-      `--disable-extensions-except=${chromeExtPath}`,
-      `--load-extension=${chromeExtPath}`,
-      '--no-first-run',
-      '--disable-default-apps',
-    ],
-  });
-  return { context, profileDir };
-}
-
-async function originFrom(context: BrowserContext): Promise<string> {
-  const workers = context.serviceWorkers();
-  const sw =
-    workers.length > 0
-      ? workers[0]!
-      : await context.waitForEvent('serviceworker', { timeout: 15_000 });
-  return `chrome-extension://${new URL(sw.url()).hostname}`;
-}
 
 export interface WorldFixtures {
   /** Worker-scoped persistent context loading `dist/chrome`. */
@@ -75,10 +37,9 @@ export const test = base.extend<
 >({
   extensionContext: [
     async ({}, use) => {
-      const { context, profileDir } = await launchChrome();
-      await use(context);
-      await context.close();
-      await rm(profileDir, { recursive: true, force: true }).catch(() => undefined);
+      const launched = await launchChrome();
+      await use(launched.context);
+      await closeLaunched(launched);
     },
     { scope: 'worker' },
   ],
@@ -113,10 +74,9 @@ export const test = base.extend<
   },
 
   freshContext: async ({}, use) => {
-    const { context, profileDir } = await launchChrome();
-    await use(context);
-    await context.close();
-    await rm(profileDir, { recursive: true, force: true }).catch(() => undefined);
+    const launched = await launchChrome();
+    await use(launched.context);
+    await closeLaunched(launched);
   },
 
   freshPage: async ({ freshContext }, use) => {

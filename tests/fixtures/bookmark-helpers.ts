@@ -1,10 +1,13 @@
 import type { Locator, Page } from '@playwright/test';
 import type { WorkspaceRecord } from '../../src/shared/models';
+import { messageTypes } from '../../src/shared/messages.js';
 import { DEFAULT_WORKSPACE_SETTINGS, STORAGE_KEYS } from './test-data.js';
+import type { ExtApi } from './seeding.js';
 
 export async function clearExtensionStorage(page: Page): Promise<void> {
   await page.evaluate(async (keys) => {
-    const api = (globalThis as any).browser || (globalThis as any).chrome;
+    const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
+      ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
     await api.storage.local.remove(Object.values(keys));
     // Settings use sync-preferred storage; clear both so state
     // never leaks between tests.
@@ -18,10 +21,11 @@ export async function clearExtensionStorage(page: Page): Promise<void> {
 
 export async function createTestFolder(page: Page, title = '__test__'): Promise<string> {
   return page.evaluate(async (folderTitle) => {
-    const api = (globalThis as any).browser || (globalThis as any).chrome;
+    const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
+      ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
     // parentId "1" = Bookmarks bar on Chromium; Firefox accepts it too.
     const folder = await api.bookmarks.create({ parentId: '1', title: folderTitle });
-    return folder.id as string;
+    return folder.id;
   }, title);
 }
 
@@ -33,9 +37,10 @@ export async function createTestBookmark(
 ): Promise<string> {
   return page.evaluate(
     async (args) => {
-      const api = (globalThis as any).browser || (globalThis as any).chrome;
+      const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
+        ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
       const bm = await api.bookmarks.create({ parentId: args.parentId, title: args.title, url: args.url });
-      return bm.id as string;
+      return bm.id;
     },
     { parentId, title, url },
   );
@@ -44,9 +49,10 @@ export async function createTestBookmark(
 export async function createSubFolder(page: Page, parentId: string, title: string): Promise<string> {
   return page.evaluate(
     async (args) => {
-      const api = (globalThis as any).browser || (globalThis as any).chrome;
+      const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
+        ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
       const folder = await api.bookmarks.create({ parentId: args.parentId, title: args.title });
-      return folder.id as string;
+      return folder.id;
     },
     { parentId, title },
   );
@@ -54,7 +60,8 @@ export async function createSubFolder(page: Page, parentId: string, title: strin
 
 export async function removeBookmarkTree(page: Page, id: string): Promise<void> {
   await page.evaluate(async (bookmarkId) => {
-    const api = (globalThis as any).browser || (globalThis as any).chrome;
+    const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
+      ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
     await api.bookmarks.removeTree(bookmarkId).catch(() => undefined);
   }, id);
 }
@@ -68,10 +75,11 @@ export async function patchSettings(
   page: Page,
   patch: Record<string, unknown>,
 ): Promise<void> {
-  await page.evaluate(async (p) => {
-    const api = (globalThis as any).browser || (globalThis as any).chrome;
-    await api.runtime.sendMessage({ type: 'settings/patch', patch: p });
-  }, patch);
+  await page.evaluate(async (args) => {
+    const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
+      ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
+    await api.runtime.sendMessage({ type: args.messageType, patch: args.patch });
+  }, { messageType: messageTypes.patchSettings, patch });
 }
 
 /**
@@ -92,14 +100,18 @@ export async function setupDefaultWorkspace(
     name: 'Test',
     rootFolderId,
   };
-  await page.evaluate(async (ws) => {
-    const api = (globalThis as any).browser || (globalThis as any).chrome;
-    await api.runtime.sendMessage({ type: 'workspaces/create', workspace: ws });
+  await page.evaluate(async (args) => {
+    const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
+      ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
+    await api.runtime.sendMessage({ type: args.messages.createWorkspace, workspace: args.ws });
     await api.runtime.sendMessage({
-      type: 'settings/patch',
-      patch: { activeWorkspaceId: ws.id, workspaceOrder: [ws.id], rememberLastFolder: false },
+      type: args.messages.patchSettings,
+      patch: { activeWorkspaceId: args.ws.id, workspaceOrder: [args.ws.id], rememberLastFolder: false },
     });
-  }, workspace);
+  }, {
+    ws: workspace,
+    messages: { createWorkspace: messageTypes.createWorkspace, patchSettings: messageTypes.patchSettings },
+  });
   return workspace;
 }
 
@@ -115,9 +127,10 @@ export async function patchWorkspace(
   id = 'ws-default',
 ): Promise<void> {
   await page.evaluate(async (args) => {
-    const api = (globalThis as any).browser || (globalThis as any).chrome;
-    await api.runtime.sendMessage({ type: 'workspaces/patch', id: args.id, patch: args.patch });
-  }, { id, patch });
+    const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
+      ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
+    await api.runtime.sendMessage({ type: args.messageType, id: args.id, patch: args.patch });
+  }, { id, patch, messageType: messageTypes.patchWorkspace });
 }
 
 export async function reloadNewtab(page: Page): Promise<void> {
@@ -185,7 +198,8 @@ export async function seedFlatHoarderTree(
   count = 120,
 ): Promise<string[]> {
   return page.evaluate(async (n) => {
-    const api = (globalThis as any).browser || (globalThis as any).chrome;
+    const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
+      ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
     const ids: string[] = [];
     for (let i = 0; i < n; i++) {
       const bm = await api.bookmarks.create({
@@ -193,7 +207,7 @@ export async function seedFlatHoarderTree(
         title: `Saved ${i + 1}`,
         url: `https://site${i + 1}.example.com/page`,
       });
-      ids.push(bm.id as string);
+      ids.push(bm.id);
     }
     return ids;
   }, count);
@@ -220,7 +234,8 @@ export async function seedDeepOrganizedTree(
 ): Promise<void> {
   await page.evaluate(
     async (args) => {
-      const api = (globalThis as any).browser || (globalThis as any).chrome;
+      const api = (globalThis as unknown as { browser?: ExtApi; chrome: ExtApi }).browser
+        ?? (globalThis as unknown as { chrome: ExtApi }).chrome;
       for (let f = 0; f < args.folderCount; f++) {
         const topFolder = await api.bookmarks.create({
           parentId: '1',
