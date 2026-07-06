@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BookmarkNode } from '@/shared/messages';
 import { createBookmark } from '../lib/messaging';
+import { findDuplicateBookmark } from '../lib/duplicate-bookmark';
 import { getHostname, getSearchName, isValidBookmarkUrl } from '../lib/icon-helpers';
 import { hasUrlScheme } from '../lib/url';
 import { Ico } from './Ico';
@@ -27,6 +28,8 @@ export function QuickAddDialog({ tree, parentId, parentTitle, onClose, onSaved }
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const duplicate = useMemo(() => findDuplicateBookmark(tree, value.trim()), [tree, value]);
 
   useEffect(() => {
     const el = inputRef.current;
@@ -89,6 +92,9 @@ export function QuickAddDialog({ tree, parentId, parentTitle, onClose, onSaved }
           onChange={(e) => { setValue(e.target.value); if (error) setError(null); }}
           placeholder="https://example.com"
         />
+        {duplicate && (
+          <div className="ff-status" data-kind="info">Already saved in {duplicate.folderTitle}</div>
+        )}
       </div>
       <div className="ff-field">
         <label className="ff-field__label">Location</label>
