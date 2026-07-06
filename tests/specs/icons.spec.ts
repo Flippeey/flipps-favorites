@@ -94,20 +94,23 @@ test.describe('icon pipeline', () => {
     expect(src).toMatch(/^data:image\/png/);
   });
 
-  test('all external icon fetches failing â†’ fallback letter renders', async ({ context, newtabPage }) => {
+  test('all external icon fetches failing → generated letter-tile fallback renders', async ({ context, newtabPage }) => {
+    // Block origin scrape, S2, Icon Horse, and DDG — every source the pipeline can use.
+    // With all sources exhausted, resolveAutomaticIcon falls back to
+    // createGeneratedRecord() (src/background/icons/icon-service.ts), which always
+    // resolves (never rejects) with an inline SVG initials tile
+    // (buildFallbackSvgDataUrl, src/shared/icon-fallback.ts). That's a specific,
+    // falsifiable outcome: an <img> whose src is a data:image/svg+xml URL.
+    await context.route('https://example.com/**', (route) => route.abort('failed'));
     await context.route('https://www.google.com/s2/favicons**', (route) => route.abort('failed'));
+    await context.route('https://icon.horse/**', (route) => route.abort('failed'));
     await context.route('https://duckduckgo.com/**', (route) => route.abort('failed'));
     await reloadNewtab(newtabPage);
 
-    const tile = newtabPage.locator('.ff-tile[data-item-kind="bookmark"]').first();
-    await expect(tile).toBeVisible();
-    // Either an <img> with a generated fallback dataUrl, or the inline fallback letter span.
-    // We can't distinguish "generated SVG" from "S2 success" via DOM alone â€” but absence of
-    // CORS errors and presence of *something* (img OR letter span) is the signal.
-    await newtabPage.waitForTimeout(2_000);
-    const hasImg = (await tile.locator('.ff-favicon img').count()) > 0;
-    const hasLetter = (await tile.locator('.ff-favicon span').count()) > 0;
-    expect(hasImg || hasLetter).toBe(true);
+    const img = newtabPage.locator('.ff-tile[data-item-kind="bookmark"] .ff-favicon img').first();
+    await expect(img).toBeVisible({ timeout: 10_000 });
+    const src = await img.getAttribute('src');
+    expect(src).toMatch(/^data:image\/svg\+xml/);
   });
 
   // Why it matters: power users pick an icon and want to be done. A single click

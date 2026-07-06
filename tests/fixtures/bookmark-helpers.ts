@@ -6,12 +6,12 @@ export async function clearExtensionStorage(page: Page): Promise<void> {
   await page.evaluate(async (keys) => {
     const api = (globalThis as any).browser || (globalThis as any).chrome;
     await api.storage.local.remove(Object.values(keys));
-    // Settings + workspaces use sync-preferred storage; clear both so state
+    // Settings use sync-preferred storage; clear both so state
     // never leaks between tests.
     try {
-      await api.storage.sync.remove([keys.appSettings, keys.workspaces]);
+      await api.storage.sync.remove([keys.appSettings]);
     } catch {
-      await api.storage.local.remove([keys.appSettings, keys.workspaces]);
+      await api.storage.local.remove([keys.appSettings]);
     }
   }, STORAGE_KEYS);
 }

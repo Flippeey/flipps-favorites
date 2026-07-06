@@ -13,6 +13,7 @@ export default defineConfig({
   },
   test: {
     include: ['tests/firefox-e2e/specs/**/*.test.ts'],
+    globalSetup: ['tests/firefox-e2e/global-setup.ts'],
     environment: 'node',
     // One Firefox instance at a time — launching Firefox is heavy and the
     // suite is a smoke suite, not a throughput target. Raise later if stable.
