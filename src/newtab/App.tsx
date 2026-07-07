@@ -30,6 +30,7 @@ import { effectiveViewSort } from './lib/effective-view-sort';
 import { prefetchAllIcons } from './lib/icon-prefetch';
 import { findFolder, findNode, findParentFolder, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 import { captureMoveSnapshots, restoreMoveSnapshots } from './lib/move-snapshot';
+import { captureDeleteSnapshots, captureSubtree, restoreDeleteSnapshots, restoreSubtree } from './lib/subtree-snapshot';
 import { MAX_WORKSPACES } from '../shared/constants';
 import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper } from '../shared/storage';
 import { useWorkspaceActions } from './state/useWorkspaceActions';
@@ -868,9 +869,34 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           folder={confirmDeleteFolder}
           onClose={() => setConfirmDeleteFolder(null)}
           onConfirm={async () => {
-            await removeBookmark(confirmDeleteFolder.id, true);
+            const folder = confirmDeleteFolder;
+            // Capture origin + full contents before deleting so Undo can
+            // recreate the folder, depth-first, exactly where it was.
+            const parent = findParentFolder(tree, folder.id);
+            const index = parent?.children?.findIndex(c => c.id === folder.id) ?? -1;
+            const subtree = captureSubtree(folder);
+            await removeBookmark(folder.id, true);
             setConfirmDeleteFolder(null);
             await refreshTree();
+            pushToast({
+              kind: 'info',
+              message: `Deleted “${folder.title}”`,
+              action: parent && index >= 0
+                ? {
+                    label: 'Undo',
+                    onClick: () => {
+                      void (async () => {
+                        try {
+                          await restoreSubtree(subtree, parent.id, index, createBookmark);
+                          await refreshTree();
+                        } catch {
+                          pushToast({ kind: 'error', message: 'Couldn’t restore the folder.' });
+                        }
+                      })();
+                    },
+                  }
+                : undefined,
+            });
           }}
         />
       )}
@@ -880,12 +906,36 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           count={confirmDeleteBatch.length}
           onClose={() => setConfirmDeleteBatch(null)}
           onConfirm={async () => {
-            for (const id of confirmDeleteBatch) {
-              await removeBookmark(id);
+            const ids = confirmDeleteBatch;
+            // Capture every item's origin + contents (bookmarks and folders
+            // alike) before deleting so Undo can restore the whole batch.
+            const snapshots = captureDeleteSnapshots(tree, ids);
+            for (const id of ids) {
+              const node = findNode(tree, id);
+              await removeBookmark(id, node ? isFolder(node) : undefined);
             }
             setConfirmDeleteBatch(null);
             setSelection({ ids: new Set(), scopeFolderId: '' });
             await refreshTree();
+            pushToast({
+              kind: 'info',
+              message: `Deleted ${ids.length} ${ids.length === 1 ? 'item' : 'items'}`,
+              action: snapshots.length > 0
+                ? {
+                    label: 'Undo',
+                    onClick: () => {
+                      void (async () => {
+                        try {
+                          await restoreDeleteSnapshots(snapshots, createBookmark);
+                          await refreshTree();
+                        } catch {
+                          pushToast({ kind: 'error', message: 'Couldn’t restore the deleted items.' });
+                        }
+                      })();
+                    },
+                  }
+                : undefined,
+            });
           }}
         />
       )}
