@@ -31,10 +31,29 @@ interface UseContextMenuBuilderArgs {
   setConfirmDeleteFolder: (folder: BookmarkNode | null) => void;
   setConfirmDeleteBatch: (ids: string[] | null) => void;
   onMoveSelectionToNewFolder: (ids: string[]) => void;
+  onMoveTo: (ids: string[], excludeIds?: Set<string>) => void;
+  onOpenAllInTabs: (folder: BookmarkNode) => void;
   setRenameWorkspaceTarget: (ws: WorkspaceRecord | null) => void;
   setConfirmDeleteWorkspace: (ws: WorkspaceRecord | null) => void;
   onDeleteBookmark: (item: BookmarkNode) => void | Promise<void>;
   onCreateFromFolderResult: (result: 'created' | 'at_max' | 'already_exists', folderTitle: string) => void;
+}
+
+// Folder id + every descendant folder id, so a "Move to…" destination picker
+// can exclude them — dropping a folder into itself or one of its own children
+// would orphan it from the tree.
+function collectFolderIds(folder: BookmarkNode): Set<string> {
+  const ids = new Set<string>([folder.id]);
+  const visit = (node: BookmarkNode): void => {
+    for (const child of node.children ?? []) {
+      if (isFolder(child)) {
+        ids.add(child.id);
+        visit(child);
+      }
+    }
+  };
+  visit(folder);
+  return ids;
 }
 
 interface UseContextMenuBuilderResult {
@@ -66,6 +85,8 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
     setConfirmDeleteFolder,
     setConfirmDeleteBatch,
     onMoveSelectionToNewFolder,
+    onMoveTo,
+    onOpenAllInTabs,
     setRenameWorkspaceTarget,
     setConfirmDeleteWorkspace,
     onDeleteBookmark,
@@ -95,10 +116,18 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
         : folderAlreadyWorkspace
           ? 'This folder is already a workspace root'
           : undefined;
+      // Direct (top-level) bookmark children only — "Open all" doesn't recurse
+      // into subfolders, matching the confirm-threshold's intent to avoid
+      // surprise mass tab-opens.
+      const directBookmarkCount = (target.children ?? []).filter(c => !!c.url).length;
+      const folderIds = collectFolderIds(target);
       return [
         { kind: 'item', icon: 'folder',     label: 'Open folder', kbd: '↵', onClick: () => handlePickFolder(target) },
+        { kind: 'item', icon: 'arrowRight', label: `Open all (${directBookmarkCount}) in new tabs`, disabled: directBookmarkCount === 0,
+          onClick: () => onOpenAllInTabs(target) },
         { kind: 'item', icon: 'pencil',     label: 'Rename',
           onClick: () => handleRenameFolder(target) },
+        { kind: 'item', icon: 'folderTree', label: 'Move to…', onClick: () => onMoveTo([target.id], folderIds) },
         { kind: 'separator' },
         { kind: 'item', icon: 'bookmark',       label: 'New bookmark inside',
           onClick: () => handleNewBookmark(target.id, target.title) },
@@ -139,6 +168,7 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
       { kind: 'item', icon: 'copy',         label: 'Copy URL',        onClick: () => target.url && navigator.clipboard?.writeText(normalizeBookmarkUrl(target.url)) },
       { kind: 'separator' },
       { kind: 'item', icon: 'pencil',       label: 'Edit…',           onClick: () => handleEditBookmark(target) },
+      { kind: 'item', icon: 'folderTree',   label: 'Move to…',        onClick: () => onMoveTo(targetIds) },
       ...(isInSelection
         ? [{ kind: 'item' as const, icon: 'folderPlus' as const, label: `Move ${selection.ids.size} to new folder…`,
             onClick: () => onMoveSelectionToNewFolder(targetIds) }]
@@ -147,7 +177,7 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
       { kind: 'item', icon: 'trash',        label: deleteLabel,       kbd: IS_MAC ? '⌫' : 'Del', destructive: true,
         onClick: deleteAction },
     ];
-  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, handleAddWorkspace, handleCreateWorkspaceFromFolder, onCreateFromFolderResult, workspaces, selection, onDeleteBookmark, onMoveSelectionToNewFolder]);
+  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, handleAddWorkspace, handleCreateWorkspaceFromFolder, onCreateFromFolderResult, workspaces, selection, onDeleteBookmark, onMoveSelectionToNewFolder, onMoveTo, onOpenAllInTabs]);
 
   const handleOpenAddMenu = useCallback((x: number, y: number) => {
     const atMax = workspaces.length >= MAX_WORKSPACES;
