@@ -6,7 +6,7 @@ import { createWorkspace, deleteWorkspace, patchSettings, patchWorkspace } from 
 import { defaultWorkspaceSettings, readWorkspaceWallpaper, writeWorkspaceWallpaper } from '@/shared/storage';
 import { MAX_WORKSPACES } from '@/shared/constants';
 import { pickNextAccent } from '../lib/workspace-accent';
-import { runOptimistic } from './useOptimisticPatch';
+import type { PushToastInput } from './useToasts';
 
 export type CreateFromFolderGuardResult = 'proceed' | 'at_max' | 'already_exists';
 
@@ -37,6 +37,9 @@ interface UseWorkspaceActionsArgs {
   setFolderPath: React.Dispatch<React.SetStateAction<import('@/shared/messages').BookmarkNode[]>>;
   setSelection: React.Dispatch<React.SetStateAction<MarqueeSelection>>;
   handlePatch: (patch: Partial<AppSettings>) => Promise<void>;
+  pushToast: (input: PushToastInput) => void;
+  /** Reconciles local workspace state with persisted truth (e.g. after a patch fails). */
+  refreshWorkspaces: () => Promise<void>;
 }
 
 interface UseWorkspaceActionsResult {
@@ -69,6 +72,8 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
     setFolderPath,
     setSelection,
     handlePatch,
+    pushToast,
+    refreshWorkspaces,
   } = args;
 
   // Mirror the latest workspaces so sequential creates (onboarding bulk-create
@@ -97,12 +102,20 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
 
   const handlePatchWorkspace = useCallback(async (patch: Partial<WorkspaceRecord>) => {
     if (!activeWorkspace) return;
-    await runOptimistic<WorkspaceRecord>({
-      optimistic: { ...activeWorkspace, ...patch },
-      apply: (ws) => setWorkspaces(prev => prev.map(w => w.id === ws.id ? ws : w)),
-      persist: () => patchWorkspace(activeWorkspace.id, patch),
-    });
-  }, [activeWorkspace, setWorkspaces]);
+    const workspaceId = activeWorkspace.id;
+    setWorkspaces(prev => prev.map(w => w.id === workspaceId ? { ...w, ...patch } : w));
+    try {
+      const persisted = await patchWorkspace(workspaceId, patch);
+      setWorkspaces(prev => prev.map(w => w.id === persisted.id ? persisted : w));
+    } catch {
+      // Persist failed — most commonly because the workspace was concurrently
+      // deleted (e.g. from another newtab page). Keeping the optimistic value
+      // would leave a ghost workspace in the UI until the next reload, so
+      // surface the failure and reconcile with truth instead.
+      pushToast({ kind: 'error', message: 'Couldn’t save workspace changes — it may have been deleted.' });
+      await refreshWorkspaces();
+    }
+  }, [activeWorkspace, setWorkspaces, pushToast, refreshWorkspaces]);
 
   const handleSetWorkspaceWallpaper = useCallback(async (dataUrl: string) => {
     if (!activeWorkspace) return;

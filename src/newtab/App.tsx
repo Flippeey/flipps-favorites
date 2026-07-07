@@ -21,7 +21,7 @@ import { useWorkspaceShortcut } from './interaction/useWorkspaceShortcut';
 import { useKeyboardNav, useDeleteShortcut } from './interaction/useKeyboardNav';
 import { useQuickAddShortcuts } from './interaction/useQuickAddShortcuts';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
-import { createBookmark, getBookmarkTree, getBookmarkUsage, moveBookmark, openTab, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
+import { createBookmark, getBookmarkTree, getBookmarkUsage, getWorkspaces, moveBookmark, openTab, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
 import { useScrollCollapsed } from './lib/useScrollCollapsed';
 import { normalizeBookmarkUrl } from './lib/url';
@@ -203,6 +203,18 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     }
   }, []);
 
+  // Reconcile local workspace state with persisted truth. Used after a
+  // patchWorkspace failure (e.g. the workspace was concurrently deleted) so a
+  // ghost workspace doesn't linger in the UI until the next reload.
+  const refreshWorkspaces = useCallback(async () => {
+    try {
+      const fresh = await getWorkspaces();
+      setWorkspaces(fresh);
+    } catch {
+      // ignore — keep current state, next successful action will reconcile
+    }
+  }, []);
+
   // Delete a single bookmark with an Undo affordance. Captures the original
   // parent + position so Undo re-creates it where it was. Failure surfaces a toast.
   const handleDeleteBookmark = useCallback(async (item: BookmarkNode) => {
@@ -337,6 +349,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setFolderPath,
     setSelection,
     handlePatch,
+    pushToast,
+    refreshWorkspaces,
   });
 
 
