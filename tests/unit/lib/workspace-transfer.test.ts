@@ -277,6 +277,177 @@ describe('parseWorkspaceFile — forward-compat guard', () => {
   });
 });
 
+describe('applyWorkspaceImport — MAX_WORKSPACES cap', () => {
+  it('caps import at MAX_WORKSPACES and reports the rest as skipped (empty existing set)', async () => {
+    installChromeFake({ localSeed: { 'workspaces-per-key-migrated': true } });
+    const transfer = await importTransfer();
+
+    // Importing into an EMPTY workspace set: without the cap, all 30 would be
+    // written and blow past the intended 20-workspace ceiling. This assertion
+    // fails if the cap is removed (30 landed / 0 skipped).
+    const workspaces = Array.from({ length: 30 }, (_, i) => baseRecordBody(`w${i}`)) as unknown as WorkspaceRecord[];
+    const payload = {
+      schema: WORKSPACE_SCHEMA,
+      schemaVersion: transfer.WORKSPACE_SCHEMA_VERSION,
+      exportedAt: Date.now(),
+      settings: {},
+      workspaces,
+      workspaceWallpapers: {},
+      iconOverrides: [],
+      bookmarkUsage: [],
+      skipped: { oversizedDataUrlCount: 0 },
+    } as unknown as Parameters<typeof transfer.applyWorkspaceImport>[0];
+
+    const summary = await transfer.applyWorkspaceImport(payload, 'merge');
+
+    expect(summary.workspaceCount).toBe(20);
+    expect(summary.workspaceSkippedCount).toBe(10);
+    expect(summary.workspaceFailedCount).toBe(0);
+  });
+
+  it('merge mode respects existing workspace count so total never exceeds MAX_WORKSPACES', async () => {
+    // Seed 15 existing workspaces via per-key entries.
+    const syncSeed: Record<string, unknown> = { 'app-settings': { activeWorkspaceId: 'e0' } };
+    for (let i = 0; i < 15; i++) {
+      syncSeed[`workspace:e${i}`] = baseRecordBody(`e${i}`);
+    }
+    installChromeFake({ syncSeed, localSeed: { 'workspaces-per-key-migrated': true } });
+    const transfer = await importTransfer();
+
+    // 10 incoming new workspaces; only 5 slots remain (20 - 15).
+    const workspaces = Array.from({ length: 10 }, (_, i) => baseRecordBody(`n${i}`)) as unknown as WorkspaceRecord[];
+    const payload = {
+      schema: WORKSPACE_SCHEMA,
+      schemaVersion: transfer.WORKSPACE_SCHEMA_VERSION,
+      exportedAt: Date.now(),
+      settings: {},
+      workspaces,
+      workspaceWallpapers: {},
+      iconOverrides: [],
+      bookmarkUsage: [],
+      skipped: { oversizedDataUrlCount: 0 },
+    } as unknown as Parameters<typeof transfer.applyWorkspaceImport>[0];
+
+    const summary = await transfer.applyWorkspaceImport(payload, 'merge');
+
+    expect(summary.workspaceCount).toBe(5);
+    expect(summary.workspaceSkippedCount).toBe(5);
+  });
+
+  it('reports a mid-loop write failure without silently dropping it from the count', async () => {
+    installChromeFake({ localSeed: { 'workspaces-per-key-migrated': true } });
+    const transfer = await importTransfer();
+
+    // Make the sync fake throw for exactly one workspace key to simulate a
+    // quota/storage failure mid-loop.
+    const chromeFake = (globalThis as unknown as { chrome: { storage: { sync: { set: (items: Record<string, unknown>) => Promise<void> } } } }).chrome;
+    const originalSet = chromeFake.storage.sync.set.bind(chromeFake.storage.sync);
+    chromeFake.storage.sync.set = async (items: Record<string, unknown>) => {
+      if ('workspace:bad' in items) {
+        throw new Error('QUOTA_BYTES_PER_ITEM quota exceeded');
+      }
+      return originalSet(items);
+    };
+
+    const workspaces = [baseRecordBody('good'), baseRecordBody('bad')] as unknown as WorkspaceRecord[];
+    const payload = {
+      schema: WORKSPACE_SCHEMA,
+      schemaVersion: transfer.WORKSPACE_SCHEMA_VERSION,
+      exportedAt: Date.now(),
+      settings: {},
+      workspaces,
+      workspaceWallpapers: {},
+      iconOverrides: [],
+      bookmarkUsage: [],
+      skipped: { oversizedDataUrlCount: 0 },
+    } as unknown as Parameters<typeof transfer.applyWorkspaceImport>[0];
+
+    const summary = await transfer.applyWorkspaceImport(payload, 'merge');
+
+    // "good" landed, "bad" failed — the caller can tell exactly what happened
+    // instead of getting a bare thrown error that hides the partial success.
+    expect(summary.workspaceCount).toBe(1);
+    expect(summary.workspaceFailedCount).toBe(1);
+  });
+});
+
+describe('parseWorkspaceFile — oversized data URL caps', () => {
+  function dataUrlOfLength(length: number): string {
+    const prefix = 'data:image/png;base64,';
+    return prefix + 'A'.repeat(Math.max(0, length - prefix.length));
+  }
+
+  it('skips an icon override whose data URL exceeds the cap and reports it', async () => {
+    const transfer = await importTransfer();
+    const oversized = dataUrlOfLength(6 * 1024 * 1024); // 6 MB > 5 MB cap
+    const fine = dataUrlOfLength(1024); // well under cap
+
+    const file = makeFile({
+      schema: WORKSPACE_SCHEMA,
+      schemaVersion: 3,
+      settings: {},
+      workspaces: [],
+      workspaceWallpapers: {},
+      iconOverrides: [
+        { bookmarkUrl: 'https://big.example.com', dataUrl: oversized, fileName: 'a.png', mimeType: 'image/png', updatedAt: 1 },
+        { bookmarkUrl: 'https://small.example.com', dataUrl: fine, fileName: 'b.png', mimeType: 'image/png', updatedAt: 2 },
+      ],
+      bookmarkUsage: [],
+    });
+
+    const result = await transfer.parseWorkspaceFile(file);
+
+    expect(result.iconOverrides).toHaveLength(1);
+    expect(result.iconOverrides[0].bookmarkUrl).toBe('https://small.example.com');
+    expect(result.skipped.oversizedDataUrlCount).toBe(1);
+  });
+
+  it('skips an oversized workspace wallpaper and reports it, leaving under-cap wallpapers untouched', async () => {
+    const transfer = await importTransfer();
+    const oversized = dataUrlOfLength(6 * 1024 * 1024);
+    const fine = dataUrlOfLength(2048);
+
+    const file = makeFile({
+      schema: WORKSPACE_SCHEMA,
+      schemaVersion: 3,
+      settings: {},
+      workspaces: [baseRecordBody('a'), baseRecordBody('b')],
+      workspaceWallpapers: { a: oversized, b: fine },
+      iconOverrides: [],
+      bookmarkUsage: [],
+    });
+
+    const result = await transfer.parseWorkspaceFile(file);
+
+    expect(result.workspaceWallpapers.a).toBeUndefined();
+    expect(result.workspaceWallpapers.b).toBe(fine);
+    expect(result.skipped.oversizedDataUrlCount).toBe(1);
+  });
+
+  it('passes through data URLs at or under the cap unchanged', async () => {
+    const transfer = await importTransfer();
+    const atCap = dataUrlOfLength(1024); // small, well under cap — sanity check for false positives
+
+    const file = makeFile({
+      schema: WORKSPACE_SCHEMA,
+      schemaVersion: 3,
+      settings: {},
+      workspaces: [],
+      workspaceWallpapers: {},
+      iconOverrides: [
+        { bookmarkUrl: 'https://ok.example.com', dataUrl: atCap, fileName: 'a.png', mimeType: 'image/png', updatedAt: 1 },
+      ],
+      bookmarkUsage: [],
+    });
+
+    const result = await transfer.parseWorkspaceFile(file);
+
+    expect(result.iconOverrides).toHaveLength(1);
+    expect(result.iconOverrides[0].dataUrl).toBe(atCap);
+    expect(result.skipped.oversizedDataUrlCount).toBe(0);
+  });
+});
+
 describe('buildWorkspaceExport — schema v3', () => {
   it('emits schemaVersion 3 and per-record view/sort fields', async () => {
     // Seed using the per-key layout (workspace:<id>) — the storage refactor

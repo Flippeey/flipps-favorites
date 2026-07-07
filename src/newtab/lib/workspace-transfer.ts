@@ -24,6 +24,7 @@ import {
   writeWorkspaceWallpaper,
 } from '@/shared/storage';
 import { getOverrideKeyForScope, normalizeOverrideScope, type IconOverrideScope } from '@/shared/icon-scope';
+import { MAX_IMPORT_DATA_URL_BYTES, MAX_WORKSPACES } from '@/shared/constants';
 import { invalidateIcon } from './messaging';
 
 export const WORKSPACE_SCHEMA = 'flipps-workspace-transfer' as const;
@@ -64,10 +65,29 @@ export interface WorkspaceExportPayload {
   bookmarkUsage: BookmarkUsageTransferRecord[];
 }
 
+// Import-only counters for entries dropped while parsing an untrusted backup
+// file. Kept separate from WorkspaceExportPayload's on-disk shape (which
+// buildWorkspaceExport also produces) so export output never carries them.
+export interface WorkspaceImportSkipCounts {
+  /** Icon overrides / wallpaper entries dropped for exceeding MAX_IMPORT_DATA_URL_BYTES. */
+  oversizedDataUrlCount: number;
+}
+
+export type ParsedWorkspaceImport = WorkspaceExportPayload & { skipped: WorkspaceImportSkipCounts };
+
 export interface WorkspaceImportSummary {
   mode: WorkspaceImportMode;
   workspaceCount: number;
+  // Workspaces present in the backup but dropped before writing because
+  // MAX_WORKSPACES was already reached (merge: existing + incoming; replace:
+  // incoming alone). Never silently truncated — always reported here.
+  workspaceSkippedCount: number;
+  // Workspaces that were attempted but whose write() threw (e.g. quota
+  // exceeded mid-loop). workspaceCount only reflects what actually persisted.
+  workspaceFailedCount: number;
   iconOverrideCount: number;
+  // Icon overrides dropped for exceeding MAX_IMPORT_DATA_URL_BYTES.
+  iconOverrideSkippedCount: number;
   bookmarkUsageCount: number;
   settings: AppSettings;
 }
@@ -117,7 +137,7 @@ export function downloadWorkspaceExport(payload: WorkspaceExportPayload, fileNam
   URL.revokeObjectURL(objectUrl);
 }
 
-export async function parseWorkspaceFile(file: File): Promise<WorkspaceExportPayload> {
+export async function parseWorkspaceFile(file: File): Promise<ParsedWorkspaceImport> {
   const text = await file.text();
   let parsed: unknown;
   try {
@@ -153,8 +173,18 @@ export async function parseWorkspaceFile(file: File): Promise<WorkspaceExportPay
   const isLegacy = rawSchemaVersion === undefined || rawSchemaVersion <= 2;
   const legacyViewSort = isLegacy ? legacyViewSortFromSettings(candidate.settings) : null;
 
+  let oversizedDataUrlCount = 0;
+
   const iconOverrides = Array.isArray(candidate.iconOverrides)
-    ? candidate.iconOverrides.map(normalizeOverride).filter((r): r is IconOverrideTransferRecord => r !== null)
+    ? candidate.iconOverrides
+        .map(entry => {
+          if (isOversizedDataUrlCandidate(entry)) {
+            oversizedDataUrlCount += 1;
+            return null;
+          }
+          return normalizeOverride(entry);
+        })
+        .filter((r): r is IconOverrideTransferRecord => r !== null)
     : [];
   const bookmarkUsage = Array.isArray(candidate.bookmarkUsage)
     ? candidate.bookmarkUsage.map(normalizeUsage).filter((r): r is BookmarkUsageTransferRecord => r !== null)
@@ -164,7 +194,9 @@ export async function parseWorkspaceFile(file: File): Promise<WorkspaceExportPay
         .map(ws => normalizeWorkspace(ws, legacyViewSort))
         .filter((r): r is WorkspaceRecord => r !== null)
     : [];
-  const workspaceWallpapers = normalizeWallpaperMap(candidate.workspaceWallpapers);
+  const { map: workspaceWallpapers, skippedCount: wallpaperSkippedCount } =
+    normalizeWallpaperMap(candidate.workspaceWallpapers);
+  oversizedDataUrlCount += wallpaperSkippedCount;
 
   return {
     schema: WORKSPACE_SCHEMA,
@@ -177,7 +209,23 @@ export async function parseWorkspaceFile(file: File): Promise<WorkspaceExportPay
     workspaceWallpapers,
     iconOverrides,
     bookmarkUsage,
+    skipped: { oversizedDataUrlCount },
   };
+}
+
+// True only when the entry has a plausible override shape AND a data URL that
+// exceeds the size cap — used to separate "oversized" (reported) from
+// "malformed" (silently dropped, existing behavior) in the skip count.
+function isOversizedDataUrlCandidate(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<IconOverrideTransferRecord>;
+  return typeof candidate.dataUrl === 'string' && exceedsDataUrlSizeCap(candidate.dataUrl);
+}
+
+function exceedsDataUrlSizeCap(dataUrl: string): boolean {
+  // Data URLs are ASCII (base64 or percent-encoded), so string length is a
+  // faithful stand-in for byte size — no need to decode.
+  return dataUrl.length > MAX_IMPORT_DATA_URL_BYTES;
 }
 
 // Legacy global view/sort carried by v2-and-earlier exports. Each field is only
@@ -215,7 +263,7 @@ function isSortDirection(value: unknown): value is SortDirection {
 }
 
 export async function applyWorkspaceImport(
-  payload: WorkspaceExportPayload,
+  payload: ParsedWorkspaceImport,
   mode: WorkspaceImportMode,
 ): Promise<WorkspaceImportSummary> {
   // Records that differ only in scope are distinct (an exact override and a host
@@ -243,14 +291,34 @@ export async function applyWorkspaceImport(
     : payload.settings;
   const nextSettings = await writeSettings(settingsToWrite);
 
+  // Cap the import at MAX_WORKSPACES so a large/crafted backup can't blow past
+  // chrome.storage.sync's 100 KB total quota mid-loop. Merge mode must respect
+  // workspaces that already exist (never exceed 20 total); replace mode caps
+  // the incoming set on its own since the loop below always merges by id
+  // (existing workspaces are never deleted, even in replace mode).
+  const existingWorkspaceCount = mode === 'merge' ? (await readWorkspaces()).length : 0;
+  const importSlots = Math.max(0, MAX_WORKSPACES - existingWorkspaceCount);
+  const workspacesToImport = payload.workspaces.slice(0, importSlots);
+  const workspaceSkippedCount = payload.workspaces.length - workspacesToImport.length;
+
   // Workspaces: always merge by id (replace would wipe all current workspaces, including
   // the one the user is currently looking at). Use the payload as the source of truth for
   // any id collision.
-  for (const ws of payload.workspaces) {
-    await writeWorkspace(ws);
-    const wallpaper = payload.workspaceWallpapers[ws.id];
-    if (wallpaper) {
-      await writeWorkspaceWallpaper(ws.id, wallpaper);
+  let workspaceLandedCount = 0;
+  let workspaceFailedCount = 0;
+  for (const ws of workspacesToImport) {
+    try {
+      await writeWorkspace(ws);
+      const wallpaper = payload.workspaceWallpapers[ws.id];
+      if (wallpaper) {
+        await writeWorkspaceWallpaper(ws.id, wallpaper);
+      }
+      workspaceLandedCount += 1;
+    } catch {
+      // Quota or other storage failure mid-loop: keep going so later
+      // (smaller/valid) entries still get a chance, and report what failed
+      // instead of throwing a generic error that hides partial success.
+      workspaceFailedCount += 1;
     }
   }
 
@@ -285,8 +353,11 @@ export async function applyWorkspaceImport(
 
   return {
     mode,
-    workspaceCount: payload.workspaces.length,
+    workspaceCount: workspaceLandedCount,
+    workspaceSkippedCount,
+    workspaceFailedCount,
     iconOverrideCount: dedupedOverrides.length,
+    iconOverrideSkippedCount: payload.skipped.oversizedDataUrlCount,
     bookmarkUsageCount: dedupedUsage.length,
     settings: nextSettings,
   };
@@ -315,6 +386,7 @@ function normalizeOverride(value: unknown): IconOverrideTransferRecord | null {
   const candidate = value as Partial<IconOverrideTransferRecord>;
   if (typeof candidate.bookmarkUrl !== 'string' || !candidate.bookmarkUrl.trim()) return null;
   if (typeof candidate.dataUrl !== 'string' || !candidate.dataUrl.startsWith('data:image/')) return null;
+  if (exceedsDataUrlSizeCap(candidate.dataUrl)) return null;
   if (typeof candidate.fileName !== 'string' || !candidate.fileName.trim()) return null;
   if (typeof candidate.mimeType !== 'string' || !candidate.mimeType.startsWith('image/')) return null;
 
@@ -374,15 +446,19 @@ function normalizeWorkspace(value: unknown, legacyViewSort: LegacyViewSort | nul
   };
 }
 
-function normalizeWallpaperMap(value: unknown): WorkspaceWallpaperMap {
-  if (!value || typeof value !== 'object') return {};
-  const out: WorkspaceWallpaperMap = {};
+function normalizeWallpaperMap(value: unknown): { map: WorkspaceWallpaperMap; skippedCount: number } {
+  if (!value || typeof value !== 'object') return { map: {}, skippedCount: 0 };
+  const map: WorkspaceWallpaperMap = {};
+  let skippedCount = 0;
   for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof raw === 'string' && raw.startsWith('data:image/')) {
-      out[key] = raw;
+    if (typeof raw !== 'string' || !raw.startsWith('data:image/')) continue;
+    if (exceedsDataUrlSizeCap(raw)) {
+      skippedCount += 1;
+      continue;
     }
+    map[key] = raw;
   }
-  return out;
+  return { map, skippedCount };
 }
 
 function dedupeByKey<T>(items: T[], keyOf: (item: T) => string, compare: (a: T, b: T) => number): T[] {
