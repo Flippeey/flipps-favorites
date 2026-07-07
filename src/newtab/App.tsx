@@ -4,8 +4,10 @@ import { ConfirmBatchDeleteDialog, ConfirmDeleteDialog } from './components/Conf
 import { ContextMenu, type ContextMenuItem } from './components/ContextMenu';
 import { Dock } from './components/Dock';
 import { EditDialog, type EditTarget } from './components/EditDialog';
+import { ConfirmOpenAllTabsDialog } from './components/ConfirmOpenAllTabsDialog';
 import { FolderNameDialog, type FolderNameDialogTarget } from './components/FolderNameDialog';
 import { FolderOverlay } from './components/FolderOverlay';
+import { MoveToDialog } from './components/MoveToDialog';
 import { NewWorkspaceDialog } from './components/NewWorkspaceDialog';
 import { QuickAddDialog } from './components/QuickAddDialog';
 import { buildSearchIndex, ClockGreeting, ClockMini, HeroSearch, type FlatSearchResult } from './components/HeroSearch';
@@ -29,8 +31,8 @@ import { resolveDockMode } from './lib/dock-mode';
 import { effectiveViewSort } from './lib/effective-view-sort';
 import { prefetchAllIcons } from './lib/icon-prefetch';
 import { findFolder, findNode, findParentFolder, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
-import { captureMoveSnapshots, restoreMoveSnapshots } from './lib/move-snapshot';
-import { MAX_WORKSPACES } from '../shared/constants';
+import { captureMoveSnapshots, moveIdsTracked, restoreMoveSnapshots } from './lib/move-snapshot';
+import { MAX_WORKSPACES, OPEN_ALL_TABS_CONFIRM_THRESHOLD } from '../shared/constants';
 import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper } from '../shared/storage';
 import { useWorkspaceActions } from './state/useWorkspaceActions';
 import { useSelection } from './state/useSelection';
@@ -112,6 +114,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<BookmarkNode | null>(null);
   const [confirmDeleteBatch, setConfirmDeleteBatch] = useState<string[] | null>(null);
+  const [moveToState, setMoveToState] = useState<{ ids: string[]; excludeIds?: Set<string> } | null>(null);
+  const [confirmOpenAllFolder, setConfirmOpenAllFolder] = useState<BookmarkNode | null>(null);
 
   // Keyboard navigation: tracks which tile is currently focused via arrow keys.
   // Null = no keyboard focus (focus model resumes from real :focus or :focus-visible).
@@ -396,6 +400,75 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setFolderNameTarget({ mode: 'create', parentId: selection.scopeFolderId || defaultParentId(), moveIds: ids });
   }, [selection.scopeFolderId, defaultParentId]);
 
+  // "Move to…" — opens a folder picker spanning every workspace (the tree is
+  // global; workspace roots are just folders within it) for an existing
+  // destination, as opposed to handleMoveSelectionToNewFolder which creates a
+  // brand-new folder.
+  const handleMoveTo = useCallback((ids: string[], excludeIds?: Set<string>) => {
+    if (ids.length === 0) return;
+    setMoveToState({ ids, excludeIds });
+  }, []);
+
+  // Tracks per-id success so a mid-batch failure only scopes the Undo/toast to
+  // the ids that actually relocated (see moveIdsTracked) — the ids that failed
+  // are surfaced via a separate error toast rather than silently dropped.
+  const handleConfirmMoveTo = useCallback(async (targetFolderId: string): Promise<void> => {
+    const ids = moveToState?.ids ?? [];
+    if (ids.length === 0) return;
+    const outcome = await moveIdsTracked(tree, ids, targetFolderId, moveBookmark);
+    if (outcome.movedIds.length > 0) {
+      setSelection({ ids: new Set(outcome.movedIds), scopeFolderId: targetFolderId });
+      pushToast({
+        kind: 'info',
+        message: `Moved ${outcome.movedIds.length} ${outcome.movedIds.length === 1 ? 'item' : 'items'}`,
+        action: outcome.snapshots.length > 0
+          ? {
+              label: 'Undo',
+              onClick: () => {
+                void (async () => {
+                  try {
+                    await restoreMoveSnapshots(outcome.snapshots, moveBookmark);
+                    await refreshTree();
+                  } catch {
+                    pushToast({ kind: 'error', message: 'Couldn’t undo the move.' });
+                  }
+                })();
+              },
+            }
+          : undefined,
+      });
+    }
+    if (outcome.failedIds.length > 0) {
+      pushToast({
+        kind: 'error',
+        message: outcome.movedIds.length > 0
+          ? `Couldn’t move ${outcome.failedIds.length} of ${ids.length} items.`
+          : `Couldn’t move the selected ${ids.length === 1 ? 'item' : 'items'}.`,
+      });
+    }
+    await refreshTree();
+  }, [moveToState, tree, refreshTree, pushToast, setSelection]);
+
+  const openFolderBookmarksInTabs = useCallback((folder: BookmarkNode) => {
+    const urls = (folder.children ?? [])
+      .filter((c): c is BookmarkNode & { url: string } => !!c.url)
+      .map(c => normalizeBookmarkUrl(c.url));
+    for (const url of urls) openTab(url).catch(() => { /* ignore */ });
+  }, []);
+
+  // "Open all in new tabs" (folder context menu) — direct children only (no
+  // recursion into subfolders). Above the threshold, require confirmation so
+  // a stray click on a giant folder can't tab-bomb the browser.
+  const handleOpenAllInTabs = useCallback((folder: BookmarkNode) => {
+    const count = (folder.children ?? []).filter(c => !!c.url).length;
+    if (count === 0) return;
+    if (count > OPEN_ALL_TABS_CONFIRM_THRESHOLD) {
+      setConfirmOpenAllFolder(folder);
+    } else {
+      openFolderBookmarksInTabs(folder);
+    }
+  }, [openFolderBookmarksInTabs]);
+
   const handleCreateFromFolderResult = useCallback((
     result: 'created' | 'at_max' | 'already_exists',
     folderTitle: string,
@@ -430,6 +503,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setConfirmDeleteFolder,
     setConfirmDeleteBatch,
     onMoveSelectionToNewFolder: handleMoveSelectionToNewFolder,
+    onMoveTo: handleMoveTo,
+    onOpenAllInTabs: handleOpenAllInTabs,
     setRenameWorkspaceTarget,
     setConfirmDeleteWorkspace,
     onDeleteBookmark: handleDeleteBookmark,
@@ -887,6 +962,26 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             setSelection({ ids: new Set(), scopeFolderId: '' });
             await refreshTree();
           }}
+        />
+      )}
+
+      {moveToState && (
+        <MoveToDialog
+          tree={tree}
+          workspaces={workspaces}
+          count={moveToState.ids.length}
+          excludeIds={moveToState.excludeIds}
+          onClose={() => setMoveToState(null)}
+          onConfirm={handleConfirmMoveTo}
+        />
+      )}
+
+      {confirmOpenAllFolder && (
+        <ConfirmOpenAllTabsDialog
+          count={(confirmOpenAllFolder.children ?? []).filter(c => !!c.url).length}
+          folderTitle={confirmOpenAllFolder.title}
+          onClose={() => setConfirmOpenAllFolder(null)}
+          onConfirm={() => openFolderBookmarksInTabs(confirmOpenAllFolder)}
         />
       )}
 

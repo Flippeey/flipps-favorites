@@ -45,3 +45,42 @@ export async function restoreMoveSnapshots(
     await move(snap.id, snap.parentId, snap.index);
   }
 }
+
+/** Result of a tracked multi-id relocate: who moved, who didn't, and their origins. */
+export interface MoveOutcome {
+  /** Ids that relocated successfully, in request order. */
+  movedIds: string[];
+  /** Ids whose move call threw, in request order. */
+  failedIds: string[];
+  /** Origin snapshots for movedIds only — safe to hand straight to restoreMoveSnapshots. */
+  snapshots: MoveSnapshot[];
+}
+
+/**
+ * Relocate each id to `targetParentId`, moving sequentially and tracking each
+ * id's outcome individually. A mid-batch failure (e.g. a stale id the browser
+ * rejects) must not corrupt the Undo/toast story for the ids that DID move —
+ * so movedIds/snapshots only ever cover ids whose move call actually resolved.
+ */
+export async function moveIdsTracked(
+  tree: BookmarkNode[],
+  ids: string[],
+  targetParentId: string,
+  move: (id: string, parentId: string) => Promise<unknown>,
+): Promise<MoveOutcome> {
+  const snapshotById = new Map(captureMoveSnapshots(tree, ids).map(s => [s.id, s]));
+  const movedIds: string[] = [];
+  const failedIds: string[] = [];
+  for (const id of ids) {
+    try {
+      await move(id, targetParentId);
+      movedIds.push(id);
+    } catch {
+      failedIds.push(id);
+    }
+  }
+  const snapshots = movedIds
+    .map(id => snapshotById.get(id))
+    .filter((s): s is MoveSnapshot => s != null);
+  return { movedIds, failedIds, snapshots };
+}
