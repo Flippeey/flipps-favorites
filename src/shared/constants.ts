@@ -30,3 +30,7 @@ export const ALLOWED_BOOKMARK_SCHEMES = ['http:', 'https:', 'chrome:', 'edge:', 
 // eliminates the letter-tile placeholder flash on cold start.  Set to false
 // to revert to the deferred behaviour if startup-latency regressions appear.
 export const EAGER_ICON_PREFETCH = true;
+
+// "Open all in new tabs" (folder context menu) asks for confirmation above
+// this count to avoid tab-bombing the browser from a single click.
+export const OPEN_ALL_TABS_CONFIRM_THRESHOLD = 10;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BookmarkNode } from '@/shared/messages';
-import { captureMoveSnapshots } from '@/newtab/lib/move-snapshot';
+import { captureMoveSnapshots, moveIdsTracked } from '@/newtab/lib/move-snapshot';
 
 // Browser-shaped tree: outer root → user folders. `dock` holds two bookmarks;
 // `work` holds one folder (`sub`) and one bookmark. Mirrors how the live tree
@@ -55,6 +55,55 @@ describe('captureMoveSnapshots', () => {
   it('skips ids whose parent cannot be resolved', () => {
     expect(captureMoveSnapshots(tree, ['missing', 'bm-a'])).toEqual([
       { id: 'bm-a', parentId: 'dock', index: 0 },
+    ]);
+  });
+});
+
+describe('moveIdsTracked', () => {
+  // WHY: "Move to..." moves several ids in one user action. If the browser
+  // rejects one move mid-batch (e.g. a stale id), the caller must still know
+  // exactly which ids landed so it can select/undo only those — not the whole
+  // requested batch, which would let the toast/undo lie about what happened.
+  it('reports only the ids that actually moved as movedIds', async () => {
+    const moved: string[] = [];
+    const move = async (id: string): Promise<void> => {
+      if (id === 'bm-b') throw new Error('simulated failure');
+      moved.push(id);
+    };
+    const result = await moveIdsTracked(tree, ['bm-a', 'bm-b', 'bm-c'], 'work', move);
+    expect(result.movedIds).toEqual(['bm-a', 'bm-c']);
+    expect(result.failedIds).toEqual(['bm-b']);
+    expect(moved).toEqual(['bm-a', 'bm-c']);
+  });
+
+  // WHY: Undo must only replay origins for ids that actually relocated —
+  // replaying a snapshot for an id that never moved would be a no-op at best
+  // and could throw at worst (the failed move already reports empty state).
+  it('scopes the returned snapshots to only the successfully moved ids', async () => {
+    const move = async (id: string): Promise<void> => {
+      if (id === 'bm-c') throw new Error('simulated failure');
+    };
+    const result = await moveIdsTracked(tree, ['bm-b', 'bm-c'], 'work', move);
+    expect(result.snapshots).toEqual([{ id: 'bm-b', parentId: 'dock', index: 1 }]);
+  });
+
+  // WHY: the common case — every move succeeds — must still work end to end,
+  // preserving request order in both movedIds and snapshots.
+  it('moves every id and returns all snapshots when nothing fails', async () => {
+    const calls: Array<{ id: string; parentId: string }> = [];
+    const move = async (id: string, parentId: string): Promise<void> => {
+      calls.push({ id, parentId });
+    };
+    const result = await moveIdsTracked(tree, ['bm-a', 'bm-b'], 'work', move);
+    expect(result.movedIds).toEqual(['bm-a', 'bm-b']);
+    expect(result.failedIds).toEqual([]);
+    expect(result.snapshots).toEqual([
+      { id: 'bm-a', parentId: 'dock', index: 0 },
+      { id: 'bm-b', parentId: 'dock', index: 1 },
+    ]);
+    expect(calls).toEqual([
+      { id: 'bm-a', parentId: 'work' },
+      { id: 'bm-b', parentId: 'work' },
     ]);
   });
 });
