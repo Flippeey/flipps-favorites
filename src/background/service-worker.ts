@@ -1,6 +1,6 @@
 import { extensionApi } from '../shared/browser';
-import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type WorkspaceRecord } from '../shared/messages';
-import { deleteWorkspace, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, readBookmarkUsageRecords, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
+import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse } from '../shared/messages';
+import { deleteWorkspace, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, patchWorkspaceRecord, readBookmarkUsageRecords, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
 import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl, sweepGeneratedRecords } from './icons/icon-service';
 
 extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }) => {
@@ -160,11 +160,7 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
       return { workspace: message.workspace } satisfies CreateWorkspaceResponse;
     }
     case messageTypes.patchWorkspace: {
-      const all = await readWorkspaces();
-      const current = all.find(w => w.id === message.id);
-      if (!current) throw new Error(`Workspace ${message.id} not found`);
-      const updated: WorkspaceRecord = { ...current, ...message.patch, id: message.id };
-      await writeWorkspace(updated);
+      const updated = await patchWorkspaceRecord(message.id, message.patch);
       return { workspace: updated } satisfies PatchWorkspaceResponse;
     }
     case messageTypes.deleteWorkspace: {
