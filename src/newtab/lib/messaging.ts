@@ -29,6 +29,7 @@ import type {
   PatchWorkspaceResponse,
   DeleteWorkspaceResponse,
   OpenTabResponse,
+  WebSearchResponse,
 } from '@/shared/messages';
 import { IconFetchError, messageTypes } from '@/shared/messages';
 
@@ -152,4 +153,8 @@ export async function deleteWorkspace(id: string): Promise<void> {
 
 export async function openTab(url: string): Promise<void> {
   await send<OpenTabResponse>({ type: messageTypes.openTab, url });
+}
+
+export async function webSearch(query: string, openInNewTab: boolean): Promise<void> {
+  await send<WebSearchResponse>({ type: messageTypes.webSearch, query, openInNewTab });
 }

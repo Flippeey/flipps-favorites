@@ -1,7 +1,8 @@
 import { extensionApi } from '../shared/browser';
-import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse } from '../shared/messages';
+import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type WebSearchResponse } from '../shared/messages';
 import { deleteWorkspace, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, patchWorkspaceRecord, readBookmarkUsageRecords, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
 import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl, sweepGeneratedRecords } from './icons/icon-service';
+import { performWebSearch } from './search-shim';
 
 extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }) => {
   const reason = details.reason ?? 'unknown';
@@ -170,6 +171,10 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
     case messageTypes.openTab: {
       await extensionApi.tabs.create({ url: message.url });
       return { ok: true } satisfies OpenTabResponse;
+    }
+    case messageTypes.webSearch: {
+      await performWebSearch(message.query, message.openInNewTab);
+      return { ok: true } satisfies WebSearchResponse;
     }
     default:
       throw new Error(`Unhandled message type: ${(message as AppRequest).type}`);

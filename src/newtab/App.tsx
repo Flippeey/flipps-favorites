@@ -23,7 +23,7 @@ import { useWorkspaceShortcut } from './interaction/useWorkspaceShortcut';
 import { useKeyboardNav, useDeleteShortcut } from './interaction/useKeyboardNav';
 import { useQuickAddShortcuts } from './interaction/useQuickAddShortcuts';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
-import { createBookmark, getBookmarkTree, getBookmarkUsage, getWorkspaces, moveBookmark, openTab, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
+import { createBookmark, getBookmarkTree, getBookmarkUsage, getWorkspaces, moveBookmark, openTab, patchSettings, recordBookmarkUse, removeBookmark, webSearch } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
 import { useScrollCollapsed } from './lib/useScrollCollapsed';
 import { normalizeBookmarkUrl } from './lib/url';
@@ -314,6 +314,24 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     if (newTab) openTab(url).catch(() => { /* ignore */ });
     else window.location.href = url;
   }, [settings.openLinksInNewTab]);
+
+  // Hero-search zero-match fallback: open an explicitly-typed URL through the
+  // same openLinksInNewTab decision handlePickBookmark uses for bookmarks.
+  // Not a bookmark (no id), so no usage tracking here.
+  const handleOpenUrl = useCallback((url: string) => {
+    if (settings.openLinksInNewTab) openTab(url).catch(() => { /* ignore */ });
+    else window.location.href = url;
+  }, [settings.openLinksInNewTab]);
+
+  const handleWebSearch = useCallback((query: string) => {
+    webSearch(query, settings.openLinksInNewTab)
+      .then(() => {
+        pushToast({ kind: 'info', message: `Searching the web for "${query}"…` });
+      })
+      .catch(() => {
+        pushToast({ kind: 'error', message: 'Couldn’t open web search.' });
+      });
+  }, [pushToast, settings.openLinksInNewTab]);
 
   const openInNewTab = useCallback((item: BookmarkNode) => {
     if (!item.url) return;
@@ -736,6 +754,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
               activeWorkspaceId={settings.activeWorkspaceId}
               onPickBookmark={onPickSearchBookmark}
               onPickFolder={onPickSearchFolder}
+              onOpenUrl={handleOpenUrl}
+              onWebSearch={handleWebSearch}
             />
           )}
         </section>
@@ -748,6 +768,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           activeWorkspaceId={settings.activeWorkspaceId}
           onPickBookmark={onPickSearchBookmark}
           onPickFolder={onPickSearchFolder}
+          onOpenUrl={handleOpenUrl}
+          onWebSearch={handleWebSearch}
           overlayMode
         />
       )}

@@ -31,7 +31,59 @@ function resultItems(page: import('@playwright/test').Page) {
   return page.locator('#ff-search-results .ff-results__item');
 }
 
+/** The single web-search / open-URL fallback row shown when there are zero bookmark matches. */
+function fallbackRow(page: import('@playwright/test').Page) {
+  return page.locator('.ff-search-fallback');
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Replace chrome.runtime.sendMessage with a spy that intercepts
+ * 'search/web-query' messages (recording the query, short-circuiting the real
+ * background dispatch so no live browser search tab opens) and passes every
+ * other message type through untouched.
+ */
+async function spyOnWebSearch(page: import('@playwright/test').Page): Promise<void> {
+  await page.evaluate(() => {
+    const api = (globalThis as any).browser ?? (globalThis as any).chrome;
+    const original = api.runtime.sendMessage.bind(api.runtime);
+    (globalThis as any).__ffWebSearchCalls = [];
+    api.runtime.sendMessage = (msg: any, ...rest: any[]) => {
+      if (msg && msg.type === 'search/web-query') {
+        (globalThis as any).__ffWebSearchCalls.push(msg.query);
+        return Promise.resolve({ ok: true });
+      }
+      return original(msg, ...rest);
+    };
+  });
+}
+
+/** Queries recorded by spyOnWebSearch, in call order. */
+async function webSearchCalls(page: import('@playwright/test').Page): Promise<string[]> {
+  return page.evaluate(() => (globalThis as any).__ffWebSearchCalls ?? []);
+}
+
+/**
+ * Like spyOnWebSearch, but the intercepted 'search/web-query' message rejects
+ * instead of resolving — simulates the background relay failing, so the
+ * failure path in App.tsx's handleWebSearch (toast on rejection) can be tested
+ * without depending on a real chrome.search.query failure.
+ */
+async function spyOnWebSearchRejecting(page: import('@playwright/test').Page): Promise<void> {
+  await page.evaluate(() => {
+    const api = (globalThis as any).browser ?? (globalThis as any).chrome;
+    const original = api.runtime.sendMessage.bind(api.runtime);
+    (globalThis as any).__ffWebSearchCalls = [];
+    api.runtime.sendMessage = (msg: any, ...rest: any[]) => {
+      if (msg && msg.type === 'search/web-query') {
+        (globalThis as any).__ffWebSearchCalls.push(msg.query);
+        return Promise.reject(new Error('web search relay failed'));
+      }
+      return original(msg, ...rest);
+    };
+  });
+}
 
 /** Type a query into the search input and wait for the results box to appear. */
 async function typeQuery(
@@ -143,18 +195,143 @@ test.describe('search', () => {
     expect(frame.url()).toMatch(/slack\.com/);
   });
 
-  // ── No-match empty state ───────────────────────────────────────────────────
+  // ── No-match state now shows a web-search fallback, not bare "No matches." ──
 
-  test('a query with no matching bookmarks shows "No matches." copy', async ({ newtabPage }) => {
-    // WHY: the empty state prevents users from thinking search is broken when
-    //      their query genuinely matches nothing.
+  test('a query with no matching bookmarks shows the web-search fallback row', async ({ newtabPage }) => {
+    // WHY: a dead-end "No matches." used to strand the user; they should be
+    //      offered a one-click path to search the web for the same text.
     const input = searchInput(newtabPage);
     await input.click();
     await input.fill('xyzzy-no-such-bookmark-12345');
 
     await expect(resultsBox(newtabPage)).toBeVisible();
-    await expect(resultsBox(newtabPage)).toContainText('No matches.');
+    await expect(resultsBox(newtabPage)).toContainText('Search the web for "xyzzy-no-such-bookmark-12345"');
+    await expect(resultsBox(newtabPage)).not.toContainText('No matches.');
     await expect(resultItems(newtabPage)).toHaveCount(0);
+  });
+
+  // ── Whitespace-only input: no fallback, no web search ─────────────────────
+
+  test('whitespace-only input shows no fallback row and never triggers a web search', async ({ newtabPage }) => {
+    // WHY: a trimmed-empty query has nothing meaningful to search for; showing
+    //      a fallback row or firing webSearch('') would be a confusing no-op.
+    await spyOnWebSearch(newtabPage);
+    const input = searchInput(newtabPage);
+    await input.click();
+    await input.fill('   ');
+
+    await expect(resultsBox(newtabPage)).toBeVisible();
+    await expect(fallbackRow(newtabPage)).toHaveCount(0);
+
+    // Enter must be a no-op — there is no row (bookmark or fallback) to activate.
+    await input.press('Enter');
+    expect(await webSearchCalls(newtabPage)).toEqual([]);
+  });
+
+  // ── Bookmark matches suppress the fallback row ────────────────────────────
+
+  test('when bookmark matches exist, no fallback row renders alongside them', async ({ newtabPage }) => {
+    // WHY: the fallback is a last resort; it must never appear next to real
+    //      matches, or users could mistakenly trigger a web search instead of
+    //      picking the bookmark they were looking for.
+    await typeQuery(newtabPage, 'GitHub');
+
+    await expect(resultItems(newtabPage)).not.toHaveCount(0);
+    await expect(fallbackRow(newtabPage)).toHaveCount(0);
+  });
+
+  // ── Explicit http(s) URL: Enter opens it directly ─────────────────────────
+
+  test('an explicit https:// URL with zero matches opens it directly on Enter', async ({ newtabPage }) => {
+    // WHY: typing a full URL is an explicit navigation intent — it must open,
+    //      not be routed through a web search, when it doesn't match a bookmark.
+    const url = 'https://example.com/no-such-bookmark-xyz';
+    await typeQuery(newtabPage, url);
+
+    await expect(resultsBox(newtabPage)).toContainText(url);
+    await expect(resultsBox(newtabPage)).not.toContainText('No matches.');
+
+    // openLinksInNewTab=false by default → window.location.href navigation.
+    const navPromise = newtabPage.waitForEvent('framenavigated', { timeout: 5_000 });
+    await searchInput(newtabPage).press('Enter');
+    const frame = await navPromise;
+    expect(frame.url()).toBe(url);
+  });
+
+  // ── Bare domain / free text: fallback row, click activates web search ─────
+
+  test('a bare domain never auto-navigates; the fallback row triggers a web search on click', async ({ newtabPage }) => {
+    // WHY: only an explicit scheme counts as navigation intent (see url.ts);
+    //      a bare host must not silently open a URL the user didn't fully type.
+    await spyOnWebSearch(newtabPage);
+    await typeQuery(newtabPage, 'example.com');
+
+    await expect(resultsBox(newtabPage)).toContainText('Search the web for "example.com"');
+    await expect(resultItems(newtabPage)).toHaveCount(0);
+
+    await fallbackRow(newtabPage).click();
+
+    await expect.poll(() => webSearchCalls(newtabPage)).toEqual(['example.com']);
+    // Mirrors openAt(): the dropdown closes and the input clears on activation.
+    await expect(searchInput(newtabPage)).toHaveValue('');
+  });
+
+  // ── Keyboard nav reaches + activates the fallback row ─────────────────────
+
+  test('keyboard nav reaches the fallback row and Enter activates it', async ({ newtabPage }) => {
+    // WHY: keyboard-only users must be able to reach and trigger the same
+    //      fallback action as a mouse click, with correct a11y focus tracking.
+    await spyOnWebSearch(newtabPage);
+    await typeQuery(newtabPage, 'nonsense-query-that-matches-nothing');
+
+    await expect(fallbackRow(newtabPage)).toBeVisible();
+    await expect(searchInput(newtabPage)).toHaveAttribute('aria-activedescendant', 'ff-search-opt-0');
+
+    await searchInput(newtabPage).press('ArrowDown');
+    await expect(fallbackRow(newtabPage)).toHaveAttribute('data-active', 'true');
+    await expect(searchInput(newtabPage)).toHaveAttribute('aria-activedescendant', 'ff-search-opt-0');
+
+    await searchInput(newtabPage).press('Enter');
+    await expect.poll(() => webSearchCalls(newtabPage)).toEqual(['nonsense-query-that-matches-nothing']);
+  });
+
+  // ── Web search relay failure: error toast, not a silent no-op ─────────────
+
+  test('a failed web search shows an error toast instead of failing silently', async ({ newtabPage }) => {
+    // WHY: handleWebSearch used to swallow a rejected webSearch() call with an
+    //      empty catch — the user saw nothing and had no idea the click/Enter
+    //      did anything. It must now surface a visible error toast.
+    await spyOnWebSearchRejecting(newtabPage);
+    await typeQuery(newtabPage, 'nonsense-query-that-matches-nothing');
+
+    await expect(fallbackRow(newtabPage)).toBeVisible();
+    await fallbackRow(newtabPage).click();
+
+    await expect.poll(() => webSearchCalls(newtabPage)).toEqual(['nonsense-query-that-matches-nothing']);
+
+    const toast = newtabPage.locator('.ff-toast');
+    await expect(toast).toBeVisible();
+    await expect(toast).toContainText(/Couldn.t open web search\./);
+  });
+
+  // ── Web search success: confirmation toast, not a silent no-op ────────────
+
+  test('a successful web search shows a confirmation toast', async ({ newtabPage }) => {
+    // WHY: chrome.search.query() opens results in a NEW tab, so the newtab page
+    //      the user is looking at shows no change at all when the click merely
+    //      succeeds — a working click reads identically to a broken one unless
+    //      the current tab gives its own visible acknowledgment.
+    await spyOnWebSearch(newtabPage);
+    await typeQuery(newtabPage, 'nonsense-query-that-matches-nothing');
+
+    await expect(fallbackRow(newtabPage)).toBeVisible();
+    await fallbackRow(newtabPage).click();
+
+    await expect.poll(() => webSearchCalls(newtabPage)).toEqual(['nonsense-query-that-matches-nothing']);
+
+    const toast = newtabPage.locator('.ff-toast');
+    await expect(toast).toBeVisible();
+    await expect(toast).toContainText('Searching the web for "nonsense-query-that-matches-nothing"');
   });
 
   // ── Relevance ordering: title match outranks host/URL match ───────────────
