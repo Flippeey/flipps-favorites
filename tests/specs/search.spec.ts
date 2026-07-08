@@ -64,6 +64,27 @@ async function webSearchCalls(page: import('@playwright/test').Page): Promise<st
   return page.evaluate(() => (globalThis as any).__ffWebSearchCalls ?? []);
 }
 
+/**
+ * Like spyOnWebSearch, but the intercepted 'search/web-query' message rejects
+ * instead of resolving — simulates the background relay failing, so the
+ * failure path in App.tsx's handleWebSearch (toast on rejection) can be tested
+ * without depending on a real chrome.search.query failure.
+ */
+async function spyOnWebSearchRejecting(page: import('@playwright/test').Page): Promise<void> {
+  await page.evaluate(() => {
+    const api = (globalThis as any).browser ?? (globalThis as any).chrome;
+    const original = api.runtime.sendMessage.bind(api.runtime);
+    (globalThis as any).__ffWebSearchCalls = [];
+    api.runtime.sendMessage = (msg: any, ...rest: any[]) => {
+      if (msg && msg.type === 'search/web-query') {
+        (globalThis as any).__ffWebSearchCalls.push(msg.query);
+        return Promise.reject(new Error('web search relay failed'));
+      }
+      return original(msg, ...rest);
+    };
+  });
+}
+
 /** Type a query into the search input and wait for the results box to appear. */
 async function typeQuery(
   page: import('@playwright/test').Page,
@@ -272,6 +293,45 @@ test.describe('search', () => {
 
     await searchInput(newtabPage).press('Enter');
     await expect.poll(() => webSearchCalls(newtabPage)).toEqual(['nonsense-query-that-matches-nothing']);
+  });
+
+  // ── Web search relay failure: error toast, not a silent no-op ─────────────
+
+  test('a failed web search shows an error toast instead of failing silently', async ({ newtabPage }) => {
+    // WHY: handleWebSearch used to swallow a rejected webSearch() call with an
+    //      empty catch — the user saw nothing and had no idea the click/Enter
+    //      did anything. It must now surface a visible error toast.
+    await spyOnWebSearchRejecting(newtabPage);
+    await typeQuery(newtabPage, 'nonsense-query-that-matches-nothing');
+
+    await expect(fallbackRow(newtabPage)).toBeVisible();
+    await fallbackRow(newtabPage).click();
+
+    await expect.poll(() => webSearchCalls(newtabPage)).toEqual(['nonsense-query-that-matches-nothing']);
+
+    const toast = newtabPage.locator('.ff-toast');
+    await expect(toast).toBeVisible();
+    await expect(toast).toContainText(/Couldn.t open web search\./);
+  });
+
+  // ── Web search success: confirmation toast, not a silent no-op ────────────
+
+  test('a successful web search shows a confirmation toast', async ({ newtabPage }) => {
+    // WHY: chrome.search.query() opens results in a NEW tab, so the newtab page
+    //      the user is looking at shows no change at all when the click merely
+    //      succeeds — a working click reads identically to a broken one unless
+    //      the current tab gives its own visible acknowledgment.
+    await spyOnWebSearch(newtabPage);
+    await typeQuery(newtabPage, 'nonsense-query-that-matches-nothing');
+
+    await expect(fallbackRow(newtabPage)).toBeVisible();
+    await fallbackRow(newtabPage).click();
+
+    await expect.poll(() => webSearchCalls(newtabPage)).toEqual(['nonsense-query-that-matches-nothing']);
+
+    const toast = newtabPage.locator('.ff-toast');
+    await expect(toast).toBeVisible();
+    await expect(toast).toContainText('Searching the web for "nonsense-query-that-matches-nothing"');
   });
 
   // ── Relevance ordering: title match outranks host/URL match ───────────────
