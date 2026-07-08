@@ -36,9 +36,9 @@ export function ConfirmBatchDeleteDialog({ count, onClose, onConfirm }: ConfirmB
       bodyStyle={{ gridTemplateColumns: '1fr', gap: 12 }}
     >
       <p className="ff-confirm__message">
-        This will permanently remove {count} bookmarks.
+        This will remove {count} bookmarks.
       </p>
-      <p className="ff-confirm__hint">This action cannot be undone.</p>
+      <p className="ff-confirm__hint">You can undo this from the toast right after.</p>
       {error && <div className="ff-status" data-kind="error" role="alert">{error}</div>}
       <div className="ff-dialog__actions">
         <button type="button" className="ff-btn ff-btn--ghost" onClick={onClose} disabled={working}>
@@ -66,7 +66,7 @@ function describeContents(folder: BookmarkNode): string {
   const parts: string[] = [];
   if (bookmarks > 0) parts.push(`${bookmarks} ${bookmarks === 1 ? 'bookmark' : 'bookmarks'}`);
   if (folders > 0) parts.push(`${folders} ${folders === 1 ? 'subfolder' : 'subfolders'}`);
-  return `This will permanently delete ${parts.join(' and ')}.`;
+  return `This will delete ${parts.join(' and ')}.`;
 }
 
 export function ConfirmDeleteDialog({ folder, onClose, onConfirm }: ConfirmDeleteDialogProps) {
@@ -95,7 +95,7 @@ export function ConfirmDeleteDialog({ folder, onClose, onConfirm }: ConfirmDelet
       bodyStyle={{ gridTemplateColumns: '1fr', gap: 12 }}
     >
       <p className="ff-confirm__message">{describeContents(folder)}</p>
-      <p className="ff-confirm__hint">This action cannot be undone.</p>
+      <p className="ff-confirm__hint">You can undo this from the toast right after.</p>
       {error && <div className="ff-status" data-kind="error" role="alert">{error}</div>}
       <div className="ff-dialog__actions">
         <button type="button" className="ff-btn ff-btn--ghost" onClick={onClose} disabled={working}>
