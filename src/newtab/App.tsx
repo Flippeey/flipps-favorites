@@ -319,14 +319,14 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   }, [settings.openLinksInNewTab]);
 
   const handleWebSearch = useCallback((query: string) => {
-    webSearch(query)
+    webSearch(query, settings.openLinksInNewTab)
       .then(() => {
         pushToast({ kind: 'info', message: `Searching the web for "${query}"…` });
       })
       .catch(() => {
         pushToast({ kind: 'error', message: 'Couldn’t open web search.' });
       });
-  }, [pushToast]);
+  }, [pushToast, settings.openLinksInNewTab]);
 
   const openInNewTab = useCallback((item: BookmarkNode) => {
     if (!item.url) return;

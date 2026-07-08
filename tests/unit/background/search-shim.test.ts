@@ -15,11 +15,13 @@ import { performWebSearch } from '@/background/search-shim';
 // WHY THIS FILE EXISTS
 // ---------------------------------------------------------------------------
 // chrome.search.query and browser.search.search have DIFFERENT method names
-// and DIFFERENT param shapes (text+disposition vs. query). A typo in either
-// shape builds and typechecks fine (both message objects are plain literals)
-// but silently no-ops or throws at runtime in the real browser. This test
-// pins the exact per-target call shape via dependency injection so a
-// regression fails here instead of only in manual QA.
+// and DIFFERENT param shapes (text+disposition vs. query+disposition). A typo
+// in either shape builds and typechecks fine (both message objects are plain
+// literals) but silently no-ops or throws at runtime in the real browser.
+// This test pins the exact per-target call shape via dependency injection so
+// a regression fails here instead of only in manual QA. It also pins that
+// `disposition` tracks the caller-supplied openInNewTab flag (sourced from
+// the newtab-side openLinksInNewTab setting) rather than being hardcoded.
 // ---------------------------------------------------------------------------
 
 describe('performWebSearch() on Chrome', () => {
@@ -28,14 +30,24 @@ describe('performWebSearch() on Chrome', () => {
     vi.unstubAllGlobals();
   });
 
-  it('calls chrome.search.query with {text, disposition: NEW_TAB}', async () => {
+  it('calls chrome.search.query with {text, disposition: NEW_TAB} when openInNewTab is true', async () => {
     vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 Chrome/125.0' });
     const queryMock = vi.fn().mockResolvedValue(undefined);
 
-    await performWebSearch('cats', { chromeSearch: { query: queryMock } });
+    await performWebSearch('cats', true, { chromeSearch: { query: queryMock } });
 
     expect(queryMock).toHaveBeenCalledOnce();
     expect(queryMock).toHaveBeenCalledWith({ text: 'cats', disposition: 'NEW_TAB' });
+  });
+
+  it('calls chrome.search.query with {text, disposition: CURRENT_TAB} when openInNewTab is false', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 Chrome/125.0' });
+    const queryMock = vi.fn().mockResolvedValue(undefined);
+
+    await performWebSearch('cats', false, { chromeSearch: { query: queryMock } });
+
+    expect(queryMock).toHaveBeenCalledOnce();
+    expect(queryMock).toHaveBeenCalledWith({ text: 'cats', disposition: 'CURRENT_TAB' });
   });
 
   it('does not call a Firefox-shaped search API on Chrome', async () => {
@@ -43,7 +55,7 @@ describe('performWebSearch() on Chrome', () => {
     const queryMock = vi.fn().mockResolvedValue(undefined);
     const searchMock = vi.fn().mockResolvedValue(undefined);
 
-    await performWebSearch('cats', { chromeSearch: { query: queryMock }, firefoxSearch: { search: searchMock } });
+    await performWebSearch('cats', true, { chromeSearch: { query: queryMock }, firefoxSearch: { search: searchMock } });
 
     expect(searchMock).not.toHaveBeenCalled();
   });
@@ -54,7 +66,7 @@ describe('performWebSearch() on Chrome', () => {
     const queryMock = vi.fn().mockRejectedValue(error);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    await expect(performWebSearch('cats', { chromeSearch: { query: queryMock } })).rejects.toThrow('quota exceeded');
+    await expect(performWebSearch('cats', true, { chromeSearch: { query: queryMock } })).rejects.toThrow('quota exceeded');
     expect(errorSpy).toHaveBeenCalled();
   });
 
@@ -63,7 +75,7 @@ describe('performWebSearch() on Chrome', () => {
     vi.stubGlobal('chrome', undefined);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    await expect(performWebSearch('cats')).rejects.toThrow();
+    await expect(performWebSearch('cats', true)).rejects.toThrow();
     expect(errorSpy).toHaveBeenCalled();
   });
 });
@@ -74,16 +86,28 @@ describe('performWebSearch() on Firefox', () => {
     vi.unstubAllGlobals();
   });
 
-  it('calls browser.search.search with {query}', async () => {
+  it('calls browser.search.search with {query, disposition: NEW_TAB} when openInNewTab is true', async () => {
     vi.stubGlobal('navigator', {
       userAgent: 'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0',
     });
     const searchMock = vi.fn().mockResolvedValue(undefined);
 
-    await performWebSearch('dogs', { firefoxSearch: { search: searchMock } });
+    await performWebSearch('dogs', true, { firefoxSearch: { search: searchMock } });
 
     expect(searchMock).toHaveBeenCalledOnce();
-    expect(searchMock).toHaveBeenCalledWith({ query: 'dogs' });
+    expect(searchMock).toHaveBeenCalledWith({ query: 'dogs', disposition: 'NEW_TAB' });
+  });
+
+  it('calls browser.search.search with {query, disposition: CURRENT_TAB} when openInNewTab is false', async () => {
+    vi.stubGlobal('navigator', {
+      userAgent: 'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0',
+    });
+    const searchMock = vi.fn().mockResolvedValue(undefined);
+
+    await performWebSearch('dogs', false, { firefoxSearch: { search: searchMock } });
+
+    expect(searchMock).toHaveBeenCalledOnce();
+    expect(searchMock).toHaveBeenCalledWith({ query: 'dogs', disposition: 'CURRENT_TAB' });
   });
 
   it('does not call a Chrome-shaped search API on Firefox', async () => {
@@ -93,7 +117,7 @@ describe('performWebSearch() on Firefox', () => {
     const queryMock = vi.fn().mockResolvedValue(undefined);
     const searchMock = vi.fn().mockResolvedValue(undefined);
 
-    await performWebSearch('dogs', { chromeSearch: { query: queryMock }, firefoxSearch: { search: searchMock } });
+    await performWebSearch('dogs', true, { chromeSearch: { query: queryMock }, firefoxSearch: { search: searchMock } });
 
     expect(queryMock).not.toHaveBeenCalled();
   });
@@ -106,7 +130,7 @@ describe('performWebSearch() on Firefox', () => {
     const searchMock = vi.fn().mockRejectedValue(error);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    await expect(performWebSearch('dogs', { firefoxSearch: { search: searchMock } })).rejects.toThrow('engine not found');
+    await expect(performWebSearch('dogs', true, { firefoxSearch: { search: searchMock } })).rejects.toThrow('engine not found');
     expect(errorSpy).toHaveBeenCalled();
   });
 
@@ -117,7 +141,7 @@ describe('performWebSearch() on Firefox', () => {
     vi.stubGlobal('browser', undefined);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    await expect(performWebSearch('dogs')).rejects.toThrow();
+    await expect(performWebSearch('dogs', true)).rejects.toThrow();
     expect(errorSpy).toHaveBeenCalled();
   });
 });

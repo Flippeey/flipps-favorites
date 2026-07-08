@@ -173,7 +173,7 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
       return { ok: true } satisfies OpenTabResponse;
     }
     case messageTypes.webSearch: {
-      await performWebSearch(message.query);
+      await performWebSearch(message.query, message.openInNewTab);
       return { ok: true } satisfies WebSearchResponse;
     }
     default:

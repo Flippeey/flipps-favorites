@@ -262,6 +262,7 @@ export interface OpenTabResponse {
 export interface WebSearchRequest {
   type: typeof messageTypes.webSearch;
   query: string;
+  openInNewTab: boolean;
 }
 
 export interface WebSearchResponse {
