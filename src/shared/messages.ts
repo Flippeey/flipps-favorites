@@ -21,6 +21,7 @@ export const messageTypes = {
   patchWorkspace: 'workspaces/patch',
   deleteWorkspace: 'workspaces/delete',
   openTab: 'tabs/open',
+  webSearch: 'search/web-query',
 } as const;
 
 // Domain models + unions now live in models.ts. Re-export so existing
@@ -258,6 +259,15 @@ export interface OpenTabResponse {
   ok: true;
 }
 
+export interface WebSearchRequest {
+  type: typeof messageTypes.webSearch;
+  query: string;
+}
+
+export interface WebSearchResponse {
+  ok: true;
+}
+
 export type AppRequest =
   | PingRequest
   | GetSettingsRequest
@@ -280,7 +290,8 @@ export type AppRequest =
   | CreateWorkspaceRequest
   | PatchWorkspaceRequest
   | DeleteWorkspaceRequest
-  | OpenTabRequest;
+  | OpenTabRequest
+  | WebSearchRequest;
 
 export type AppResponse =
   | PingResponse
@@ -304,4 +315,5 @@ export type AppResponse =
   | CreateWorkspaceResponse
   | PatchWorkspaceResponse
   | DeleteWorkspaceResponse
-  | OpenTabResponse;
+  | OpenTabResponse
+  | WebSearchResponse;

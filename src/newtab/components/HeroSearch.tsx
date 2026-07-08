@@ -2,6 +2,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { BookmarkNode, ClockHourFormat, TileShape, WorkspaceRecord } from '@/shared/messages';
 import { IS_MAC } from '../lib/platform';
+import { classifyHeroInput } from '../lib/url';
 import { Favicon } from './Favicon';
 import { Ico } from './Ico';
 
@@ -64,6 +65,8 @@ interface HeroSearchProps {
   activeWorkspaceId?: string;
   onPickBookmark: (item: FlatSearchResult) => void;
   onPickFolder: (item: FlatSearchResult) => void;
+  onOpenUrl: (url: string) => void;
+  onWebSearch: (query: string) => void;
   overlayMode?: boolean;
 }
 
@@ -177,7 +180,7 @@ function scoreResult(result: FlatSearchResult, query: string, usage: Record<stri
   return score;
 }
 
-export function HeroSearch({ shape, index, usage, activeWorkspaceId, onPickBookmark, onPickFolder, overlayMode }: HeroSearchProps) {
+export function HeroSearch({ shape, index, usage, activeWorkspaceId, onPickBookmark, onPickFolder, onOpenUrl, onWebSearch, overlayMode }: HeroSearchProps) {
   const [value, setValue] = useState('');
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -253,6 +256,15 @@ export function HeroSearch({ shape, index, usage, activeWorkspaceId, onPickBookm
     rowRefs.current[activeIndex]?.scrollIntoView({ block: 'nearest' });
   }, [activeIndex]);
 
+  // Zero-match fallback: classify the raw input as an explicit URL to open or
+  // a search query to run. Only ever computed (and rendered) when there are
+  // no bookmark matches and the trimmed input is non-empty — a whitespace-only
+  // query must show no fallback row and never fire a web search.
+  const fallback = useMemo(() => {
+    if (visible.length > 0 || value.trim().length === 0) return null;
+    return classifyHeroInput(value);
+  }, [visible.length, value]);
+
   const openAt = (i: number) => {
     const r = visible[i];
     if (!r) return;
@@ -262,9 +274,22 @@ export function HeroSearch({ shape, index, usage, activeWorkspaceId, onPickBookm
     else onPickBookmark(r);
   };
 
+  const openFallback = () => {
+    if (!fallback) return;
+    setValue('');
+    if (overlayMode) setOverlayOpen(false);
+    if (fallback.kind === 'url') {
+      onOpenUrl(fallback.url);
+    } else {
+      const q = fallback.query.trim();
+      if (q.length > 0) onWebSearch(q);
+    }
+  };
+
   const onInputKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (visible.length === 0) return;
-    const last = visible.length - 1;
+    const rowCount = visible.length > 0 ? visible.length : (fallback ? 1 : 0);
+    if (rowCount === 0) return;
+    const last = rowCount - 1;
     if (e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
       e.preventDefault();
       setActiveIndex(i => (i >= last ? 0 : i + 1));
@@ -273,7 +298,8 @@ export function HeroSearch({ shape, index, usage, activeWorkspaceId, onPickBookm
       setActiveIndex(i => (i <= 0 ? last : i - 1));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      openAt(activeIndex);
+      if (visible.length > 0) openAt(activeIndex);
+      else openFallback();
     }
   };
 
@@ -293,7 +319,7 @@ export function HeroSearch({ shape, index, usage, activeWorkspaceId, onPickBookm
           aria-label="Search bookmarks"
           aria-autocomplete="list"
           aria-controls="ff-search-results"
-          aria-activedescendant={visible.length > 0 ? `ff-search-opt-${activeIndex}` : undefined}
+          aria-activedescendant={(visible.length > 0 || fallback) ? `ff-search-opt-${activeIndex}` : undefined}
           spellCheck={false}
           autoComplete="off"
         />
@@ -321,7 +347,37 @@ export function HeroSearch({ shape, index, usage, activeWorkspaceId, onPickBookm
           style={{ overflowY: 'auto' }}
           role="listbox"
         >
-          {visible.length === 0 && (
+          {visible.length === 0 && fallback && (
+            <div
+              ref={el => { rowRefs.current[0] = el; }}
+              id="ff-search-opt-0"
+              className="ff-search-fallback"
+              data-active={activeIndex === 0}
+              data-fallback-kind={fallback.kind}
+              role="option"
+              aria-selected={activeIndex === 0}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '8px 12px', cursor: 'pointer',
+                background: activeIndex === 0 ? 'var(--accent-soft)' : undefined,
+              }}
+              onMouseEnter={() => setActiveIndex(0)}
+              onMouseDown={() => openFallback()}
+            >
+              <div style={{
+                width: 28, height: 28, borderRadius: 6,
+                background: 'color-mix(in oklab, var(--accent) 12%, var(--ink-2))',
+                display: 'grid', placeItems: 'center', color: 'var(--accent)',
+                flex: '0 0 28px',
+              }}>
+                <Ico name={fallback.kind === 'url' ? 'externalLink' : 'search'} size={16} />
+              </div>
+              <span className="ff-results__title">
+                {fallback.kind === 'url' ? `Open ${fallback.url}` : `Search the web for "${fallback.query.trim()}"`}
+              </span>
+            </div>
+          )}
+          {visible.length === 0 && !fallback && (
             <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--fg-3)', fontSize: 13 }}>
               No matches.
             </div>
