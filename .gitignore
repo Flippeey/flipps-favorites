@@ -4,6 +4,9 @@ node_modules/
 releases/
 docs/*
 
+# gem-team agent config — personal process tooling, canonical copy lives in claude-setup
+.gem-team.yaml
+
 # Claude Code (config, agents, runtime data)
 # Ignore .claude/ contents by default; selectively track shared docs + safe settings.
 # NOTE: must be `.claude/*` (not `.claude/`) — a dir/ ignore can't be undone by `!` negation.
