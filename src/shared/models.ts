@@ -144,6 +144,18 @@ export interface IconOverrideRecord {
   updatedAt: number;
 }
 
+// Opt-in custom icon for a folder. Independent of the bookmark icon-override
+// system (icon-scope.ts) — folders have no URL to scope by, so this is keyed
+// directly by the folder's bookmark id. Absent = default rendering (favicon
+// collage in grid, folder glyph in list) — zero-diff for existing users.
+export interface FolderIconOverrideRecord {
+  folderId: string;
+  dataUrl: string;
+  fileName?: string;
+  mimeType: string;
+  updatedAt: number;
+}
+
 export interface IconSearchCandidate {
   imageUrl: string;
   previewUrl: string;

@@ -33,7 +33,7 @@ const PIPELINE_VERSION = 'bookmark-icons-v9';
 
 /** IDB database and store names from src/shared/icon-idb.ts. */
 const IDB_NAME = 'ff-icons';
-const IDB_VERSION = 3;
+const IDB_VERSION = 4;
 const IDB_STORE = 'cache';
 
 interface TestBookmark {

@@ -150,6 +150,25 @@
   border-radius: inherit;
 }
 
+/* Custom folder icon (opt-in, issue #44): image fills the tile, count badge preserved. */
+.ff-folder-tile--custom-icon {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+}
+.ff-folder-tile__custom-image {
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+}
+
+/* Custom folder icon in list/section-header view: replaces the folder glyph. */
+.ff-section__icon-image {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
+}
+
 /* Sections view (inline folder rows on the root surface) */
 .ff-sections {
   display: flex; flex-direction: column; gap: var(--s-10);

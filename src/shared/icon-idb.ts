@@ -1,13 +1,22 @@
-import type { IconCacheRecord, IconOverrideRecord } from './messages';
+import type { FolderIconOverrideRecord, IconCacheRecord, IconOverrideRecord } from './messages';
 import { getOverrideKeyForScope } from './icon-scope';
 
 const DB_NAME = 'ff-icons';
 // v2: overrides store re-keyed from bookmarkUrl to overrideKey so scoped
 // (host/domain) records can coexist with exact-URL ones.
 // v3: (historical) added optional `fit` field — now removed; ignored on read.
-const DB_VERSION = 3;
+// v4: added folder-icons store (additive — existing stores are untouched, no
+// record migration needed).
+const DB_VERSION = 4;
 const STORE_CACHE = 'cache';
 const STORE_OVERRIDES = 'overrides';
+const STORE_FOLDER_ICONS = 'folder-icons';
+
+// Out-of-line key for the folder-icons store — the store has no keyPath, so
+// callers pass this derived key explicitly to idbGet/idbPut/idbDelete.
+function getFolderIconKey(folderId: string): string {
+  return `folder:${folderId}`;
+}
 
 let _db: IDBDatabase | null = null;
 
@@ -20,6 +29,10 @@ function getDB(): Promise<IDBDatabase> {
       const oldVersion = event.oldVersion;
       if (!db.objectStoreNames.contains(STORE_CACHE)) {
         db.createObjectStore(STORE_CACHE, { keyPath: 'cacheKey' });
+      }
+      if (!db.objectStoreNames.contains(STORE_FOLDER_ICONS)) {
+        // Out-of-line keys (no keyPath): keys are derived via getFolderIconKey.
+        db.createObjectStore(STORE_FOLDER_ICONS);
       }
       if (!db.objectStoreNames.contains(STORE_OVERRIDES)) {
         db.createObjectStore(STORE_OVERRIDES, { keyPath: 'overrideKey' });
@@ -63,9 +76,9 @@ function idbGet<T>(storeName: string, key: string): Promise<T | undefined> {
   }));
 }
 
-function idbPut<T>(storeName: string, value: T): Promise<void> {
+function idbPut<T>(storeName: string, value: T, key?: IDBValidKey): Promise<void> {
   return getDB().then(db => new Promise((resolve, reject) => {
-    const req = db.transaction(storeName, 'readwrite').objectStore(storeName).put(value);
+    const req = db.transaction(storeName, 'readwrite').objectStore(storeName).put(value, key);
     req.onsuccess = () => resolve();
     req.onerror = () => reject(req.error);
   }));
@@ -148,4 +161,21 @@ export async function clearIconOverrides(): Promise<void> {
 export async function readAllIconOverrides(): Promise<Record<string, IconOverrideRecord>> {
   const all = await idbGetAll<IconOverrideRecord>(STORE_OVERRIDES);
   return Object.fromEntries(all.map(r => [r.overrideKey, r]));
+}
+
+export async function readFolderIconRecord(folderId: string): Promise<FolderIconOverrideRecord | null> {
+  return (await idbGet<FolderIconOverrideRecord>(STORE_FOLDER_ICONS, getFolderIconKey(folderId))) ?? null;
+}
+
+export async function writeFolderIconRecord(record: FolderIconOverrideRecord): Promise<void> {
+  await idbPut(STORE_FOLDER_ICONS, record, getFolderIconKey(record.folderId));
+}
+
+export async function deleteFolderIconRecord(folderId: string): Promise<void> {
+  await idbDelete(STORE_FOLDER_ICONS, getFolderIconKey(folderId));
+}
+
+export async function readAllFolderIconRecords(): Promise<Record<string, FolderIconOverrideRecord>> {
+  const all = await idbGetAll<FolderIconOverrideRecord>(STORE_FOLDER_ICONS);
+  return Object.fromEntries(all.map(r => [r.folderId, r]));
 }

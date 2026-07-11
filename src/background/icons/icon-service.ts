@@ -1,6 +1,6 @@
-import type { GetIconRequest, IconCacheRecord, IconSearchCandidate, ResolvedIcon, SetIconOverrideRequest, IconOverrideRecord } from '@/shared/messages';
+import type { FolderIconOverrideRecord, GetIconRequest, IconCacheRecord, IconSearchCandidate, ResolvedIcon, SetIconOverrideRequest, IconOverrideRecord } from '@/shared/messages';
 import { extensionApi } from '@/shared/browser';
-import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRecordsForUrl, readIconCacheRecord, readIconCacheRecords, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideRecord } from '@/shared/storage';
+import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRecordsForUrl, readIconCacheRecord, readIconCacheRecords, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideRecord, deleteFolderIconOverride, readAllFolderIconOverrides, writeFolderIconOverride } from '@/shared/storage';
 import { evictExpiredCachedIcons } from '@/shared/icon-idb';
 import { getOverrideKeyForScope, normalizeOverrideScope, type IconOverrideScope } from '@/shared/icon-scope';
 import { iconPipelineVersion, maxDuckDuckGoResults, autoSourceTimeoutMs, sweepBatchSize, sweepBatchSpacingMs, maxConcurrentResolutions, getIconCacheKey } from './icon-constants';
@@ -10,9 +10,12 @@ import { createGeneratedRecord, toResolvedIcon } from './icon-image';
 import { dedupeIconCandidates, getDomainCandidates, buildSearchQueryFromBookmark } from './icon-classify';
 import { isDataUrl, normalizeDataUrl } from './icon-parse';
 import { extractBrandInfo } from '@/shared/url-brand';
+import { collectAllFolderIds, computeOrphanFolderIconIds } from './folder-icon-sweep';
+import type { BookmarkNode } from '@/shared/messages';
 import {
   fetchS2Favicon, fetchOriginScrape, fetchIconHorse, fetchDuckDuckGoFirstHit,
   searchDuckDuckGoImages, gatherAuthoritativeCandidates, downloadAndPersistOverride,
+  downloadAndPersistFolderIcon,
 } from './icon-providers';
 
 const inFlightIcons = new Map<string, Promise<ResolvedIcon>>();
@@ -115,6 +118,56 @@ export async function removeIconOverride(bookmarkUrl: string, bookmarkTitle?: st
   await deleteIconOverrideRecordsForUrl(bookmarkUrl);
   await deleteIconCacheRecord(cacheKey);
   return getIcon({ type: 'icons/get', bookmarkUrl, bookmarkTitle });
+}
+
+export async function setFolderIcon(folderId: string, dataUrl: string, mimeType: string, fileName?: string): Promise<FolderIconOverrideRecord> {
+  const normalizedDataUrl = normalizeDataUrl(dataUrl, mimeType);
+  const record: FolderIconOverrideRecord = {
+    folderId,
+    dataUrl: normalizedDataUrl,
+    fileName,
+    mimeType,
+    updatedAt: Date.now(),
+  };
+  await writeFolderIconOverride(record);
+  return record;
+}
+
+export async function setFolderIconFromUrl(
+  folderId: string,
+  imageUrl: string,
+  fileName?: string,
+  fallbackImageUrl?: string,
+): Promise<FolderIconOverrideRecord> {
+  try {
+    return await downloadAndPersistFolderIcon(folderId, imageUrl, fileName);
+  } catch (primaryError) {
+    if (!fallbackImageUrl || fallbackImageUrl === imageUrl) {
+      throw primaryError;
+    }
+    try {
+      return await downloadAndPersistFolderIcon(folderId, fallbackImageUrl, fileName);
+    } catch {
+      throw primaryError;
+    }
+  }
+}
+
+export async function removeFolderIcon(folderId: string): Promise<void> {
+  await deleteFolderIconOverride(folderId);
+}
+
+// Startup sweep: removes folder-icon records whose folder no longer exists in
+// the live bookmark tree (deleted via a path that predates this feature's
+// cleanup call sites, or deleted from another sync peer). Mirrors
+// sweepGeneratedRecords' best-effort, non-fatal style.
+export async function sweepFolderIcons(tree: BookmarkNode[]): Promise<void> {
+  const records = await readAllFolderIconOverrides().catch(() => ({}));
+  const storedFolderIds = Object.keys(records);
+  if (!storedFolderIds.length) return;
+  const liveFolderIds = collectAllFolderIds(tree);
+  const orphanIds = computeOrphanFolderIconIds(storedFolderIds, liveFolderIds);
+  await Promise.all(orphanIds.map(id => deleteFolderIconOverride(id).catch(() => { /* non-fatal */ })));
 }
 
 export async function invalidateIcon(bookmarkUrl?: string): Promise<void> {

@@ -23,14 +23,14 @@ import { useWorkspaceShortcut } from './interaction/useWorkspaceShortcut';
 import { useKeyboardNav, useDeleteShortcut } from './interaction/useKeyboardNav';
 import { useQuickAddShortcuts } from './interaction/useQuickAddShortcuts';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
-import { createBookmark, getBookmarkTree, getBookmarkUsage, getWorkspaces, moveBookmark, openTab, patchSettings, recordBookmarkUse, removeBookmark, webSearch } from './lib/messaging';
+import { createBookmark, getBookmarkTree, getBookmarkUsage, getWorkspaces, moveBookmark, openTab, patchSettings, recordBookmarkUse, removeBookmark, removeFolderIcon, webSearch } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
 import { useScrollCollapsed } from './lib/useScrollCollapsed';
 import { normalizeBookmarkUrl } from './lib/url';
 import { resolveDockMode } from './lib/dock-mode';
 import { effectiveViewSort } from './lib/effective-view-sort';
 import { prefetchAllIcons } from './lib/icon-prefetch';
-import { findFolder, findNode, findParentFolder, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
+import { collectFolderIds, findFolder, findNode, findParentFolder, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 import { captureDeleteSnapshots, captureSubtree, restoreDeleteSnapshots, restoreSubtree } from './lib/subtree-snapshot';
 import { captureMoveSnapshots, moveIdsTracked, restoreMoveSnapshots } from './lib/move-snapshot';
 import { MAX_WORKSPACES, OPEN_ALL_TABS_CONFIRM_THRESHOLD } from '../shared/constants';
@@ -405,6 +405,16 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
 
   const handleRenameFolder = useCallback((folder: BookmarkNode) => {
     setFolderNameTarget({ mode: 'rename', id: folder.id, title: folder.title });
+  }, []);
+
+  // Best-effort cleanup for the folder-icons IDB store (issue #44): removeBookmark
+  // only deletes the browser bookmark subtree, not our separate custom-icon
+  // records, so every deleted folder (plus any deleted descendant folders) needs
+  // its icon record removed explicitly or it leaks forever. Fire-and-forget —
+  // a failed cleanup call is caught by the startup orphan sweep as a backstop.
+  const cleanupFolderIcons = useCallback(async (folder: BookmarkNode): Promise<void> => {
+    const folderIds = collectFolderIds(folder);
+    await Promise.all(Array.from(folderIds).map(id => removeFolderIcon(id).catch(() => { /* swept later */ })));
   }, []);
 
   const handleEditBookmark = useCallback((item: BookmarkNode) => {
@@ -973,6 +983,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             const index = parent?.children?.findIndex(c => c.id === folder.id) ?? -1;
             const subtree = captureSubtree(folder);
             await removeBookmark(folder.id, true);
+            void cleanupFolderIcons(folder);
             setConfirmDeleteFolder(null);
             await refreshTree();
             pushToast({
@@ -1010,6 +1021,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             for (const id of ids) {
               const node = findNode(tree, id);
               await removeBookmark(id, node ? isFolder(node) : undefined);
+              if (node && isFolder(node)) void cleanupFolderIcons(node);
             }
             setConfirmDeleteBatch(null);
             setSelection({ ids: new Set(), scopeFolderId: '' });

@@ -1,8 +1,43 @@
-import type { MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import type { BookmarkNode, TileShape } from '@/shared/messages';
 import { isFolder } from '../lib/tree';
+import { fetchFolderIcon, folderIconCache, subscribeFolderIconCache } from '../lib/folder-icon-cache';
 import { Favicon } from './Favicon';
 import { Ico } from './Ico';
+
+// Opt-in per-folder custom icon (issue #44). Returns null (default rendering:
+// favicon collage in grid, folder glyph in list) unless the user has set one.
+function useFolderCustomIcon(folderId: string): string | null {
+  const [src, setSrc] = useState<string | null>(() => folderIconCache.get(folderId) ?? null);
+  // Bump on invalidation to force the fetch effect below to re-run even when
+  // folderId hasn't changed — mirrors Favicon.tsx's cache-invalidation pattern.
+  // (invalidateFolderIconCache deletes the cache entry rather than repopulating
+  // it, so a subscriber must re-fetch, not just re-read the now-empty cache.)
+  const [version, setVersion] = useState(0);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  useEffect(() => subscribeFolderIconCache(folderId, () => {
+    if (mounted.current) setVersion(v => v + 1);
+  }), [folderId]);
+
+  useEffect(() => {
+    const cached = folderIconCache.get(folderId);
+    if (folderIconCache.has(folderId)) {
+      setSrc(cached ?? null);
+      return;
+    }
+    fetchFolderIcon(folderId)
+      .then(value => { if (mounted.current) setSrc(value); })
+      .catch(() => { if (mounted.current) setSrc(null); });
+  }, [folderId, version]);
+
+  return src;
+}
 
 interface BookmarkTileProps {
   item: BookmarkNode;
@@ -52,6 +87,7 @@ interface FolderTileProps {
 export function FolderTile({ folder, shape, selected = false, focused = false, onClick, onContextMenu }: FolderTileProps) {
   const items: (BookmarkNode | null)[] = (folder.children ?? []).slice(0, 4);
   while (items.length < 4) items.push(null);
+  const customIcon = useFolderCustomIcon(folder.id);
   return (
     <button
       className="ff-tile"
@@ -64,23 +100,30 @@ export function FolderTile({ folder, shape, selected = false, focused = false, o
       title={folder.title}
     >
       <div className="ff-tile__icon">
-        <div className="ff-folder-tile">
-          {items.map((it, i) => (
-            <div key={i} className="ff-folder-tile__mini">
-              {it == null && <div className="ff-folder-tile__empty" />}
-              {it && !isFolder(it) && <Favicon url={it.url} title={it.title} shape="rounded" />}
-              {it && isFolder(it) && (
-                <div className="ff-folder-tile__sub">
-                  <svg viewBox="0 0 24 24" width="60%" height="60%" fill="none" stroke="currentColor"
-                       strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
-                  </svg>
-                </div>
-              )}
-            </div>
-          ))}
-          <span className="ff-folder-tile__count">{folder.children?.length ?? 0}</span>
-        </div>
+        {customIcon ? (
+          <div className="ff-folder-tile ff-folder-tile--custom-icon">
+            <img src={customIcon} alt="" draggable={false} className="ff-folder-tile__custom-image" />
+            <span className="ff-folder-tile__count">{folder.children?.length ?? 0}</span>
+          </div>
+        ) : (
+          <div className="ff-folder-tile">
+            {items.map((it, i) => (
+              <div key={i} className="ff-folder-tile__mini">
+                {it == null && <div className="ff-folder-tile__empty" />}
+                {it && !isFolder(it) && <Favicon url={it.url} title={it.title} shape="rounded" />}
+                {it && isFolder(it) && (
+                  <div className="ff-folder-tile__sub">
+                    <svg viewBox="0 0 24 24" width="60%" height="60%" fill="none" stroke="currentColor"
+                         strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+            ))}
+            <span className="ff-folder-tile__count">{folder.children?.length ?? 0}</span>
+          </div>
+        )}
       </div>
       <div className="ff-tile__label">{folder.title}</div>
     </button>
@@ -130,6 +173,7 @@ interface SectionHeaderProps {
 
 export function SectionHeader({ folder, rootFolderId, dragEnabled, onMenu }: SectionHeaderProps) {
   const count = folder.children?.length ?? 0;
+  const customIcon = useFolderCustomIcon(folder.id);
   const dragAttrs = dragEnabled && rootFolderId ? {
     'data-item-id': folder.id,
     'data-item-kind': 'section' as const,
@@ -138,7 +182,11 @@ export function SectionHeader({ folder, rootFolderId, dragEnabled, onMenu }: Sec
   return (
     <header className="ff-section__header" {...dragAttrs}>
       <div className="ff-section__icon-folder">
-        <Ico name="folder" size={16} />
+        {customIcon ? (
+          <img src={customIcon} alt="" draggable={false} className="ff-section__icon-image" />
+        ) : (
+          <Ico name="folder" size={16} />
+        )}
       </div>
       <h3 className="ff-section__title">{folder.title}</h3>
       <span className="ff-section__count" aria-label={`${count} ${count === 1 ? 'item' : 'items'}`}>

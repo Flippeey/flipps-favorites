@@ -15,6 +15,10 @@ vi.mock('@/shared/icon-idb', () => ({
   readIconOverride: async () => null,
   writeIconOverride: async () => undefined,
   writeCachedIcon: async () => undefined,
+  readAllFolderIconRecords: async () => ({}),
+  readFolderIconRecord: async () => null,
+  writeFolderIconRecord: async () => undefined,
+  deleteFolderIconRecord: async () => undefined,
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -261,15 +265,16 @@ describe('parseWorkspaceFile — forward-compat guard', () => {
     await expect(transfer.parseWorkspaceFile(file)).rejects.toThrow(/newer/i);
   });
 
-  it('rejects a concrete future v4 backup', async () => {
+  it('rejects a concrete future v5 backup', async () => {
     const transfer = await importTransfer();
     const file = makeFile({
       schema: WORKSPACE_SCHEMA,
-      schemaVersion: 4,
+      schemaVersion: 5,
       settings: {},
       workspaces: [baseRecordBody('a')],
       workspaceWallpapers: {},
       iconOverrides: [],
+      folderIcons: [],
       bookmarkUsage: [],
     });
 
@@ -448,8 +453,8 @@ describe('parseWorkspaceFile — oversized data URL caps', () => {
   });
 });
 
-describe('buildWorkspaceExport — schema v3', () => {
-  it('emits schemaVersion 3 and per-record view/sort fields', async () => {
+describe('buildWorkspaceExport — schema v4', () => {
+  it('emits schemaVersion 4 and per-record view/sort fields', async () => {
     // Seed using the per-key layout (workspace:<id>) — the storage refactor
     // stores each workspace record under its own sync key.
     installChromeFake({
@@ -463,10 +468,121 @@ describe('buildWorkspaceExport — schema v3', () => {
 
     const payload = await transfer.buildWorkspaceExport();
 
-    expect(payload.schemaVersion).toBe(3);
+    expect(payload.schemaVersion).toBe(4);
     const exported = payload.workspaces.find((w: WorkspaceRecord) => w.id === 'a');
     expect(exported?.folderMode).toBe('list');
     expect(exported?.bookmarkSortMode).toBe('name');
     expect(exported?.bookmarkSortDirection).toBe('desc');
+  });
+});
+
+// Folder custom icons (issue #44) round-trip through export/import, and a v3-
+// and-earlier backup (predating the feature) upcasts to an empty list rather
+// than failing to parse.
+describe('folder icon export/import round-trip', () => {
+  it('a v3 (pre-feature) backup with no folderIcons key upcasts to an empty list', async () => {
+    const transfer = await importTransfer();
+    const file = makeFile({
+      schema: WORKSPACE_SCHEMA,
+      schemaVersion: 3,
+      settings: {},
+      workspaces: [],
+      workspaceWallpapers: {},
+      iconOverrides: [],
+      bookmarkUsage: [],
+      // no folderIcons field at all
+    });
+
+    const result = await transfer.parseWorkspaceFile(file);
+
+    expect(result.folderIcons).toEqual([]);
+  });
+
+  it('valid folder icon entries pass through parseWorkspaceFile unchanged', async () => {
+    const transfer = await importTransfer();
+    const file = makeFile({
+      schema: WORKSPACE_SCHEMA,
+      schemaVersion: 4,
+      settings: {},
+      workspaces: [],
+      workspaceWallpapers: {},
+      iconOverrides: [],
+      folderIcons: [
+        { folderId: 'f1', dataUrl: 'data:image/png;base64,AAAA', fileName: 'icon.png', mimeType: 'image/png', updatedAt: 5 },
+      ],
+      bookmarkUsage: [],
+    });
+
+    const result = await transfer.parseWorkspaceFile(file);
+
+    expect(result.folderIcons).toHaveLength(1);
+    expect(result.folderIcons[0].folderId).toBe('f1');
+    expect(result.folderIcons[0].dataUrl).toBe('data:image/png;base64,AAAA');
+  });
+
+  it('skips a folder icon whose data URL exceeds the size cap and reports it', async () => {
+    const transfer = await importTransfer();
+    const oversized = 'data:image/png;base64,' + 'A'.repeat(6 * 1024 * 1024);
+    const file = makeFile({
+      schema: WORKSPACE_SCHEMA,
+      schemaVersion: 4,
+      settings: {},
+      workspaces: [],
+      workspaceWallpapers: {},
+      iconOverrides: [],
+      folderIcons: [
+        { folderId: 'big', dataUrl: oversized, mimeType: 'image/png', updatedAt: 1 },
+      ],
+      bookmarkUsage: [],
+    });
+
+    const result = await transfer.parseWorkspaceFile(file);
+
+    expect(result.folderIcons).toHaveLength(0);
+    expect(result.skipped.oversizedDataUrlCount).toBe(1);
+  });
+
+  it('applyWorkspaceImport dedupes folder icons by folderId, most recent wins', async () => {
+    installChromeFake({ localSeed: { 'workspaces-per-key-migrated': true } });
+    const transfer = await importTransfer();
+    const payload = {
+      schema: WORKSPACE_SCHEMA,
+      schemaVersion: transfer.WORKSPACE_SCHEMA_VERSION,
+      exportedAt: Date.now(),
+      settings: {},
+      workspaces: [],
+      workspaceWallpapers: {},
+      iconOverrides: [],
+      folderIcons: [
+        { folderId: 'f1', dataUrl: 'data:image/png;base64,OLD', mimeType: 'image/png', updatedAt: 1 },
+        { folderId: 'f1', dataUrl: 'data:image/png;base64,NEW', mimeType: 'image/png', updatedAt: 99 },
+      ],
+      bookmarkUsage: [],
+      skipped: { oversizedDataUrlCount: 0 },
+    } as unknown as Parameters<typeof transfer.applyWorkspaceImport>[0];
+
+    const summary = await transfer.applyWorkspaceImport(payload, 'merge');
+
+    expect(summary.folderIconCount).toBe(1);
+  });
+
+  it('a manually-built payload lacking the folderIcons field defaults to zero imported (no crash)', async () => {
+    installChromeFake({ localSeed: { 'workspaces-per-key-migrated': true } });
+    const transfer = await importTransfer();
+    const payload = {
+      schema: WORKSPACE_SCHEMA,
+      schemaVersion: transfer.WORKSPACE_SCHEMA_VERSION,
+      exportedAt: Date.now(),
+      settings: {},
+      workspaces: [],
+      workspaceWallpapers: {},
+      iconOverrides: [],
+      bookmarkUsage: [],
+      skipped: { oversizedDataUrlCount: 0 },
+    } as unknown as Parameters<typeof transfer.applyWorkspaceImport>[0];
+
+    const summary = await transfer.applyWorkspaceImport(payload, 'merge');
+
+    expect(summary.folderIconCount).toBe(0);
   });
 });

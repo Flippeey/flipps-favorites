@@ -21,9 +21,9 @@ import {
 } from '../lib/icon-helpers';
 import { buildBrandSearchQuery } from '@/shared/url-brand';
 import { invalidateFaviconCache, invalidateFaviconCacheForScope } from '../lib/favicon-cache';
-import { IS_FIREFOX } from '@/newtab/lib/platform';
 import { Ico } from './Ico';
 import { ModalDialog } from './ModalDialog';
+import { IconPickerPanel } from './IconPickerPanel';
 
 export interface EditTarget {
   id?: string;
@@ -37,15 +37,6 @@ interface EditDialogProps {
   tileShape?: TileShape;
   onClose: () => void;
   onSaved: (bookmark: BookmarkNode) => void;
-}
-
-function radiusForShape(shape: TileShape | undefined): string {
-  switch (shape) {
-    case 'circle':   return '50%';
-    case 'rounded':  return '16%';
-    case 'squircle':
-    default:         return '22%';
-  }
 }
 
 type StatusKind = 'info' | 'success' | 'error';
@@ -68,20 +59,6 @@ const ICON_SOURCE_LABELS: Record<IconSourceKind, string> = {
   search: 'Web search',
   generated: 'Placeholder',
 };
-
-function candidateSourceLabel(candidate: { sourceKind: 'favicon' | 'search'; sourcePageUrl?: string }): string {
-  if (candidate.sourceKind === 'favicon') return ICON_SOURCE_LABELS.favicon;
-  const base = ICON_SOURCE_LABELS.search;
-  if (candidate.sourcePageUrl) {
-    try {
-      const host = new URL(candidate.sourcePageUrl).hostname;
-      if (host) return `${base} · ${host}`;
-    } catch {
-      // malformed URL — fall through to base label
-    }
-  }
-  return base;
-}
 
 export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogProps) {
   const [title, setTitle] = useState(target.title);
@@ -332,106 +309,54 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
               <input className="ff-input" value={url} onChange={(e) => setUrl(e.target.value)} />
             </div>
 
-            <div className="ff-iconpreview" aria-label="Icon preview">
-              {previewSrc ? (
-                <div
+            <IconPickerPanel
+              section="preview"
+              tileShape={tileShape}
+              previewSrc={previewSrc}
+              fallbackLetter={title?.[0] ?? '?'}
+              canManage={canManageIcon}
+              onRefresh={handleRefreshIcon}
+              onRemove={handleRemoveOverride}
+              onUploadClick={handleUploadClick}
+              fileInputRef={fileInputRef}
+              onFileChange={handleFileChange}
+              hintText="Hover the preview for quick icon actions."
+              scopeControl={canManageIcon && scopeOptions.length > 1 ? (
+                <div className="ff-field">
+                  <label className="ff-field__label">Apply icon to</label>
+                  <div className="ff-segmented" role="radiogroup" aria-label="Icon override scope" style={{ alignSelf: 'stretch' }}>
+                    {scopeOptions.map(option => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className="ff-segmented__option"
+                        data-active={overrideScope === option.value}
+                        title={option.title}
+                        onClick={() => setOverrideScope(option.value)}
+                        style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : undefined}
+              sourceInfo={previewIcon ? (
+                <p
                   style={{
-                    width: '70%',
-                    height: '70%',
-                    borderRadius: radiusForShape(tileShape),
-                    overflow: 'hidden',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    margin: 0,
+                    fontSize: 11,
+                    color: 'var(--fg-3)',
+                    textAlign: 'center',
+                    letterSpacing: 0.2,
                   }}
+                  title={`Icon source: ${ICON_SOURCE_LABELS[previewIcon.sourceKind]}`}
                 >
-                  <img
-                    src={previewSrc}
-                    alt=""
-                    referrerPolicy="no-referrer"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                  />
-                </div>
-              ) : (
-                <span className="ff-iconpreview__fallback">
-                  {(title?.[0] ?? '?').toUpperCase()}
-                </span>
-              )}
-              {canManageIcon && (
-                <div className="ff-iconpreview__hover">
-                  <button type="button" onClick={handleRefreshIcon} aria-label="Refresh icon" title="Refresh icon">
-                    <Ico name="refresh" size={14} />
-                    <span>Refresh</span>
-                  </button>
-                  <button type="button" onClick={handleRemoveOverride} aria-label="Remove icon override" title="Remove icon override">
-                    <Ico name="trash" size={14} />
-                    <span>Remove</span>
-                  </button>
-                  <button type="button" onClick={handleUploadClick} aria-label="Upload icon" title="Upload icon" style={{ gridColumn: 'span 2' }}>
-                    <Ico name="upload" size={14} />
-                    <span>Upload</span>
-                  </button>
-                </div>
-              )}
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              style={{ display: 'none' }}
+                  Source: {ICON_SOURCE_LABELS[previewIcon.sourceKind]}
+                  {previewIcon.sourceKind === 'generated' && ' — try Search or Upload for a real icon.'}
+                </p>
+              ) : undefined}
             />
-
-            {canManageIcon && scopeOptions.length > 1 && (
-              <div className="ff-field">
-                <label className="ff-field__label">Apply icon to</label>
-                <div className="ff-segmented" role="radiogroup" aria-label="Icon override scope" style={{ alignSelf: 'stretch' }}>
-                  {scopeOptions.map(option => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className="ff-segmented__option"
-                      data-active={overrideScope === option.value}
-                      title={option.title}
-                      onClick={() => setOverrideScope(option.value)}
-                      style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {canManageIcon && (
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 11,
-                  color: 'var(--fg-3)',
-                  textAlign: 'center',
-                  letterSpacing: 0.2,
-                }}
-              >
-                Hover the preview for quick icon actions.
-              </p>
-            )}
-
-            {previewIcon && (
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 11,
-                  color: 'var(--fg-3)',
-                  textAlign: 'center',
-                  letterSpacing: 0.2,
-                }}
-                title={`Icon source: ${ICON_SOURCE_LABELS[previewIcon.sourceKind]}`}
-              >
-                Source: {ICON_SOURCE_LABELS[previewIcon.sourceKind]}
-                {previewIcon.sourceKind === 'generated' && ' — try Search or Upload for a real icon.'}
-              </p>
-            )}
 
             {status && (
               <div className="ff-status" data-kind={status.kind} role="status">
@@ -444,75 +369,20 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
             </button>
           </aside>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-                <h4 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 600 }}>
-                  Search icons
-                </h4>
-                {results.length > 0 && (
-                  <span style={{ fontSize: 12, color: 'var(--fg-3)', flexShrink: 0 }}>
-                    {results.length} candidate{results.length === 1 ? '' : 's'}
-                  </span>
-                )}
-              </div>
-              <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--fg-3)', lineHeight: 1.5 }}>
-                Search the web for icons and favicons. Click any result to apply instantly.
-              </p>
-            </div>
-
-            <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: 8 }}>
-              <input
-                className="ff-input"
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search for an icon"
-                style={{ flex: 1 }}
-                disabled={!canManageIcon}
-              />
-              <button className="ff-btn ff-btn--ghost" type="submit" disabled={!canManageIcon || searching || !query.trim()} title="Search for icons">
-                <Ico name="search" size={14} />
-                <span>Search</span>
-              </button>
-            </form>
-
-            {!canManageIcon ? (
-              <p style={{ fontSize: 12, color: 'var(--fg-3)', margin: 0 }}>
-                Save the bookmark first to manage its icon.
-              </p>
-            ) : searching ? (
-              <p style={{ fontSize: 12, color: 'var(--fg-3)', margin: 0 }}>Searching for icons…</p>
-            ) : results.length === 0 ? (
-              <p style={{ fontSize: 12, color: 'var(--fg-3)', margin: 0 }}>No results yet.</p>
-            ) : (
-              <div className="ff-icongrid" style={{ overflowY: 'auto' }}>
-                {results.map((candidate) => {
-                  const isValidated = validatedPreviews.has(candidate.imageUrl);
-                  return (
-                    <button
-                      key={candidate.imageUrl}
-                      type="button"
-                      className="ff-icongrid__cell"
-                      title={`${candidate.label} — ${candidateSourceLabel(candidate)} — double-click to apply and close`}
-                      onClick={() => handlePickCandidate(candidate)}
-                      onDoubleClick={() => { void handlePickCandidateAndClose(candidate); }}
-                      data-busy={working || undefined}
-                      style={{ display: isValidated ? undefined : 'none' }}
-                    >
-                      <img
-                        src={candidate.previewUrl}
-                        alt=""
-                        referrerPolicy={IS_FIREFOX ? 'origin' : 'no-referrer'}
-                        onLoad={(e) => handlePreviewLoad(candidate.imageUrl, e.currentTarget)}
-                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <IconPickerPanel
+            section="search"
+            canManage={canManageIcon}
+            query={query}
+            onQueryChange={setQuery}
+            onSearchSubmit={handleSearchSubmit}
+            searching={searching}
+            results={results}
+            validatedPreviews={validatedPreviews}
+            onPreviewLoad={handlePreviewLoad}
+            onPickCandidate={handlePickCandidate}
+            onPickCandidateAndClose={handlePickCandidateAndClose}
+            working={working}
+          />
     </ModalDialog>
   );
 }
