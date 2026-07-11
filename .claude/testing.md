@@ -33,6 +33,34 @@ Chrome Playwright specs load a **test build** to eliminate flake from `chrome.st
 - `tests/unit/state/*.test.ts` — `useSelection`, `useWorkspaceActions`, `useToasts`, `useContextMenuBuilder` (state hooks with side effects that need the full component tree)
 - `tests/unit/interaction/deferred-to-e2e.test.ts` — all 8 interaction hooks (`useDrag`, `useMarquee`, `useKeyboardNav`, etc.; require real DOM + event simulation)
 
+## Evidence specs
+
+UI-affecting PRs capture feature moments via evidence specs — **not** assertions-based tests, but
+screenshot-driven specs that prove the feature works. Reviewers see the evidence in a sticky PR
+comment without checking out the branch.
+
+**Rule:** UI-affecting PRs MUST add/update an evidence spec. Non-UI PRs (refactor, docs, config)
+skip evidence specs; CI skips gracefully.
+
+**Location & execution:**
+- Files: `tests/evidence/*.evidence.spec.ts` (separate `testDir`, excluded from all suites).
+- Runner: `playwright.evidence.config.ts` (chrome-only, workers:1, deterministic screenshot ordering).
+- Script: `npm run evidence` (builds `dist/chrome-test` + runs specs + writes PNGs to `tests/evidence/output/`).
+- Fixture: `capture(page, testInfo, label)` from `tests/evidence/evidence.ts` auto-derives naming
+  as `<spec-basename>--<label>.png`.
+- How-to & examples: `tests/evidence/README.md`, `tests/evidence/example-edit-dialog.evidence.spec.ts`.
+
+**Exclusion from other suites:** Evidence specs run **only** via `playwright.evidence.config.ts`.
+`npm test` / `test:chrome` / `test:firefox` use `playwright.config.ts` (testDir `tests/specs`).
+`test:unit` scans `tests/unit/**/*.test.ts`. `test:firefox:e2e` scans `tests/firefox-e2e/specs/**/*.test.ts`.
+Zero collision.
+
+**CI consumption:** `.github/workflows/pr-evidence.yml` on each PR (diff-based gate: runs only if
+a `*.evidence.spec.ts` file changed) builds, captures, and posts a sticky comment embedding
+screenshots from an orphan `pr-evidence` branch. No evidence spec changes → CI posts a graceful
+skip note (expected for non-UI work). No assertions, no failure gate — a missing screenshot
+just means the PR carries no evidence.
+
 ## Layout
 
 - `playwright.config.ts` — Chrome (all specs) + Firefox (icons-only) projects; global-setup verifies `dist/{chrome,firefox}` exist.
