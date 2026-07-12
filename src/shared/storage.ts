@@ -354,6 +354,13 @@ export async function writeWorkspaceWallpaper(workspaceId: string, dataUrl: stri
   await area.set({ [key]: dataUrl });
 }
 
+export async function removeWorkspaceWallpaper(workspaceId: string): Promise<void> {
+  const key = workspaceWallpaperKey(workspaceId);
+  const area = extensionApi.storage?.local;
+  if (!area?.remove) return;
+  await area.remove(key);
+}
+
 // Last successful settings-sync completion on THIS browser (#7). Local-only —
 // deliberately not in the sync bundle, since "when did I last sync here" is a
 // per-device fact.

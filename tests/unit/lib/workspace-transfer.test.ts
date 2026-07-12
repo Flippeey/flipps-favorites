@@ -658,6 +658,7 @@ describe('buildSyncPreview — link-dialog dry run', () => {
 
     expect(preview.newWorkspaceNames).toEqual(['Workspace b']);
     expect(preview.updatedWorkspaceNames).toEqual(['Workspace a']);
+    expect(preview.removedWorkspaceNames).toEqual([]);
     expect(preview.workspaceSkippedCount).toBe(0);
     // Two overrides for the same URL/scope collapse to one, exactly as apply dedupes.
     expect(preview.iconOverrideIncomingCount).toBe(1);
@@ -682,5 +683,81 @@ describe('buildSyncPreview — link-dialog dry run', () => {
     // the preview must show the incoming workspace as skipped, not as new.
     expect(preview.newWorkspaceNames).toEqual([]);
     expect(preview.workspaceSkippedCount).toBe(1);
+  });
+
+  it('replace previews AND applies as a mirror: locals absent from the payload are removed', async () => {
+    installChromeFake({
+      syncSeed: {
+        'workspace:a': { ...baseRecordBody('a'), folderMode: 'grid', bookmarkSortMode: 'manual', bookmarkSortDirection: 'asc' },
+        'workspace:b': { ...baseRecordBody('b'), folderMode: 'grid', bookmarkSortMode: 'manual', bookmarkSortDirection: 'asc' },
+      },
+      localSeed: { 'workspaces-per-key-migrated': true },
+    });
+    const transfer = await importTransfer();
+
+    const parsed = transfer.normalizeWorkspaceExportPayload(previewPayload({
+      workspaces: [baseRecordBody('c')],
+    }));
+
+    // The dialog must list exactly what the confirm will delete...
+    const preview = await transfer.buildSyncPreview(parsed, 'replace');
+    expect(preview.newWorkspaceNames).toEqual(['Workspace c']);
+    expect(preview.removedWorkspaceNames).toEqual(['Workspace a', 'Workspace b']);
+
+    // ...and the confirm must delete exactly that, nothing else.
+    await transfer.applyWorkspaceImport(parsed, 'replace');
+    const sync = (globalThis as unknown as { chrome: { storage: { sync: StorageAreaFake } } }).chrome.storage.sync;
+    const all = await sync.get(null);
+    expect(all['workspace:c']).toBeDefined();
+    expect(all['workspace:a']).toBeUndefined();
+    expect(all['workspace:b']).toBeUndefined();
+  });
+
+  it('merge never removes: removedWorkspaceNames stays empty even for non-incoming locals', async () => {
+    installChromeFake({
+      syncSeed: {
+        'workspace:a': { ...baseRecordBody('a'), folderMode: 'grid', bookmarkSortMode: 'manual', bookmarkSortDirection: 'asc' },
+      },
+      localSeed: { 'workspaces-per-key-migrated': true },
+    });
+    const transfer = await importTransfer();
+
+    const parsed = transfer.normalizeWorkspaceExportPayload(previewPayload({
+      workspaces: [baseRecordBody('c')],
+    }));
+    const preview = await transfer.buildSyncPreview(parsed, 'merge');
+
+    expect(preview.removedWorkspaceNames).toEqual([]);
+    await transfer.applyWorkspaceImport(parsed, 'merge');
+    const sync = (globalThis as unknown as { chrome: { storage: { sync: StorageAreaFake } } }).chrome.storage.sync;
+    const all = await sync.get(null);
+    expect(all['workspace:a']).toBeDefined();
+    expect(all['workspace:c']).toBeDefined();
+  });
+
+  it('identity dedupe: incoming same-name + same-folder workspace updates the local record instead of duplicating', async () => {
+    installChromeFake({
+      syncSeed: {
+        'workspace:y': { ...baseRecordBody('y'), name: 'Favorites', rootFolderId: 'f1', folderMode: 'grid', bookmarkSortMode: 'manual', bookmarkSortDirection: 'asc' },
+      },
+      localSeed: { 'workspaces-per-key-migrated': true },
+    });
+    const transfer = await importTransfer();
+
+    const parsed = transfer.normalizeWorkspaceExportPayload(previewPayload({
+      workspaces: [{ ...baseRecordBody('x'), name: 'Favorites', rootFolderId: 'f1', accentColor: '#112233' }],
+    }));
+
+    // Preview classifies it as an update, not a new tab...
+    const preview = await transfer.buildSyncPreview(parsed, 'merge');
+    expect(preview.newWorkspaceNames).toEqual([]);
+    expect(preview.updatedWorkspaceNames).toEqual(['Favorites']);
+
+    // ...and apply lands it under the LOCAL id — no duplicate "Favorites" tab.
+    await transfer.applyWorkspaceImport(parsed, 'merge');
+    const sync = (globalThis as unknown as { chrome: { storage: { sync: StorageAreaFake } } }).chrome.storage.sync;
+    const all = await sync.get(null);
+    expect(all['workspace:x']).toBeUndefined();
+    expect((all['workspace:y'] as WorkspaceRecord).accentColor).toBe('#112233');
   });
 });
