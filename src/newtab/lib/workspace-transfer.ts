@@ -1,5 +1,6 @@
 import type {
   AppSettings,
+  BookmarkNode,
   BookmarkSortMode,
   BookmarkUsageRecord,
   IconOverrideRecord,
@@ -25,7 +26,8 @@ import {
 } from '@/shared/storage';
 import { getOverrideKeyForScope, normalizeOverrideScope, type IconOverrideScope } from '@/shared/icon-scope';
 import { MAX_IMPORT_DATA_URL_BYTES, MAX_WORKSPACES } from '@/shared/constants';
-import { invalidateIcon } from './messaging';
+import { getBookmarkTree, invalidateIcon } from './messaging';
+import { findFolder, isFolder } from './tree';
 
 export const WORKSPACE_SCHEMA = 'flipps-workspace-transfer' as const;
 // v3: per-workspace view/sort. v2 (and earlier) exports stored folderMode/
@@ -304,17 +306,30 @@ export async function applyWorkspaceImport(
   // workspaces that already exist (never exceed 20 total); replace mode caps
   // the incoming set on its own since the loop below always merges by id
   // (existing workspaces are never deleted, even in replace mode).
-  const existingWorkspaceCount = mode === 'merge' ? (await readWorkspaces()).length : 0;
+  const existingWorkspaces = await readWorkspaces();
+  const existingWorkspaceCount = mode === 'merge' ? existingWorkspaces.length : 0;
   const importSlots = Math.max(0, MAX_WORKSPACES - existingWorkspaceCount);
   const workspacesToImport = payload.workspaces.slice(0, importSlots);
   const workspaceSkippedCount = payload.workspaces.length - workspacesToImport.length;
+
+  // Best-effort tree fetch for cross-browser folder re-matching below. A
+  // failed fetch must not fail the import — records then keep their original
+  // pointers (the pre-rematch behavior).
+  let rematchTree: BookmarkNode[] | null = null;
+  try {
+    rematchTree = await getBookmarkTree();
+  } catch {
+    rematchTree = null;
+  }
+  const existingById = new Map(existingWorkspaces.map(w => [w.id, w]));
 
   // Workspaces: always merge by id (replace would wipe all current workspaces, including
   // the one the user is currently looking at). Use the payload as the source of truth for
   // any id collision.
   let workspaceLandedCount = 0;
   let workspaceFailedCount = 0;
-  for (const ws of workspacesToImport) {
+  for (const incoming of workspacesToImport) {
+    const ws = rematchTree ? rematchRootFolder(incoming, rematchTree, existingById) : incoming;
     try {
       await writeWorkspace(ws);
       const wallpaper = payload.workspaceWallpapers[ws.id];
@@ -369,6 +384,44 @@ export async function applyWorkspaceImport(
     bookmarkUsageCount: dedupedUsage.length,
     settings: nextSettings,
   };
+}
+
+// Cross-browser workspace repair (#7): rootFolderId is a browser-local
+// bookmark id, so a record imported from another browser or profile usually
+// points at a folder that doesn't exist here. Best-effort, in order: keep a
+// pointer that resolves; else keep the resolving pointer of the local record
+// with the same id (an id collision must not clobber a working local link
+// with a foreign one); else adopt the folder whose title uniquely equals the
+// workspace name. No match or an ambiguous title leaves the record unchanged
+// (it renders as unresolved, exactly as before this repair existed).
+function rematchRootFolder(
+  record: WorkspaceRecord,
+  tree: BookmarkNode[],
+  existingById: Map<string, WorkspaceRecord>,
+): WorkspaceRecord {
+  if (findFolder(tree, record.rootFolderId)) return record;
+  const local = existingById.get(record.id);
+  if (local && findFolder(tree, local.rootFolderId)) {
+    return { ...record, rootFolderId: local.rootFolderId };
+  }
+  const titleMatches = collectFoldersByTitle(tree, record.name);
+  if (titleMatches.length === 1) {
+    return { ...record, rootFolderId: titleMatches[0].id };
+  }
+  return record;
+}
+
+function collectFoldersByTitle(tree: BookmarkNode[], title: string): BookmarkNode[] {
+  const matches: BookmarkNode[] = [];
+  const walk = (nodes: BookmarkNode[]): void => {
+    for (const node of nodes) {
+      if (!isFolder(node)) continue;
+      if (node.title === title) matches.push(node);
+      walk(node.children ?? []);
+    }
+  };
+  walk(tree);
+  return matches;
 }
 
 function toTransferOverride(record: IconOverrideRecord): IconOverrideTransferRecord {

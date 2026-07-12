@@ -79,6 +79,23 @@ describe('runSyncNow', () => {
     expect(result).toEqual({ merged: true, settings: FAKE_SETTINGS });
   });
 
+  it("passes the link flow's 'replace' mode through to applyWorkspaceImport", async () => {
+    mockSyncPull.mockReset().mockResolvedValue(FAKE_EXPORT);
+    mockSyncPush.mockReset().mockResolvedValue(undefined);
+    mockApplyWorkspaceImport.mockReset().mockResolvedValue({
+      mode: 'replace', workspaceCount: 1, iconOverrideCount: 0, bookmarkUsageCount: 0, settings: FAKE_SETTINGS,
+    });
+    mockBuildWorkspaceExport.mockReset().mockResolvedValue(FAKE_EXPORT);
+    mockWriteLastSyncedAt.mockReset().mockResolvedValue(undefined);
+
+    const mod = await importSyncNow();
+    await mod.runSyncNow('replace');
+
+    // The link form's Merge/Replace choice must reach the import layer —
+    // silently degrading to merge would ignore an explicit user decision.
+    expect(mockApplyWorkspaceImport).toHaveBeenCalledWith(FAKE_EXPORT, 'replace');
+  });
+
   it('propagates a SyncFetchError from pull without pushing', async () => {
     mockSyncPull.mockReset().mockRejectedValue(new SyncFetchError('network', 'offline'));
     mockSyncPush.mockReset();

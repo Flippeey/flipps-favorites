@@ -5,6 +5,7 @@ import {
   applyWorkspaceImport,
   buildWorkspaceExport,
   normalizeWorkspaceExportPayload,
+  type WorkspaceImportMode,
 } from '@/newtab/lib/workspace-transfer';
 
 export type SyncNowResult =
@@ -21,7 +22,12 @@ export type SyncNowResult =
 //
 // A pull that finds nothing (server has no data yet for this pairing) is NOT
 // an error — it's just the first sync, so we skip straight to push.
-export async function runSyncNow(): Promise<SyncNowResult> {
+//
+// `mode` is how the pulled payload is applied locally: the Sync now button
+// always merges; the link-another-browser flow lets the user pick Replace to
+// adopt the other browser's settings/icon overrides (workspaces are still
+// merged by id — replace never deletes them, see applyWorkspaceImport).
+export async function runSyncNow(mode: WorkspaceImportMode = 'merge'): Promise<SyncNowResult> {
   const remote = await syncPull();
 
   if (remote === null) {
@@ -32,7 +38,7 @@ export async function runSyncNow(): Promise<SyncNowResult> {
   }
 
   const payload = normalizeWorkspaceExportPayload(remote);
-  const summary = await applyWorkspaceImport(payload, 'merge');
+  const summary = await applyWorkspaceImport(payload, mode);
 
   const bundle = await buildWorkspaceExport();
   await syncPush(bundle);

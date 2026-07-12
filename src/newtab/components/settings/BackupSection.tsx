@@ -68,6 +68,7 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
   const [pairingRevealed, setPairingRevealed] = useState(false);
   const [pairingCodeBusy, setPairingCodeBusy] = useState(false);
   const [linkInput, setLinkInput] = useState('');
+  const [linkMode, setLinkMode] = useState<WorkspaceImportMode>('merge');
   const [linkConfirming, setLinkConfirming] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linkBusy, setLinkBusy] = useState(false);
@@ -198,7 +199,7 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
     setLinkError(null);
     try {
       await adoptSyncSecret(linkInput.trim());
-      const result = await runSyncNow();
+      const result = await runSyncNow(linkMode);
       if (result.merged) {
         onAfterImport(result.settings);
       }
@@ -307,7 +308,8 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
         stores encrypted bytes — it can never read your workspaces, bookmarks, or icons.
         {' '}<strong>Synced:</strong> settings, workspaces, wallpapers, icon overrides, and usage stats.
         {' '}<strong>Not synced:</strong> your browser&rsquo;s actual bookmarks — each workspace points at a
-        folder in this browser&rsquo;s bookmarks, so on a newly linked browser a workspace may need repointing.
+        folder in this browser&rsquo;s bookmarks. On a newly linked browser we re-match that folder by
+        name; only when no unique name match exists does a workspace need manual repointing.
       </p>
 
       <div className="ff-card" style={{ marginBottom: 16 }}>
@@ -387,11 +389,26 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
                 data-testid="link-pairing-code-input"
               />
             </div>
+            <div className="ff-row" style={{ marginTop: 8 }}>
+              <div>
+                <div className="ff-row__label">If both browsers have data</div>
+                <div className="ff-row__hint">
+                  Merge keeps what&rsquo;s here and adds theirs. Replace adopts their settings and
+                  icons — workspaces are always kept.
+                </div>
+              </div>
+              <Segmented<WorkspaceImportMode>
+                options={[{ id: 'merge', label: 'Merge' }, { id: 'replace', label: 'Replace' }]}
+                value={linkMode}
+                onChange={(mode) => { setLinkMode(mode); setLinkConfirming(false); }}
+              />
+            </div>
             {linkError && <div className="ff-status" data-kind="error" role="alert">{linkError}</div>}
             {linkConfirming && !linkError && (
               <div className="ff-status" data-kind="warning" role="alert">
-                This replaces this browser&rsquo;s pairing code with the pasted one and merges that
-                browser&rsquo;s data in. Continue?
+                {linkMode === 'replace'
+                  ? 'This replaces this browser’s pairing code AND adopts the other browser’s settings and icon overrides (workspaces here are kept). Continue?'
+                  : 'This replaces this browser’s pairing code with the pasted one and merges that browser’s data in. Continue?'}
               </div>
             )}
             <div className="ff-dialog__actions" style={{ marginTop: 8 }}>
