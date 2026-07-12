@@ -208,7 +208,14 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
       setPairingCode(null);
       setPairingRevealed(false);
       setLastSyncedAt(Date.now());
-      pushToast({ kind: 'info', message: 'Linked and synced with the other browser.' });
+      // merged:false = the shared namespace was empty (other browser never
+      // pushed), so nothing arrived HERE — saying "synced" would overpromise.
+      pushToast({
+        kind: 'info',
+        message: result.merged
+          ? 'Linked and synced with the other browser.'
+          : 'Linked — this browser’s data is now the shared copy. Press Sync now on your other browser to pick it up.',
+      });
     } catch (error) {
       if (error instanceof SyncFetchError && error.kind === 'validation') {
         setLinkError('That pairing code doesn’t look right. Double-check it and try again.');
