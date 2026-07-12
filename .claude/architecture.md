@@ -108,6 +108,18 @@ Same source compiles to both Chrome and Firefox (via Vite `--mode chrome|firefox
 
 Feature code MUST NOT have target-aware branches. All conditional logic funnels through the shims above.
 
+## Firefox Event-Page Lifetime
+
+The Firefox background is a **non-persistent event page** (`background.page` in the manifest; `persistent: true` is an *error* in MV3). Firefox suspends it after ~30s idle (pref `extensions.background.idle.timeout`), and two facts make naive messaging break — both verified empirically (2026-07-12) and guarded by `tests/firefox-e2e/specs/sync-event-page.test.ts`:
+
+1. **Wake-up requires synchronous listener registration.** Firefox only re-spawns a suspended event page for events whose listeners were registered synchronously at document start. `background.js` is a `type="module"` script — it evaluates after its import graph loads, too late for that bookkeeping — so a listener registered there is never primed: after suspension, `runtime.sendMessage` fails with "Receiving end does not exist". Fix: `public/background-boot.js`, a classic script loaded *before* the module in `background.html`, registers the one `runtime.onMessage` listener at parse time and forwards to the handler that `service-worker.ts` publishes via `globalThis.__ffPublishBackgroundHandler`. On Chrome the hook is absent (the manifest points straight at `background.js` as the SW) and `service-worker.ts` registers its own classic `sendResponse` listener — Chrome handles module-SW listener registration fine and ignores Promise returns from listeners.
+
+2. **A pending response does not hold the page.** A pending onMessage listener Promise or in-flight XHR does NOT defer suspension (MDN: "Message ports cannot prevent an event page from shutting down"). Any request slower than the remaining idle window is torn down mid-flight and the sender rejects with "Promised response from onMessage listener went out of scope". Fix: `sendKeepingBackgroundAlive` in `newtab/lib/messaging.ts` pings the background every 1s while a slow request (sync pull/push/preview — up to a 10s XHR timeout) is pending; each delivered message is an event that resets the idle timer. On Chrome the same pings usefully extend the MV3 service worker's lifetime.
+
+Icon-pipeline XHRs share exposure to (2) but fail silent + retry by design (see Icon Pipeline), so they don't use the ping wrapper. When adding a new slow background operation, route its messaging wrapper through `sendKeepingBackgroundAlive`.
+
+Testing note: the regression spec makes suspension test-fast by shrinking `extensions.background.idle.timeout` to 2s via launch pref, and keeps the sync XHR in-flight hermetically by PAC-proxying `api.flippflix.com` to a non-routable class-E address (240.0.0.1) so it hangs until the client-side timeout.
+
 ## XSS / Security
 
 - JSX text children handle escaping automatically — prefer them. If a new `innerHTML` becomes unavoidable, reintroduce a focused escape helper rather than copy-pasting `replaceAll` chains. No `innerHTML` in `src/`.

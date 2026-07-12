@@ -22,6 +22,7 @@ import type {
   MoveBookmarkResponse,
   GetBookmarkUsageResponse,
   IconOverrideScope,
+  PingResponse,
   RecordBookmarkUseResponse,
   WorkspaceRecord,
   GetWorkspacesResponse,
@@ -53,6 +54,33 @@ async function send<T extends AppResponse>(req: AppRequest): Promise<T> {
     throw new IconFetchError('unknown', 'No response from background service worker.');
   }
   return res as T;
+}
+
+// How often to nudge the background while a slow request is pending. Must sit
+// comfortably below the Firefox event-page idle timeout (default 30s; the
+// regression test shrinks it to 2s via pref) and Chrome's SW idle window.
+const KEEP_ALIVE_INTERVAL_MS = 1_000;
+
+// Firefox suspends its background EVENT PAGE after an idle timeout even while
+// an onMessage response is pending — a pending listener promise or in-flight
+// XHR does NOT hold the page (MDN: "Message ports cannot prevent an event page
+// from shutting down"). A sync request can take up to 10s (XHR timeout), so
+// without help Firefox tears the page down mid-request and the reply surfaces
+// as "Promised response from onMessage listener went out of scope". Pinging
+// while the request is pending resets the idle timer (every delivered message
+// is an event), keeping the page alive; on Chrome the same pings extend the
+// MV3 service worker's lifetime. Wake-up of an ALREADY-suspended page is
+// handled separately by public/background-boot.js. Both halves are guarded by
+// tests/firefox-e2e/specs/sync-event-page.test.ts.
+async function sendKeepingBackgroundAlive<T extends AppResponse>(req: AppRequest): Promise<T> {
+  const keepAlive = setInterval(() => {
+    void send<PingResponse>({ type: messageTypes.ping }).catch(() => undefined);
+  }, KEEP_ALIVE_INTERVAL_MS);
+  try {
+    return await send<T>(req);
+  } finally {
+    clearInterval(keepAlive);
+  }
 }
 
 export async function getSettings(): Promise<AppSettings> {
@@ -169,7 +197,7 @@ export async function openTab(url: string): Promise<void> {
 // newtab/lib/workspace-transfer.ts's buildWorkspaceExport(); typed as unknown
 // at the message boundary (see messages.ts comment) and narrowed by the caller.
 export async function syncPush(bundle: unknown): Promise<void> {
-  await send<SyncPushResponse>({ type: messageTypes.syncPush, bundle });
+  await sendKeepingBackgroundAlive<SyncPushResponse>({ type: messageTypes.syncPush, bundle });
 }
 
 // Returns the decrypted export payload (untyped — caller narrows/validates,
@@ -177,7 +205,7 @@ export async function syncPush(bundle: unknown): Promise<void> {
 // stored yet for this device's pairing (404). Applying it via
 // applyWorkspaceImport(payload, 'merge') is the UI wave's responsibility.
 export async function syncPull(): Promise<unknown | null> {
-  const res = await send<SyncPullResponse | SyncPullNotFoundResponse>({ type: messageTypes.syncPull });
+  const res = await sendKeepingBackgroundAlive<SyncPullResponse | SyncPullNotFoundResponse>({ type: messageTypes.syncPull });
   return res.found ? res.payload : null;
 }
 
@@ -185,7 +213,7 @@ export async function syncPull(): Promise<unknown | null> {
 // pasted code is used for auth/decrypt but NOT adopted. Returns the decrypted
 // payload, or null when that namespace has nothing stored yet.
 export async function syncPreviewPull(pairingCode: string): Promise<unknown | null> {
-  const res = await send<SyncPullResponse | SyncPullNotFoundResponse>({
+  const res = await sendKeepingBackgroundAlive<SyncPullResponse | SyncPullNotFoundResponse>({
     type: messageTypes.syncPreviewPull,
     pairingCode,
   });
