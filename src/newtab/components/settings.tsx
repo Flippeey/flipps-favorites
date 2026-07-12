@@ -31,7 +31,7 @@ const APP_SECTION_TITLES: Record<AppSectionId, string> = {
   navigation: 'Navigation',
   dock:       'Dock',
   clock:      'Clock',
-  backup:     'Backup',
+  backup:     'Backup & Sync',
   help:       'Help',
 };
 

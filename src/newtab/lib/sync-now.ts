@@ -12,8 +12,9 @@ export type SyncNowResult =
 
 // Orchestrates "Sync now" (BackupSection) and the post-adopt convergence step
 // of "Link another browser": pull remote -> if present, validate its shape and
-// merge it into local storage (record-level newest-updatedAt-wins, never
-// clobbers a newer local edit) -> (re)build the local export -> push it.
+// merge it into local storage (record-level: the pulled record wins on id/key
+// collision, records only present locally survive — merge never deletes)
+// -> (re)build the local export -> push it.
 // Pull-before-push, and rebuilding the export AFTER the merge, is what lets
 // two devices converge instead of one clobbering the other.
 //
