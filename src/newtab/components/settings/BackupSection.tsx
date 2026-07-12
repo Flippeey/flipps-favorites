@@ -3,6 +3,7 @@ import type { AppSettings } from '@/shared/messages';
 import { SyncFetchError } from '@/shared/messages';
 import { adoptSyncSecret, getSyncPairingCode } from '@/newtab/lib/messaging';
 import { runSyncNow } from '@/newtab/lib/sync-now';
+import { readLastSyncedAt } from '@/shared/storage';
 import type { PushToastInput } from '@/newtab/state/useToasts';
 import {
   applyWorkspaceImport,
@@ -31,6 +32,19 @@ const SYNC_ERROR_COPY: Record<string, string> = {
   'not-found': 'Nothing has been synced yet.',
 };
 
+// "4 minutes ago"-style caption for the last successful sync. Coarse on
+// purpose: the caption answers "did it work / roughly when", not "exactly when".
+function describeLastSynced(timestamp: number | null): string {
+  if (timestamp === null) return 'Never synced on this browser.';
+  const elapsedMs = Date.now() - timestamp;
+  if (elapsedMs < 60_000) return 'Last synced just now on this browser.';
+  const minutes = Math.floor(elapsedMs / 60_000);
+  if (minutes < 60) return `Last synced ${String(minutes)} minute${minutes === 1 ? '' : 's'} ago on this browser.`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Last synced ${String(hours)} hour${hours === 1 ? '' : 's'} ago on this browser.`;
+  return `Last synced ${new Date(timestamp).toLocaleDateString()} on this browser.`;
+}
+
 function describeSyncError(error: unknown): string {
   if (error instanceof SyncFetchError) {
     const known = SYNC_ERROR_COPY[error.kind];
@@ -57,6 +71,15 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
   const [linkConfirming, setLinkConfirming] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linkBusy, setLinkBusy] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    readLastSyncedAt()
+      .then((ts) => { if (!cancelled) setLastSyncedAt(ts); })
+      .catch(() => { /* caption stays at "Never synced" — not worth an error state */ });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!status) return;
@@ -130,6 +153,7 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
       if (result.merged) {
         onAfterImport(result.settings);
       }
+      setLastSyncedAt(Date.now());
       pushToast({ kind: 'info', message: 'Synced.' });
     } catch (error) {
       pushToast({ kind: 'error', message: describeSyncError(error) });
@@ -183,6 +207,7 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
       // A newly adopted pairing means any cached code/reveal state is stale.
       setPairingCode(null);
       setPairingRevealed(false);
+      setLastSyncedAt(Date.now());
       pushToast({ kind: 'info', message: 'Linked and synced with the other browser.' });
     } catch (error) {
       if (error instanceof SyncFetchError && error.kind === 'validation') {
@@ -273,13 +298,20 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
       <p className="ff-set-section__desc">
         End-to-end encrypted sync between your own browsers, via our server. The server only ever
         stores encrypted bytes — it can never read your workspaces, bookmarks, or icons.
+        {' '}<strong>Synced:</strong> settings, workspaces, wallpapers, icon overrides, and usage stats.
+        {' '}<strong>Not synced:</strong> your browser&rsquo;s actual bookmarks — each workspace points at a
+        folder in this browser&rsquo;s bookmarks, so on a newly linked browser a workspace may need repointing.
       </p>
 
       <div className="ff-card" style={{ marginBottom: 16 }}>
         <div className="ff-row">
           <div>
             <div className="ff-row__label">Sync now</div>
-            <div className="ff-row__hint">Pulls the latest synced data, merges it with what&rsquo;s here, then pushes the result.</div>
+            <div className="ff-row__hint">
+              Pulls the latest synced data, merges it with what&rsquo;s here, then pushes the result.
+              If the same item changed on two browsers, whichever browser synced last takes over —
+              syncing never deletes anything.
+            </div>
           </div>
           <button
             type="button"
@@ -291,6 +323,9 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
             <Ico name="refresh" size={14} /> {syncBusy ? 'Syncing…' : 'Sync now'}
           </button>
         </div>
+        <p className="ff-row__hint" style={{ marginTop: 8, marginBottom: 0 }} data-testid="last-synced-caption">
+          {describeLastSynced(lastSyncedAt)}
+        </p>
       </div>
 
       <div className="ff-card" style={{ marginBottom: 16 }}>
@@ -328,8 +363,9 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
           <div className="ff-stackrow">
             <div className="ff-row__label">Link another browser</div>
             <div className="ff-row__hint" style={{ marginBottom: 8 }}>
-              Paste a pairing code from another browser to link it to this data. Linking merges that
-              browser&rsquo;s synced data with what&rsquo;s here — it does not replace it.
+              Paste a pairing code from another browser to join its sync data. This browser&rsquo;s own
+              pairing code is replaced by the one you paste — afterwards both browsers share that same
+              code. Your data merges; nothing here is deleted.
             </div>
             <div className="ff-field">
               <input
@@ -347,7 +383,8 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
             {linkError && <div className="ff-status" data-kind="error" role="alert">{linkError}</div>}
             {linkConfirming && !linkError && (
               <div className="ff-status" data-kind="warning" role="alert">
-                This links to another browser&rsquo;s sync data and merges it with your data here. Continue?
+                This replaces this browser&rsquo;s pairing code with the pasted one and merges that
+                browser&rsquo;s data in. Continue?
               </div>
             )}
             <div className="ff-dialog__actions" style={{ marginTop: 8 }}>

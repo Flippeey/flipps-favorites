@@ -1,5 +1,6 @@
 import type { AppSettings } from '@/shared/messages';
 import { syncPull, syncPush } from '@/newtab/lib/messaging';
+import { writeLastSyncedAt } from '@/shared/storage';
 import {
   applyWorkspaceImport,
   buildWorkspaceExport,
@@ -26,6 +27,7 @@ export async function runSyncNow(): Promise<SyncNowResult> {
   if (remote === null) {
     const bundle = await buildWorkspaceExport();
     await syncPush(bundle);
+    await recordSyncCompleted();
     return { merged: false };
   }
 
@@ -34,6 +36,17 @@ export async function runSyncNow(): Promise<SyncNowResult> {
 
   const bundle = await buildWorkspaceExport();
   await syncPush(bundle);
+  await recordSyncCompleted();
 
   return { merged: true, settings: summary.settings };
+}
+
+// The "Last synced …" caption is cosmetic — a failed timestamp write must not
+// turn an otherwise-successful sync into an error.
+async function recordSyncCompleted(): Promise<void> {
+  try {
+    await writeLastSyncedAt(Date.now());
+  } catch (error) {
+    console.warn('Sync succeeded but its timestamp could not be persisted.', error);
+  }
 }
