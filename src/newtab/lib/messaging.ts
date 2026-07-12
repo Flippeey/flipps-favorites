@@ -35,6 +35,7 @@ import type {
   SyncPullNotFoundResponse,
   GetSyncPairingCodeResponse,
   AdoptSyncSecretResponse,
+  WebSearchResponse,
 } from '@/shared/messages';
 import { IconFetchError, SyncFetchError, messageTypes } from '@/shared/messages';
 
@@ -187,4 +188,8 @@ export async function getSyncPairingCode(): Promise<string> {
 
 export async function adoptSyncSecret(pairingCode: string): Promise<void> {
   await send<AdoptSyncSecretResponse>({ type: messageTypes.adoptSyncSecret, pairingCode });
+}
+
+export async function webSearch(query: string, openInNewTab: boolean): Promise<void> {
+  await send<WebSearchResponse>({ type: messageTypes.webSearch, query, openInNewTab });
 }

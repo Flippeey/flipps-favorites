@@ -25,6 +25,7 @@ export const messageTypes = {
   syncPull: 'sync/pull',
   getSyncPairingCode: 'sync/get-pairing-code',
   adoptSyncSecret: 'sync/adopt-secret',
+  webSearch: 'search/web-query',
 } as const;
 
 // Domain models + unions now live in models.ts. Re-export so existing
@@ -309,6 +310,16 @@ export interface AdoptSyncSecretResponse {
   ok: true;
 }
 
+export interface WebSearchRequest {
+  type: typeof messageTypes.webSearch;
+  query: string;
+  openInNewTab: boolean;
+}
+
+export interface WebSearchResponse {
+  ok: true;
+}
+
 export type AppRequest =
   | PingRequest
   | GetSettingsRequest
@@ -335,7 +346,8 @@ export type AppRequest =
   | SyncPushRequest
   | SyncPullRequest
   | GetSyncPairingCodeRequest
-  | AdoptSyncSecretRequest;
+  | AdoptSyncSecretRequest
+  | WebSearchRequest;
 
 export type AppResponse =
   | PingResponse
@@ -363,4 +375,5 @@ export type AppResponse =
   | SyncPushResponse
   | (SyncPullResponse | SyncPullNotFoundResponse)
   | GetSyncPairingCodeResponse
-  | AdoptSyncSecretResponse;
+  | AdoptSyncSecretResponse
+  | WebSearchResponse;

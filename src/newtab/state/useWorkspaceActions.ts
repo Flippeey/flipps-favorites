@@ -6,7 +6,24 @@ import { createWorkspace, deleteWorkspace, patchSettings, patchWorkspace } from 
 import { defaultWorkspaceSettings, readWorkspaceWallpaper, writeWorkspaceWallpaper } from '@/shared/storage';
 import { MAX_WORKSPACES } from '@/shared/constants';
 import { pickNextAccent } from '../lib/workspace-accent';
-import { runOptimistic } from './useOptimisticPatch';
+import type { PushToastInput } from './useToasts';
+
+export type CreateFromFolderGuardResult = 'proceed' | 'at_max' | 'already_exists';
+
+/**
+ * Guard checked before attempting to create a workspace from a folder: the cap
+ * check and the duplicate-root check both short-circuit the actual create call.
+ * Order matters — at_max is checked before already_exists (documented in
+ * handleCreateWorkspaceFromFolder's caller-facing outcome contract).
+ */
+export function checkCreateFromFolderGuard(
+  workspaces: Pick<WorkspaceRecord, 'rootFolderId'>[],
+  folderId: string,
+): CreateFromFolderGuardResult {
+  if (workspaces.length >= MAX_WORKSPACES) return 'at_max';
+  if (workspaces.some(w => w.rootFolderId === folderId)) return 'already_exists';
+  return 'proceed';
+}
 
 interface UseWorkspaceActionsArgs {
   workspaces: WorkspaceRecord[];
@@ -20,6 +37,9 @@ interface UseWorkspaceActionsArgs {
   setFolderPath: React.Dispatch<React.SetStateAction<import('@/shared/messages').BookmarkNode[]>>;
   setSelection: React.Dispatch<React.SetStateAction<MarqueeSelection>>;
   handlePatch: (patch: Partial<AppSettings>) => Promise<void>;
+  pushToast: (input: PushToastInput) => void;
+  /** Reconciles local workspace state with persisted truth (e.g. after a patch fails). */
+  refreshWorkspaces: () => Promise<void>;
 }
 
 interface UseWorkspaceActionsResult {
@@ -52,6 +72,8 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
     setFolderPath,
     setSelection,
     handlePatch,
+    pushToast,
+    refreshWorkspaces,
   } = args;
 
   // Mirror the latest workspaces so sequential creates (onboarding bulk-create
@@ -80,12 +102,20 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
 
   const handlePatchWorkspace = useCallback(async (patch: Partial<WorkspaceRecord>) => {
     if (!activeWorkspace) return;
-    await runOptimistic<WorkspaceRecord>({
-      optimistic: { ...activeWorkspace, ...patch },
-      apply: (ws) => setWorkspaces(prev => prev.map(w => w.id === ws.id ? ws : w)),
-      persist: () => patchWorkspace(activeWorkspace.id, patch),
-    });
-  }, [activeWorkspace, setWorkspaces]);
+    const workspaceId = activeWorkspace.id;
+    setWorkspaces(prev => prev.map(w => w.id === workspaceId ? { ...w, ...patch } : w));
+    try {
+      const persisted = await patchWorkspace(workspaceId, patch);
+      setWorkspaces(prev => prev.map(w => w.id === persisted.id ? persisted : w));
+    } catch {
+      // Persist failed — most commonly because the workspace was concurrently
+      // deleted (e.g. from another newtab page). Keeping the optimistic value
+      // would leave a ghost workspace in the UI until the next reload, so
+      // surface the failure and reconcile with truth instead.
+      pushToast({ kind: 'error', message: 'Couldn’t save workspace changes — it may have been deleted.' });
+      await refreshWorkspaces();
+    }
+  }, [activeWorkspace, setWorkspaces, pushToast, refreshWorkspaces]);
 
   const handleSetWorkspaceWallpaper = useCallback(async (dataUrl: string) => {
     if (!activeWorkspace) return;
@@ -192,9 +222,8 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
     folderTitle: string,
     insertIndex?: number,
   ): Promise<'created' | 'at_max' | 'already_exists'> => {
-    const current = workspacesRef.current;
-    if (current.length >= MAX_WORKSPACES) return 'at_max';
-    if (current.some(w => w.rootFolderId === folderId)) return 'already_exists';
+    const guard = checkCreateFromFolderGuard(workspacesRef.current, folderId);
+    if (guard !== 'proceed') return guard;
     const created = await handleCreateWorkspace(folderId, folderTitle, undefined, insertIndex);
     return created !== undefined ? 'created' : 'at_max';
   }, [handleCreateWorkspace]);

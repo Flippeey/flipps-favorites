@@ -6,6 +6,53 @@ import { useDrag, type DropTarget, type DragPreviewState } from './useDrag';
 import { moveBookmark } from '../lib/messaging';
 import { findFolder, findNode, isFolder } from '../lib/tree';
 import { captureMoveSnapshots, restoreMoveSnapshots } from '../lib/move-snapshot';
+import { MAX_WORKSPACES } from '@/shared/constants';
+
+export type FolderTabDropResult = 'create' | 'move' | 'skip';
+
+/**
+ * Decide what should happen when dragIds are dropped on the workspace bar.
+ *
+ * `dropKind` encodes WHERE the drop landed:
+ *  'workspace'     — pointer landed ON an existing workspace pill → always MOVE
+ *  'workspace-new' — pointer landed in the bar gap (no pill ancestor) → may CREATE
+ *
+ * Returns:
+ *  'create' — single folder in bar gap, not at cap, not already a workspace root
+ *  'skip'   — single folder in bar gap but at cap or already a workspace root
+ *  'move'   — pill drop (any payload), or non-folder/multi-item gap drop
+ */
+export function routeFolderTabDrop(
+  dragIds: string[],
+  tree: BookmarkNode[],
+  workspaces: Pick<WorkspaceRecord, 'rootFolderId'>[],
+  dropKind: 'workspace' | 'workspace-new',
+): FolderTabDropResult {
+  // Pill drop: always move into the existing workspace (regardless of payload).
+  if (dropKind === 'workspace') return 'move';
+
+  // Bar-gap drop: only a single folder triggers workspace creation.
+  if (!isFolderTabCreateCandidate(dragIds, tree)) return 'move';
+
+  const node = findNode(tree, dragIds[0]!)!;
+  if (workspaces.length >= MAX_WORKSPACES) return 'skip';
+  if (workspaces.some(w => w.rootFolderId === node.id)) return 'skip';
+  return 'create';
+}
+
+/**
+ * True when a bar-gap drop's payload is eligible to attempt workspace creation:
+ * exactly one dragged id, and it resolves to a folder node in the live tree.
+ * Split out from routeFolderTabDrop because the production commit handler
+ * (handleDragCommit) must still call onFolderDropOnTab even when the eventual
+ * cap/duplicate check will skip — that downstream call is what surfaces the
+ * 'at_max' / 'already_exists' toast, so it can't be short-circuited here.
+ */
+export function isFolderTabCreateCandidate(dragIds: string[], tree: BookmarkNode[]): boolean {
+  if (dragIds.length !== 1) return false;
+  const node = findNode(tree, dragIds[0]!);
+  return !!node && isFolder(node);
+}
 
 interface UseDragWiringArgs {
   canvasEl: HTMLElement | null;
@@ -97,14 +144,16 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
       } else if (target.kind === 'workspace-new') {
         // Drop in the workspace bar GAP (not on a pill) → create workspace from
         // a single folder, inserted at target.insertIndex in the workspace order.
-        // Multi-item and non-folder gap drops are no-ops.
-        if (dragIds.length === 1) {
-          const node = findNode(tree, dragIds[0]!);
-          if (node && isFolder(node)) {
-            const result = await onFolderDropOnTab(node.id, node.title, target.insertIndex);
-            void result; // toast surfaced by App.tsx via the onFolderDropOnTab callback
-            return;
-          }
+        // Multi-item and non-folder gap drops are no-ops. isFolderTabCreateCandidate
+        // only decides eligibility to attempt a create (single folder payload);
+        // the cap/duplicate skip decision is made downstream in onFolderDropOnTab
+        // (handleCreateWorkspaceFromFolder), which still needs to run so it can
+        // surface the correct 'at_max' / 'already_exists' toast.
+        if (isFolderTabCreateCandidate(dragIds, tree)) {
+          const node = findNode(tree, dragIds[0]!)!;
+          const result = await onFolderDropOnTab(node.id, node.title, target.insertIndex);
+          void result; // toast surfaced by App.tsx via the onFolderDropOnTab callback
+          return;
         }
         // Non-folder or multi-item gap drop: no-op.
         return;

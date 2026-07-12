@@ -98,7 +98,10 @@ export function createCachedValueStore<T>(args: {
   async function resolveStorageArea(): Promise<ResolvedStorageArea> {
     if (!areaPromise) {
       areaPromise = (async () => {
-        if (area !== 'sync-preferred') {
+        // Test-only escape hatch: force local storage to eliminate the async
+        // sync-preferred flush race (see vite.config.mjs). Dead-code-eliminated
+        // in every non-test build since the constant is a literal `false`.
+        if (__FF_TEST_STORAGE_LOCAL__ || area !== 'sync-preferred') {
           return getLocalArea();
         }
 
@@ -257,6 +260,18 @@ export function createCachedRecordStore<T>(args: {
     },
   });
 
+  // Chain every writeOne/deleteOne onto a per-store tail promise so the
+  // readFresh -> merge -> write sequence runs serially. Without this, concurrent
+  // writes for DIFFERENT keys both read the same pre-write map and the second
+  // write's `...records` spread overwrites the first write's key (#41).
+  let writeTail: Promise<unknown> = Promise.resolve();
+
+  function enqueueWrite<R>(run: () => Promise<R>): Promise<R> {
+    const scheduled = writeTail.then(run);
+    writeTail = scheduled.catch(() => undefined);
+    return scheduled;
+  }
+
   return {
     async readAll(): Promise<Record<string, T>> {
       return { ...(await valueStore.read()) };
@@ -266,27 +281,31 @@ export function createCachedRecordStore<T>(args: {
       return records[key] ?? null;
     },
     async writeOne(key: string, value: T): Promise<void> {
-      const records = await valueStore.readFresh();
-      const nextValue = key in records && resolveConflict
-        ? resolveConflict(records[key] as T, value)
-        : value;
-      await valueStore.write({
-        ...records,
-        [key]: nextValue,
+      await enqueueWrite(async () => {
+        const records = await valueStore.readFresh();
+        const nextValue = key in records && resolveConflict
+          ? resolveConflict(records[key] as T, value)
+          : value;
+        await valueStore.write({
+          ...records,
+          [key]: nextValue,
+        });
       });
     },
     async deleteOne(key: string): Promise<void> {
-      const records = await valueStore.read();
-      if (!(key in records)) {
-        return;
-      }
+      await enqueueWrite(async () => {
+        const records = await valueStore.readFresh();
+        if (!(key in records)) {
+          return;
+        }
 
-      const nextRecords = { ...records };
-      delete nextRecords[key];
-      await valueStore.write(nextRecords);
+        const nextRecords = { ...records };
+        delete nextRecords[key];
+        await valueStore.write(nextRecords);
+      });
     },
     async clearAll(): Promise<void> {
-      await valueStore.write({});
+      await enqueueWrite(() => valueStore.write({}));
     },
   };
 }
@@ -331,7 +350,8 @@ export function createPerKeyRecordStore<T>(args: {
   async function resolveArea(): Promise<ResolvedStorageArea> {
     if (!areaPromise) {
       areaPromise = (async () => {
-        if (area !== 'sync-preferred') {
+        // Test-only escape hatch: see resolveStorageArea above.
+        if (__FF_TEST_STORAGE_LOCAL__ || area !== 'sync-preferred') {
           return getLocalArea();
         }
         const syncArea = extensionApi.storage?.sync;

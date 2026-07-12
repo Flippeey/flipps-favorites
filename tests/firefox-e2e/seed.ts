@@ -59,9 +59,9 @@ export async function resetStorage(page: Page): Promise<void> {
     const wallpaperKeys = Object.keys(all).filter((k) => k.startsWith('app-wallpaper'));
     await api.storage.local.remove([...Object.values(keys), ...wallpaperKeys]);
     try {
-      await api.storage.sync.remove([keys.appSettings, keys.workspaces]);
+      await api.storage.sync.remove([keys.appSettings]);
     } catch {
-      await api.storage.local.remove([keys.appSettings, keys.workspaces]);
+      await api.storage.local.remove([keys.appSettings]);
     }
     const tree = await api.bookmarks.getTree();
     const virtualRoot = tree[0];

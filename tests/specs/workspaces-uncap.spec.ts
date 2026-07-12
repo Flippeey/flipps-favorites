@@ -13,8 +13,8 @@ import { createTestFolder, removeBookmarkTree } from '../fixtures/bookmark-helpe
 import { createWorkspace, dismissOnboarding } from '../fixtures/seeding.js';
 import { workspaceTab } from '../fixtures/selectors.js';
 import { DEFAULT_WORKSPACE_SETTINGS } from '../fixtures/test-data.js';
-import { MAX_WORKSPACES } from '../../src/shared/constants.js';
-import type { WorkspaceRecord } from '../../src/shared/models.js';
+import { MAX_WORKSPACES } from '@/shared/constants.js';
+import type { WorkspaceRecord } from '@/shared/models.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -8,6 +8,7 @@
     "build": "npm run build:chrome && npm run build:firefox",
     "build:chrome": "vite build --mode chrome --outDir dist/chrome && node scripts/write-manifest.mjs chrome dist/chrome",
     "build:firefox": "vite build --mode firefox --outDir dist/firefox && node scripts/write-manifest.mjs firefox dist/firefox",
+    "build:chrome:test": "vite build --mode chrome-test --outDir dist/chrome-test && node scripts/write-manifest.mjs chrome dist/chrome-test",
     "typecheck": "tsc --noEmit",
     "test": "playwright test",
     "test:firefox": "playwright test --project=firefox",
@@ -16,8 +17,8 @@
     "test:group": "playwright test --project=chrome -g",
     "test:report": "playwright test --project=chrome --reporter=html",
     "test:headed": "playwright test --project=chrome --headed",
-    "test:ci": "npm run build && playwright test",
-    "test:build": "npm run build && npm test",
+    "test:ci": "npm run build && npm run build:chrome:test && playwright test",
+    "test:build": "npm run build && npm run build:chrome:test && npm test",
     "promo": "node scripts/promo/index.mjs all",
     "promo:screenshots": "node scripts/promo/index.mjs screenshots",
     "promo:videos": "node scripts/promo/index.mjs videos",
@@ -27,7 +28,8 @@
     "test:unit:watch": "vitest",
     "test:firefox:e2e": "vitest run -c tests/firefox-e2e/vitest.config.ts",
     "test:firefox:e2e:build": "npm run build:firefox && npm run test:firefox:e2e",
-    "test:all": "npm run build && npm test && npm run test:firefox:e2e"
+    "test:all": "npm run build && npm run build:chrome:test && npm test && npm run test:firefox:e2e",
+    "evidence": "npm run build:chrome:test && playwright test -c playwright.evidence.config.ts"
   },
   "devDependencies": {
     "@estruyf/github-actions-reporter": "^1.12.0",

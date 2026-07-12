@@ -12,13 +12,15 @@ interface UseQuickAddShortcutsArgs {
   onNewWorkspace: () => void;
   onRenameFolder: (folder: BookmarkNode) => void;
   onEditBookmark: (item: BookmarkNode) => void;
+  onOpenHelp: () => void;
 }
 
 // Single-key quick-add shortcuts (a/f/w add bookmark/folder/workspace; e edits
-// the lone selected tile). Inert while any overlay/dialog is open or focus is in
-// a text field. Pure relocation of App.tsx's keydown effect — behavior unchanged.
+// the lone selected tile; ? opens help & shortcuts). Inert while any overlay/dialog
+// is open or focus is in a text field. Pure relocation of App.tsx's keydown effect —
+// behavior unchanged (plus the newly-wired `?` shortcut).
 export function useQuickAddShortcuts(args: UseQuickAddShortcutsArgs): void {
-  const { enabled, selection, tree, onNewBookmark, onNewFolder, onNewWorkspace, onRenameFolder, onEditBookmark } = args;
+  const { enabled, selection, tree, onNewBookmark, onNewFolder, onNewWorkspace, onRenameFolder, onEditBookmark, onOpenHelp } = args;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -28,6 +30,12 @@ export function useQuickAddShortcuts(args: UseQuickAddShortcutsArgs): void {
       if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) return;
 
       const mod = e.ctrlKey || e.metaKey;
+
+      if (e.key === '?' && !mod && !e.altKey) {
+        e.preventDefault();
+        onOpenHelp();
+        return;
+      }
 
       if (mod || e.altKey || e.shiftKey) return;
 
@@ -59,5 +67,5 @@ export function useQuickAddShortcuts(args: UseQuickAddShortcutsArgs): void {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [enabled, selection, tree, onNewBookmark, onNewFolder, onNewWorkspace, onRenameFolder, onEditBookmark]);
+  }, [enabled, selection, tree, onNewBookmark, onNewFolder, onNewWorkspace, onRenameFolder, onEditBookmark, onOpenHelp]);
 }

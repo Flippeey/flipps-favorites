@@ -104,9 +104,13 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
       onAfterImport(summary.settings);
       const wsLabel = summary.workspaceCount === 1 ? 'workspace' : 'workspaces';
       const overrideLabel = summary.iconOverrideCount === 1 ? 'icon override' : 'icon overrides';
+      const skippedTotal = summary.workspaceSkippedCount + summary.workspaceFailedCount + summary.iconOverrideSkippedCount;
+      const skippedSuffix = skippedTotal > 0
+        ? ` ${String(skippedTotal)} item${skippedTotal === 1 ? '' : 's'} skipped (over the workspace limit or too large) and were not imported.`
+        : '';
       setStatus({
         kind: 'success',
-        text: `Imported ${String(summary.workspaceCount)} ${wsLabel} and ${String(summary.iconOverrideCount)} ${overrideLabel} (${summary.mode} mode).`,
+        text: `Imported ${String(summary.workspaceCount)} ${wsLabel} and ${String(summary.iconOverrideCount)} ${overrideLabel} (${summary.mode} mode).${skippedSuffix}`,
       });
     } catch (error) {
       setStatus({

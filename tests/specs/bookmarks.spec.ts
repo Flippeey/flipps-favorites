@@ -159,8 +159,10 @@ test('middle-click on a folder tile does NOT open a new tab', async ({ newtabPag
   context.on('page', onPage);
 
   await tile.click({ button: 'middle' });
-  // No message round-trip is involved for a no-op folder middle-click, so a
-  // short settle window is enough to prove nothing opened.
+  // REVIEWED, INTENTIONAL exception to the no-blind-wait convention: this is an
+  // absence assertion (folder middle-click must NOT open a tab), so there is no
+  // positive event to poll/wait on instead — a fixed settle window is the only
+  // way to give a would-be (buggy) tab-open time to happen before asserting it didn't.
   await newtabPage.waitForTimeout(500);
 
   context.off('page', onPage);

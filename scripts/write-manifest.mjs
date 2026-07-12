@@ -51,7 +51,7 @@ const baseManifest = {
   default_locale: 'en',
   version: extensionVersion,
   description: '__MSG_extensionDescription__',
-  permissions: ['bookmarks', 'storage', 'declarativeNetRequest'],
+  permissions: ['bookmarks', 'storage', 'declarativeNetRequest', 'search'],
   host_permissions: hostPermissions,
   icons: extensionIcons,
   chrome_url_overrides: {

@@ -4,8 +4,10 @@ import { ConfirmBatchDeleteDialog, ConfirmDeleteDialog } from './components/Conf
 import { ContextMenu, type ContextMenuItem } from './components/ContextMenu';
 import { Dock } from './components/Dock';
 import { EditDialog, type EditTarget } from './components/EditDialog';
+import { ConfirmOpenAllTabsDialog } from './components/ConfirmOpenAllTabsDialog';
 import { FolderNameDialog, type FolderNameDialogTarget } from './components/FolderNameDialog';
 import { FolderOverlay } from './components/FolderOverlay';
+import { MoveToDialog } from './components/MoveToDialog';
 import { NewWorkspaceDialog } from './components/NewWorkspaceDialog';
 import { QuickAddDialog } from './components/QuickAddDialog';
 import { buildSearchIndex, ClockGreeting, ClockMini, HeroSearch, type FlatSearchResult } from './components/HeroSearch';
@@ -21,7 +23,7 @@ import { useWorkspaceShortcut } from './interaction/useWorkspaceShortcut';
 import { useKeyboardNav, useDeleteShortcut } from './interaction/useKeyboardNav';
 import { useQuickAddShortcuts } from './interaction/useQuickAddShortcuts';
 import { applyAccent, applyDensity, resolveThemeAttr } from './lib/accent';
-import { createBookmark, getBookmarkTree, getBookmarkUsage, moveBookmark, openTab, patchSettings, recordBookmarkUse, removeBookmark } from './lib/messaging';
+import { createBookmark, getBookmarkTree, getBookmarkUsage, getWorkspaces, moveBookmark, openTab, patchSettings, recordBookmarkUse, removeBookmark, webSearch } from './lib/messaging';
 import { useBlobUrl } from './lib/useBlobUrl';
 import { useScrollCollapsed } from './lib/useScrollCollapsed';
 import { normalizeBookmarkUrl } from './lib/url';
@@ -29,8 +31,9 @@ import { resolveDockMode } from './lib/dock-mode';
 import { effectiveViewSort } from './lib/effective-view-sort';
 import { prefetchAllIcons } from './lib/icon-prefetch';
 import { findFolder, findNode, findParentFolder, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
-import { captureMoveSnapshots, restoreMoveSnapshots } from './lib/move-snapshot';
-import { MAX_WORKSPACES } from '../shared/constants';
+import { captureDeleteSnapshots, captureSubtree, restoreDeleteSnapshots, restoreSubtree } from './lib/subtree-snapshot';
+import { captureMoveSnapshots, moveIdsTracked, restoreMoveSnapshots } from './lib/move-snapshot';
+import { MAX_WORKSPACES, OPEN_ALL_TABS_CONFIRM_THRESHOLD } from '../shared/constants';
 import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper } from '../shared/storage';
 import { useWorkspaceActions } from './state/useWorkspaceActions';
 import { useSelection } from './state/useSelection';
@@ -112,6 +115,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<BookmarkNode | null>(null);
   const [confirmDeleteBatch, setConfirmDeleteBatch] = useState<string[] | null>(null);
+  const [moveToState, setMoveToState] = useState<{ ids: string[]; excludeIds?: Set<string> } | null>(null);
+  const [confirmOpenAllFolder, setConfirmOpenAllFolder] = useState<BookmarkNode | null>(null);
 
   // Keyboard navigation: tracks which tile is currently focused via arrow keys.
   // Null = no keyboard focus (focus model resumes from real :focus or :focus-visible).
@@ -175,9 +180,12 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       const keys = Object.keys(patch) as (keyof AppSettings)[];
       setSettings(prev => ({ ...prev, ...Object.fromEntries(keys.map(k => [k, next[k]])) }));
     } catch {
-      // keep optimistic value
+      // Keep the optimistic value (don't revert abruptly) but surface the
+      // failure — otherwise the setting looks applied and silently reverts
+      // on next open.
+      pushToast({ kind: 'error', message: 'Couldn’t save that setting — it may not persist.' });
     }
-  }, []);
+  }, [pushToast]);
 
   const openAppSettings = useCallback((section: AppSectionId = 'navigation') => {
     setWorkspaceSettingsOpen(false);
@@ -197,6 +205,18 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       setTree(t);
     } catch {
       // ignore
+    }
+  }, []);
+
+  // Reconcile local workspace state with persisted truth. Used after a
+  // patchWorkspace failure (e.g. the workspace was concurrently deleted) so a
+  // ghost workspace doesn't linger in the UI until the next reload.
+  const refreshWorkspaces = useCallback(async () => {
+    try {
+      const fresh = await getWorkspaces();
+      setWorkspaces(fresh);
+    } catch {
+      // ignore — keep current state, next successful action will reconcile
     }
   }, []);
 
@@ -295,6 +315,24 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     else window.location.href = url;
   }, [settings.openLinksInNewTab]);
 
+  // Hero-search zero-match fallback: open an explicitly-typed URL through the
+  // same openLinksInNewTab decision handlePickBookmark uses for bookmarks.
+  // Not a bookmark (no id), so no usage tracking here.
+  const handleOpenUrl = useCallback((url: string) => {
+    if (settings.openLinksInNewTab) openTab(url).catch(() => { /* ignore */ });
+    else window.location.href = url;
+  }, [settings.openLinksInNewTab]);
+
+  const handleWebSearch = useCallback((query: string) => {
+    webSearch(query, settings.openLinksInNewTab)
+      .then(() => {
+        pushToast({ kind: 'info', message: `Searching the web for "${query}"…` });
+      })
+      .catch(() => {
+        pushToast({ kind: 'error', message: 'Couldn’t open web search.' });
+      });
+  }, [pushToast, settings.openLinksInNewTab]);
+
   const openInNewTab = useCallback((item: BookmarkNode) => {
     if (!item.url) return;
     const usedAt = Date.now();
@@ -334,6 +372,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setFolderPath,
     setSelection,
     handlePatch,
+    pushToast,
+    refreshWorkspaces,
   });
 
 
@@ -379,6 +419,75 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setFolderNameTarget({ mode: 'create', parentId: selection.scopeFolderId || defaultParentId(), moveIds: ids });
   }, [selection.scopeFolderId, defaultParentId]);
 
+  // "Move to…" — opens a folder picker spanning every workspace (the tree is
+  // global; workspace roots are just folders within it) for an existing
+  // destination, as opposed to handleMoveSelectionToNewFolder which creates a
+  // brand-new folder.
+  const handleMoveTo = useCallback((ids: string[], excludeIds?: Set<string>) => {
+    if (ids.length === 0) return;
+    setMoveToState({ ids, excludeIds });
+  }, []);
+
+  // Tracks per-id success so a mid-batch failure only scopes the Undo/toast to
+  // the ids that actually relocated (see moveIdsTracked) — the ids that failed
+  // are surfaced via a separate error toast rather than silently dropped.
+  const handleConfirmMoveTo = useCallback(async (targetFolderId: string): Promise<void> => {
+    const ids = moveToState?.ids ?? [];
+    if (ids.length === 0) return;
+    const outcome = await moveIdsTracked(tree, ids, targetFolderId, moveBookmark);
+    if (outcome.movedIds.length > 0) {
+      setSelection({ ids: new Set(outcome.movedIds), scopeFolderId: targetFolderId });
+      pushToast({
+        kind: 'info',
+        message: `Moved ${outcome.movedIds.length} ${outcome.movedIds.length === 1 ? 'item' : 'items'}`,
+        action: outcome.snapshots.length > 0
+          ? {
+              label: 'Undo',
+              onClick: () => {
+                void (async () => {
+                  try {
+                    await restoreMoveSnapshots(outcome.snapshots, moveBookmark);
+                    await refreshTree();
+                  } catch {
+                    pushToast({ kind: 'error', message: 'Couldn’t undo the move.' });
+                  }
+                })();
+              },
+            }
+          : undefined,
+      });
+    }
+    if (outcome.failedIds.length > 0) {
+      pushToast({
+        kind: 'error',
+        message: outcome.movedIds.length > 0
+          ? `Couldn’t move ${outcome.failedIds.length} of ${ids.length} items.`
+          : `Couldn’t move the selected ${ids.length === 1 ? 'item' : 'items'}.`,
+      });
+    }
+    await refreshTree();
+  }, [moveToState, tree, refreshTree, pushToast, setSelection]);
+
+  const openFolderBookmarksInTabs = useCallback((folder: BookmarkNode) => {
+    const urls = (folder.children ?? [])
+      .filter((c): c is BookmarkNode & { url: string } => !!c.url)
+      .map(c => normalizeBookmarkUrl(c.url));
+    for (const url of urls) openTab(url).catch(() => { /* ignore */ });
+  }, []);
+
+  // "Open all in new tabs" (folder context menu) — direct children only (no
+  // recursion into subfolders). Above the threshold, require confirmation so
+  // a stray click on a giant folder can't tab-bomb the browser.
+  const handleOpenAllInTabs = useCallback((folder: BookmarkNode) => {
+    const count = (folder.children ?? []).filter(c => !!c.url).length;
+    if (count === 0) return;
+    if (count > OPEN_ALL_TABS_CONFIRM_THRESHOLD) {
+      setConfirmOpenAllFolder(folder);
+    } else {
+      openFolderBookmarksInTabs(folder);
+    }
+  }, [openFolderBookmarksInTabs]);
+
   const handleCreateFromFolderResult = useCallback((
     result: 'created' | 'at_max' | 'already_exists',
     folderTitle: string,
@@ -413,6 +522,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setConfirmDeleteFolder,
     setConfirmDeleteBatch,
     onMoveSelectionToNewFolder: handleMoveSelectionToNewFolder,
+    onMoveTo: handleMoveTo,
+    onOpenAllInTabs: handleOpenAllInTabs,
     setRenameWorkspaceTarget,
     setConfirmDeleteWorkspace,
     onDeleteBookmark: handleDeleteBookmark,
@@ -565,6 +676,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     onNewWorkspace: handleOpenNewWorkspace,
     onRenameFolder: handleRenameFolder,
     onEditBookmark: handleEditBookmark,
+    onOpenHelp: () => openAppSettings('help'),
   });
 
   const wallpaperBlobUrl = useBlobUrl(workspaceWallpaper);
@@ -642,6 +754,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
               activeWorkspaceId={settings.activeWorkspaceId}
               onPickBookmark={onPickSearchBookmark}
               onPickFolder={onPickSearchFolder}
+              onOpenUrl={handleOpenUrl}
+              onWebSearch={handleWebSearch}
             />
           )}
         </section>
@@ -654,6 +768,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           activeWorkspaceId={settings.activeWorkspaceId}
           onPickBookmark={onPickSearchBookmark}
           onPickFolder={onPickSearchFolder}
+          onOpenUrl={handleOpenUrl}
+          onWebSearch={handleWebSearch}
           overlayMode
         />
       )}
@@ -781,6 +897,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
 
       {quickAddTarget && (
         <QuickAddDialog
+          tree={tree}
           parentId={quickAddTarget.parentId}
           parentTitle={quickAddTarget.parentTitle}
           onClose={() => setQuickAddTarget(null)}
@@ -790,6 +907,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
 
       {folderNameTarget && (
         <FolderNameDialog
+          tree={tree}
           target={folderNameTarget}
           siblingNames={folderSiblingNames}
           onClose={() => setFolderNameTarget(null)}
@@ -848,9 +966,34 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           folder={confirmDeleteFolder}
           onClose={() => setConfirmDeleteFolder(null)}
           onConfirm={async () => {
-            await removeBookmark(confirmDeleteFolder.id, true);
+            const folder = confirmDeleteFolder;
+            // Capture origin + full contents before deleting so Undo can
+            // recreate the folder, depth-first, exactly where it was.
+            const parent = findParentFolder(tree, folder.id);
+            const index = parent?.children?.findIndex(c => c.id === folder.id) ?? -1;
+            const subtree = captureSubtree(folder);
+            await removeBookmark(folder.id, true);
             setConfirmDeleteFolder(null);
             await refreshTree();
+            pushToast({
+              kind: 'info',
+              message: `Deleted “${folder.title}”`,
+              action: parent && index >= 0
+                ? {
+                    label: 'Undo',
+                    onClick: () => {
+                      void (async () => {
+                        try {
+                          await restoreSubtree(subtree, parent.id, index, createBookmark);
+                          await refreshTree();
+                        } catch {
+                          pushToast({ kind: 'error', message: 'Couldn’t restore the folder.' });
+                        }
+                      })();
+                    },
+                  }
+                : undefined,
+            });
           }}
         />
       )}
@@ -860,13 +1003,57 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           count={confirmDeleteBatch.length}
           onClose={() => setConfirmDeleteBatch(null)}
           onConfirm={async () => {
-            for (const id of confirmDeleteBatch) {
-              await removeBookmark(id);
+            const ids = confirmDeleteBatch;
+            // Capture every item's origin + contents (bookmarks and folders
+            // alike) before deleting so Undo can restore the whole batch.
+            const snapshots = captureDeleteSnapshots(tree, ids);
+            for (const id of ids) {
+              const node = findNode(tree, id);
+              await removeBookmark(id, node ? isFolder(node) : undefined);
             }
             setConfirmDeleteBatch(null);
             setSelection({ ids: new Set(), scopeFolderId: '' });
             await refreshTree();
+            pushToast({
+              kind: 'info',
+              message: `Deleted ${ids.length} ${ids.length === 1 ? 'item' : 'items'}`,
+              action: snapshots.length > 0
+                ? {
+                    label: 'Undo',
+                    onClick: () => {
+                      void (async () => {
+                        try {
+                          await restoreDeleteSnapshots(snapshots, createBookmark);
+                          await refreshTree();
+                        } catch {
+                          pushToast({ kind: 'error', message: 'Couldn’t restore the deleted items.' });
+                        }
+                      })();
+                    },
+                  }
+                : undefined,
+            });
           }}
+        />
+      )}
+
+      {moveToState && (
+        <MoveToDialog
+          tree={tree}
+          workspaces={workspaces}
+          count={moveToState.ids.length}
+          excludeIds={moveToState.excludeIds}
+          onClose={() => setMoveToState(null)}
+          onConfirm={handleConfirmMoveTo}
+        />
+      )}
+
+      {confirmOpenAllFolder && (
+        <ConfirmOpenAllTabsDialog
+          count={(confirmOpenAllFolder.children ?? []).filter(c => !!c.url).length}
+          folderTitle={confirmOpenAllFolder.title}
+          onClose={() => setConfirmOpenAllFolder(null)}
+          onConfirm={() => openFolderBookmarksInTabs(confirmOpenAllFolder)}
         />
       )}
 
@@ -878,6 +1065,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           onPatchGlobal={handlePatch}
           onAfterImport={(next: AppSettings) => { setSettings(next); refreshTree(); }}
           pushToast={pushToast}
+          onReplaySetup={() => { setAppSettingsOpen(false); setOnboardOpen(true); }}
           onClose={() => { setAppSettingsOpen(false); setAppSettingsInitialSection('navigation'); }}
         />
       )}

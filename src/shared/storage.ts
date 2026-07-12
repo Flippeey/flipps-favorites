@@ -311,6 +311,33 @@ export async function deleteWorkspace(id: string): Promise<void> {
   await workspacesStore.deleteOne(id);
 }
 
+// Per-workspace-id write queues, mirroring the settings writeQueue/doWriteSettings
+// pattern above. The MV3 service worker can handle two patchWorkspace messages for
+// the SAME workspace concurrently; without serialization both read the same base
+// record and the second write clobbers the first (#41). Keying by workspace id
+// (rather than one global queue) lets patches to different workspaces proceed
+// in parallel.
+const workspacePatchQueues = new Map<string, Promise<unknown>>();
+
+export async function patchWorkspaceRecord(id: string, patch: Partial<WorkspaceRecord>): Promise<WorkspaceRecord> {
+  const previous = workspacePatchQueues.get(id) ?? Promise.resolve();
+  const run = previous.then(() => doPatchWorkspaceRecord(id, patch));
+  workspacePatchQueues.set(id, run.catch(() => undefined));
+  return run;
+}
+
+async function doPatchWorkspaceRecord(id: string, patch: Partial<WorkspaceRecord>): Promise<WorkspaceRecord> {
+  // Re-read fresh INSIDE the critical section (after acquiring the queue slot) so
+  // the merge is based on the latest persisted state, not a stale pre-queue snapshot.
+  const current = await workspacesStore.readOne(id);
+  if (!current) {
+    throw new Error(`Workspace ${id} not found`);
+  }
+  const updated: WorkspaceRecord = { ...current, ...patch, id };
+  await workspacesStore.writeOne(id, updated);
+  return updated;
+}
+
 // Wallpapers are data URLs too large to cache in memory — bypass CachedValueStore intentionally.
 export async function readWorkspaceWallpaper(workspaceId: string): Promise<string> {
   const key = workspaceWallpaperKey(workspaceId);
@@ -389,6 +416,13 @@ function asResolvedArea(area: MinimalStorageArea | undefined): ResolvedStorageAr
 // resolveStorageArea so the migration reads/writes the same raw bytes the
 // stores do.
 async function resolveSyncPreferredArea(): Promise<ResolvedStorageArea | null> {
+  // Test-only escape hatch: mirrors storage-buckets.ts's resolveStorageArea /
+  // resolveArea so the one-shot migrations agree with the stores on which
+  // area is authoritative under test. Dead-code-eliminated otherwise.
+  if (__FF_TEST_STORAGE_LOCAL__) {
+    return asResolvedArea(extensionApi.storage?.local as MinimalStorageArea | undefined);
+  }
+
   const syncArea = asResolvedArea(extensionApi.storage?.sync as MinimalStorageArea | undefined);
   if (syncArea) {
     try {

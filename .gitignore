@@ -4,9 +4,21 @@ node_modules/
 releases/
 docs/*
 
+# gem-team agent config — personal process tooling, canonical copy lives in claude-setup
+.gem-team.yaml
+
 # Claude Code (config, agents, runtime data)
-# Root CLAUDE.md is tracked (shared project instructions); .claude/ detail docs stay local.
-.claude/
+# Ignore .claude/ contents by default; selectively track shared docs + safe settings.
+# NOTE: must be `.claude/*` (not `.claude/`) — a dir/ ignore can't be undone by `!` negation.
+.claude/*
+!.claude/settings.json
+!.claude/CLAUDE.md
+!.claude/structure.md
+!.claude/architecture.md
+!.claude/conventions.md
+!.claude/testing.md
+# Explicitly keep ignored (defense-in-depth; already covered by .claude/* since these are top-level):
+.claude/settings.local.json
 .mcp.json
 
 # Runtime / generated data
@@ -32,3 +44,6 @@ playwright-report/
 tests/spike-firefox-puppeteer/
 # Playwright test artifacts
 tests/.artifacts/
+
+# Evidence spec screenshots (generated per-run, uploaded to pr-evidence branch by CI)
+tests/evidence/output/

@@ -231,7 +231,7 @@ test.describe('folder CRUD', () => {
 
     // Project Apollo has 4 bookmarks — confirm the descriptor message.
     await expect(dialog.locator('.ff-confirm__message')).toHaveText(
-      'This will permanently delete 4 bookmarks.',
+      'This will delete 4 bookmarks.',
     );
 
     await newtabPage.getByRole('button', { name: 'Delete folder' }).click();

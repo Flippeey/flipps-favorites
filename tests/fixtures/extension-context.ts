@@ -1,12 +1,5 @@
 import { test as base, type BrowserContext, type Page } from '@playwright/test';
-import { chromium, firefox } from '@playwright/test';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const rootDir = resolve(fileURLToPath(import.meta.url), '..', '..', '..');
-const chromeExtPath = join(rootDir, 'dist', 'chrome');
+import { closeLaunched, launchChrome, launchFirefox, originFrom } from './launch.js';
 
 export interface ExtensionFixtures {
   context: BrowserContext;
@@ -17,40 +10,11 @@ export interface ExtensionFixtures {
 export const test = base.extend<ExtensionFixtures>({
   context: async ({ }, use, testInfo) => {
     const isFirefox = testInfo.project.name === 'firefox';
-    let context: BrowserContext;
-    let profileDir: string | undefined;
+    const launched = isFirefox ? await launchFirefox() : await launchChrome();
 
-    if (isFirefox) {
-      profileDir = await mkdtemp(join(tmpdir(), 'ff-ext-'));
-      context = await firefox.launchPersistentContext(profileDir, { headless: false });
-    } else {
-      profileDir = await mkdtemp(join(tmpdir(), 'cr-ext-'));
-      // Chrome's new headless mode (--headless=new) supports MV3 extensions,
-      // unlike legacy headless. Set HEADED=1 to force a visible window for
-      // local debugging.
-      const headed = process.env.HEADED === '1';
-      // headless:false + the `--headless=new` arg drives Chrome's new headless
-      // mode, which loads MV3 extensions. Passing headless:true instead makes
-      // Playwright inject legacy `--headless`, under which the extension service
-      // worker never registers (waitForEvent('serviceworker') times out).
-      context = await chromium.launchPersistentContext(profileDir, {
-        headless: false,
-        args: [
-          ...(headed ? [] : ['--headless=new']),
-          `--disable-extensions-except=${chromeExtPath}`,
-          `--load-extension=${chromeExtPath}`,
-          '--no-first-run',
-          '--disable-default-apps',
-        ],
-      });
-    }
+    await use(launched.context);
 
-    await use(context);
-
-    await context.close();
-    if (profileDir) {
-      await rm(profileDir, { recursive: true, force: true }).catch(() => undefined);
-    }
+    await closeLaunched(launched);
   },
 
   extensionOrigin: async ({ context }, use, testInfo) => {
@@ -58,13 +22,7 @@ export const test = base.extend<ExtensionFixtures>({
       await use('');
       return;
     }
-    const workers = context.serviceWorkers();
-    const sw =
-      workers.length > 0
-        ? workers[0]
-        : await context.waitForEvent('serviceworker', { timeout: 15_000 });
-    const extId = new URL(sw.url()).hostname;
-    await use(`chrome-extension://${extId}`);
+    await use(await originFrom(context));
   },
 
   newtabPage: async ({ context, extensionOrigin }, use, testInfo) => {

@@ -196,10 +196,11 @@ export function ListViewPreview({ active }: { active?: boolean }) {
     : 'color-mix(in oklab, var(--ink-3) 70%, var(--ink-2))';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 8, height: '100%', padding: '2px 0' }}>
-      {[64, 82, 52].map((w, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div style={{ width: 12, height: 12, borderRadius: 3, background: solid, flexShrink: 0, transition: 'background 140ms ease-out' }} />
-          <div style={{ height: 6, width: `${w}%`, borderRadius: 3, background: soft, transition: 'background 140ms ease-out' }} />
+      <div style={{ height: 5, width: '45%', borderRadius: 3, background: soft, transition: 'background 140ms ease-out' }} />
+      {[74, 58].map((w, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 16, height: 16, borderRadius: 5, background: solid, flexShrink: 0, transition: 'background 140ms ease-out' }} />
+          <div style={{ height: 7, width: `${w}%`, borderRadius: 3, background: soft, transition: 'background 140ms ease-out' }} />
         </div>
       ))}
     </div>

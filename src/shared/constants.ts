@@ -11,6 +11,15 @@
 // time, so normal usage stays far below either cap.
 export const MAX_WORKSPACES = 20;
 
+// Upper bound on a single data: URL (icon override or workspace wallpaper)
+// accepted from an imported backup. Data URLs of this size are already far
+// past what a favicon/wallpaper needs; a crafted/corrupt backup with a huge
+// embedded image can otherwise exhaust storage.local/IDB and wedge icon
+// writes extension-wide (see workspace-transfer.ts import normalizers).
+// 5 MB of base64 text comfortably covers a legitimate hi-res wallpaper while
+// still rejecting pathological payloads.
+export const MAX_IMPORT_DATA_URL_BYTES = 5 * 1024 * 1024;
+
 // Schemes a bookmark URL may use. http/https plus browser-internal pages and
 // local files. Note: chrome://, edge://, about: bookmarks save + display, but
 // an extension page is blocked from opening them via window.open on click.
@@ -27,3 +36,7 @@ export const EAGER_ICON_PREFETCH = true;
 // Bearer header (see shared/sync-crypto.ts). https://*/* host permission
 // already covers this host, so no manifest change is required.
 export const SYNC_ENDPOINT = 'https://api.flippflix.com/sync';
+
+// "Open all in new tabs" (folder context menu) asks for confirmation above
+// this count to avoid tab-bombing the browser from a single click.
+export const OPEN_ALL_TABS_CONFIRM_THRESHOLD = 10;

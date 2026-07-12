@@ -11,7 +11,7 @@
  */
 import { test, expect } from '../fixtures/world.js';
 import type { Page } from '@playwright/test';
-import { MAX_WORKSPACES } from '../../src/shared/constants.js';
+import { MAX_WORKSPACES } from '@/shared/constants.js';
 
 const WS_DEFAULTS = {
   themeMode: 'system', accentColor: '#3F72DC', backgroundMode: 'gradient', solidBackgroundColor: '',
@@ -76,7 +76,12 @@ test.describe('preprod fixes', () => {
       await urlInput.waitFor({ timeout: 5_000 });
       await urlInput.fill(value);
       await freshPage.locator('.ff-dialog button[type="submit"]').click();
-      await freshPage.waitForTimeout(400);
+      // Wait for form processing: dialog closes if valid, stays open if invalid.
+      // Wait for the dialog to either become hidden (valid) or remain visible (invalid).
+      await Promise.race([
+        freshPage.locator('.ff-dialog').waitFor({ state: 'hidden', timeout: 400 }).catch(() => {}),
+        freshPage.waitForTimeout(400)
+      ]);
       // If the dialog stayed open (rejected input), close it and wait for it to go.
       if (await urlInput.count() > 0) {
         await freshPage.keyboard.press('Escape');
@@ -110,7 +115,7 @@ test.describe('preprod fixes', () => {
   test('empty workspace shows an empty-state with an Add button', async ({ freshPage }) => {
     await seed(freshPage, [{ id: 'ws-empty', name: 'Empty', bookmarks: [] }]);
     await reload(freshPage);
-    await freshPage.waitForTimeout(400);
+    // Wait for the empty state to appear after reload.
     await expect(freshPage.locator('.ff-empty')).toBeVisible();
     await expect(freshPage.locator('.ff-empty button', { hasText: 'Add bookmark' })).toBeVisible();
     expect(await freshPage.locator('[data-item-id]').count()).toBe(0);
@@ -164,8 +169,12 @@ test.describe('preprod fixes', () => {
     // that only the root folder "Personal" matches yields no results.
     await input.fill('');
     await input.fill('Personal');
-    await freshPage.waitForTimeout(300);
-    expect(await freshPage.locator('.ff-results__item').count()).toBe(0);
+    // Wait for search results to update or confirm no results appear.
+    // Use expect.poll to wait for the result count to settle.
+    await expect(async () => {
+      const count = await freshPage.locator('.ff-results__item').count();
+      expect(count).toBe(0);
+    }).toPass({ timeout: 300 });
   });
 
   test('`w` shortcut does nothing at the workspace limit', async ({ freshPage }) => {
@@ -176,6 +185,11 @@ test.describe('preprod fixes', () => {
 
     await freshPage.locator('main.ff-canvas').click({ position: { x: 6, y: 6 } });
     await freshPage.keyboard.press('w');
+    // REVIEWED, INTENTIONAL exception to the no-blind-wait convention: this is an
+    // absence assertion (the 'w' shortcut must NOT open "New workspace" at the cap),
+    // so there is no positive event to poll/wait on instead — a fixed settle window
+    // is the only way to give a would-be (buggy) dialog open time to happen before
+    // asserting it didn't.
     await freshPage.waitForTimeout(400);
     expect(await freshPage.getByText('New workspace', { exact: false }).count()).toBe(0);
   });

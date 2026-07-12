@@ -3,7 +3,7 @@
 // attributes + ff- class hooks) — query those, never ad-hoc CSS, so a markup
 // refactor only touches this file.
 import type { Locator, Page } from '@playwright/test';
-import type { BookmarkSortMode, SortDirection, ThemeMode, TileShape } from '../../src/shared/models';
+import type { BookmarkSortMode, SortDirection, ThemeMode, TileShape } from '@/shared/models';
 
 /** A bookmark/folder tile by its stable bookmark id. */
 export function tileById(page: Page, id: string): Locator {

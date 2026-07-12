@@ -105,6 +105,13 @@ export function ancestorFolderIds(tree: BookmarkNode[], id: string): string[] {
   return ids;
 }
 
+// The set of folder ids that must start expanded so `folderId` is visible
+// without the user drilling down manually. Used to seed a single-select
+// folder picker's initial expansion state from its default target folder.
+export function initialExpansionForSelection(tree: BookmarkNode[], folderId: string): Set<string> {
+  return new Set(ancestorFolderIds(tree, folderId));
+}
+
 export function resolveRootFolder(tree: BookmarkNode[], rootId: string): BookmarkNode | null {
   if (rootId) {
     const folder = findFolder(tree, rootId);
