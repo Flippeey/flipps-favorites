@@ -5,6 +5,7 @@ import {
   applyWorkspaceImport,
   buildWorkspaceExport,
   normalizeWorkspaceExportPayload,
+  type ParsedWorkspaceImport,
   type WorkspaceImportMode,
 } from '@/newtab/lib/workspace-transfer';
 
@@ -40,6 +41,32 @@ export async function runSyncNow(mode: WorkspaceImportMode = 'merge'): Promise<S
   const payload = normalizeWorkspaceExportPayload(remote);
   const summary = await applyWorkspaceImport(payload, mode);
 
+  const bundle = await buildWorkspaceExport();
+  await syncPush(bundle);
+  await recordSyncCompleted();
+
+  return { merged: true, settings: summary.settings };
+}
+
+// Finishes "Link another browser" AFTER the user confirmed the preview
+// dialog. The remote payload was already pulled once (previewPull) and is
+// passed in from memory — this function must NOT pull again: one GET + one
+// PUT per link, both for R2 request economy and so the user applies exactly
+// the data they previewed. `payload` is null when the preview found an empty
+// namespace (the other browser never pushed): nothing to apply, the local
+// state just becomes the shared copy.
+export async function completeLinkFromPreview(
+  payload: ParsedWorkspaceImport | null,
+  mode: WorkspaceImportMode,
+): Promise<SyncNowResult> {
+  if (payload === null) {
+    const bundle = await buildWorkspaceExport();
+    await syncPush(bundle);
+    await recordSyncCompleted();
+    return { merged: false };
+  }
+
+  const summary = await applyWorkspaceImport(payload, mode);
   const bundle = await buildWorkspaceExport();
   await syncPush(bundle);
   await recordSyncCompleted();

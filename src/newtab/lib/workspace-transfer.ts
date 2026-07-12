@@ -386,6 +386,55 @@ export async function applyWorkspaceImport(
   };
 }
 
+export interface SyncPreviewSummary {
+  // Incoming workspaces whose id doesn't exist locally (the ones that appear).
+  newWorkspaceNames: string[];
+  // Local workspaces a same-id incoming record will overwrite.
+  updatedWorkspaceNames: string[];
+  // Incoming workspaces that will be dropped by the MAX_WORKSPACES cap.
+  workspaceSkippedCount: number;
+  iconOverrideIncomingCount: number;
+  // Replace mode wipes local overrides before applying; 0 in merge mode.
+  iconOverrideRemovedCount: number;
+  bookmarkUsageIncomingCount: number;
+}
+
+// Dry run of applyWorkspaceImport for the link-preview dialog: reports what
+// WOULD change without writing anything. Mirrors apply's cap and dedupe math
+// so the preview matches what a confirm actually does — reads local state
+// only, never the network (the payload was already pulled once and is held
+// in memory by the caller).
+export async function buildSyncPreview(
+  payload: ParsedWorkspaceImport,
+  mode: WorkspaceImportMode,
+): Promise<SyncPreviewSummary> {
+  const [existingWorkspaces, existingOverrides] = await Promise.all([
+    readWorkspaces(),
+    readIconOverrideRecords(),
+  ]);
+
+  const existingWorkspaceCount = mode === 'merge' ? existingWorkspaces.length : 0;
+  const importSlots = Math.max(0, MAX_WORKSPACES - existingWorkspaceCount);
+  const workspacesToImport = payload.workspaces.slice(0, importSlots);
+  const existingIds = new Set(existingWorkspaces.map(w => w.id));
+
+  const dedupedOverrides = dedupeByKey(
+    payload.iconOverrides,
+    r => getOverrideKeyForScope(r.bookmarkUrl, normalizeOverrideScope(r.scope)) ?? `exact:${r.bookmarkUrl}`,
+    (a, b) => b.updatedAt - a.updatedAt,
+  );
+  const dedupedUsage = dedupeByKey(payload.bookmarkUsage, r => r.bookmarkId, (a, b) => b.usedAt - a.usedAt);
+
+  return {
+    newWorkspaceNames: workspacesToImport.filter(w => !existingIds.has(w.id)).map(w => w.name),
+    updatedWorkspaceNames: workspacesToImport.filter(w => existingIds.has(w.id)).map(w => w.name),
+    workspaceSkippedCount: payload.workspaces.length - workspacesToImport.length,
+    iconOverrideIncomingCount: dedupedOverrides.length,
+    iconOverrideRemovedCount: mode === 'replace' ? Object.keys(existingOverrides).length : 0,
+    bookmarkUsageIncomingCount: dedupedUsage.length,
+  };
+}
+
 // Cross-browser workspace repair (#7): rootFolderId is a browser-local
 // bookmark id, so a record imported from another browser or profile usually
 // points at a folder that doesn't exist here. Best-effort, in order: keep a

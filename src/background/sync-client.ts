@@ -93,6 +93,43 @@ export async function syncPull(): Promise<SyncPullResult> {
   }
 }
 
+// Dry-run pull for the link-preview dialog: fetches + decrypts the namespace
+// the PASTED pairing code points at WITHOUT adopting the code — the stored
+// secret is untouched, so cancelling the dialog leaves this browser exactly
+// as it was. The caller holds the returned payload in memory and applies it
+// via completeLinkFromPreview after the user confirms; there is never a
+// second GET for the same link (one GET + one PUT per link, same as before).
+export async function previewPull(pairingCode: string): Promise<SyncPullResult> {
+  let secret: Uint8Array;
+  try {
+    secret = await decodePairingCode(pairingCode);
+  } catch (error) {
+    if (error instanceof SyncCryptoError) {
+      throw new SyncFetchError('validation', error.message);
+    }
+    throw new SyncFetchError('validation', 'Pairing code could not be read.');
+  }
+
+  const [authToken, aesKey] = await Promise.all([deriveAuthToken(secret), deriveAesKey(secret)]);
+  const response = await requestSync({ method: 'GET', headers: { Authorization: `Bearer ${authToken}` } });
+
+  if (response.status === 404) {
+    return { found: false };
+  }
+
+  const httpError = classifyHttpStatus(response.status);
+  if (httpError) throw httpError;
+
+  const bodyBytes = new Uint8Array(await response.arrayBuffer());
+  try {
+    const json = await decryptPayload(bodyBytes, aesKey);
+    return { found: true, payload: JSON.parse(json) as unknown };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new SyncFetchError('unknown', `Could not decrypt the synced data: ${message}`);
+  }
+}
+
 export async function getSyncPairingCode(): Promise<string> {
   const secret = await getOrCreateSyncSecret();
   return encodePairingCode(secret);

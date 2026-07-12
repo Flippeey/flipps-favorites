@@ -181,6 +181,17 @@ export async function syncPull(): Promise<unknown | null> {
   return res.found ? res.payload : null;
 }
 
+// Dry-run pull for the link-preview dialog (see sync-client.previewPull): the
+// pasted code is used for auth/decrypt but NOT adopted. Returns the decrypted
+// payload, or null when that namespace has nothing stored yet.
+export async function syncPreviewPull(pairingCode: string): Promise<unknown | null> {
+  const res = await send<SyncPullResponse | SyncPullNotFoundResponse>({
+    type: messageTypes.syncPreviewPull,
+    pairingCode,
+  });
+  return res.found ? res.payload : null;
+}
+
 export async function getSyncPairingCode(): Promise<string> {
   const res = await send<GetSyncPairingCodeResponse>({ type: messageTypes.getSyncPairingCode });
   return res.pairingCode;

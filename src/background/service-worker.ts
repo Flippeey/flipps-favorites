@@ -2,7 +2,7 @@ import { extensionApi } from '../shared/browser';
 import { IconFetchError, SyncFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetSyncPairingCodeResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type SyncErrorResponse, type SyncPullResponse, type SyncPullNotFoundResponse, type SyncPushResponse, type AdoptSyncSecretResponse, type WebSearchResponse, type WorkspaceRecord } from '../shared/messages';
 import { deleteWorkspace, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, patchWorkspaceRecord, readBookmarkUsageRecords, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
 import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl, sweepGeneratedRecords } from './icons/icon-service';
-import { adoptSyncSecret, getSyncPairingCode, syncPull, syncPush } from './sync-client';
+import { adoptSyncSecret, getSyncPairingCode, previewPull, syncPull, syncPush } from './sync-client';
 import { performWebSearch } from './search-shim';
 
 extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }) => {
@@ -187,6 +187,12 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
     }
     case messageTypes.syncPull: {
       const result = await syncPull();
+      return result.found
+        ? ({ found: true, payload: result.payload } satisfies SyncPullResponse)
+        : ({ found: false } satisfies SyncPullNotFoundResponse);
+    }
+    case messageTypes.syncPreviewPull: {
+      const result = await previewPull(message.pairingCode);
       return result.found
         ? ({ found: true, payload: result.payload } satisfies SyncPullResponse)
         : ({ found: false } satisfies SyncPullNotFoundResponse);

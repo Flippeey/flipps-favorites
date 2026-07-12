@@ -1,19 +1,24 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import type { AppSettings } from '@/shared/messages';
 import { SyncFetchError } from '@/shared/messages';
-import { adoptSyncSecret, getSyncPairingCode } from '@/newtab/lib/messaging';
-import { runSyncNow } from '@/newtab/lib/sync-now';
+import { adoptSyncSecret, getSyncPairingCode, syncPreviewPull } from '@/newtab/lib/messaging';
+import { completeLinkFromPreview, runSyncNow } from '@/newtab/lib/sync-now';
 import { readLastSyncedAt } from '@/shared/storage';
 import type { PushToastInput } from '@/newtab/state/useToasts';
 import {
   applyWorkspaceImport,
+  buildSyncPreview,
   buildWorkspaceExport,
   downloadWorkspaceExport,
+  normalizeWorkspaceExportPayload,
   parseWorkspaceFile,
+  type ParsedWorkspaceImport,
+  type SyncPreviewSummary,
   type WorkspaceImportMode,
 } from '@/newtab/lib/workspace-transfer';
 import { Ico } from '../Ico';
 import { Segmented } from '../settings-controls';
+import { LinkPreviewDialog } from './LinkPreviewDialog';
 
 interface BackupSectionProps {
   onAfterImport: (settings: AppSettings) => void;
@@ -69,9 +74,14 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
   const [pairingCodeBusy, setPairingCodeBusy] = useState(false);
   const [linkInput, setLinkInput] = useState('');
   const [linkMode, setLinkMode] = useState<WorkspaceImportMode>('merge');
-  const [linkConfirming, setLinkConfirming] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linkBusy, setLinkBusy] = useState(false);
+  // Set once the preview pull returns: holds the decrypted remote payload in
+  // memory (payload null = empty namespace) so confirming applies exactly the
+  // previewed data with no second GET against the server.
+  const [linkPreview, setLinkPreview] = useState<
+    { payload: ParsedWorkspaceImport; summary: SyncPreviewSummary } | { payload: null; summary: null } | null
+  >(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
 
   useEffect(() => {
@@ -188,27 +198,62 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
     }
   };
 
+  // Step 1 of linking: validate the code and pull the remote payload WITHOUT
+  // adopting the code, then open the preview dialog. Cancelling the dialog
+  // leaves this browser fully untouched (secret, data, everything).
   const handleLinkSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (linkBusy || !linkInput.trim()) return;
-    if (!linkConfirming) {
-      setLinkConfirming(true);
-      return;
-    }
     setLinkBusy(true);
     setLinkError(null);
     try {
+      const remote = await syncPreviewPull(linkInput.trim());
+      if (remote === null) {
+        setLinkPreview({ payload: null, summary: null });
+      } else {
+        const payload = normalizeWorkspaceExportPayload(remote);
+        const summary = await buildSyncPreview(payload, linkMode);
+        setLinkPreview({ payload, summary });
+      }
+    } catch (error) {
+      if (error instanceof SyncFetchError && error.kind === 'validation') {
+        setLinkError('That pairing code doesn’t look right. Double-check it and try again.');
+      } else {
+        pushToast({ kind: 'error', message: describeSyncError(error) });
+      }
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+
+  // Mode toggle inside the dialog re-runs the dry run against the SAME
+  // in-memory payload — local reads only, never another server request.
+  const handleLinkModeChange = (mode: WorkspaceImportMode) => {
+    setLinkMode(mode);
+    const payload = linkPreview?.payload;
+    if (!payload) return;
+    void buildSyncPreview(payload, mode).then(summary => {
+      setLinkPreview(prev => (prev?.payload ? { payload: prev.payload, summary } : prev));
+    });
+  };
+
+  // Step 2, on dialog confirm: only now is the pasted code adopted; the
+  // previewed payload is applied from memory and the merged state pushed.
+  const handleLinkConfirm = async () => {
+    if (!linkPreview || linkBusy) return;
+    setLinkBusy(true);
+    try {
       await adoptSyncSecret(linkInput.trim());
-      const result = await runSyncNow(linkMode);
+      const result = await completeLinkFromPreview(linkPreview.payload, linkMode);
       if (result.merged) {
         onAfterImport(result.settings);
       }
       setLinkInput('');
-      setLinkConfirming(false);
       // A newly adopted pairing means any cached code/reveal state is stale.
       setPairingCode(null);
       setPairingRevealed(false);
       setLastSyncedAt(Date.now());
+      setLinkPreview(null);
       // merged:false = the shared namespace was empty (other browser never
       // pushed), so nothing arrived HERE — saying "synced" would overpromise.
       pushToast({
@@ -218,12 +263,8 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
           : 'Linked — this browser’s data is now the shared copy. Press Sync now on your other browser to pick it up.',
       });
     } catch (error) {
-      if (error instanceof SyncFetchError && error.kind === 'validation') {
-        setLinkError('That pairing code doesn’t look right. Double-check it and try again.');
-      } else {
-        pushToast({ kind: 'error', message: describeSyncError(error) });
-      }
-      setLinkConfirming(false);
+      setLinkPreview(null);
+      pushToast({ kind: 'error', message: describeSyncError(error) });
     } finally {
       setLinkBusy(false);
     }
@@ -372,9 +413,9 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
           <div className="ff-stackrow">
             <div className="ff-row__label">Link another browser</div>
             <div className="ff-row__hint" style={{ marginBottom: 8 }}>
-              Paste a pairing code from another browser to join its sync data. This browser&rsquo;s own
-              pairing code is replaced by the one you paste — afterwards both browsers share that same
-              code. Your data merges; nothing here is deleted.
+              Paste a pairing code from another browser to join its sync data. You&rsquo;ll review
+              exactly what changes — including the choice to merge or replace — before anything
+              is applied.
             </div>
             <div className="ff-field">
               <input
@@ -384,33 +425,12 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
                 spellCheck={false}
                 placeholder="XXXX-XXXX-XXXX-XXXX"
                 value={linkInput}
-                onChange={(e) => { setLinkInput(e.target.value); setLinkError(null); setLinkConfirming(false); }}
+                onChange={(e) => { setLinkInput(e.target.value); setLinkError(null); }}
                 disabled={linkBusy}
                 data-testid="link-pairing-code-input"
               />
             </div>
-            <div className="ff-row" style={{ marginTop: 8 }}>
-              <div>
-                <div className="ff-row__label">If both browsers have data</div>
-                <div className="ff-row__hint">
-                  Merge keeps what&rsquo;s here and adds theirs. Replace adopts their settings and
-                  icons — workspaces are always kept.
-                </div>
-              </div>
-              <Segmented<WorkspaceImportMode>
-                options={[{ id: 'merge', label: 'Merge' }, { id: 'replace', label: 'Replace' }]}
-                value={linkMode}
-                onChange={(mode) => { setLinkMode(mode); setLinkConfirming(false); }}
-              />
-            </div>
             {linkError && <div className="ff-status" data-kind="error" role="alert">{linkError}</div>}
-            {linkConfirming && !linkError && (
-              <div className="ff-status" data-kind="warning" role="alert">
-                {linkMode === 'replace'
-                  ? 'This replaces this browser’s pairing code AND adopts the other browser’s settings and icon overrides (workspaces here are kept). Continue?'
-                  : 'This replaces this browser’s pairing code with the pasted one and merges that browser’s data in. Continue?'}
-              </div>
-            )}
             <div className="ff-dialog__actions" style={{ marginTop: 8 }}>
               <button
                 type="submit"
@@ -419,12 +439,23 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
                 data-testid="link-browser-submit"
               >
                 <Ico name="link" size={14} />
-                {linkBusy ? 'Linking…' : linkConfirming ? 'Confirm link' : 'Link browser'}
+                {linkBusy && !linkPreview ? 'Checking…' : 'Link browser'}
               </button>
             </div>
           </div>
         </form>
       </div>
+
+      {linkPreview && (
+        <LinkPreviewDialog
+          preview={linkPreview.summary}
+          mode={linkMode}
+          onModeChange={handleLinkModeChange}
+          busy={linkBusy}
+          onConfirm={() => { void handleLinkConfirm(); }}
+          onClose={() => setLinkPreview(null)}
+        />
+      )}
     </div>
   );
 }

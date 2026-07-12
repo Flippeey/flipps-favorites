@@ -121,6 +121,45 @@ describe('runSyncNow', () => {
     expect(mockWriteLastSyncedAt).not.toHaveBeenCalled();
   });
 
+  it('completeLinkFromPreview applies the in-memory payload WITHOUT pulling again', async () => {
+    mockSyncPull.mockReset();
+    mockSyncPush.mockReset().mockResolvedValue(undefined);
+    mockApplyWorkspaceImport.mockReset().mockResolvedValue({
+      mode: 'replace', workspaceCount: 1, iconOverrideCount: 0, bookmarkUsageCount: 0, settings: FAKE_SETTINGS,
+    });
+    mockBuildWorkspaceExport.mockReset().mockResolvedValue(FAKE_EXPORT);
+    mockWriteLastSyncedAt.mockReset().mockResolvedValue(undefined);
+
+    const mod = await importSyncNow();
+    const payload = FAKE_EXPORT as Parameters<typeof mod.completeLinkFromPreview>[0];
+    const result = await mod.completeLinkFromPreview(payload, 'replace');
+
+    // The point of the preview flow: the payload was pulled ONCE for the
+    // dialog; confirming must reuse it — a second GET would double R2 reads
+    // and could apply different data than the user just reviewed.
+    expect(mockSyncPull).not.toHaveBeenCalled();
+    expect(mockApplyWorkspaceImport).toHaveBeenCalledWith(FAKE_EXPORT, 'replace');
+    expect(mockSyncPush).toHaveBeenCalledWith(FAKE_EXPORT);
+    expect(mockWriteLastSyncedAt).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ merged: true, settings: FAKE_SETTINGS });
+  });
+
+  it('completeLinkFromPreview with an empty namespace (null payload) pushes local state only', async () => {
+    mockSyncPull.mockReset();
+    mockSyncPush.mockReset().mockResolvedValue(undefined);
+    mockApplyWorkspaceImport.mockReset();
+    mockBuildWorkspaceExport.mockReset().mockResolvedValue(FAKE_EXPORT);
+    mockWriteLastSyncedAt.mockReset().mockResolvedValue(undefined);
+
+    const mod = await importSyncNow();
+    const result = await mod.completeLinkFromPreview(null, 'merge');
+
+    expect(mockSyncPull).not.toHaveBeenCalled();
+    expect(mockApplyWorkspaceImport).not.toHaveBeenCalled();
+    expect(mockSyncPush).toHaveBeenCalledWith(FAKE_EXPORT);
+    expect(result).toEqual({ merged: false });
+  });
+
   it('a failed timestamp write does not fail an otherwise-successful sync', async () => {
     mockSyncPull.mockReset().mockResolvedValue(null);
     mockSyncPush.mockReset().mockResolvedValue(undefined);

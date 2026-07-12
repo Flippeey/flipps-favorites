@@ -617,3 +617,70 @@ describe('applyWorkspaceImport — cross-browser folder re-matching', () => {
     expect((await storedWorkspace('w5'))?.rootFolderId).toBe('firefox-guid-123');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// buildSyncPreview — the link dialog's dry run. Its numbers must mirror what
+// a confirming applyWorkspaceImport actually does (same cap and dedupe math),
+// or the dialog shows one thing and the confirm does another.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('buildSyncPreview — link-dialog dry run', () => {
+  function previewPayload(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+    return {
+      schema: WORKSPACE_SCHEMA,
+      settings: {},
+      workspaces: [],
+      workspaceWallpapers: {},
+      iconOverrides: [],
+      bookmarkUsage: [],
+      ...overrides,
+    };
+  }
+
+  it('splits incoming workspaces into new vs updated and dedupes override/usage counts', async () => {
+    installChromeFake({
+      syncSeed: {
+        'workspace:a': { ...baseRecordBody('a'), folderMode: 'grid', bookmarkSortMode: 'manual', bookmarkSortDirection: 'asc' },
+      },
+      localSeed: { 'workspaces-per-key-migrated': true },
+    });
+    const transfer = await importTransfer();
+
+    const parsed = transfer.normalizeWorkspaceExportPayload(previewPayload({
+      workspaces: [baseRecordBody('a'), baseRecordBody('b')],
+      iconOverrides: [
+        { bookmarkUrl: 'https://x.com/a', dataUrl: 'data:image/png;base64,AAA', fileName: 'a.png', mimeType: 'image/png', updatedAt: 1 },
+        { bookmarkUrl: 'https://x.com/a', dataUrl: 'data:image/png;base64,BBB', fileName: 'b.png', mimeType: 'image/png', updatedAt: 2 },
+      ],
+      bookmarkUsage: [{ bookmarkId: 'b1', usedAt: 1 }],
+    }));
+    const preview = await transfer.buildSyncPreview(parsed, 'merge');
+
+    expect(preview.newWorkspaceNames).toEqual(['Workspace b']);
+    expect(preview.updatedWorkspaceNames).toEqual(['Workspace a']);
+    expect(preview.workspaceSkippedCount).toBe(0);
+    // Two overrides for the same URL/scope collapse to one, exactly as apply dedupes.
+    expect(preview.iconOverrideIncomingCount).toBe(1);
+    expect(preview.iconOverrideRemovedCount).toBe(0);
+    expect(preview.bookmarkUsageIncomingCount).toBe(1);
+  });
+
+  it('reports cap-skipped workspaces the same way apply would drop them', async () => {
+    const syncSeed: Record<string, unknown> = {};
+    for (let i = 0; i < 20; i += 1) {
+      syncSeed[`workspace:e${i}`] = { ...baseRecordBody(`e${i}`), folderMode: 'grid', bookmarkSortMode: 'manual', bookmarkSortDirection: 'asc' };
+    }
+    installChromeFake({ syncSeed, localSeed: { 'workspaces-per-key-migrated': true } });
+    const transfer = await importTransfer();
+
+    const parsed = transfer.normalizeWorkspaceExportPayload(previewPayload({
+      workspaces: [baseRecordBody('incoming')],
+    }));
+    const preview = await transfer.buildSyncPreview(parsed, 'merge');
+
+    // MAX_WORKSPACES already reached locally: merge mode has zero slots, so
+    // the preview must show the incoming workspace as skipped, not as new.
+    expect(preview.newWorkspaceNames).toEqual([]);
+    expect(preview.workspaceSkippedCount).toBe(1);
+  });
+});

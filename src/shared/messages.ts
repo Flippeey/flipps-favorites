@@ -23,6 +23,7 @@ export const messageTypes = {
   openTab: 'tabs/open',
   syncPush: 'sync/push',
   syncPull: 'sync/pull',
+  syncPreviewPull: 'sync/preview-pull',
   getSyncPairingCode: 'sync/get-pairing-code',
   adoptSyncSecret: 'sync/adopt-secret',
   webSearch: 'search/web-query',
@@ -293,6 +294,15 @@ export interface SyncPullNotFoundResponse {
   found: false;
 }
 
+// Dry-run pull for the link-preview dialog: fetches the namespace the PASTED
+// pairing code points at without adopting the code, so cancelling the dialog
+// leaves this browser untouched. Response reuses SyncPullResponse /
+// SyncPullNotFoundResponse.
+export interface SyncPreviewPullRequest {
+  type: typeof messageTypes.syncPreviewPull;
+  pairingCode: string;
+}
+
 export interface GetSyncPairingCodeRequest {
   type: typeof messageTypes.getSyncPairingCode;
 }
@@ -345,6 +355,7 @@ export type AppRequest =
   | OpenTabRequest
   | SyncPushRequest
   | SyncPullRequest
+  | SyncPreviewPullRequest
   | GetSyncPairingCodeRequest
   | AdoptSyncSecretRequest
   | WebSearchRequest;
