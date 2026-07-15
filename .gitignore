@@ -34,9 +34,10 @@ tests/.firefox-profile/
 test-results/
 playwright-report/
 
-# Ignore GitHub metadata, but keep CI workflows tracked
+# Ignore GitHub metadata, but keep CI workflows + Dependabot config tracked
 .github/*
 !.github/workflows/
+!.github/dependabot.yml
 
 # Ignore editor settings
 .vscode
