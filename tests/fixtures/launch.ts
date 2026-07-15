@@ -24,6 +24,11 @@ export interface LaunchedContext {
   profileDir: string;
 }
 
+export interface LaunchChromeOptions {
+  /** Extra Chromium CLI args (e.g. `--host-resolver-rules=...` for a network stub). */
+  extraArgs?: string[];
+}
+
 /**
  * Launch Chrome with the built extension loaded via a temp profile dir.
  *
@@ -34,7 +39,8 @@ export interface LaunchedContext {
  * legacy `--headless`, under which the extension service worker never
  * registers (waitForEvent('serviceworker') times out).
  */
-export async function launchChrome(): Promise<LaunchedContext> {
+export async function launchChrome(options: LaunchChromeOptions = {}): Promise<LaunchedContext> {
+  const { extraArgs = [] } = options;
   const profileDir = await mkdtemp(join(tmpdir(), 'cr-ext-'));
   const headed = process.env.HEADED === '1';
   const context = await chromium.launchPersistentContext(profileDir, {
@@ -45,6 +51,7 @@ export async function launchChrome(): Promise<LaunchedContext> {
       `--load-extension=${chromeExtPath}`,
       '--no-first-run',
       '--disable-default-apps',
+      ...extraArgs,
     ],
   });
   return { context, profileDir };
