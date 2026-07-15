@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # npm dependencies (the extension). Minor + patch bundled into one weekly PR to
+  # cut noise; majors get their own PR so a breaking bump gets a deliberate review.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  # The versions pinned in .github/workflows/*.yml (actions/checkout, setup-node, …).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+    groups:
+      actions:
+        patterns: ["*"]
