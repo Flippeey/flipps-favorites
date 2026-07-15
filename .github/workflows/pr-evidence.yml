@@ -50,13 +50,13 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Full history so the diff below can always resolve base/head SHAs, even for a
           # first push on a new branch.
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -149,7 +149,7 @@ jobs:
       # interpolation) - filenames are spec-generated but still handled defensively.
       - name: Post/update sticky evidence comment
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           HAS_SPEC: ${{ steps.check_specs.outputs.has_spec }}
         with:
@@ -240,7 +240,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Non-fatal by design: if the pr-evidence branch or this PR's subdir never existed
       # (no evidence spec ever ran for it), there's nothing to clean up - exit green.
