@@ -112,7 +112,7 @@ describe('firefoxSafeFetch() on Firefox (XHR path)', () => {
 
     // Provide a minimal XHR stub
     const xhrInstance = makeXhrStub({ status: 200, responseBlob: new Blob(['icon'], { type: 'image/png' }) });
-    vi.stubGlobal('XMLHttpRequest', vi.fn(() => xhrInstance));
+    vi.stubGlobal('XMLHttpRequest', vi.fn(mockXhrCtor(xhrInstance)));
 
     await firefoxSafeFetch('https://example.com/icon.png');
     expect(fetchMock).not.toHaveBeenCalled();
@@ -121,7 +121,7 @@ describe('firefoxSafeFetch() on Firefox (XHR path)', () => {
   it('returns a Response with the correct status on success', async () => {
     const blob = new Blob(['<svg/>'], { type: 'image/svg+xml' });
     const xhrInstance = makeXhrStub({ status: 200, responseBlob: blob });
-    vi.stubGlobal('XMLHttpRequest', vi.fn(() => xhrInstance));
+    vi.stubGlobal('XMLHttpRequest', vi.fn(mockXhrCtor(xhrInstance)));
 
     const response = await firefoxSafeFetch('https://example.com/icon.svg');
     expect(response.status).toBe(200);
@@ -132,7 +132,7 @@ describe('firefoxSafeFetch() on Firefox (XHR path)', () => {
 
   it('returns a non-ok Response when XHR status is 404', async () => {
     const xhrInstance = makeXhrStub({ status: 404, responseBlob: new Blob([]) });
-    vi.stubGlobal('XMLHttpRequest', vi.fn(() => xhrInstance));
+    vi.stubGlobal('XMLHttpRequest', vi.fn(mockXhrCtor(xhrInstance)));
 
     const response = await firefoxSafeFetch('https://example.com/missing.png');
     expect(response.status).toBe(404);
@@ -141,7 +141,7 @@ describe('firefoxSafeFetch() on Firefox (XHR path)', () => {
 
   it('rejects when XHR encounters a network error', async () => {
     const xhrInstance = makeXhrStub({ networkError: true });
-    vi.stubGlobal('XMLHttpRequest', vi.fn(() => xhrInstance));
+    vi.stubGlobal('XMLHttpRequest', vi.fn(mockXhrCtor(xhrInstance)));
 
     await expect(firefoxSafeFetch('https://unreachable.test/icon.png'))
       .rejects.toThrow();
@@ -149,7 +149,7 @@ describe('firefoxSafeFetch() on Firefox (XHR path)', () => {
 
   it('sets XHR responseType to blob', async () => {
     const xhrInstance = makeXhrStub({ status: 200, responseBlob: new Blob(['x']) });
-    vi.stubGlobal('XMLHttpRequest', vi.fn(() => xhrInstance));
+    vi.stubGlobal('XMLHttpRequest', vi.fn(mockXhrCtor(xhrInstance)));
 
     await firefoxSafeFetch('https://example.com/icon.png');
     expect(xhrInstance.responseType).toBe('blob');
@@ -157,7 +157,7 @@ describe('firefoxSafeFetch() on Firefox (XHR path)', () => {
 
   it('opens the request as GET with the correct URL', async () => {
     const xhrInstance = makeXhrStub({ status: 200, responseBlob: new Blob(['x']) });
-    vi.stubGlobal('XMLHttpRequest', vi.fn(() => xhrInstance));
+    vi.stubGlobal('XMLHttpRequest', vi.fn(mockXhrCtor(xhrInstance)));
 
     await firefoxSafeFetch('https://example.com/test.png');
     expect(xhrInstance.openArgs).toEqual(['GET', 'https://example.com/test.png', true]);
@@ -165,7 +165,7 @@ describe('firefoxSafeFetch() on Firefox (XHR path)', () => {
 
   it('applies timeout when timeoutMs is provided', async () => {
     const xhrInstance = makeXhrStub({ status: 200, responseBlob: new Blob(['x']) });
-    vi.stubGlobal('XMLHttpRequest', vi.fn(() => xhrInstance));
+    vi.stubGlobal('XMLHttpRequest', vi.fn(mockXhrCtor(xhrInstance)));
 
     await firefoxSafeFetch('https://example.com/icon.png', undefined, 3000);
     expect(xhrInstance.timeout).toBe(3000);
@@ -173,7 +173,7 @@ describe('firefoxSafeFetch() on Firefox (XHR path)', () => {
 
   it('rejects when XHR times out', async () => {
     const xhrInstance = makeXhrStub({ timeout: true });
-    vi.stubGlobal('XMLHttpRequest', vi.fn(() => xhrInstance));
+    vi.stubGlobal('XMLHttpRequest', vi.fn(mockXhrCtor(xhrInstance)));
 
     await expect(firefoxSafeFetch('https://slow.test/icon.png', undefined, 100))
       .rejects.toThrow();
@@ -234,4 +234,13 @@ function makeXhrStub(opts: XhrStubOptions): XhrStub {
     setRequestHeader() { /* no-op */ },
   };
   return stub;
+}
+
+// vitest 4 invokes stubbed constructors with `new`, so the mock implementation
+// must be a real (non-arrow) function — an arrow throws "is not a constructor".
+// Returning the stub from the body makes `new XMLHttpRequest()` yield it.
+function mockXhrCtor(instance: XhrStub): () => XhrStub {
+  return function () {
+    return instance;
+  };
 }
