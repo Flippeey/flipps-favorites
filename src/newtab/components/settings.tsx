@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AppSettings, BookmarkNode, WorkspaceRecord } from '@/shared/messages';
+import type { PushToastInput } from '../state/useToasts';
 import { useFocusTrap } from '../interaction/useFocusTrap';
 import { Ico } from './Ico';
 import {
@@ -30,7 +31,7 @@ const APP_SECTION_TITLES: Record<AppSectionId, string> = {
   navigation: 'Navigation',
   dock:       'Dock',
   clock:      'Clock',
-  backup:     'Backup',
+  backup:     'Backup & Sync',
   help:       'Help',
 };
 
@@ -45,11 +46,12 @@ interface AppSettingsDrawerProps {
   initialSection?: AppSectionId;
   onPatchGlobal: (patch: Partial<AppSettings>) => void;
   onAfterImport: (settings: AppSettings) => void;
+  pushToast: (input: PushToastInput) => void;
   onReplaySetup: () => void;
   onClose: () => void;
 }
 
-export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation', onPatchGlobal, onAfterImport, onReplaySetup, onClose }: AppSettingsDrawerProps) {
+export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation', onPatchGlobal, onAfterImport, pushToast, onReplaySetup, onClose }: AppSettingsDrawerProps) {
   const [section, setSection] = useState<AppSectionId>(initialSection);
   const [closing, setClosing] = useState(false);
   const drawerRef = useRef<HTMLElement | null>(null);
@@ -98,7 +100,7 @@ export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation
             {section === 'navigation' && <NavigationSection settings={settings} onPatch={onPatchGlobal} />}
             {section === 'dock'       && <DockSection settings={settings} tree={tree} onPatch={onPatchGlobal} />}
             {section === 'clock'      && <ClockSection settings={settings} onPatch={onPatchGlobal} />}
-            {section === 'backup'     && <BackupSection onAfterImport={onAfterImport} />}
+            {section === 'backup'     && <BackupSection onAfterImport={onAfterImport} pushToast={pushToast} />}
             {section === 'help'       && <HelpSection onReplaySetup={onReplaySetup} />}
           </div>
         </div>

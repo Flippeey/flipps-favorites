@@ -1064,6 +1064,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           initialSection={appSettingsInitialSection}
           onPatchGlobal={handlePatch}
           onAfterImport={(next: AppSettings) => { setSettings(next); refreshTree(); }}
+          pushToast={pushToast}
           onReplaySetup={() => { setAppSettingsOpen(false); setOnboardOpen(true); }}
           onClose={() => { setAppSettingsOpen(false); setAppSettingsInitialSection('navigation'); }}
         />

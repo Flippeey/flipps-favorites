@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WorkspaceRecord } from '@/shared/models';
+import type { BookmarkNode, WorkspaceRecord } from '@/shared/models';
 
 // buildWorkspaceExport reads icon overrides from IndexedDB, which the node test
 // environment has no implementation for. Stub the IDB-backed reads (export
@@ -15,6 +15,17 @@ vi.mock('@/shared/icon-idb', () => ({
   readIconOverride: async () => null,
   writeIconOverride: async () => undefined,
   writeCachedIcon: async () => undefined,
+}));
+
+// workspace-transfer calls getBookmarkTree() for cross-browser folder
+// re-matching (best-effort) and invalidateIcon() after imports. Mock the
+// messaging boundary: the default rejected tree keeps every non-rematch test
+// on the no-rematch path (records keep their pointers, as before the repair
+// existed); rematch tests point it at a fixture tree.
+const mockGetBookmarkTree = vi.fn();
+vi.mock('@/newtab/lib/messaging', () => ({
+  invalidateIcon: async () => undefined,
+  getBookmarkTree: (...args: unknown[]) => mockGetBookmarkTree(...args),
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -75,6 +86,7 @@ async function importTransfer(): Promise<typeof import('@/newtab/lib/workspace-t
 
 beforeEach(() => {
   installChromeFake();
+  mockGetBookmarkTree.mockReset().mockRejectedValue(new Error('tree unavailable'));
 });
 
 afterEach(() => {
@@ -468,5 +480,284 @@ describe('buildWorkspaceExport — schema v3', () => {
     expect(exported?.folderMode).toBe('list');
     expect(exported?.bookmarkSortMode).toBe('name');
     expect(exported?.bookmarkSortDirection).toBe('desc');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cross-browser folder re-matching (#7). rootFolderId is browser-local, so a
+// record imported from another browser points at a folder that doesn't exist
+// here. The repair must fix the pointer ONLY when it can do so unambiguously —
+// a wrong guess silently rebinds a workspace to the wrong folder, which is
+// worse than leaving it visibly unresolved.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('applyWorkspaceImport — cross-browser folder re-matching', () => {
+  const REMATCH_TREE: BookmarkNode[] = [
+    {
+      id: '0',
+      title: '',
+      children: [
+        {
+          id: '1',
+          title: 'Bookmarks Bar',
+          children: [
+            { id: 'f-jason', title: 'Jason', children: [] },
+            { id: 'f-dup-a', title: 'Duplicate', children: [] },
+            { id: 'b1', title: 'Some bookmark', url: 'https://example.com' },
+          ],
+        },
+        {
+          id: '2',
+          title: 'Other Bookmarks',
+          children: [{ id: 'f-dup-b', title: 'Duplicate', children: [] }],
+        },
+      ],
+    },
+  ];
+
+  function rematchPayload(records: Array<Record<string, unknown>>): Record<string, unknown> {
+    return {
+      schema: WORKSPACE_SCHEMA,
+      settings: {},
+      workspaces: records,
+      workspaceWallpapers: {},
+      iconOverrides: [],
+      bookmarkUsage: [],
+    };
+  }
+
+  async function storedWorkspace(id: string): Promise<WorkspaceRecord | undefined> {
+    const sync = (globalThis as unknown as { chrome: { storage: { sync: StorageAreaFake } } }).chrome.storage.sync;
+    const all = await sync.get(null);
+    return all[`workspace:${id}`] as WorkspaceRecord | undefined;
+  }
+
+  it('keeps a pointer that already resolves in this browser', async () => {
+    mockGetBookmarkTree.mockReset().mockResolvedValue(REMATCH_TREE);
+    const transfer = await importTransfer();
+
+    const parsed = transfer.normalizeWorkspaceExportPayload(
+      rematchPayload([{ ...baseRecordBody('w1'), rootFolderId: 'f-jason' }]),
+    );
+    await transfer.applyWorkspaceImport(parsed, 'merge');
+
+    expect((await storedWorkspace('w1'))?.rootFolderId).toBe('f-jason');
+  });
+
+  it('re-matches a broken pointer by unique folder title', async () => {
+    mockGetBookmarkTree.mockReset().mockResolvedValue(REMATCH_TREE);
+    const transfer = await importTransfer();
+
+    const parsed = transfer.normalizeWorkspaceExportPayload(
+      rematchPayload([{ ...baseRecordBody('w2'), rootFolderId: 'firefox-guid-123', name: 'Jason' }]),
+    );
+    await transfer.applyWorkspaceImport(parsed, 'merge');
+
+    expect((await storedWorkspace('w2'))?.rootFolderId).toBe('f-jason');
+  });
+
+  it('leaves a broken pointer unchanged when the title match is ambiguous', async () => {
+    mockGetBookmarkTree.mockReset().mockResolvedValue(REMATCH_TREE);
+    const transfer = await importTransfer();
+
+    const parsed = transfer.normalizeWorkspaceExportPayload(
+      rematchPayload([{ ...baseRecordBody('w3'), rootFolderId: 'firefox-guid-123', name: 'Duplicate' }]),
+    );
+    await transfer.applyWorkspaceImport(parsed, 'merge');
+
+    // Two folders are named "Duplicate" — guessing either could bind the
+    // workspace to the wrong one, so the foreign pointer must survive intact.
+    expect((await storedWorkspace('w3'))?.rootFolderId).toBe('firefox-guid-123');
+  });
+
+  it('on id collision, keeps the resolving local pointer while the rest of the record still comes from the payload', async () => {
+    installChromeFake({
+      syncSeed: {
+        'workspace:w4': {
+          ...baseRecordBody('w4'),
+          rootFolderId: 'f-jason',
+          folderMode: 'grid',
+          bookmarkSortMode: 'manual',
+          bookmarkSortDirection: 'asc',
+        },
+      },
+      localSeed: { 'workspaces-per-key-migrated': true },
+    });
+    mockGetBookmarkTree.mockReset().mockResolvedValue(REMATCH_TREE);
+    const transfer = await importTransfer();
+
+    const parsed = transfer.normalizeWorkspaceExportPayload(
+      rematchPayload([{
+        ...baseRecordBody('w4'),
+        rootFolderId: 'firefox-guid-123',
+        name: 'Duplicate',
+        accentColor: '#112233',
+      }]),
+    );
+    await transfer.applyWorkspaceImport(parsed, 'merge');
+
+    const stored = await storedWorkspace('w4');
+    // The working local folder link survives the collision...
+    expect(stored?.rootFolderId).toBe('f-jason');
+    // ...but the record content still follows the payload (remote wins).
+    expect(stored?.accentColor).toBe('#112233');
+  });
+
+  it('imports unchanged when the bookmark tree cannot be fetched (best-effort repair)', async () => {
+    // Default mock from beforeEach: getBookmarkTree rejects.
+    const transfer = await importTransfer();
+
+    const parsed = transfer.normalizeWorkspaceExportPayload(
+      rematchPayload([{ ...baseRecordBody('w5'), rootFolderId: 'firefox-guid-123', name: 'Jason' }]),
+    );
+    const summary = await transfer.applyWorkspaceImport(parsed, 'merge');
+
+    // The import itself must succeed — repair is opportunistic, not required.
+    expect(summary.workspaceCount).toBe(1);
+    expect((await storedWorkspace('w5'))?.rootFolderId).toBe('firefox-guid-123');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// buildSyncPreview — the link dialog's dry run. Its numbers must mirror what
+// a confirming applyWorkspaceImport actually does (same cap and dedupe math),
+// or the dialog shows one thing and the confirm does another.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('buildSyncPreview — link-dialog dry run', () => {
+  function previewPayload(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+    return {
+      schema: WORKSPACE_SCHEMA,
+      settings: {},
+      workspaces: [],
+      workspaceWallpapers: {},
+      iconOverrides: [],
+      bookmarkUsage: [],
+      ...overrides,
+    };
+  }
+
+  it('splits incoming workspaces into new vs updated and dedupes override/usage counts', async () => {
+    installChromeFake({
+      syncSeed: {
+        'workspace:a': { ...baseRecordBody('a'), folderMode: 'grid', bookmarkSortMode: 'manual', bookmarkSortDirection: 'asc' },
+      },
+      localSeed: { 'workspaces-per-key-migrated': true },
+    });
+    const transfer = await importTransfer();
+
+    const parsed = transfer.normalizeWorkspaceExportPayload(previewPayload({
+      workspaces: [baseRecordBody('a'), baseRecordBody('b')],
+      iconOverrides: [
+        { bookmarkUrl: 'https://x.com/a', dataUrl: 'data:image/png;base64,AAA', fileName: 'a.png', mimeType: 'image/png', updatedAt: 1 },
+        { bookmarkUrl: 'https://x.com/a', dataUrl: 'data:image/png;base64,BBB', fileName: 'b.png', mimeType: 'image/png', updatedAt: 2 },
+      ],
+      bookmarkUsage: [{ bookmarkId: 'b1', usedAt: 1 }],
+    }));
+    const preview = await transfer.buildSyncPreview(parsed, 'merge');
+
+    expect(preview.newWorkspaceNames).toEqual(['Workspace b']);
+    expect(preview.updatedWorkspaceNames).toEqual(['Workspace a']);
+    expect(preview.removedWorkspaceNames).toEqual([]);
+    expect(preview.workspaceSkippedCount).toBe(0);
+    // Two overrides for the same URL/scope collapse to one, exactly as apply dedupes.
+    expect(preview.iconOverrideIncomingCount).toBe(1);
+    expect(preview.iconOverrideRemovedCount).toBe(0);
+    expect(preview.bookmarkUsageIncomingCount).toBe(1);
+  });
+
+  it('reports cap-skipped workspaces the same way apply would drop them', async () => {
+    const syncSeed: Record<string, unknown> = {};
+    for (let i = 0; i < 20; i += 1) {
+      syncSeed[`workspace:e${i}`] = { ...baseRecordBody(`e${i}`), folderMode: 'grid', bookmarkSortMode: 'manual', bookmarkSortDirection: 'asc' };
+    }
+    installChromeFake({ syncSeed, localSeed: { 'workspaces-per-key-migrated': true } });
+    const transfer = await importTransfer();
+
+    const parsed = transfer.normalizeWorkspaceExportPayload(previewPayload({
+      workspaces: [baseRecordBody('incoming')],
+    }));
+    const preview = await transfer.buildSyncPreview(parsed, 'merge');
+
+    // MAX_WORKSPACES already reached locally: merge mode has zero slots, so
+    // the preview must show the incoming workspace as skipped, not as new.
+    expect(preview.newWorkspaceNames).toEqual([]);
+    expect(preview.workspaceSkippedCount).toBe(1);
+  });
+
+  it('replace previews AND applies as a mirror: locals absent from the payload are removed', async () => {
+    installChromeFake({
+      syncSeed: {
+        'workspace:a': { ...baseRecordBody('a'), folderMode: 'grid', bookmarkSortMode: 'manual', bookmarkSortDirection: 'asc' },
+        'workspace:b': { ...baseRecordBody('b'), folderMode: 'grid', bookmarkSortMode: 'manual', bookmarkSortDirection: 'asc' },
+      },
+      localSeed: { 'workspaces-per-key-migrated': true },
+    });
+    const transfer = await importTransfer();
+
+    const parsed = transfer.normalizeWorkspaceExportPayload(previewPayload({
+      workspaces: [baseRecordBody('c')],
+    }));
+
+    // The dialog must list exactly what the confirm will delete...
+    const preview = await transfer.buildSyncPreview(parsed, 'replace');
+    expect(preview.newWorkspaceNames).toEqual(['Workspace c']);
+    expect(preview.removedWorkspaceNames).toEqual(['Workspace a', 'Workspace b']);
+
+    // ...and the confirm must delete exactly that, nothing else.
+    await transfer.applyWorkspaceImport(parsed, 'replace');
+    const sync = (globalThis as unknown as { chrome: { storage: { sync: StorageAreaFake } } }).chrome.storage.sync;
+    const all = await sync.get(null);
+    expect(all['workspace:c']).toBeDefined();
+    expect(all['workspace:a']).toBeUndefined();
+    expect(all['workspace:b']).toBeUndefined();
+  });
+
+  it('merge never removes: removedWorkspaceNames stays empty even for non-incoming locals', async () => {
+    installChromeFake({
+      syncSeed: {
+        'workspace:a': { ...baseRecordBody('a'), folderMode: 'grid', bookmarkSortMode: 'manual', bookmarkSortDirection: 'asc' },
+      },
+      localSeed: { 'workspaces-per-key-migrated': true },
+    });
+    const transfer = await importTransfer();
+
+    const parsed = transfer.normalizeWorkspaceExportPayload(previewPayload({
+      workspaces: [baseRecordBody('c')],
+    }));
+    const preview = await transfer.buildSyncPreview(parsed, 'merge');
+
+    expect(preview.removedWorkspaceNames).toEqual([]);
+    await transfer.applyWorkspaceImport(parsed, 'merge');
+    const sync = (globalThis as unknown as { chrome: { storage: { sync: StorageAreaFake } } }).chrome.storage.sync;
+    const all = await sync.get(null);
+    expect(all['workspace:a']).toBeDefined();
+    expect(all['workspace:c']).toBeDefined();
+  });
+
+  it('identity dedupe: incoming same-name + same-folder workspace updates the local record instead of duplicating', async () => {
+    installChromeFake({
+      syncSeed: {
+        'workspace:y': { ...baseRecordBody('y'), name: 'Favorites', rootFolderId: 'f1', folderMode: 'grid', bookmarkSortMode: 'manual', bookmarkSortDirection: 'asc' },
+      },
+      localSeed: { 'workspaces-per-key-migrated': true },
+    });
+    const transfer = await importTransfer();
+
+    const parsed = transfer.normalizeWorkspaceExportPayload(previewPayload({
+      workspaces: [{ ...baseRecordBody('x'), name: 'Favorites', rootFolderId: 'f1', accentColor: '#112233' }],
+    }));
+
+    // Preview classifies it as an update, not a new tab...
+    const preview = await transfer.buildSyncPreview(parsed, 'merge');
+    expect(preview.newWorkspaceNames).toEqual([]);
+    expect(preview.updatedWorkspaceNames).toEqual(['Favorites']);
+
+    // ...and apply lands it under the LOCAL id — no duplicate "Favorites" tab.
+    await transfer.applyWorkspaceImport(parsed, 'merge');
+    const sync = (globalThis as unknown as { chrome: { storage: { sync: StorageAreaFake } } }).chrome.storage.sync;
+    const all = await sync.get(null);
+    expect(all['workspace:x']).toBeUndefined();
+    expect((all['workspace:y'] as WorkspaceRecord).accentColor).toBe('#112233');
   });
 });

@@ -22,6 +22,7 @@ import type {
   MoveBookmarkResponse,
   GetBookmarkUsageResponse,
   IconOverrideScope,
+  PingResponse,
   RecordBookmarkUseResponse,
   WorkspaceRecord,
   GetWorkspacesResponse,
@@ -29,12 +30,22 @@ import type {
   PatchWorkspaceResponse,
   DeleteWorkspaceResponse,
   OpenTabResponse,
+  SyncErrorResponse,
+  SyncPushResponse,
+  SyncPullResponse,
+  SyncPullNotFoundResponse,
+  GetSyncPairingCodeResponse,
+  AdoptSyncSecretResponse,
   WebSearchResponse,
 } from '@/shared/messages';
-import { IconFetchError, messageTypes } from '@/shared/messages';
+import { IconFetchError, SyncFetchError, messageTypes } from '@/shared/messages';
 
 async function send<T extends AppResponse>(req: AppRequest): Promise<T> {
-  const res = (await extensionApi.runtime.sendMessage(req)) as T | AppErrorResponse | undefined;
+  const res = (await extensionApi.runtime.sendMessage(req)) as T | AppErrorResponse | SyncErrorResponse | undefined;
+  if (res && typeof res === 'object' && '__syncError' in res) {
+    const { kind, message, httpStatus } = (res as SyncErrorResponse).__syncError;
+    throw new SyncFetchError(kind, message, httpStatus);
+  }
   if (res && typeof res === 'object' && '__error' in res) {
     const { kind, message, httpStatus } = (res as AppErrorResponse).__error;
     throw new IconFetchError(kind, message, httpStatus);
@@ -43,6 +54,33 @@ async function send<T extends AppResponse>(req: AppRequest): Promise<T> {
     throw new IconFetchError('unknown', 'No response from background service worker.');
   }
   return res as T;
+}
+
+// How often to nudge the background while a slow request is pending. Must sit
+// comfortably below the Firefox event-page idle timeout (default 30s; the
+// regression test shrinks it to 2s via pref) and Chrome's SW idle window.
+const KEEP_ALIVE_INTERVAL_MS = 1_000;
+
+// Firefox suspends its background EVENT PAGE after an idle timeout even while
+// an onMessage response is pending — a pending listener promise or in-flight
+// XHR does NOT hold the page (MDN: "Message ports cannot prevent an event page
+// from shutting down"). A sync request can take up to 10s (XHR timeout), so
+// without help Firefox tears the page down mid-request and the reply surfaces
+// as "Promised response from onMessage listener went out of scope". Pinging
+// while the request is pending resets the idle timer (every delivered message
+// is an event), keeping the page alive; on Chrome the same pings extend the
+// MV3 service worker's lifetime. Wake-up of an ALREADY-suspended page is
+// handled separately by public/background-boot.js. Both halves are guarded by
+// tests/firefox-e2e/specs/sync-event-page.test.ts.
+async function sendKeepingBackgroundAlive<T extends AppResponse>(req: AppRequest): Promise<T> {
+  const keepAlive = setInterval(() => {
+    void send<PingResponse>({ type: messageTypes.ping }).catch(() => undefined);
+  }, KEEP_ALIVE_INTERVAL_MS);
+  try {
+    return await send<T>(req);
+  } finally {
+    clearInterval(keepAlive);
+  }
 }
 
 export async function getSettings(): Promise<AppSettings> {
@@ -153,6 +191,42 @@ export async function deleteWorkspace(id: string): Promise<void> {
 
 export async function openTab(url: string): Promise<void> {
   await send<OpenTabResponse>({ type: messageTypes.openTab, url });
+}
+
+// Settings sync (#7). `bundle` is the WorkspaceExportPayload from
+// newtab/lib/workspace-transfer.ts's buildWorkspaceExport(); typed as unknown
+// at the message boundary (see messages.ts comment) and narrowed by the caller.
+export async function syncPush(bundle: unknown): Promise<void> {
+  await sendKeepingBackgroundAlive<SyncPushResponse>({ type: messageTypes.syncPush, bundle });
+}
+
+// Returns the decrypted export payload (untyped — caller narrows/validates,
+// same shape parseWorkspaceFile expects) or null when the server has nothing
+// stored yet for this device's pairing (404). Applying it via
+// applyWorkspaceImport(payload, 'merge') is the UI wave's responsibility.
+export async function syncPull(): Promise<unknown | null> {
+  const res = await sendKeepingBackgroundAlive<SyncPullResponse | SyncPullNotFoundResponse>({ type: messageTypes.syncPull });
+  return res.found ? res.payload : null;
+}
+
+// Dry-run pull for the link-preview dialog (see sync-client.previewPull): the
+// pasted code is used for auth/decrypt but NOT adopted. Returns the decrypted
+// payload, or null when that namespace has nothing stored yet.
+export async function syncPreviewPull(pairingCode: string): Promise<unknown | null> {
+  const res = await sendKeepingBackgroundAlive<SyncPullResponse | SyncPullNotFoundResponse>({
+    type: messageTypes.syncPreviewPull,
+    pairingCode,
+  });
+  return res.found ? res.payload : null;
+}
+
+export async function getSyncPairingCode(): Promise<string> {
+  const res = await send<GetSyncPairingCodeResponse>({ type: messageTypes.getSyncPairingCode });
+  return res.pairingCode;
+}
+
+export async function adoptSyncSecret(pairingCode: string): Promise<void> {
+  await send<AdoptSyncSecretResponse>({ type: messageTypes.adoptSyncSecret, pairingCode });
 }
 
 export async function webSearch(query: string, openInNewTab: boolean): Promise<void> {

@@ -48,3 +48,4 @@ tests/.artifacts/
 
 # Evidence spec screenshots (generated per-run, uploaded to pr-evidence branch by CI)
 tests/evidence/output/
+.wrangler/

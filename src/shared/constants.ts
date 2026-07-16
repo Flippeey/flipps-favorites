@@ -31,6 +31,12 @@ export const ALLOWED_BOOKMARK_SCHEMES = ['http:', 'https:', 'chrome:', 'edge:', 
 // to revert to the deferred behaviour if startup-latency regressions appear.
 export const EAGER_ICON_PREFETCH = true;
 
+// Settings-sync server endpoint (#7). Owner-operated Cloudflare Worker + R2;
+// no API key needed here — auth is the HKDF-derived authToken sent as a
+// Bearer header (see shared/sync-crypto.ts). https://*/* host permission
+// already covers this host, so no manifest change is required.
+export const SYNC_ENDPOINT = 'https://api.flippflix.com/sync';
+
 // "Open all in new tabs" (folder context menu) asks for confirmation above
 // this count to avoid tab-bombing the browser from a single click.
 export const OPEN_ALL_TABS_CONFIRM_THRESHOLD = 10;

@@ -21,6 +21,11 @@ export const messageTypes = {
   patchWorkspace: 'workspaces/patch',
   deleteWorkspace: 'workspaces/delete',
   openTab: 'tabs/open',
+  syncPush: 'sync/push',
+  syncPull: 'sync/pull',
+  syncPreviewPull: 'sync/preview-pull',
+  getSyncPairingCode: 'sync/get-pairing-code',
+  adoptSyncSecret: 'sync/adopt-secret',
   webSearch: 'search/web-query',
 } as const;
 
@@ -259,6 +264,62 @@ export interface OpenTabResponse {
   ok: true;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Settings sync (#7). The export bundle carried by SyncPushRequest is the
+// WorkspaceExportPayload built by newtab/lib/workspace-transfer.ts's
+// buildWorkspaceExport() — typed here as `unknown` to avoid a messages.ts ->
+// newtab import (messages.ts is shared/background-safe); callers narrow on
+// their own side.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SyncPushRequest {
+  type: typeof messageTypes.syncPush;
+  bundle: unknown;
+}
+
+export interface SyncPushResponse {
+  ok: true;
+}
+
+export interface SyncPullRequest {
+  type: typeof messageTypes.syncPull;
+}
+
+export interface SyncPullResponse {
+  found: true;
+  payload: unknown;
+}
+
+export interface SyncPullNotFoundResponse {
+  found: false;
+}
+
+// Dry-run pull for the link-preview dialog: fetches the namespace the PASTED
+// pairing code points at without adopting the code, so cancelling the dialog
+// leaves this browser untouched. Response reuses SyncPullResponse /
+// SyncPullNotFoundResponse.
+export interface SyncPreviewPullRequest {
+  type: typeof messageTypes.syncPreviewPull;
+  pairingCode: string;
+}
+
+export interface GetSyncPairingCodeRequest {
+  type: typeof messageTypes.getSyncPairingCode;
+}
+
+export interface GetSyncPairingCodeResponse {
+  pairingCode: string;
+}
+
+export interface AdoptSyncSecretRequest {
+  type: typeof messageTypes.adoptSyncSecret;
+  pairingCode: string;
+}
+
+export interface AdoptSyncSecretResponse {
+  ok: true;
+}
+
 export interface WebSearchRequest {
   type: typeof messageTypes.webSearch;
   query: string;
@@ -292,6 +353,11 @@ export type AppRequest =
   | PatchWorkspaceRequest
   | DeleteWorkspaceRequest
   | OpenTabRequest
+  | SyncPushRequest
+  | SyncPullRequest
+  | SyncPreviewPullRequest
+  | GetSyncPairingCodeRequest
+  | AdoptSyncSecretRequest
   | WebSearchRequest;
 
 export type AppResponse =
@@ -317,4 +383,8 @@ export type AppResponse =
   | PatchWorkspaceResponse
   | DeleteWorkspaceResponse
   | OpenTabResponse
+  | SyncPushResponse
+  | (SyncPullResponse | SyncPullNotFoundResponse)
+  | GetSyncPairingCodeResponse
+  | AdoptSyncSecretResponse
   | WebSearchResponse;

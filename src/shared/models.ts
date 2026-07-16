@@ -113,6 +113,39 @@ export interface AppErrorResponse {
   };
 }
 
+// Settings-sync (#7) error taxonomy. Distinct from IconFetchErrorKind: sync
+// errors are transport/server-condition oriented (no image-decode concerns),
+// plus a client-side 'validation' kind for a bad pairing code.
+export type SyncErrorKind =
+  | 'offline'
+  | 'network'
+  | 'http-status'
+  | 'payload-too-large'
+  | 'rate-limited'
+  | 'not-found'
+  | 'validation'
+  | 'unknown';
+
+export class SyncFetchError extends Error {
+  readonly kind: SyncErrorKind;
+  readonly httpStatus?: number;
+
+  constructor(kind: SyncErrorKind, message: string, httpStatus?: number) {
+    super(message);
+    this.name = 'SyncFetchError';
+    this.kind = kind;
+    this.httpStatus = httpStatus;
+  }
+}
+
+export interface SyncErrorResponse {
+  __syncError: {
+    kind: SyncErrorKind;
+    message: string;
+    httpStatus?: number;
+  };
+}
+
 export interface ResolvedIcon {
   cacheKey: string;
   sourceKind: IconSourceKind;

@@ -1,7 +1,8 @@
 import { extensionApi } from '../shared/browser';
-import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type WebSearchResponse } from '../shared/messages';
+import { IconFetchError, SyncFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetSyncPairingCodeResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type SyncErrorResponse, type SyncPullResponse, type SyncPullNotFoundResponse, type SyncPushResponse, type AdoptSyncSecretResponse, type WebSearchResponse, type WorkspaceRecord } from '../shared/messages';
 import { deleteWorkspace, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, patchWorkspaceRecord, readBookmarkUsageRecords, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
 import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl, sweepGeneratedRecords } from './icons/icon-service';
+import { adoptSyncSecret, getSyncPairingCode, previewPull, syncPull, syncPush } from './sync-client';
 import { performWebSearch } from './search-shim';
 
 extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }) => {
@@ -32,14 +33,45 @@ function scheduleGeneratedRecordSweep(): Promise<void> {
   });
 }
 
-extensionApi.runtime.onMessage.addListener((message: AppRequest, _sender: unknown, sendResponse: (response: AppResponse | AppErrorResponse | undefined) => void) => {
-  handleMessage(message)
-    .then(sendResponse)
-    .catch((error: unknown) => {
-      sendResponse(buildErrorEnvelope(error));
-    });
-  return true; // Keep the message channel open for the async response
-});
+type BackgroundResponse = AppResponse | AppErrorResponse | SyncErrorResponse;
+
+// Single response pipeline for both wiring modes below: never rejects — every
+// failure resolves into a typed error envelope the newtab side knows how to
+// unwrap.
+function respond(message: AppRequest): Promise<BackgroundResponse> {
+  return handleMessage(message).catch((error: unknown) => {
+    if (error instanceof SyncFetchError) {
+      return buildSyncErrorEnvelope(error);
+    }
+    return buildErrorEnvelope(error);
+  });
+}
+
+// Firefox runs the background as an EVENT PAGE (background.html), where
+// public/background-boot.js has already registered the runtime.onMessage
+// listener synchronously at document start — Firefox only wakes a suspended
+// event page for listeners registered that early; one registered from this
+// module script evaluates too late, so after ~30s idle the page was
+// unreachable ("Receiving end does not exist") or torn down mid-response
+// ("Promised response from onMessage listener went out of scope"). Guarded by
+// tests/firefox-e2e/specs/sync-event-page.test.ts. Here we only publish the
+// actual handler into the boot listener.
+// Chrome runs this file directly as the MV3 service worker (no boot script,
+// hook absent): register the classic sendResponse listener — Chrome's SW
+// wake-up handles module-registered listeners fine, and Chrome ignores a
+// Promise returned from an onMessage listener.
+const publishBackgroundHandler = (globalThis as {
+  __ffPublishBackgroundHandler?: (handler: (message: AppRequest) => Promise<BackgroundResponse>) => void;
+}).__ffPublishBackgroundHandler;
+
+if (publishBackgroundHandler) {
+  publishBackgroundHandler(respond);
+} else {
+  extensionApi.runtime.onMessage.addListener((message: AppRequest, _sender: unknown, sendResponse: (response: BackgroundResponse | undefined) => void) => {
+    void respond(message).then(sendResponse);
+    return true; // Keep the message channel open for the async response
+  });
+}
 
 function buildErrorEnvelope(error: unknown): AppErrorResponse {
   let kind: IconFetchErrorKind = 'unknown';
@@ -57,6 +89,10 @@ function buildErrorEnvelope(error: unknown): AppErrorResponse {
   }
 
   return { __error: { kind, message, httpStatus } };
+}
+
+function buildSyncErrorEnvelope(error: SyncFetchError): SyncErrorResponse {
+  return { __syncError: { kind: error.kind, message: error.message, httpStatus: error.httpStatus } };
 }
 
 async function handleMessage(message: AppRequest): Promise<AppResponse> {
@@ -171,6 +207,30 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
     case messageTypes.openTab: {
       await extensionApi.tabs.create({ url: message.url });
       return { ok: true } satisfies OpenTabResponse;
+    }
+    case messageTypes.syncPush: {
+      await syncPush(message.bundle);
+      return { ok: true } satisfies SyncPushResponse;
+    }
+    case messageTypes.syncPull: {
+      const result = await syncPull();
+      return result.found
+        ? ({ found: true, payload: result.payload } satisfies SyncPullResponse)
+        : ({ found: false } satisfies SyncPullNotFoundResponse);
+    }
+    case messageTypes.syncPreviewPull: {
+      const result = await previewPull(message.pairingCode);
+      return result.found
+        ? ({ found: true, payload: result.payload } satisfies SyncPullResponse)
+        : ({ found: false } satisfies SyncPullNotFoundResponse);
+    }
+    case messageTypes.getSyncPairingCode: {
+      const pairingCode = await getSyncPairingCode();
+      return { pairingCode } satisfies GetSyncPairingCodeResponse;
+    }
+    case messageTypes.adoptSyncSecret: {
+      await adoptSyncSecret(message.pairingCode);
+      return { ok: true } satisfies AdoptSyncSecretResponse;
     }
     case messageTypes.webSearch: {
       await performWebSearch(message.query, message.openInNewTab);

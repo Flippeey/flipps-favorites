@@ -1,5 +1,6 @@
 import type {
   AppSettings,
+  BookmarkNode,
   BookmarkSortMode,
   BookmarkUsageRecord,
   IconOverrideRecord,
@@ -12,11 +13,13 @@ import {
   defaultWorkspaceSettings,
   deleteBookmarkUsageRecord,
   deleteIconOverrideRecord,
+  deleteWorkspace,
   readBookmarkUsageRecords,
   readIconOverrideRecords,
   readSettings,
   readWorkspaces,
   readWorkspaceWallpaper,
+  removeWorkspaceWallpaper,
   writeBookmarkUsageRecord,
   writeIconOverrideRecord,
   writeSettings,
@@ -25,7 +28,8 @@ import {
 } from '@/shared/storage';
 import { getOverrideKeyForScope, normalizeOverrideScope, type IconOverrideScope } from '@/shared/icon-scope';
 import { MAX_IMPORT_DATA_URL_BYTES, MAX_WORKSPACES } from '@/shared/constants';
-import { invalidateIcon } from './messaging';
+import { getBookmarkTree, invalidateIcon } from './messaging';
+import { findFolder, isFolder } from './tree';
 
 export const WORKSPACE_SCHEMA = 'flipps-workspace-transfer' as const;
 // v3: per-workspace view/sort. v2 (and earlier) exports stored folderMode/
@@ -145,7 +149,15 @@ export async function parseWorkspaceFile(file: File): Promise<ParsedWorkspaceImp
   } catch {
     throw new Error('Import file is not valid JSON.');
   }
+  return normalizeWorkspaceExportPayload(parsed);
+}
 
+// Shared shape validation + normalization for a parsed (untrusted) export
+// payload, used by both the file-import path (parseWorkspaceFile) and the
+// settings-sync pull path (sync-now.ts), which receives the same shape
+// decrypted from the server rather than read from a File. Both are import
+// paths, so the result carries the import-only `skipped` counters.
+export function normalizeWorkspaceExportPayload(parsed: unknown): ParsedWorkspaceImport {
   if (!parsed || typeof parsed !== 'object') {
     throw new Error('Import file has an invalid structure.');
   }
@@ -296,22 +308,31 @@ export async function applyWorkspaceImport(
   // workspaces that already exist (never exceed 20 total); replace mode caps
   // the incoming set on its own since the loop below always merges by id
   // (existing workspaces are never deleted, even in replace mode).
-  const existingWorkspaceCount = mode === 'merge' ? (await readWorkspaces()).length : 0;
-  const importSlots = Math.max(0, MAX_WORKSPACES - existingWorkspaceCount);
-  const workspacesToImport = payload.workspaces.slice(0, importSlots);
-  const workspaceSkippedCount = payload.workspaces.length - workspacesToImport.length;
+  const existingWorkspaces = await readWorkspaces();
 
-  // Workspaces: always merge by id (replace would wipe all current workspaces, including
-  // the one the user is currently looking at). Use the payload as the source of truth for
-  // any id collision.
+  // Best-effort tree fetch for cross-browser folder re-matching + identity
+  // dedupe below. A failed fetch must not fail the import — records then keep
+  // their original pointers (the pre-rematch behavior).
+  let rematchTree: BookmarkNode[] | null = null;
+  try {
+    rematchTree = await getBookmarkTree();
+  } catch {
+    rematchTree = null;
+  }
+
+  const plan = planIncomingWorkspaces(payload, existingWorkspaces, rematchTree, mode);
+  const workspaceSkippedCount = plan.skippedCount;
+
   let workspaceLandedCount = 0;
   let workspaceFailedCount = 0;
-  for (const ws of workspacesToImport) {
+  for (const { record, originalId } of plan.toWrite) {
     try {
-      await writeWorkspace(ws);
-      const wallpaper = payload.workspaceWallpapers[ws.id];
+      await writeWorkspace(record);
+      // Wallpapers in the payload are keyed by the sender's workspace id —
+      // look up by the ORIGINAL id, store under the (possibly adopted) final id.
+      const wallpaper = payload.workspaceWallpapers[originalId];
       if (wallpaper) {
-        await writeWorkspaceWallpaper(ws.id, wallpaper);
+        await writeWorkspaceWallpaper(record.id, wallpaper);
       }
       workspaceLandedCount += 1;
     } catch {
@@ -319,6 +340,20 @@ export async function applyWorkspaceImport(
       // (smaller/valid) entries still get a chance, and report what failed
       // instead of throwing a generic error that hides partial success.
       workspaceFailedCount += 1;
+    }
+  }
+
+  // Replace = mirror: local workspaces absent from the other browser's data
+  // are removed. Safe only because the preview dialog listed these removals
+  // by name before the user confirmed. Bookmarks are never touched — only
+  // the workspace record and its wallpaper go.
+  for (const removed of plan.removedInReplace) {
+    try {
+      await deleteWorkspace(removed.id);
+      await removeWorkspaceWallpaper(removed.id);
+    } catch {
+      // A failed deletion leaves an extra tab behind — harmless compared to
+      // failing the whole import halfway through.
     }
   }
 
@@ -361,6 +396,163 @@ export async function applyWorkspaceImport(
     bookmarkUsageCount: dedupedUsage.length,
     settings: nextSettings,
   };
+}
+
+export interface SyncPreviewSummary {
+  // Incoming workspaces that will appear as new tabs.
+  newWorkspaceNames: string[];
+  // Local workspaces the incoming data will update in place (same id, or
+  // identity-deduped: same name + same resolved folder).
+  updatedWorkspaceNames: string[];
+  // Replace-mirror only: local workspaces absent from the incoming data,
+  // which confirming will REMOVE. Always [] in merge mode.
+  removedWorkspaceNames: string[];
+  // Incoming workspaces that will be dropped by the MAX_WORKSPACES cap.
+  workspaceSkippedCount: number;
+  iconOverrideIncomingCount: number;
+  // Replace mode wipes local overrides before applying; 0 in merge mode.
+  iconOverrideRemovedCount: number;
+  bookmarkUsageIncomingCount: number;
+}
+
+// Dry run of applyWorkspaceImport for the link-preview dialog: reports what
+// WOULD change without writing anything. Uses the SAME planIncomingWorkspaces
+// as apply, so the dialog can never disagree with what a confirm actually
+// does — reads local state only, never the network (the payload was already
+// pulled once and is held in memory by the caller).
+export async function buildSyncPreview(
+  payload: ParsedWorkspaceImport,
+  mode: WorkspaceImportMode,
+): Promise<SyncPreviewSummary> {
+  const [existingWorkspaces, existingOverrides] = await Promise.all([
+    readWorkspaces(),
+    readIconOverrideRecords(),
+  ]);
+
+  let tree: BookmarkNode[] | null = null;
+  try {
+    tree = await getBookmarkTree();
+  } catch {
+    tree = null;
+  }
+
+  const plan = planIncomingWorkspaces(payload, existingWorkspaces, tree, mode);
+
+  const dedupedOverrides = dedupeByKey(
+    payload.iconOverrides,
+    r => getOverrideKeyForScope(r.bookmarkUrl, normalizeOverrideScope(r.scope)) ?? `exact:${r.bookmarkUrl}`,
+    (a, b) => b.updatedAt - a.updatedAt,
+  );
+  const dedupedUsage = dedupeByKey(payload.bookmarkUsage, r => r.bookmarkId, (a, b) => b.usedAt - a.usedAt);
+
+  return {
+    newWorkspaceNames: plan.toWrite.filter(r => r.isNew).map(r => r.record.name),
+    updatedWorkspaceNames: plan.toWrite.filter(r => !r.isNew).map(r => r.record.name),
+    removedWorkspaceNames: plan.removedInReplace.map(w => w.name),
+    workspaceSkippedCount: plan.skippedCount,
+    iconOverrideIncomingCount: dedupedOverrides.length,
+    iconOverrideRemovedCount: mode === 'replace' ? Object.keys(existingOverrides).length : 0,
+    bookmarkUsageIncomingCount: dedupedUsage.length,
+  };
+}
+
+interface ResolvedIncomingWorkspace {
+  // Post folder-rematch and identity-dedupe (id possibly adopted from a local match).
+  record: WorkspaceRecord;
+  // The sender's id, needed to look up payload.workspaceWallpapers entries.
+  originalId: string;
+  // Final id absent locally = appears as a new tab.
+  isNew: boolean;
+}
+
+interface IncomingWorkspacePlan {
+  toWrite: ResolvedIncomingWorkspace[];
+  // Incoming records dropped by the MAX_WORKSPACES cap.
+  skippedCount: number;
+  // Replace-mirror only: local records absent from the incoming set, to delete.
+  removedInReplace: WorkspaceRecord[];
+}
+
+// Single source of truth for how incoming workspace records land locally —
+// used by BOTH applyWorkspaceImport and buildSyncPreview so the preview
+// dialog can never promise something the apply doesn't do. Handles, in order:
+// the MAX_WORKSPACES cap (merge counts existing records, replace caps the
+// incoming set alone), cross-browser folder re-matching, identity dedupe,
+// and (replace only) the mirror's removal set.
+function planIncomingWorkspaces(
+  payload: ParsedWorkspaceImport,
+  existingWorkspaces: WorkspaceRecord[],
+  tree: BookmarkNode[] | null,
+  mode: WorkspaceImportMode,
+): IncomingWorkspacePlan {
+  const existingById = new Map(existingWorkspaces.map(w => [w.id, w]));
+  const existingWorkspaceCount = mode === 'merge' ? existingWorkspaces.length : 0;
+  const importSlots = Math.max(0, MAX_WORKSPACES - existingWorkspaceCount);
+  const sliced = payload.workspaces.slice(0, importSlots);
+
+  const toWrite: ResolvedIncomingWorkspace[] = [];
+  for (const incoming of sliced) {
+    let record = tree ? rematchRootFolder(incoming, tree, existingById) : incoming;
+    if (!existingById.has(record.id)) {
+      // Identity dedupe: an incoming workspace matching an existing one by
+      // name + (re-matched) folder IS that workspace arriving under a foreign
+      // id — adopt the local id so it updates in place instead of stacking a
+      // duplicate same-name tab. Several local matches = ambiguous, skip the
+      // dedupe (same single-match rule as folder re-matching).
+      const matches = existingWorkspaces.filter(
+        w => w.name === record.name && w.rootFolderId === record.rootFolderId,
+      );
+      if (matches.length === 1) {
+        record = { ...record, id: matches[0].id };
+      }
+    }
+    toWrite.push({ record, originalId: incoming.id, isNew: !existingById.has(record.id) });
+  }
+
+  const finalIds = new Set(toWrite.map(r => r.record.id));
+  return {
+    toWrite,
+    skippedCount: payload.workspaces.length - sliced.length,
+    removedInReplace: mode === 'replace' ? existingWorkspaces.filter(w => !finalIds.has(w.id)) : [],
+  };
+}
+
+// Cross-browser workspace repair (#7): rootFolderId is a browser-local
+// bookmark id, so a record imported from another browser or profile usually
+// points at a folder that doesn't exist here. Best-effort, in order: keep a
+// pointer that resolves; else keep the resolving pointer of the local record
+// with the same id (an id collision must not clobber a working local link
+// with a foreign one); else adopt the folder whose title uniquely equals the
+// workspace name. No match or an ambiguous title leaves the record unchanged
+// (it renders as unresolved, exactly as before this repair existed).
+function rematchRootFolder(
+  record: WorkspaceRecord,
+  tree: BookmarkNode[],
+  existingById: Map<string, WorkspaceRecord>,
+): WorkspaceRecord {
+  if (findFolder(tree, record.rootFolderId)) return record;
+  const local = existingById.get(record.id);
+  if (local && findFolder(tree, local.rootFolderId)) {
+    return { ...record, rootFolderId: local.rootFolderId };
+  }
+  const titleMatches = collectFoldersByTitle(tree, record.name);
+  if (titleMatches.length === 1) {
+    return { ...record, rootFolderId: titleMatches[0].id };
+  }
+  return record;
+}
+
+function collectFoldersByTitle(tree: BookmarkNode[], title: string): BookmarkNode[] {
+  const matches: BookmarkNode[] = [];
+  const walk = (nodes: BookmarkNode[]): void => {
+    for (const node of nodes) {
+      if (!isFolder(node)) continue;
+      if (node.title === title) matches.push(node);
+      walk(node.children ?? []);
+    }
+  };
+  walk(tree);
+  return matches;
 }
 
 function toTransferOverride(record: IconOverrideRecord): IconOverrideTransferRecord {
