@@ -178,6 +178,12 @@ test.describe('search', () => {
     //      must open (same tab, since openLinksInNewTab=false by default).
     void world; // Ensures world is seeded — the fixture dependency is implicit.
 
+    // Stub the Slack bookmark's host so the same-tab navigation below doesn't
+    // depend on live DNS/network — the URL assertion stays exactly as strict.
+    await newtabPage.route(/slack\.com/, (route) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>stub</title>' }),
+    );
+
     await typeQuery(newtabPage, 'Slack');
 
     const items = resultItems(newtabPage);
@@ -246,6 +252,13 @@ test.describe('search', () => {
     // WHY: typing a full URL is an explicit navigation intent — it must open,
     //      not be routed through a web search, when it doesn't match a bookmark.
     const url = 'https://example.com/no-such-bookmark-xyz';
+
+    // Stub the target host so the same-tab navigation below doesn't depend on
+    // live DNS/network — the URL assertion stays exactly as strict.
+    await newtabPage.route(url, (route) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>stub</title>' }),
+    );
+
     await typeQuery(newtabPage, url);
 
     await expect(resultsBox(newtabPage)).toContainText(url);

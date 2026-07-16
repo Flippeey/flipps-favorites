@@ -120,30 +120,41 @@ test('renaming a folder updates its tile title', async ({ newtabPage }) => {
   await expect(tile).toHaveAttribute('title', 'Renamed Folder', { timeout: 5_000 });
 });
 
-test('middle-click on a bookmark tile opens it in a new tab', async ({ newtabPage }) => {
-  // example.com (bare, no subdomain) is the IANA reserved test domain and
-  // resolves for real in this sandbox; arbitrary subdomains of it (the
-  // previous "middle-click.example.com") do NOT resolve, which surfaced only
-  // once this test started asserting on a real navigation instead of a
-  // stubbed window.open call.
-  const bmUrl = 'https://example.com/';
-  const bmId = await createTestBookmark(newtabPage, rootId, 'Middle Click Target', bmUrl);
-  await reloadNewtab(newtabPage);
+test.describe('middle-click on a bookmark tile', () => {
+  // This test asserts on a real navigation in a tab the extension opens via
+  // extensionApi.tabs.create (see comment below) — a browser-level tab open,
+  // not a page-driven popup. context.route()/page.route() can't reliably
+  // cover it: Playwright's request interception attaches to that new tab's
+  // target asynchronously, so under a fast DNS failure the real network can
+  // resolve (or fail to chrome-error://chromewebdata) before the route is
+  // even wired up. `stubHosts` redirects example.com to a local HTTPS stub at
+  // the Chromium-process level instead (--host-resolver-rules), which closes
+  // that race — see network-stub.ts.
+  test.use({ stubHosts: ['example.com'] });
 
-  const tile = tileById(newtabPage, bmId);
-  await tile.waitFor();
+  test('opens it in a new tab', async ({ newtabPage }) => {
+    // example.com (bare, no subdomain) is the IANA reserved test domain; the
+    // stub above redirects it to a local server so this doesn't depend on
+    // live DNS/network.
+    const bmUrl = 'https://example.com/';
+    const bmId = await createTestBookmark(newtabPage, rootId, 'Middle Click Target', bmUrl);
+    await reloadNewtab(newtabPage);
 
-  const [newPage] = await Promise.all([
-    newtabPage.context().waitForEvent('page', { timeout: 10_000 }),
-    tile.click({ button: 'middle' }),
-  ]);
-  await newPage.waitForLoadState('domcontentloaded');
-  expect(newPage.url()).toBe(bmUrl);
-  await newPage.close();
+    const tile = tileById(newtabPage, bmId);
+    await tile.waitFor();
 
-  // Verify selection was NOT changed by the middle-click.
-  const selectedCount = await newtabPage.locator('.ff-tile[data-selected="true"]').count();
-  expect(selectedCount).toBe(0);
+    const [newPage] = await Promise.all([
+      newtabPage.context().waitForEvent('page', { timeout: 10_000 }),
+      tile.click({ button: 'middle' }),
+    ]);
+    await newPage.waitForLoadState('domcontentloaded');
+    expect(newPage.url()).toBe(bmUrl);
+    await newPage.close();
+
+    // Verify selection was NOT changed by the middle-click.
+    const selectedCount = await newtabPage.locator('.ff-tile[data-selected="true"]').count();
+    expect(selectedCount).toBe(0);
+  });
 });
 
 test('middle-click on a folder tile does NOT open a new tab', async ({ newtabPage }) => {

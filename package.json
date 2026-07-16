@@ -9,7 +9,7 @@
     "build:chrome": "vite build --mode chrome --outDir dist/chrome && node scripts/write-manifest.mjs chrome dist/chrome",
     "build:firefox": "vite build --mode firefox --outDir dist/firefox && node scripts/write-manifest.mjs firefox dist/firefox",
     "build:chrome:test": "vite build --mode chrome-test --outDir dist/chrome-test && node scripts/write-manifest.mjs chrome dist/chrome-test",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "playwright test",
     "test:firefox": "playwright test --project=firefox",
     "test:chrome": "playwright test --project=chrome",
@@ -28,25 +28,26 @@
     "test:unit:watch": "vitest",
     "test:firefox:e2e": "vitest run -c tests/firefox-e2e/vitest.config.ts",
     "test:firefox:e2e:build": "npm run build:firefox && npm run test:firefox:e2e",
-    "test:all": "npm run build && npm run build:chrome:test && npm test && npm run test:firefox:e2e"
+    "test:all": "npm run build && npm run build:chrome:test && npm test && npm run test:firefox:e2e",
+    "evidence": "npm run build:chrome:test && playwright test -c playwright.evidence.config.ts"
   },
   "devDependencies": {
     "@estruyf/github-actions-reporter": "^1.12.0",
-    "@playwright/test": "^1.58.2",
-    "@types/chrome": "^0.1.42",
+    "@playwright/test": "^1.61.1",
+    "@types/chrome": "^0.2.2",
     "@types/firefox-webext-browser": "^143.0.0",
     "@types/node": "^22.13.10",
-    "@types/react": "^19.2.14",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.2.0",
+    "@vitejs/plugin-react": "^6.0.3",
     "puppeteer": "^25.3.0",
     "tslib": "^2.8.1",
-    "typescript": "^5.8.2",
-    "vite": "^6.2.0",
-    "vitest": "^3.2.4"
+    "typescript": "^7.0.2",
+    "vite": "^8.1.4",
+    "vitest": "^4.1.10"
   },
   "dependencies": {
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   }
 }

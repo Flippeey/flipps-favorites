@@ -34,9 +34,10 @@ tests/.firefox-profile/
 test-results/
 playwright-report/
 
-# Ignore GitHub metadata, but keep CI workflows tracked
+# Ignore GitHub metadata, but keep CI workflows + Dependabot config tracked
 .github/*
 !.github/workflows/
+!.github/dependabot.yml
 
 # Ignore editor settings
 .vscode
@@ -44,3 +45,6 @@ playwright-report/
 tests/spike-firefox-puppeteer/
 # Playwright test artifacts
 tests/.artifacts/
+
+# Evidence spec screenshots (generated per-run, uploaded to pr-evidence branch by CI)
+tests/evidence/output/
