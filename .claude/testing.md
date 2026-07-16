@@ -39,27 +39,44 @@ UI-affecting PRs capture feature moments via evidence specs — **not** assertio
 screenshot-driven specs that prove the feature works. Reviewers see the evidence in a sticky PR
 comment without checking out the branch.
 
-**Rule:** UI-affecting PRs MUST add/update an evidence spec. Non-UI PRs (refactor, docs, config)
+**Rule:** UI-affecting PRs MUST stage an evidence spec. Non-UI PRs (refactor, docs, config)
 skip evidence specs; CI skips gracefully.
 
+**Evidence specs are NEVER committed to this repo.** A per-PR spec is throwaway review
+scaffolding, and its screenshots are already deleted when the PR closes — so the spec is
+exactly as disposable. Committing one left a file nobody ever runs again in a public repo's
+permanent history. Specs live on the disposable orphan `pr-evidence` branch at
+`pr-<N>/spec/`, next to the screenshots they produce; CI copies them in at capture time and
+the cleanup job deletes spec + PNGs together on close.
+
 **Location & execution:**
-- Files: `tests/evidence/*.evidence.spec.ts` (separate `testDir`, excluded from all suites).
-- Runner: `playwright.evidence.config.ts` (chrome-only, workers:1, deterministic screenshot ordering).
-- Script: `npm run evidence` (builds `dist/chrome-test` + runs specs + writes PNGs to `tests/evidence/output/`).
-- Fixture: `capture(page, testInfo, label)` from `tests/evidence/evidence.ts` auto-derives naming
-  as `<spec-basename>--<label>.png`.
-- How-to & examples: `tests/evidence/README.md`, `tests/evidence/example-edit-dialog.evidence.spec.ts`.
+- Authoring: write to `tests/evidence/pr/<name>.evidence.spec.ts` — **gitignored**, so a stray
+  `git add -A` can't leak it into `main`. Push it to `pr-<N>/spec/` on `pr-evidence` (exact
+  commands in `tests/evidence/README.md`).
+- Runner: `playwright.evidence.config.ts` (chrome-only, workers:1, deterministic ordering).
+  `testDir` is `tests/evidence/pr` — scoping it there is what keeps a PR's evidence comment to
+  that PR's own screenshots.
+- Script: `npm run evidence` (builds `dist/chrome-test` + runs `tests/evidence/pr/` + writes
+  PNGs to `tests/evidence/output/`).
+- Harness: `capture(page, testInfo, label)` names output `<spec-basename>--<label>.png`;
+  `settle(locator)` waits out CSS animations (dialogs run `ffScaleIn` for 240ms — capture
+  without it and you screenshot a half-faded dialog).
+- Committed here: `evidence.ts` (harness), `global-setup.ts`, and
+  `example-edit-dialog.evidence.spec.ts` — a reference to copy that sits outside `testDir`, so
+  it never runs but is still typechecked by `tsconfig.test.json`.
 
 **Exclusion from other suites:** Evidence specs run **only** via `playwright.evidence.config.ts`.
 `npm test` / `test:chrome` / `test:firefox` use `playwright.config.ts` (testDir `tests/specs`).
 `test:unit` scans `tests/unit/**/*.test.ts`. `test:firefox:e2e` scans `tests/firefox-e2e/specs/**/*.test.ts`.
 Zero collision.
 
-**CI consumption:** `.github/workflows/pr-evidence.yml` on each PR (diff-based gate: runs only if
-a `*.evidence.spec.ts` file changed) builds, captures, and posts a sticky comment embedding
-screenshots from an orphan `pr-evidence` branch. No evidence spec changes → CI posts a graceful
-skip note (expected for non-UI work). No assertions, no failure gate — a missing screenshot
-just means the PR carries no evidence.
+**CI consumption:** `.github/workflows/pr-evidence.yml` on each PR. Gate: does
+`pr-<N>/spec/*.evidence.spec.ts` exist on the `pr-evidence` branch? If so it copies the spec
+into `tests/evidence/pr/`, builds, captures, publishes the PNGs to `pr-<N>/`, and posts a
+sticky comment embedding them plus a link back to the spec — evidence a reviewer can't audit
+is worth nothing. No staged spec → graceful skip note (expected for non-UI work). On PR close,
+the cleanup job deletes `pr-<N>/` entirely, taking spec and screenshots with it. No assertions,
+no failure gate — a missing screenshot just means the PR carries no evidence.
 
 ## Layout
 

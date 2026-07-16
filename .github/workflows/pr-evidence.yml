@@ -1,7 +1,10 @@
 name: PR Evidence
 
-# Captures UI-evidence screenshots for PRs that touch tests/evidence/*.evidence.spec.ts
-# and posts them as a single sticky comment. See:
+# Captures UI-evidence screenshots for PRs that stage a spec at pr-<N>/spec/ on the orphan
+# `pr-evidence` branch, and posts them as a single sticky comment. The spec and its
+# screenshots both live on that disposable branch and are deleted together when the PR
+# closes (cleanup job below) - a per-PR evidence spec is throwaway review scaffolding and
+# never belongs in this public repo's permanent history. See:
 #   /home/flippey/.claude/docs/plan/20260711-pr-evidence-and-wiki-capture/ws1-evidence-decision.md
 # for the full design rationale (T1). This file implements that contract (T4).
 #
@@ -61,29 +64,61 @@ jobs:
           node-version: 20
           cache: npm
 
-      # Gate rule (decided here per T1's open question): an evidence-carrying PR is one whose
-      # diff *changes* a tests/evidence/*.evidence.spec.ts file. Existence alone is not enough -
-      # the repo always carries at least one committed example spec, so an existence check
-      # would treat every PR as evidence-bearing. Diffing base..head SHAs is the simplest rule
-      # that still says "no evidence for this PR" for ordinary non-UI changes.
-      # Known limitation (flagged for T7): a PR that only edits a component already covered by
-      # an *unchanged* evidence spec will be skipped too. Accepted for simplicity; revisit if
-      # stale screenshots on unrelated UI PRs become a problem.
-      - name: Detect changed evidence specs
+      # Gate rule: an evidence-carrying PR is one that has a spec staged for it at
+      # `pr-<N>/spec/*.evidence.spec.ts` on the disposable orphan `pr-evidence` branch.
+      #
+      # Why there and not in the PR's own diff: a per-PR evidence spec is throwaway review
+      # scaffolding whose screenshots this workflow already deletes on close (see the cleanup
+      # job) - so the spec should be exactly as disposable as its output. Committing it to the
+      # PR branch put it in main's history permanently, on a public repo, for a file nobody
+      # ever runs again. Staging it on the orphan branch means it is structurally incapable of
+      # reaching main, and the existing cleanup deletes the spec and the PNGs together.
+      #
+      # Auditability note: the spec is NOT in the PR diff, so the sticky comment links to it
+      # on the orphan branch - a reviewer must be able to read how the evidence was produced,
+      # or the screenshots are worth nothing.
+      - name: Detect staged evidence spec
         id: check_specs
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          [[ "$BASE_SHA" =~ ^[0-9a-f]{7,40}$ ]] || { echo "BASE_SHA not a sha"; exit 1; }
-          [[ "$HEAD_SHA" =~ ^[0-9a-f]{7,40}$ ]] || { echo "HEAD_SHA not a sha"; exit 1; }
-          CHANGED="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- 'tests/evidence/*.evidence.spec.ts' || true)"
-          if [ -n "$CHANGED" ]; then
+          [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || { echo "PR_NUMBER not numeric"; exit 1; }
+
+          if ! git ls-remote --exit-code --heads origin pr-evidence >/dev/null 2>&1; then
+            echo "pr-evidence branch does not exist - no evidence staged"
+            echo "has_spec=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git fetch --depth=1 origin pr-evidence
+          # Spec paths come from the orphan branch's tree listing, never interpolated into a
+          # shell body; the copy below uses git checkout of a fixed pathspec.
+          if git ls-tree -r --name-only FETCH_HEAD -- "pr-$PR_NUMBER/spec" \
+              | grep -q '\.evidence\.spec\.ts$'; then
             echo "has_spec=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_spec=false" >> "$GITHUB_OUTPUT"
           fi
+
+      # Copy the staged spec into the gitignored drop-zone the evidence config points at
+      # (playwright.evidence.config.ts testDir = tests/evidence/pr). The run therefore covers
+      # this PR's spec and nothing else.
+      - name: Stage evidence spec into the working tree
+        if: steps.check_specs.outputs.has_spec == 'true'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || { echo "PR_NUMBER not numeric"; exit 1; }
+
+          mkdir -p tests/evidence/pr
+          TMP="$(mktemp -d)"
+          git worktree add --detach "$TMP" FETCH_HEAD
+          cp "$TMP/pr-$PR_NUMBER/spec/"*.evidence.spec.ts tests/evidence/pr/
+          git worktree remove --force "$TMP"
+          echo "Staged:"
+          ls -1 tests/evidence/pr/
 
       - name: Install dependencies
         if: steps.check_specs.outputs.has_spec == 'true'
@@ -128,8 +163,11 @@ jobs:
           fi
 
           DEST="$WORKTREE/pr-$PR_NUMBER"
-          rm -rf "$DEST"
           mkdir -p "$DEST"
+          # Replace this PR's PNGs only. NOT `rm -rf "$DEST"` — that would delete the
+          # pr-<N>/spec/ the run was just staged from, so a re-push would find no spec and
+          # silently downgrade the PR to "no evidence".
+          rm -f "$DEST"/*.png
           if compgen -G "tests/evidence/output/*.png" > /dev/null; then
             cp tests/evidence/output/*.png "$DEST"/
           fi
@@ -162,14 +200,20 @@ jobs:
             const prNumber = context.payload.pull_request.number;
             const hasSpec = process.env.HAS_SPEC === 'true';
 
+            const specDirUrl =
+              `https://github.com/${owner}/${repo}/tree/pr-evidence/pr-${prNumber}/spec`;
+
             let body;
             if (!hasSpec) {
               body = [
                 marker,
                 '### PR Evidence',
                 '',
-                'No UI evidence spec changed on this PR ' +
-                  '(`tests/evidence/*.evidence.spec.ts` unchanged in the diff) - skipped.',
+                'No evidence spec staged for this PR ' +
+                  `(nothing at \`pr-${prNumber}/spec/\` on the \`pr-evidence\` branch) - skipped.`,
+                '',
+                'Expected for non-UI changes. For a UI change, stage a spec there and push - ' +
+                  'see `tests/evidence/README.md`.',
               ].join('\n');
             } else {
               const outDir = path.join(process.env.GITHUB_WORKSPACE, 'tests/evidence/output');
@@ -188,7 +232,14 @@ jobs:
                   'Evidence spec ran but produced no screenshots.',
                 ].join('\n');
               } else {
-                const lines = [marker, '### PR Evidence', ''];
+                const lines = [
+                  marker,
+                  '### PR Evidence',
+                  '',
+                  `Captured by [\`pr-${prNumber}/spec\`](${specDirUrl}) on the \`pr-evidence\` ` +
+                    'branch. Screenshots and spec are both deleted automatically when this PR closes.',
+                  '',
+                ];
                 for (const file of files) {
                   const base = file.replace(/\.png$/, '');
                   const sep = base.lastIndexOf('--');
@@ -229,6 +280,8 @@ jobs:
               });
             }
 
+  # Deletes pr-<N>/ wholesale, which now takes the staged spec (pr-<N>/spec/) with the
+  # screenshots - the whole point of staging it here rather than committing it.
   cleanup:
     name: Remove closed PR's evidence
     if: >

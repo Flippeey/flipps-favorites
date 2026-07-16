@@ -48,3 +48,11 @@ tests/.artifacts/
 
 # Evidence spec screenshots (generated per-run, uploaded to pr-evidence branch by CI)
 tests/evidence/output/
+
+# Per-PR evidence specs are deliberately NEVER committed here — they are throwaway
+# review scaffolding, and the screenshots they produce are already deleted from the
+# pr-evidence branch when the PR closes. They live on that same disposable branch
+# (pr-<N>/spec/) and CI copies them in at capture time; see tests/evidence/README.md.
+# Ignoring the directory means an absent-minded `git add -A` can't leak one into main.
+tests/evidence/pr/*
+!tests/evidence/pr/.gitkeep
