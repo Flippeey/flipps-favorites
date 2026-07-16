@@ -9,7 +9,7 @@
     "build:chrome": "vite build --mode chrome --outDir dist/chrome && node scripts/write-manifest.mjs chrome dist/chrome",
     "build:firefox": "vite build --mode firefox --outDir dist/firefox && node scripts/write-manifest.mjs firefox dist/firefox",
     "build:chrome:test": "vite build --mode chrome-test --outDir dist/chrome-test && node scripts/write-manifest.mjs chrome dist/chrome-test",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "playwright test",
     "test:firefox": "playwright test --project=firefox",
     "test:chrome": "playwright test --project=chrome",
