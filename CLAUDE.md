@@ -13,7 +13,7 @@ React 19 SPA in newtab; vanilla TS service worker.
 
 ## Tech Stack
 
-- TypeScript 5.8 (strict, ES2022, `moduleResolution: Bundler`). `@/*` path alias → `src/*` (tsconfig + vite); prefer it over deep relative imports.
+- TypeScript 7.0 (native compiler; strict, ES2022, `moduleResolution: Bundler`). `@/*` path alias → `src/*` (tsconfig + vite); prefer it over deep relative imports.
 - React 19 + ReactDOM 19 — functional components + hooks only.
 - Vite 8 + `@vitejs/plugin-react` 6 — dual output via `--mode chrome` / `--mode firefox`. Manifest V3 both targets.
 - Tests: Playwright 1.61 (`tests/specs/*.spec.ts`) + Vitest 4 (`tests/unit/**/*.test.ts`).
