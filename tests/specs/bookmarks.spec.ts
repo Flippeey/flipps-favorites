@@ -111,11 +111,11 @@ test('renaming a folder updates its tile title', async ({ newtabPage }) => {
   const tile = tileById(newtabPage, subId);
   await tile.waitFor();
   const menu = await openContextMenu(newtabPage, tile);
-  await clickMenuItem(menu, /Rename/i);
+  await clickMenuItem(menu, /Edit/i);
 
   const dialog = newtabPage.locator('.ff-dialog');
   await dialog.locator('input.ff-input').first().fill('Renamed Folder');
-  await dialog.getByRole('button', { name: /Rename/i }).click();
+  await dialog.getByRole('button', { name: /Save folder/i }).click();
 
   await expect(tile).toHaveAttribute('title', 'Renamed Folder', { timeout: 5_000 });
 });

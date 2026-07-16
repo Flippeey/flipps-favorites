@@ -52,10 +52,10 @@ test.describe('folder custom icons', () => {
     const tile = newtabPage.locator('.ff-tile[data-item-kind="folder"]', { hasText: 'Recipes' });
     await expect(tile).toBeVisible();
 
-    // Open the folder edit dialog (context menu → Rename opens FolderNameDialog,
+    // Open the folder edit dialog (context menu → Edit… opens FolderNameDialog,
     // which now also carries the icon section) and upload a custom icon.
     const menu = await openContextMenu(newtabPage, tile);
-    await clickMenuItem(menu, 'Rename');
+    await clickMenuItem(menu, 'Edit…');
 
     const dialog = newtabPage.locator('.ff-modal-scrim');
     await expect(dialog).toBeVisible();
@@ -67,14 +67,14 @@ test.describe('folder custom icons', () => {
       buffer: MOCK_FAVICON_PNG,
     });
 
-    // Upload persists immediately (not gated behind the Rename submit) — the
-    // preview updates in place.
+    // Upload persists immediately (not gated behind the Save folder submit) —
+    // the preview updates in place.
     await expect(dialog.locator('.ff-iconpreview img')).toBeVisible({ timeout: 10_000 });
 
-    await newtabPage.getByRole('button', { name: 'Rename' }).click();
+    await newtabPage.getByRole('button', { name: 'Save folder' }).click();
     await expect(dialog).toBeHidden({ timeout: 5_000 });
 
-    // Grid: custom image fills the tile, count badge preserved.
+    // Grid: custom image sits inside the folder frame, count badge preserved.
     const customImage = tile.locator('.ff-folder-tile__custom-image');
     await expect(customImage).toBeVisible({ timeout: 10_000 });
     await expect(tile.locator('.ff-folder-tile__count')).toHaveText('1');
@@ -91,7 +91,7 @@ test.describe('folder custom icons', () => {
     await reloadNewtab(newtabPage);
     const tileAfterListSwitch = newtabPage.locator('.ff-tile[data-item-kind="folder"]', { hasText: 'Recipes' });
     const menu2 = await openContextMenu(newtabPage, tileAfterListSwitch);
-    await clickMenuItem(menu2, 'Rename');
+    await clickMenuItem(menu2, 'Edit…');
 
     const dialog2 = newtabPage.locator('.ff-modal-scrim');
     await expect(dialog2).toBeVisible();
@@ -107,11 +107,15 @@ test.describe('folder custom icons', () => {
     await expect(tileAfterRemove.locator('.ff-folder-tile__mini').first()).toBeVisible();
   });
 
-  test('deleting a folder removes its custom-icon record (no leak on re-create with the same id space)', async ({ newtabPage }) => {
+  test('a custom-icon folder stays visually distinguishable from a bookmark tile', async ({ newtabPage }) => {
+    // Why this matters: the first cut rendered the custom image edge-to-edge
+    // (padding:0) and clipped the overhanging count badge (overflow:hidden), so
+    // a folder was indistinguishable from a bookmark at a glance. These are the
+    // two properties that carry the distinction — assert them, not the pixels.
     await reloadNewtab(newtabPage);
     const tile = newtabPage.locator('.ff-tile[data-item-kind="folder"]', { hasText: 'Recipes' });
     const menu = await openContextMenu(newtabPage, tile);
-    await clickMenuItem(menu, 'Rename');
+    await clickMenuItem(menu, 'Edit…');
     const dialog = newtabPage.locator('.ff-modal-scrim');
     await dialog.locator('input[type="file"]').setInputFiles({
       name: 'folder-icon.png',
@@ -119,7 +123,81 @@ test.describe('folder custom icons', () => {
       buffer: MOCK_FAVICON_PNG,
     });
     await expect(dialog.locator('.ff-iconpreview img')).toBeVisible({ timeout: 10_000 });
-    await newtabPage.getByRole('button', { name: 'Rename' }).click();
+    await newtabPage.getByRole('button', { name: 'Save folder' }).click();
+    await expect(dialog).toBeHidden({ timeout: 5_000 });
+
+    const frame = tile.locator('.ff-folder-tile--custom-icon');
+    await expect(frame).toBeVisible({ timeout: 10_000 });
+
+    // The folder frame must stay inset + unclipped: padding is what keeps the
+    // gradient/border backplate visible around the image (= reads as a folder),
+    // overflow:visible is what stops the badge being cut off.
+    const box = await frame.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { padding: parseFloat(s.paddingTop), overflow: s.overflowX };
+    });
+    expect(box.padding).toBeGreaterThan(0);
+    expect(box.overflow).toBe('visible');
+
+    // Badge is fully inside the viewport-painted area of the tile, not clipped
+    // away, and visible at rest without hovering.
+    const badge = tile.locator('.ff-folder-tile__count');
+    await expect(badge).toBeVisible();
+    await expect(badge).toHaveText('1');
+    const badgeBox = await badge.boundingBox();
+    expect(badgeBox?.width ?? 0).toBeGreaterThan(0);
+    expect(badgeBox?.height ?? 0).toBeGreaterThan(0);
+  });
+
+  test('clicking Search in the folder edit dialog does not submit the folder form', async ({ newtabPage }) => {
+    // Regression: FolderNameDialog's ModalDialog root is a <form>, and the icon
+    // search panel used to render its own nested <form> + type="submit" button.
+    // Nested forms are invalid HTML; the submit escaped React's onSubmit, so
+    // clicking Search did a native GET to newtab.html?, reloading the page and
+    // destroying the dialog along with the user's unsaved folder name.
+    await reloadNewtab(newtabPage);
+    const tile = newtabPage.locator('.ff-tile[data-item-kind="folder"]', { hasText: 'Recipes' });
+    const menu = await openContextMenu(newtabPage, tile);
+    await clickMenuItem(menu, 'Edit…');
+
+    const dialog = newtabPage.locator('.ff-dialog[role="dialog"]');
+    await expect(dialog).toBeVisible();
+
+    const navigations: string[] = [];
+    newtabPage.on('framenavigated', (f) => {
+      if (f === newtabPage.mainFrame()) navigations.push(f.url());
+    });
+
+    const nameInput = dialog.locator('input[type="text"]').first();
+    await nameInput.fill('Unsaved Name');
+    await dialog.getByRole('button', { name: 'Search', exact: true }).click({ noWaitAfter: true });
+    await expect(dialog).toBeVisible();
+
+    // The three things a stray form submit would destroy.
+    expect(navigations).toEqual([]);
+    await expect(nameInput).toHaveValue('Unsaved Name');
+
+    // ...while Enter in the name field must still submit and save the folder.
+    await nameInput.press('Enter');
+    await expect(dialog).toBeHidden({ timeout: 5_000 });
+    await expect(
+      newtabPage.locator('.ff-tile[data-item-kind="folder"]', { hasText: 'Unsaved Name' }),
+    ).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('deleting a folder removes its custom-icon record (no leak on re-create with the same id space)', async ({ newtabPage }) => {
+    await reloadNewtab(newtabPage);
+    const tile = newtabPage.locator('.ff-tile[data-item-kind="folder"]', { hasText: 'Recipes' });
+    const menu = await openContextMenu(newtabPage, tile);
+    await clickMenuItem(menu, 'Edit…');
+    const dialog = newtabPage.locator('.ff-modal-scrim');
+    await dialog.locator('input[type="file"]').setInputFiles({
+      name: 'folder-icon.png',
+      mimeType: 'image/png',
+      buffer: MOCK_FAVICON_PNG,
+    });
+    await expect(dialog.locator('.ff-iconpreview img')).toBeVisible({ timeout: 10_000 });
+    await newtabPage.getByRole('button', { name: 'Save folder' }).click();
     await expect(dialog).toBeHidden({ timeout: 5_000 });
 
     // Delete the folder via context menu.

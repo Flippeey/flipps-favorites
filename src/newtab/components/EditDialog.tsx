@@ -272,8 +272,7 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
     }
   };
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearchSubmit = () => {
     if (!query.trim()) return;
     runSearch(query.trim());
   };

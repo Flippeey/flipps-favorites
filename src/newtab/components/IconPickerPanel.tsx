@@ -55,7 +55,7 @@ interface IconSearchSectionProps {
   canManage: boolean;
   query: string;
   onQueryChange: (value: string) => void;
-  onSearchSubmit: (event: FormEvent) => void;
+  onSearchSubmit: () => void;
   searching: boolean;
   results: IconSearchCandidate[];
   validatedPreviews: ReadonlySet<string>;
@@ -180,21 +180,40 @@ export function IconPickerPanel(props: IconPickerPanelProps) {
         </p>
       </div>
 
-      <form onSubmit={onSearchSubmit} style={{ display: 'flex', gap: 8 }}>
+      {/* Deliberately NOT a <form>. This panel is embedded in FolderNameDialog,
+          whose ModalDialog root IS a form — a nested <form> is invalid HTML, and
+          the resulting submit escaped React's onSubmit entirely: clicking Search
+          did a native GET, reloading newtab.html and destroying the dialog with
+          the user's unsaved folder name in it. Enter-to-search is wired on the
+          input instead, so the panel is safe to embed anywhere. */}
+      <div style={{ display: 'flex', gap: 8 }}>
         <input
           className="ff-input"
           type="search"
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return;
+            // Stop the keypress reaching an enclosing form, which would submit it.
+            e.preventDefault();
+            if (!canManage || searching || !query.trim()) return;
+            onSearchSubmit();
+          }}
           placeholder="Search for an icon"
           style={{ flex: 1 }}
           disabled={!canManage}
         />
-        <button className="ff-btn ff-btn--ghost" type="submit" disabled={!canManage || searching || !query.trim()} title="Search for icons">
+        <button
+          className="ff-btn ff-btn--ghost"
+          type="button"
+          onClick={() => onSearchSubmit()}
+          disabled={!canManage || searching || !query.trim()}
+          title="Search for icons"
+        >
           <Ico name="search" size={14} />
           <span>Search</span>
         </button>
-      </form>
+      </div>
 
       {!canManage ? (
         <p style={{ fontSize: 12, color: 'var(--fg-3)', margin: 0 }}>

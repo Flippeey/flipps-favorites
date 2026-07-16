@@ -164,8 +164,7 @@ export function FolderNameDialog({ tree, target, siblingNames, onClose, onSaved 
     }
   };
 
-  const handleIconSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleIconSearchSubmit = () => {
     if (!query.trim()) return;
     runSearch(query.trim());
   };
@@ -215,86 +214,116 @@ export function FolderNameDialog({ tree, target, siblingNames, onClose, onSaved 
     }
   };
 
-  const isRename = target.mode === 'rename';
-  const eyebrow = isRename ? 'Rename folder' : 'New folder';
-  const title = isRename
+  const isEdit = target.mode === 'rename';
+  const eyebrow = isEdit ? 'Edit folder' : 'New folder';
+  const title = isEdit
     ? target.title
     : target.parentTitle ? `In ${target.parentTitle}` : 'Untitled folder';
-  const submitLabel = saving ? 'Saving…' : (isRename ? 'Rename' : 'Create folder');
+  const submitLabel = saving ? 'Saving…' : (isEdit ? 'Save folder' : 'Create folder');
 
-  return (
-    <ModalDialog
-      icon={isRename ? 'pencil' : 'folderPlus'}
-      eyebrow={eyebrow}
-      title={title}
-      onClose={onClose}
-      width="min(480px, 100%)"
-      bodyStyle={{ gridTemplateColumns: '1fr', gap: 12 }}
-      as="form"
-      onSubmit={handleSubmit}
-    >
-      <div className="ff-field">
-        <label className="ff-field__label">Name</label>
-        <input
-          ref={inputRef}
-          className="ff-input"
-          type="text"
-          spellCheck={false}
-          value={value}
-          onChange={(e) => { setValue(e.target.value); if (error) setError(null); }}
-          placeholder="Folder name"
-        />
-      </div>
-      {target.mode === 'create' && (
+  const nameField = (
+    <div className="ff-field">
+      <label className="ff-field__label">Name</label>
+      <input
+        ref={inputRef}
+        className="ff-input"
+        type="text"
+        spellCheck={false}
+        value={value}
+        onChange={(e) => { setValue(e.target.value); if (error) setError(null); }}
+        placeholder="Folder name"
+      />
+    </div>
+  );
+
+  const statusRows = (
+    <>
+      {error && <div className="ff-status" data-kind="error" role="alert">{error}</div>}
+      {!error && duplicateWarning && <div className="ff-status" data-kind="info" role="status">{duplicateWarning}</div>}
+    </>
+  );
+
+  const actions = (
+    <div className="ff-dialog__actions">
+      <button type="button" className="ff-btn ff-btn--ghost" onClick={onClose}>Cancel</button>
+      <button type="submit" className="ff-btn" disabled={saving}>
+        <Ico name="check" size={14} /> {submitLabel}
+      </button>
+    </div>
+  );
+
+  // Create mode has no icon picker (no folder id to key the record by), so it
+  // keeps the narrow single-column form. Edit mode mirrors EditDialog's default
+  // two-column body (280px aside + search grid) so both dialogs read the same.
+  if (!isEdit) {
+    return (
+      <ModalDialog
+        icon="folderPlus"
+        eyebrow={eyebrow}
+        title={title}
+        onClose={onClose}
+        width="min(480px, 100%)"
+        bodyStyle={{ gridTemplateColumns: '1fr', gap: 12 }}
+        as="form"
+        onSubmit={handleSubmit}
+      >
+        {nameField}
         <div className="ff-field">
           <label className="ff-field__label">Parent folder</label>
           <FolderPicker tree={tree} selectedId={parentIdOverride} onSelect={setParentIdOverride} />
         </div>
-      )}
-      {canManageIcon && (
-        <div className="ff-field">
-          <label className="ff-field__label">Folder icon (optional)</label>
-          <IconPickerPanel
-            section="preview"
-            previewSrc={previewSrc}
-            fallbackLetter={value?.[0] ?? '?'}
-            canManage={canManageIcon}
-            onRemove={handleRemoveIcon}
-            onUploadClick={handleUploadClick}
-            fileInputRef={fileInputRef}
-            onFileChange={handleFileChange}
-            hintText="Hover the preview to change or remove the folder icon."
-          />
-          <IconPickerPanel
-            section="search"
-            canManage={canManageIcon}
-            query={query}
-            onQueryChange={setQuery}
-            onSearchSubmit={handleIconSearchSubmit}
-            searching={searching}
-            results={results}
-            validatedPreviews={validatedPreviews}
-            onPreviewLoad={handlePreviewLoad}
-            onPickCandidate={handlePickCandidate}
-            onPickCandidateAndClose={handlePickCandidateAndClose}
-            working={working}
-            heading="Search folder icons"
-          />
-          {iconStatus && (
-            <div className="ff-status" data-kind={iconStatus.kind} role="status">
-              {iconStatus.message}
-            </div>
-          )}
-        </div>
-      )}
-      {error && <div className="ff-status" data-kind="error" role="alert">{error}</div>}
-      {!error && duplicateWarning && <div className="ff-status" data-kind="info" role="status">{duplicateWarning}</div>}
-      <div className="ff-dialog__actions">
-        <button type="button" className="ff-btn ff-btn--ghost" onClick={onClose}>Cancel</button>
-        <button type="submit" className="ff-btn" disabled={saving}>
-          <Ico name="check" size={14} /> {submitLabel}
-        </button>
-      </div>
+        {statusRows}
+        {actions}
+      </ModalDialog>
+    );
+  }
+
+  return (
+    <ModalDialog
+      icon="pencil"
+      eyebrow={eyebrow}
+      title={title}
+      onClose={onClose}
+      as="form"
+      onSubmit={handleSubmit}
+    >
+      <aside style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {nameField}
+        <IconPickerPanel
+          section="preview"
+          previewSrc={previewSrc}
+          fallbackLetter={value?.[0] ?? '?'}
+          canManage={canManageIcon}
+          onRemove={handleRemoveIcon}
+          onUploadClick={handleUploadClick}
+          fileInputRef={fileInputRef}
+          onFileChange={handleFileChange}
+          hintText="Hover the preview to change or remove the folder icon."
+        />
+        {iconStatus && (
+          <div className="ff-status" data-kind={iconStatus.kind} role="status">
+            {iconStatus.message}
+          </div>
+        )}
+        {statusRows}
+        {actions}
+      </aside>
+
+      <IconPickerPanel
+        section="search"
+        canManage={canManageIcon}
+        query={query}
+        onQueryChange={setQuery}
+        onSearchSubmit={handleIconSearchSubmit}
+        searching={searching}
+        results={results}
+        validatedPreviews={validatedPreviews}
+        onPreviewLoad={handlePreviewLoad}
+        onPickCandidate={handlePickCandidate}
+        onPickCandidateAndClose={handlePickCandidateAndClose}
+        working={working}
+        heading="Search folder icons"
+      />
     </ModalDialog>
   );
 }
