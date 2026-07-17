@@ -125,7 +125,7 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
         { kind: 'item', icon: 'folder',     label: 'Open folder', kbd: '↵', onClick: () => handlePickFolder(target) },
         { kind: 'item', icon: 'arrowRight', label: `Open all (${directBookmarkCount}) in new tabs`, disabled: directBookmarkCount === 0,
           onClick: () => onOpenAllInTabs(target) },
-        { kind: 'item', icon: 'pencil',     label: 'Rename',
+        { kind: 'item', icon: 'pencil',     label: 'Edit…',
           onClick: () => handleRenameFolder(target) },
         { kind: 'item', icon: 'folderTree', label: 'Move to…', onClick: () => onMoveTo([target.id], folderIds) },
         { kind: 'separator' },

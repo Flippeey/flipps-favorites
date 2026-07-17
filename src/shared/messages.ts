@@ -14,6 +14,10 @@ export const messageTypes = {
   setIconOverrideFromUrl: 'icons/set-override-from-url',
   removeIconOverride: 'icons/remove-override',
   invalidateIcon: 'icons/invalidate',
+  getFolderIcon: 'icons/get-folder-icon',
+  setFolderIcon: 'icons/set-folder-icon',
+  setFolderIconFromUrl: 'icons/set-folder-icon-from-url',
+  removeFolderIcon: 'icons/remove-folder-icon',
   getBookmarkUsage: 'bookmarks/get-usage',
   recordBookmarkUse: 'bookmarks/record-use',
   getWorkspaces: 'workspaces/get-all',
@@ -32,6 +36,7 @@ export type { IconOverrideScope } from './icon-scope';
 import type {
   AppSettings,
   BookmarkNode,
+  FolderIconOverrideRecord,
   IconSearchCandidate,
   ResolvedIcon,
   WorkspaceRecord,
@@ -196,6 +201,48 @@ export interface InvalidateIconResponse {
   ok: true;
 }
 
+export interface GetFolderIconRequest {
+  type: typeof messageTypes.getFolderIcon;
+  folderId: string;
+}
+
+export interface GetFolderIconResponse {
+  icon: FolderIconOverrideRecord | null;
+}
+
+export interface SetFolderIconRequest {
+  type: typeof messageTypes.setFolderIcon;
+  folderId: string;
+  dataUrl: string;
+  fileName?: string;
+  mimeType: string;
+}
+
+export interface SetFolderIconResponse {
+  icon: FolderIconOverrideRecord;
+}
+
+export interface SetFolderIconFromUrlRequest {
+  type: typeof messageTypes.setFolderIconFromUrl;
+  folderId: string;
+  imageUrl: string;
+  fallbackImageUrl?: string;
+  fileName?: string;
+}
+
+export interface SetFolderIconFromUrlResponse {
+  icon: FolderIconOverrideRecord;
+}
+
+export interface RemoveFolderIconRequest {
+  type: typeof messageTypes.removeFolderIcon;
+  folderId: string;
+}
+
+export interface RemoveFolderIconResponse {
+  ok: true;
+}
+
 export interface GetBookmarkUsageRequest {
   type: typeof messageTypes.getBookmarkUsage;
 }
@@ -285,6 +332,10 @@ export type AppRequest =
   | SetIconOverrideFromUrlRequest
   | RemoveIconOverrideRequest
   | InvalidateIconRequest
+  | GetFolderIconRequest
+  | SetFolderIconRequest
+  | SetFolderIconFromUrlRequest
+  | RemoveFolderIconRequest
   | GetBookmarkUsageRequest
   | RecordBookmarkUseRequest
   | GetWorkspacesRequest
@@ -310,6 +361,10 @@ export type AppResponse =
   | SetIconOverrideFromUrlResponse
   | RemoveIconOverrideResponse
   | InvalidateIconResponse
+  | GetFolderIconResponse
+  | SetFolderIconResponse
+  | SetFolderIconFromUrlResponse
+  | RemoveFolderIconResponse
   | GetBookmarkUsageResponse
   | RecordBookmarkUseResponse
   | GetWorkspacesResponse

@@ -1,7 +1,7 @@
 import { extensionApi } from '../shared/browser';
 import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type WebSearchResponse } from '../shared/messages';
-import { deleteWorkspace, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, patchWorkspaceRecord, readBookmarkUsageRecords, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
-import { getIcon, invalidateIcon, removeIconOverride, searchIcons, setIconOverride, setIconOverrideFromUrl, sweepGeneratedRecords } from './icons/icon-service';
+import { deleteWorkspace, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, patchWorkspaceRecord, readBookmarkUsageRecords, readFolderIconOverride, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
+import { getIcon, invalidateIcon, removeFolderIcon, removeIconOverride, searchIcons, setFolderIcon, setFolderIconFromUrl, setIconOverride, setIconOverrideFromUrl, sweepFolderIcons, sweepGeneratedRecords } from './icons/icon-service';
 import { performWebSearch } from './search-shim';
 
 extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }) => {
@@ -16,6 +16,7 @@ extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }
     await (local.remove as (keys: string[]) => Promise<void>)(['icon-cache-records', 'icon-override-records']).catch(() => { /* non-fatal */ });
   }
   void scheduleGeneratedRecordSweep();
+  void scheduleFolderIconSweep();
   console.info(`Flipp's Favorites install event reason: ${reason}`);
   console.info('Flipp\'s Favorites - Bookmarks & more installed');
 });
@@ -23,6 +24,7 @@ extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }
 if (extensionApi.runtime.onStartup) {
   extensionApi.runtime.onStartup.addListener(() => {
     void scheduleGeneratedRecordSweep();
+    void scheduleFolderIconSweep();
   });
 }
 
@@ -30,6 +32,14 @@ function scheduleGeneratedRecordSweep(): Promise<void> {
   return sweepGeneratedRecords().catch((error: unknown) => {
     console.warn('Generated-icon sweep failed.', error);
   });
+}
+
+function scheduleFolderIconSweep(): Promise<void> {
+  return getBookmarkTree()
+    .then(tree => sweepFolderIcons(tree))
+    .catch((error: unknown) => {
+      console.warn('Folder-icon sweep failed.', error);
+    });
 }
 
 extensionApi.runtime.onMessage.addListener((message: AppRequest, _sender: unknown, sendResponse: (response: AppResponse | AppErrorResponse | undefined) => void) => {
@@ -140,6 +150,15 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
       return { icon: await removeIconOverride(message.bookmarkUrl, message.bookmarkTitle) };
     case messageTypes.invalidateIcon:
       await invalidateIcon(message.bookmarkUrl);
+      return { ok: true };
+    case messageTypes.getFolderIcon:
+      return { icon: await readFolderIconOverride(message.folderId) };
+    case messageTypes.setFolderIcon:
+      return { icon: await setFolderIcon(message.folderId, message.dataUrl, message.mimeType, message.fileName) };
+    case messageTypes.setFolderIconFromUrl:
+      return { icon: await setFolderIconFromUrl(message.folderId, message.imageUrl, message.fileName, message.fallbackImageUrl) };
+    case messageTypes.removeFolderIcon:
+      await removeFolderIcon(message.folderId);
       return { ok: true };
     case messageTypes.getBookmarkUsage: {
       const records = await readBookmarkUsageRecords();

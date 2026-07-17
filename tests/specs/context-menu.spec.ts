@@ -21,12 +21,14 @@ test.describe('context menu', () => {
     await expect(menu.locator('.ff-ctx__label', { hasText: 'Delete' })).toBeVisible();
   });
 
-  test('folder menu exposes open / rename / delete-folder actions', async ({ newtabPage, world }) => {
+  test('folder menu exposes open / edit / delete-folder actions', async ({ newtabPage, world }) => {
     const folder = tileById(newtabPage, world.bookmarkIdByTitle('Project Apollo'));
     const menu = await openContextMenu(newtabPage, folder);
 
     await expect(menu.locator('.ff-ctx__label', { hasText: 'Open folder' })).toBeVisible();
-    await expect(menu.locator('.ff-ctx__label', { hasText: 'Rename' })).toBeVisible();
+    // 'Edit…', not 'Rename': the dialog edits name *and* icon, and this matches
+    // the bookmark menu's own 'Edit…' item.
+    await expect(menu.locator('.ff-ctx__label', { hasText: 'Edit…' })).toBeVisible();
     await expect(menu.locator('.ff-ctx__label', { hasText: 'Delete folder' })).toBeVisible();
   });
 

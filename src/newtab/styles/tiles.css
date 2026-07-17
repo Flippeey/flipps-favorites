@@ -132,10 +132,7 @@
   font-size: 11px; font-weight: 600;
   display: grid; place-items: center;
   box-shadow: 0 2px 8px color-mix(in oklab, var(--accent) 35%, transparent);
-  opacity: 0; transform: scale(0.7);
-  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
-.ff-tile:hover .ff-folder-tile__count { opacity: 1; transform: scale(1); }
 
 .ff-folder-tile__sub {
   width: 100%; height: 100%;
@@ -148,6 +145,37 @@
   width: 100%; height: 100%;
   background: rgba(255,255,255,0.04);
   border-radius: inherit;
+}
+
+/* Custom folder icon (opt-in, issue #44). The image replaces the 2x2 collage
+   *inside* the default folder frame rather than filling the tile edge-to-edge:
+   a full-bleed image is indistinguishable from a bookmark tile, so the base
+   .ff-folder-tile gradient backplate + hairline border + padding are what still
+   read as "folder". This rule only undoes what the collage needed:
+   - display: the base is a 2x2 grid; a single image wants block.
+   - overflow: .ff-folder-tile__count deliberately overhangs the box
+     (bottom/right: -4px), so hidden clips the badge off.
+   Padding is inherited from the base rule on purpose — don't restate it here. */
+.ff-folder-tile--custom-icon {
+  display: block;
+  overflow: visible;
+}
+.ff-folder-tile__custom-image {
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+  /* inherit, not the __mini radius: at data-tile-shape="circle" the frame is a
+     50% circle, and a fixed small radius would let the image corners poke out
+     past it (barely visible on the gapped 4-favicon collage, glaring on a
+     single full-bleed photo). */
+  border-radius: inherit;
+}
+
+/* Custom folder icon in list/section-header view: replaces the folder glyph. */
+.ff-section__icon-image {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
 }
 
 /* Sections view (inline folder rows on the root surface) */

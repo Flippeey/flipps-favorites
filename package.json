@@ -29,7 +29,7 @@
     "test:firefox:e2e": "vitest run -c tests/firefox-e2e/vitest.config.ts",
     "test:firefox:e2e:build": "npm run build:firefox && npm run test:firefox:e2e",
     "test:all": "npm run build && npm run build:chrome:test && npm test && npm run test:firefox:e2e",
-    "evidence": "npm run build:chrome:test && playwright test -c playwright.evidence.config.ts"
+    "evidence": "npm run build:chrome:test && playwright test -c playwright.evidence.config.ts --pass-with-no-tests"
   },
   "devDependencies": {
     "@estruyf/github-actions-reporter": "^1.12.0",

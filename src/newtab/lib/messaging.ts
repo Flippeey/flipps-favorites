@@ -5,15 +5,20 @@ import type {
   AppResponse,
   AppSettings,
   BookmarkNode,
+  FolderIconOverrideRecord,
   GetBookmarkTreeResponse,
+  GetFolderIconResponse,
   GetIconResponse,
   GetSettingsResponse,
   IconSearchCandidate,
   InvalidateIconResponse,
   PatchSettingsResponse,
+  RemoveFolderIconResponse,
   RemoveIconOverrideResponse,
   ResolvedIcon,
   SearchIconsResponse,
+  SetFolderIconFromUrlResponse,
+  SetFolderIconResponse,
   SetIconOverrideFromUrlResponse,
   SetIconOverrideResponse,
   UpdateBookmarkResponse,
@@ -120,6 +125,35 @@ export async function removeIconOverride(bookmarkUrl: string, bookmarkTitle?: st
 
 export async function invalidateIcon(bookmarkUrl?: string): Promise<void> {
   await send<InvalidateIconResponse>({ type: messageTypes.invalidateIcon, bookmarkUrl });
+}
+
+export async function getFolderIcon(folderId: string): Promise<FolderIconOverrideRecord | null> {
+  const res = await send<GetFolderIconResponse>({ type: messageTypes.getFolderIcon, folderId });
+  return res.icon;
+}
+
+export async function setFolderIcon(args: {
+  folderId: string;
+  dataUrl: string;
+  fileName?: string;
+  mimeType: string;
+}): Promise<FolderIconOverrideRecord> {
+  const res = await send<SetFolderIconResponse>({ type: messageTypes.setFolderIcon, ...args });
+  return res.icon;
+}
+
+export async function setFolderIconFromUrl(args: {
+  folderId: string;
+  imageUrl: string;
+  fallbackImageUrl?: string;
+  fileName?: string;
+}): Promise<FolderIconOverrideRecord> {
+  const res = await send<SetFolderIconFromUrlResponse>({ type: messageTypes.setFolderIconFromUrl, ...args });
+  return res.icon;
+}
+
+export async function removeFolderIcon(folderId: string): Promise<void> {
+  await send<RemoveFolderIconResponse>({ type: messageTypes.removeFolderIcon, folderId });
 }
 
 export async function getBookmarkUsage(): Promise<Record<string, number>> {
