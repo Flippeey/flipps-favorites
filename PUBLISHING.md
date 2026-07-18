@@ -4,7 +4,7 @@ How Flipp's Favorites ships to the three stores, and whether/how to automate it.
 
 > **Store listing copy & screenshots** (descriptions, captions, promo tiles) are a
 > separate concern from package publishing — see [`store/README.md`](store/README.md).
-> TL;DR: AMO syncs fully via `npm run store:amo`; Chrome listing text is dashboard-only
+> TL;DR: AMO syncs fully via `npm run store:firefox`; Chrome listing text is dashboard-only
 > (no API exists, verified against CWS API v2), assisted by `npm run store:chrome`.
 
 Current build produces two MV3 packages:

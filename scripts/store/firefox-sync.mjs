@@ -2,9 +2,9 @@
  * Sync the AMO listing (summary, description, screenshot captions/images)
  * from the store/ source-of-truth files.
  *
- *   node scripts/store/amo-sync.mjs                              # dry-run diff — no credentials needed
- *   node scripts/store/amo-sync.mjs --apply                      # push summary/description/caption changes
- *   node scripts/store/amo-sync.mjs --apply --replace-previews   # ALSO delete + re-upload every preview image
+ *   node scripts/store/firefox-sync.mjs                              # dry-run diff — no credentials needed
+ *   node scripts/store/firefox-sync.mjs --apply                      # push summary/description/caption changes
+ *   node scripts/store/firefox-sync.mjs --apply --replace-previews   # ALSO delete + re-upload every preview image
  *
  * --apply needs AMO_JWT_ISSUER + AMO_JWT_SECRET (same credentials as publish.yml;
  * create at https://addons.mozilla.org/developers/addon/api/key/).
@@ -56,8 +56,8 @@ async function api(method, url, body, isForm = false) {
 console.log(`▶ AMO listing sync — ${AMO_SLUG} (${APPLY ? 'APPLY' : 'dry run'})`);
 
 const local = {
-  summary: (await readRepoFile('store/amo/summary.txt')).trimEnd(),
-  description: (await readRepoFile('store/amo/description.html')).trimEnd(),
+  summary: (await readRepoFile('store/firefox/summary.txt')).trimEnd(),
+  description: (await readRepoFile('store/firefox/description.md')).trimEnd(),
   previews: await readPreviewsConfig(),
 };
 
@@ -76,12 +76,12 @@ const livePreviews = [...(live.previews ?? [])].sort((a, b) => a.position - b.po
 const patch = {};
 if (liveSummary !== local.summary) {
   patch.summary = { [AMO_LOCALE]: local.summary };
-  await printDiff('summary', liveSummary, 'store/amo/summary.txt');
+  await printDiff('summary', liveSummary, 'store/firefox/summary.txt');
 } else console.log('  ✓ summary in sync');
 
 if (liveDescription !== local.description) {
   patch.description = { [AMO_LOCALE]: local.description };
-  await printDiff('description', liveDescription, 'store/amo/description.html');
+  await printDiff('description', liveDescription, 'store/firefox/description.md');
 } else console.log('  ✓ description in sync');
 
 const captionChanges = [];

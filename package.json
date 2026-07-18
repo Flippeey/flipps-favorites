@@ -26,7 +26,7 @@
     "promo:mp4": "node scripts/promo/to-mp4.mjs",
     "promo:tiles": "node scripts/promo/tiles.mjs",
     "store:lint": "node scripts/store/lint.mjs",
-    "store:amo": "node scripts/store/amo-sync.mjs",
+    "store:firefox": "node scripts/store/firefox-sync.mjs",
     "store:chrome": "node scripts/store/chrome-pack.mjs",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",

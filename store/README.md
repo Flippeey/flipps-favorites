@@ -5,9 +5,9 @@ listings on 2026-07-18 — this directory wins over the dashboards from that dat
 
 | File | Store field | How it reaches the store |
 | --- | --- | --- |
-| `amo/summary.txt` | AMO summary (max 250 chars, single line) | `npm run store:amo -- --apply` |
-| `amo/description.html` | AMO description (limited HTML subset) | `npm run store:amo -- --apply` |
-| `previews.json` | AMO screenshot captions + order | `npm run store:amo -- --apply` (captions); `--replace-previews` (images) |
+| `firefox/summary.txt` | AMO summary (max 250 chars, single line, plain text) | `npm run store:firefox -- --apply` |
+| `firefox/description.md` | AMO description — **limited Markdown**; inline HTML restricted to AMO's tag allowlist also passes through. The API returns the raw source, so round-trip diffs stay stable. | `npm run store:firefox -- --apply` |
+| `previews.json` | AMO screenshot captions + order | `npm run store:firefox -- --apply` (captions); `--replace-previews` (images) |
 | `chrome/description.txt` | Chrome Web Store detailed description | **Manual paste** — `npm run store:chrome` diffs live vs repo and tells you when + what |
 | `public/_locales/en/messages.json` → `extensionDescription` | Chrome short description + AMO-visible manifest description (max 132 chars) | Ships inside the package on every release — no listing action needed |
 
@@ -15,9 +15,9 @@ listings on 2026-07-18 — this directory wins over the dashboards from that dat
 
 ```bash
 npm run store:lint     # char limits, HTML allowlist, previews.json shape
-npm run store:amo      # dry-run diff repo vs live AMO listing (no credentials needed)
-npm run store:amo -- --apply                      # push summary/description/caption changes
-npm run store:amo -- --apply --replace-previews   # also delete + re-upload preview images
+npm run store:firefox  # dry-run diff repo vs live AMO listing (no credentials needed)
+npm run store:firefox -- --apply                      # push summary/description/caption changes
+npm run store:firefox -- --apply --replace-previews   # also delete + re-upload preview images
 npm run store:chrome   # diff repo vs live Chrome listing; prints paste instructions
 npm run promo:tiles    # generate Chrome promo tiles (440x280 + 1400x560)
 ```

@@ -37,15 +37,15 @@ else if (manifestDesc.length > MANIFEST_DESC_MAX) {
   fail(`manifest description is ${manifestDesc.length} chars (max ${MANIFEST_DESC_MAX})`);
 } else ok(`manifest description: ${manifestDesc.length}/${MANIFEST_DESC_MAX} chars`);
 
-const summary = (await readRepoFile('store/amo/summary.txt')).trimEnd();
-if (!summary) fail('store/amo/summary.txt is empty');
-else if (summary.includes('\n')) fail('store/amo/summary.txt must be a single line');
+const summary = (await readRepoFile('store/firefox/summary.txt')).trimEnd();
+if (!summary) fail('store/firefox/summary.txt is empty');
+else if (summary.includes('\n')) fail('store/firefox/summary.txt must be a single line');
 else if (summary.length > AMO_SUMMARY_MAX) {
   fail(`AMO summary is ${summary.length} chars (max ${AMO_SUMMARY_MAX})`);
 } else ok(`AMO summary: ${summary.length}/${AMO_SUMMARY_MAX} chars`);
 
-const amoDesc = (await readRepoFile('store/amo/description.html')).trimEnd();
-if (!amoDesc) fail('store/amo/description.html is empty');
+const amoDesc = (await readRepoFile('store/firefox/description.md')).trimEnd();
+if (!amoDesc) fail('store/firefox/description.md is empty');
 else {
   const badTags = [...amoDesc.matchAll(/<\s*\/?\s*([a-zA-Z0-9]+)/g)]
     .map((m) => m[1].toLowerCase())

@@ -18,16 +18,19 @@ import {
 
 // ─── Extraction ──────────────────────────────────────────────────────────────
 
-function unescapeBlob(s) {
+// Two distinct encodings on the page, decoded separately (never chained, so a
+// decoded '&' can't be re-consumed as an entity — the CodeQL double-unescape trap):
+// the serialized JS data blob uses JS string escapes; meta attributes use HTML entities.
+function decodeJsString(s) {
   return s
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/\\n/g, '\n')
-    .replace(/\\u003c/gi, '<')
-    .replace(/\\u003e/gi, '>')
-    .replace(/\\u0026/gi, '&')
-    .replace(/\\"/g, '"')
-    .replace(/\\'/g, "'")
-    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+    .replace(/\\(["'\\/])/g, '$1');
+}
+
+function decodeHtmlEntities(s) {
+  const entities = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" };
+  return s.replace(/&(amp|lt|gt|quot|#39);/g, (_, name) => entities[name]);
 }
 
 /**
@@ -43,7 +46,7 @@ function extractLongDescription(html) {
       if (!best || s.length > best.length) best = s;
     }
   }
-  return best ? unescapeBlob(best).trim() : null;
+  return best ? decodeJsString(best).trim() : null;
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -61,7 +64,7 @@ if (!res.ok) {
 }
 const html = await res.text();
 
-const liveShort = unescapeBlob(html.match(/<meta property="og:description" content="([^"]*)"/)?.[1] ?? '');
+const liveShort = decodeHtmlEntities(html.match(/<meta property="og:description" content="([^"]*)"/)?.[1] ?? '');
 const liveLong = extractLongDescription(html);
 
 let actionNeeded = false;
