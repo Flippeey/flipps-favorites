@@ -52,16 +52,39 @@ jobs:
 
       # CWS API v2 (v1.1 sunsets 2026-10-15). Requires CHROME_PUBLISHER_ID
       # (Developer Dashboard -> Account) alongside the existing OAuth secrets.
-      - name: Upload & publish to Chrome Web Store
-        # v2.0.1 tag ships no built index.cjs (upstream broken release); v2.0.0 is the last working CWS API v2 build.
+      # v2.0.1 tag ships no built index.cjs (upstream broken release); v2.0.0 is the last working CWS API v2 build.
+      #
+      # Upload and publish are split: upload MUST succeed (hard-fails the job), but
+      # publish is best-effort. A store-side metadata block (INVALID_ITEM_METADATA)
+      # then leaves a clean uploaded draft the maintainer can publish from the
+      # dashboard, instead of red-X-ing the whole run after a successful upload.
+      - name: Upload draft to Chrome Web Store
         uses: wdzeng/chrome-extension@37f4f9cdc664959bafef36b1f4da03dec5141620 # v2.0.0
         with:
+          action: upload
           zip-path: flipps-favorites-chrome.zip
           extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
           publisher-id: ${{ secrets.CHROME_PUBLISHER_ID }}
           client-id: ${{ secrets.CHROME_CLIENT_ID }}
           client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
           refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
+
+      - name: Publish Chrome Web Store draft
+        id: cws_publish
+        continue-on-error: true
+        uses: wdzeng/chrome-extension@37f4f9cdc664959bafef36b1f4da03dec5141620 # v2.0.0
+        with:
+          action: publish
+          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
+          publisher-id: ${{ secrets.CHROME_PUBLISHER_ID }}
+          client-id: ${{ secrets.CHROME_CLIENT_ID }}
+          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
+
+      - name: Flag unpublished draft
+        if: steps.cws_publish.outcome == 'failure'
+        run: |
+          echo "::warning title=Chrome draft not published::Draft uploaded but auto-publish was rejected (likely INVALID_ITEM_METADATA). Resolve listing metadata in the CWS Developer Dashboard, then publish there or re-run this job."
 
   firefox:
     needs: build
@@ -85,15 +108,27 @@ jobs:
 
       # --approval-timeout 0: listed submissions are human-reviewed, so don't
       # poll for the signed XPI — succeed once upload + validation complete.
+      #
+      # AMO rejects a re-submit of an existing version ("Version X already exists").
+      # That is a benign idempotent re-run, not a failure, so swallow only that case.
       - name: Sign & submit to AMO
+        shell: bash
         run: |
-          npx web-ext sign \
+          set -o pipefail
+          if npx web-ext sign \
             --source-dir dist/firefox \
             --channel listed \
             --approval-timeout 0 \
             --upload-source-code flipps-favorites-source.zip \
             --api-key "$AMO_JWT_ISSUER" \
-            --api-secret "$AMO_JWT_SECRET"
+            --api-secret "$AMO_JWT_SECRET" 2>&1 | tee sign.log; then
+            exit 0
+          fi
+          if grep -q "already exists" sign.log; then
+            echo "::warning title=AMO version already submitted::Version already exists on AMO; treating idempotent re-run as success."
+            exit 0
+          fi
+          exit 1
         env:
           AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
           AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
