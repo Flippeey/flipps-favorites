@@ -50,11 +50,14 @@ jobs:
         with:
           name: packages
 
+      # CWS API v2 (v1.1 sunsets 2026-10-15). Requires CHROME_PUBLISHER_ID
+      # (Developer Dashboard -> Account) alongside the existing OAuth secrets.
       - name: Upload & publish to Chrome Web Store
-        uses: mnao305/chrome-extension-upload@fdfe79400af990f5145a319e834aee64907ccff4 # v6.0.0
+        uses: wdzeng/chrome-extension@ccb488e04fba014a4b574a533ccee8bc1b772f0a # v2.0.1
         with:
-          file-path: flipps-favorites-chrome.zip
+          zip-path: flipps-favorites-chrome.zip
           extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
+          publisher-id: ${{ secrets.CHROME_PUBLISHER_ID }}
           client-id: ${{ secrets.CHROME_CLIENT_ID }}
           client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
           refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
