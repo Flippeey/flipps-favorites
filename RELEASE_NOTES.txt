@@ -1,3 +1,13 @@
-What's new in 2.6.2:
+What's new in 2.7.0:
 
-- Open in new tab now works on Firefox - middle-click, Ctrl/Cmd-click, and the context-menu "Open in new tab" / "Open all in new tabs" actions now correctly open bookmarks in a new tab (previously they did nothing on Firefox). Chrome is unchanged.
+- Add bookmarks and folders straight into any folder with the new destination picker in the add dialogs
+- Undo folder delete and batch delete right from the toast
+- New "Move to..." and "Open all in tabs" context-menu actions
+- Opt-in custom icons for folders
+- Hero search now opens typed URLs directly and falls back to web search when there are no matches
+- QuickAdd now warns when you're about to add a duplicate bookmark
+- Replay the onboarding setup anytime from Help, or open Help with the ? shortcut
+- Fixed: wallpaper at 100% opacity no longer leaves a dark tint
+- Fixed: Firefox new-tab page now shows the correct branded favicon
+- Fixed: drag no longer breaks on bookmarks or folders with special characters in their name
+- Fixed: settings that fail to save now show a toast instead of silently reverting
