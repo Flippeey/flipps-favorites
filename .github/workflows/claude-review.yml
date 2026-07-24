@@ -25,9 +25,15 @@ permissions:
 jobs:
   claude:
     # Auto-review only same-repo PRs; for comments, only act on @claude mentions.
+    # Bot-authored PRs (Dependabot) are skipped: the action rejects non-human
+    # actors outright, so without this guard every dep bump is a failed run.
     if: >
-      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event_name != 'pull_request' && contains(github.event.comment.body, '@claude'))
+      (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        github.event.pull_request.user.type != 'Bot') ||
+      (github.event_name != 'pull_request' &&
+        github.event.comment.user.type != 'Bot' &&
+        contains(github.event.comment.body, '@claude'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
