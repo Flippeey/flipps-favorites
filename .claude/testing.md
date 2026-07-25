@@ -80,8 +80,8 @@ no failure gate — a missing screenshot just means the PR carries no evidence.
 
 ## Layout
 
-- `playwright.config.ts` — Chrome (all specs) + Firefox (icons-only) projects; global-setup verifies `dist/{chrome,firefox}` exist.
-- `tests/global-setup.ts` — Playwright global setup; asserts `dist/{chrome,firefox}` exist (does NOT build).
+- `playwright.config.ts` — Chrome (all specs) + Firefox (icons-only) projects; global-setup verifies `dist/{chrome-test,firefox}` exist.
+- `tests/global-setup.ts` — Playwright global setup; asserts `dist/{chrome-test,firefox}` exist (does NOT build). Both are checked on every run, whichever project you select.
 - `tests/firefox-e2e/global-setup.ts` — Puppeteer suite global setup; asserts `dist/firefox` exists.
 - `tests/fixtures/launch.ts` — Single source of truth for browser launch (Chrome loads `dist/chrome-test`, Firefox loads `dist/firefox`).
 - `tests/fixtures/` — Playwright fixtures: `world` (worker-scoped with seeded bookmarks), `extension-context`, `test-data`, `bookmark-helpers`, `seeding`, `selectors`.
