@@ -721,6 +721,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       data-tile-shape={tileShape}
       data-labels={String(activeWorkspace?.showTileLabels ?? true)}
       data-dock={dockMode}
+      data-folder-count-badge={settings.folderCountBadgeMode}
       data-switching={isSwitching || undefined}
       style={appStyle as CSSProperties}
       onContextMenu={handleCanvasContextMenu}

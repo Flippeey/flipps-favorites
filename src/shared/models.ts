@@ -13,6 +13,7 @@ export type LayoutPresetId = 'balanced' | 'compact' | 'spacious' | 'presentation
 export type ClockHourFormat = '12' | '24';
 export type ViewMode = 'grid' | 'list';
 export type FolderOpenMode = 'overlay' | 'page';
+export type FolderCountBadgeMode = 'always' | 'hover';
 export type TileShape = 'squircle' | 'rounded' | 'circle';
 export type BackgroundMode = 'solid' | 'gradient' | 'wallpaper';
 export type GradientStyle = 'top' | 'top-bottom' | 'bottom' | 'aurora' | 'mesh' | 'vignette';
@@ -67,6 +68,7 @@ export interface AppSettings {
   showSearchBar: boolean;
   // Folder behaviour (global)
   folderOpenMode: FolderOpenMode;
+  folderCountBadgeMode: FolderCountBadgeMode;
 }
 
 export interface BookmarkNode {

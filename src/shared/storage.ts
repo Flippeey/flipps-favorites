@@ -143,6 +143,7 @@ export const defaultSettings: AppSettings = {
   clockHourFormat: '24',
   showSearchBar: true,
   folderOpenMode: 'overlay',
+  folderCountBadgeMode: 'always',
 };
 
 export const defaultWorkspaceSettings: Omit<WorkspaceRecord, 'id' | 'name' | 'rootFolderId'> = {
@@ -239,6 +240,8 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     showSearchBar: typeof settings.showSearchBar === 'boolean' ? settings.showSearchBar : defaultSettings.showSearchBar,
     folderOpenMode: settings.folderOpenMode === 'overlay' || settings.folderOpenMode === 'page'
       ? settings.folderOpenMode : defaultSettings.folderOpenMode,
+    folderCountBadgeMode: settings.folderCountBadgeMode === 'always' || settings.folderCountBadgeMode === 'hover'
+      ? settings.folderCountBadgeMode : defaultSettings.folderCountBadgeMode,
   };
 }
 
