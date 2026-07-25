@@ -17,6 +17,16 @@ test.describe('folder count badge visibility', () => {
     // 1. Capture default state: badge always visible
     // ─────────────────────────────────────────────────────────────────────────
     await folderTile.waitFor({ state: 'visible', timeout: 5_000 });
+    // CI runs headed under xvfb, where the very first capture can be reached
+    // before the compositor has produced a frame; Page.captureScreenshot then
+    // fails outright. Focus the tab and wait for two painted frames so there is
+    // something to capture.
+    await newtabPage.bringToFront();
+    await newtabPage.evaluate(
+      () => new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+    );
     await capture(newtabPage, testInfo, 'default-always-visible');
 
     // ─────────────────────────────────────────────────────────────────────────
