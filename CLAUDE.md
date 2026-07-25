@@ -38,8 +38,8 @@ npm run build            # Both targets → dist/{chrome,firefox}
 npm run build:chrome     # / build:firefox — single target
 npm run typecheck        # tsc --noEmit
 npm run test:unit        # Vitest unit tests (fast, no browser)
-npm test                 # Playwright chrome project — needs a fresh `npm run build` first (global-setup only checks dist exists, it does NOT build)
-npm run test:firefox     # Firefox project (icons only) — also needs a prior build
+npm test                 # Playwright chrome project — needs dist/chrome-test + dist/firefox fresh; `npm run build` alone is NOT enough (global-setup only checks, it does NOT build)
+npm run test:firefox     # Firefox project (icons only) — same prerequisite: global-setup checks both paths regardless of project
 npm run test:build       # build + test (use this to avoid testing a stale build)
 npm run evidence         # Evidence specs — UI-feature screenshots for PRs (separate runner, not part of npm test)
 ```
