@@ -1,7 +1,5 @@
 # Project: Flipp's Favorites
 
-# Memory Bank: flipps-favorites
-
 The tracked root [`CLAUDE.md`](../CLAUDE.md) is the source of truth for project summary,
 critical rules, tech stack, layout, commands, and workflow. Read it first — it is not
 duplicated here, to avoid drift between the two files.
