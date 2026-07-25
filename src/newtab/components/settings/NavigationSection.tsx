@@ -1,4 +1,4 @@
-import type { FolderOpenMode } from '@/shared/messages';
+import type { FolderCountBadgeMode, FolderOpenMode } from '@/shared/messages';
 import { Segmented, Toggle } from '../settings-controls';
 import type { SectionProps } from './types';
 
@@ -31,6 +31,17 @@ export function NavigationSection({ settings, onPatch }: SectionProps) {
             options={[{ id: 'overlay', label: 'Overlay' }, { id: 'page', label: 'Page' }]}
             value={settings.folderOpenMode}
             onChange={(v) => onPatch({ folderOpenMode: v })}
+          />
+        </div>
+        <div className="ff-row">
+          <div>
+            <div className="ff-row__label">Folder count badge</div>
+            <div className="ff-row__hint">Always shows the bookmark count; On hover reveals it only when you point at the tile.</div>
+          </div>
+          <Segmented<FolderCountBadgeMode>
+            options={[{ id: 'always', label: 'Always' }, { id: 'hover', label: 'On hover' }]}
+            value={settings.folderCountBadgeMode}
+            onChange={(v) => onPatch({ folderCountBadgeMode: v })}
           />
         </div>
         <div className="ff-row">
