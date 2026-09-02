@@ -59,7 +59,7 @@ jobs:
       # then leaves a clean uploaded draft the maintainer can publish from the
       # dashboard, instead of red-X-ing the whole run after a successful upload.
       - name: Upload draft to Chrome Web Store
-        uses: wdzeng/chrome-extension@ccb488e04fba014a4b574a533ccee8bc1b772f0a # v2.0.1
+        uses: wdzeng/chrome-extension@25f21f518a470076a8fe40c817e20505cd1a81a7 # v2.0.1
         with:
           action: upload
           zip-path: flipps-favorites-chrome.zip
@@ -72,7 +72,7 @@ jobs:
       - name: Publish Chrome Web Store draft
         id: cws_publish
         continue-on-error: true
-        uses: wdzeng/chrome-extension@ccb488e04fba014a4b574a533ccee8bc1b772f0a # v2.0.1
+        uses: wdzeng/chrome-extension@25f21f518a470076a8fe40c817e20505cd1a81a7 # v2.0.1
         with:
           action: publish
           extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
