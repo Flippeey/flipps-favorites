@@ -299,17 +299,24 @@ test('reorder workspace tabs by drag persists', async ({ newtabPage, world }) =>
   );
 
   // After the reorder, Personal must now appear earlier in DOM order than Work.
-  // We check by reading their rendered positions in the tab list.
+  // The reorder commits on the next render, so assert with an auto-retrying
+  // matcher instead of a single-shot read that can observe the pre-commit DOM.
   const tabs = newtabPage.locator('.ff-ws-tab');
-  const firstTabId = await tabs.first().getAttribute('data-workspace-id');
-  expect(firstTabId).toBe(world.workspaceIds.Personal);
+  await expect(tabs.first()).toHaveAttribute('data-workspace-id', world.workspaceIds.Personal);
+
+  // The settings write behind the reorder is unawaited by the drop handler, so
+  // wait for the stored order to actually commit before reloading -- otherwise
+  // the reload can race the write and land on the pre-reorder order.
+  await waitForSettings(newtabPage, (s) => s.workspaceOrder?.[0] === world.workspaceIds.Personal);
 
   // Reload to confirm persistence (workspaceOrder is written through patchSettings).
   await newtabPage.reload();
   await newtabPage.waitForSelector('.ff-app', { timeout: 15_000 });
 
-  const firstTabIdAfterReload = await newtabPage.locator('.ff-ws-tab').first().getAttribute('data-workspace-id');
-  expect(firstTabIdAfterReload).toBe(world.workspaceIds.Personal);
+  await expect(newtabPage.locator('.ff-ws-tab').first()).toHaveAttribute(
+    'data-workspace-id',
+    world.workspaceIds.Personal,
+  );
 });
 
 test('Alt+1..9 switches workspace', async ({ newtabPage, world }) => {
