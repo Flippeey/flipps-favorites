@@ -53,6 +53,9 @@ describe('isCollageTitle / stripHtml', () => {
 });
 
 describe('stripHtml performance and output stability', () => {
+  // Each timing case catches a different quadratic shape: a regex like /<[^>]*>/ rescans
+  // to the end from every unterminated '<', while a /<[^<>]*>/ fixed-point loop strips one
+  // '<>' pair per pass when opens and closes are segregated.
   it('stays linear on unterminated nested angle brackets', () => {
     const start = performance.now();
     stripHtml('<'.repeat(100000));
