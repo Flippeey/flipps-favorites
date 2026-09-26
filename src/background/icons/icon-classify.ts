@@ -381,7 +381,17 @@ export function isCollageTitle(title: string): boolean {
 }
 
 export function stripHtml(value: string): string {
-  return value.replace(/<[^>]+>/g, '').trim();
+  // Titles come from untrusted search results. Strip tags, then drop any
+  // leftover `<` from an unterminated tag (e.g. `<script`) so no tag start
+  // survives. One pass already reaches a fixed point; the loop is the form
+  // static sanitization analysis recognises as complete.
+  let previous: string;
+  let current = value;
+  do {
+    previous = current;
+    current = current.replace(/<[^>]*>/g, '');
+  } while (current !== previous);
+  return current.replace(/</g, '').trim();
 }
 
 /**
