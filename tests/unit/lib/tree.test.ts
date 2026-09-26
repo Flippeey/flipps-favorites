@@ -64,8 +64,8 @@ describe('ancestorFolderIds', () => {
 });
 
 // collectFolderIds backs the folder-delete cleanup call sites (App.tsx): when a
-// folder subtree is deleted, every descendant folder's custom-icon record (IDB,
-// issue #44) must be removed too, or it leaks forever since removeBookmark only
+// folder subtree is deleted, every descendant folder's custom-icon record (IDB)
+// must be removed too, or it leaks forever since removeBookmark only
 // wipes the browser bookmark tree, not the separate icon store.
 describe('collectFolderIds', () => {
   it('includes the folder itself plus every nested descendant folder', () => {

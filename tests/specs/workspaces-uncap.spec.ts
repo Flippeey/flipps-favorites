@@ -1,6 +1,6 @@
 /**
- * Workspaces uncap (#19 + #28): cap raised from 9 → interim 10 → 20 (final).
- * Per-workspace-key sync storage (#28) lifts the interim 8 KB/item cap.
+ * Workspaces uncap: cap raised from 9 → interim 10 → 20 (final).
+ * Per-workspace-key sync storage lifts the interim 8 KB/item cap.
  *
  * Why these tests matter:
  * - Users need to create more than 9 workspaces without hitting a silent block.
@@ -52,11 +52,11 @@ async function seedExtraWorkspaces(page: Parameters<typeof createWorkspace>[0], 
 }
 
 // ---------------------------------------------------------------------------
-// Cap is now 20 (was 9 → interim 10; now final 20 via per-key storage refactor #28)
+// Cap is now 20 (was 9 → interim 10; now final 20 via per-key storage refactor)
 // ---------------------------------------------------------------------------
 
 test('MAX_WORKSPACES constant equals 20', () => {
-  // Cap raised to 20 after the per-workspace-key storage refactor (#28):
+  // Cap raised to 20 after the per-workspace-key storage refactor:
   // each workspace lives under its own `workspace:<id>` sync key so the
   // 8 KB-per-item limit applies per record (~630 B), not to the aggregate.
   // Guard against regression to the interim cap of 10 or the old cap of 9.

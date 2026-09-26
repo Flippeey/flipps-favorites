@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 // transitions and timer bookkeeping only run through React's `useState`
 // dispatcher — calling the hook outside a component tree throws. No jsdom /
 // react-test-renderer / @testing-library dependency exists in this repo, and
-// adding one is explicitly out of scope for issue #54 ("DECIDED: no RTL / no
+// adding one is explicitly out of scope ("DECIDED: no RTL / no
 // component-testing dep"). Extracting the enqueue/dismiss logic into a
 // standalone pure function (mirroring the useOptimisticPatch.ts pattern)
 // would require editing useToasts.ts, which is also out of scope here.

@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 // would mean editing useContextMenuBuilder.ts, which is out of scope here.
 // Calling the hook itself requires a React dispatcher (jsdom / react-test-
 // renderer / @testing-library), none of which are installed, and adding one
-// is explicitly out of scope for issue #54 ("DECIDED: no RTL / no
+// is explicitly out of scope ("DECIDED: no RTL / no
 // component-testing dep").
 //
 // Net: the menu-item branches this task called out (single bookmark, single

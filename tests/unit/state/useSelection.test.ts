@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 //
 // Calling a hook outside a component tree throws (no dispatcher) — there is
 // no jsdom / react-test-renderer / @testing-library dependency in this repo,
-// and adding one is explicitly out of scope for issue #54 ("DECIDED: no RTL
+// and adding one is explicitly out of scope ("DECIDED: no RTL
 // / no component-testing dep"). Extracting the transition logic into a
 // standalone pure function would require editing useSelection.ts, which is
 // also out of scope here (read-only; a different wave/task owns it).

@@ -1,8 +1,8 @@
-// Organization archetype template bundles consumed by the TemplatePicker (Wave 7).
+// Organization archetype template bundles consumed by the TemplatePicker.
 // Context-free — no chrome.* / window accesses. Lives in shared/ so it can be
 // imported from both the newtab context and any future background consumers.
 //
-// Templates NEVER set layoutPreset — resolution-aware layout (#17) owns that field.
+// Templates NEVER set layoutPreset — resolution-aware layout owns that field.
 // workspaceOverrides is limited to the agreed Pick:
 //   folderMode | bookmarkSortMode | bookmarkSortDirection
 

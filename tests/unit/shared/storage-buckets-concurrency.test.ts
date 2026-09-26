@@ -84,7 +84,7 @@ describe('createCachedRecordStore concurrent writeOne/deleteOne', () => {
   });
 
   // WHY this matters: writeOne does readFresh -> spread -> write. Before the
-  // per-store write-chaining fix (#41), two concurrent writeOne calls for
+  // per-store write-chaining fix, two concurrent writeOne calls for
   // DIFFERENT keys both read the same pre-write map, so the second write's
   // `{ ...records, [key]: value }` spread silently drops the first write's key.
   // This backs bookmark usage (fires on every tile click) and icon overrides —

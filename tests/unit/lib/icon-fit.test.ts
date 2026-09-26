@@ -3,7 +3,7 @@
  *
  * WHY: `normalizeUploadedImage` bakes the image into the stored dataUrl using
  * cover scaling (Math.max) — the fixed default chosen when the inert
- * contain/cover fit control was removed (issue #29). Cover always fills the
+ * contain/cover fit control was removed. Cover always fills the
  * 160px canvas and matches the tile's objectFit:cover rendering.
  *
  * These tests verify the pure math (`computeIconDrawRect`) without a DOM.

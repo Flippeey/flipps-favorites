@@ -337,7 +337,7 @@ export async function deleteWorkspace(id: string): Promise<void> {
 // Per-workspace-id write queues, mirroring the settings writeQueue/doWriteSettings
 // pattern above. The MV3 service worker can handle two patchWorkspace messages for
 // the SAME workspace concurrently; without serialization both read the same base
-// record and the second write clobbers the first (#41). Keying by workspace id
+// record and the second write clobbers the first. Keying by workspace id
 // (rather than one global queue) lets patches to different workspaces proceed
 // in parallel.
 const workspacePatchQueues = new Map<string, Promise<unknown>>();
@@ -579,7 +579,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Per-workspace-key storage migration (#28)
+// Per-workspace-key storage migration
 //
 // Splits the legacy single `workspaces` aggregate sync key into one
 // `workspace:<id>` key per record, then deletes the legacy key and sets a

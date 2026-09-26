@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 // All 8 hooks in src/newtab/interaction/ were audited for separable pure logic
-// (t9, issue #54). None qualify for a Vitest unit test without either mounting
+// None qualify for a Vitest unit test without either mounting
 // a component (RTL/component-testing dep — explicitly out of scope, "DECIDED:
 // no RTL / no component-testing dep", same constraint t8 hit for state/ hooks)
 // or extracting new pure functions from production code (out of scope for this
