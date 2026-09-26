@@ -88,6 +88,14 @@ export function LinkPreviewDialog({ preview, mode, onModeChange, busy, onConfirm
                 ? `; ${preview.iconOverrideRemovedCount} local custom icon(s) are removed first.`
                 : '.'}
             </li>
+            {(preview.folderIconIncomingCount > 0 || preview.folderIconRemovedCount > 0) && (
+              <li>
+                {preview.folderIconIncomingCount} folder icon(s) arrive
+                {preview.folderIconRemovedCount > 0
+                  ? `; ${preview.folderIconRemovedCount} local folder icon(s) are removed first.`
+                  : '.'}
+              </li>
+            )}
             <li>{preview.bookmarkUsageIncomingCount} usage entr{preview.bookmarkUsageIncomingCount === 1 ? 'y' : 'ies'} arrive.</li>
             <li>
               {mode === 'replace'

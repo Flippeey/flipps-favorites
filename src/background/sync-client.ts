@@ -3,8 +3,8 @@
 // browser; decrypts on pull. The server only ever sees the derived authToken
 // and opaque ciphertext bytes.
 
-import { firefoxSafeFetchRequest } from './icons/platform';
-import { SYNC_ENDPOINT } from '@/shared/constants';
+import { firefoxSafeFetchRequest, ResponseTooLargeError } from './icons/platform';
+import { SYNC_ENDPOINT, SYNC_MAX_PAYLOAD_BYTES } from '@/shared/constants';
 import { SyncFetchError } from '@/shared/models';
 import {
   decodePairingCode,
@@ -38,8 +38,11 @@ function classifyHttpStatus(status: number): SyncFetchError | null {
 // an opaque TypeError, matching the "no silent failures" requirement.
 async function requestSync(init: { method: string; headers?: Record<string, string>; body?: BodyInit }): Promise<Response> {
   try {
-    return await firefoxSafeFetchRequest(SYNC_ENDPOINT, init, syncFetchTimeoutMs);
+    return await firefoxSafeFetchRequest(SYNC_ENDPOINT, init, syncFetchTimeoutMs, SYNC_MAX_PAYLOAD_BYTES);
   } catch (error) {
+    if (error instanceof ResponseTooLargeError) {
+      throw new SyncFetchError('payload-too-large', 'Synced data is larger than the sync server allows.');
+    }
     const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
     const message = error instanceof Error ? error.message : String(error);
     throw new SyncFetchError(offline ? 'offline' : 'network', `Could not reach the sync server: ${message}`);

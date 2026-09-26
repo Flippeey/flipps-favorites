@@ -30,14 +30,17 @@ export function overlayWorkspace(record: WorkspaceRecord, bindings: Record<strin
 }
 
 // One-time, for records stored before bindings existed: this browser already
-// showed their rootFolderId, so it keeps showing it.
+// showed their rootFolderId, so it keeps showing it. A record whose locator
+// resolves to a different folder here only shares an id with an unrelated
+// local folder, and is left to normal resolution.
 export function backfillBindings(
   records: WorkspaceRecord[],
   bindings: Record<string, FolderBinding>,
   tree: BookmarkNode[],
 ): Record<string, FolderBinding> {
   const added = records
-    .filter(r => !bindings[r.id] && folderExists(tree, r.rootFolderId))
+    .filter(r => !bindings[r.id] && folderExists(tree, r.rootFolderId)
+      && (!r.rootFolder || resolveFolder(r.rootFolder, tree, { hintId: r.rootFolderId }) === r.rootFolderId))
     .map(r => [r.id, { localId: r.rootFolderId, locatorHash: locatorHash(r.rootFolder), state: 'bound' as const }]);
   return { ...bindings, ...Object.fromEntries(added) };
 }

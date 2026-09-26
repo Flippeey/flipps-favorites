@@ -51,7 +51,10 @@ test.describe.configure({ timeout: 120_000 });
 
 test('workspaces copied by Chrome account sync bind to their own folder here or wait hidden, never to the folder that shares their id', async ({ syncStub, openSyncBrowser }) => {
   const first = await openSyncBrowser();
-  const second = await openSyncBrowser();
+  // The second profile is freshly installed and has not opened a page yet:
+  // account sync can deliver the first profile's storage before this
+  // browser ever asks for its workspaces.
+  const second = await openSyncBrowser({ newtab: false });
 
   await completeOnboarding(first.sync);
   const workOnFirst = await addFolder(first.sync, WORK);
@@ -66,21 +69,33 @@ test('workspaces copied by Chrome account sync bind to their own folder here or 
   // The second profile has its own bookmarks: Recipes first, then the same
   // Work folder as the first profile. Fresh profiles number folders alike,
   // so the first profile's Work id is Recipes here and its Travel id is Work.
-  await completeOnboarding(second.sync);
-  const recipesOnSecond = await addFolder(second.sync, RECIPES);
-  const workOnSecond = await addFolder(second.sync, WORK);
+  await completeOnboarding(second.background);
+  const recipesOnSecond = await addFolder(second.background, RECIPES);
+  const workOnSecond = await addFolder(second.background, WORK);
   expect([recipesOnSecond, workOnSecond]).toEqual([workOnFirst, travelOnFirst]);
-  // The second profile already ran this version, so its one-time binding
-  // backfill (which trusts local ids) is done before any record arrives.
-  expect(await readLocalStorageKey(second.sync, 'bookmark-bindings-backfilled')).toBe(true);
 
-  const copied = await copyAccountSyncedStorage(first.sync, second.sync);
+  const copied = await copyAccountSyncedStorage(first.sync, second.background);
   expect(copied).toEqual(['app-settings', 'sync-secret', 'workspace:ws-travel', 'workspace:ws-work']);
-  await second.sync.reload();
+  // A profile on an older version stores workspaces without a folder
+  // locator. One such record arrives too, still naming the first profile's
+  // Work folder id, which is Recipes here; only its id could place it.
+  await second.background.evaluate(async (ids) => {
+    type Api = { storage: { local: {
+      get(key: string): Promise<Record<string, unknown>>;
+      set(items: Record<string, unknown>): Promise<void>;
+    } } };
+    const local = (globalThis as unknown as { chrome: Api }).chrome.storage.local;
+    const source = (await local.get(`workspace:${ids.from}`))[`workspace:${ids.from}`] as Record<string, unknown>;
+    const { rootFolder: _locator, ...legacy } = source;
+    await local.set({ [`workspace:${ids.to}`]: { ...legacy, id: ids.to, name: 'Legacy Canary' } });
+  }, { from: 'ws-work', to: 'ws-legacy' });
+  expect(await readLocalStorageKey(second.background, 'workspace:ws-legacy')).toMatchObject({ rootFolderId: recipesOnSecond });
+  await second.openNewtab();
 
   expect(await workspaceView(second.sync, 'ws-work')).toMatchObject({ rootFolderId: workOnSecond });
   expect((await workspaceView(second.sync, 'ws-work'))?.folderState).toBeUndefined();
   expect(await workspaceView(second.sync, 'ws-travel')).toMatchObject({ rootFolderId: '', folderState: 'waiting' });
+  expect(await workspaceView(second.sync, 'ws-legacy')).toMatchObject({ rootFolderId: '', folderState: 'waiting' });
   expect(await shownTabIds(second.sync)).toEqual(['ws-work']);
   expect(await showWorkspace(second.sync, 'ws-work')).toEqual(titles(WORK));
   // Travel is hidden, so asking for it falls back to a shown workspace.

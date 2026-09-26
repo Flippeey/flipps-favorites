@@ -32,20 +32,23 @@ function createAreaFake(seed: Record<string, unknown> = {}): { api: StorageAreaF
   return { api, data };
 }
 
+type ChangeListener = (changes: Record<string, unknown>, areaName: string) => void;
+
 function installChromeFake() {
   const local = createAreaFake();
   const sync = createAreaFake();
+  const changeListeners: ChangeListener[] = [];
   const chromeFake = {
     runtime: { id: 'test-extension' },
     storage: {
       local: local.api,
       sync: sync.api,
-      onChanged: { addListener: () => undefined },
+      onChanged: { addListener: (listener: ChangeListener) => changeListeners.push(listener) },
     },
   };
   (globalThis as unknown as { chrome?: unknown }).chrome = chromeFake;
   (globalThis as unknown as { browser?: unknown }).browser = undefined;
-  return { local, sync };
+  return { local, sync, changeListeners };
 }
 
 async function importSyncCrypto(): Promise<typeof import('@/shared/sync-crypto')> {
@@ -203,6 +206,42 @@ describe('sync-crypto: get-or-create master secret', () => {
     const second = await mod2.getOrCreateSyncSecret();
 
     expect(Buffer.from(second).toString('hex')).toBe(Buffer.from(first).toString('hex'));
+  });
+
+  // Browser account sync can deliver another browser's secret into storage
+  // while this worker stays alive; sync must then use that secret.
+  it('returns the secret that browser account sync stored after the first call', async () => {
+    const fake = installChromeFake();
+    const mod = await importSyncCrypto();
+    await mod.getOrCreateSyncSecret();
+
+    const delivered = mod.generateSecret();
+    fake.sync.data['sync-secret'] = Buffer.from(delivered).toString('base64');
+    for (const listener of fake.changeListeners) listener({ 'sync-secret': {} }, 'sync');
+
+    const current = await mod.getOrCreateSyncSecret();
+    expect(Buffer.from(current).toString('hex')).toBe(Buffer.from(delivered).toString('hex'));
+  });
+
+  it('creates exactly one secret when two first calls race', async () => {
+    const fake = installChromeFake();
+    const mod = await importSyncCrypto();
+
+    const [a, b] = await Promise.all([mod.getOrCreateSyncSecret(), mod.getOrCreateSyncSecret()]);
+
+    expect(Buffer.from(a).toString('hex')).toBe(Buffer.from(b).toString('hex'));
+    expect(fake.sync.data['sync-secret']).toBe(Buffer.from(a).toString('base64'));
+  });
+
+  it('returns an adopted secret on the next call', async () => {
+    installChromeFake();
+    const mod = await importSyncCrypto();
+    await mod.getOrCreateSyncSecret();
+    const adopted = mod.generateSecret();
+
+    await mod.replaceSyncSecret(adopted);
+
+    expect(Buffer.from(await mod.getOrCreateSyncSecret()).toString('hex')).toBe(Buffer.from(adopted).toString('hex'));
   });
 });
 

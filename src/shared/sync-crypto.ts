@@ -1,9 +1,11 @@
 // End-to-end-encryption core for settings sync.
 //
-// The master secret never leaves the client. Everything the sync server ever
-// sees is: the derived authToken (Bearer header) and opaque AES-GCM
-// ciphertext. Do not console.log the secret, the derived aesKey's raw bytes,
-// or the authToken.
+// The master secret never goes to the sync server. Everything that server
+// ever sees is: the derived authToken (Bearer header) and opaque AES-GCM
+// ciphertext. The secret is kept in the sync-preferred storage area, so the
+// browser account's own sync (Chrome/Firefox) carries it between that
+// account's browsers. Do not console.log the secret, the derived aesKey's
+// raw bytes, or the authToken.
 //
 // No extension-API import at module scope (would throw in Node/Vitest — see
 // background/icons/platform.ts precedent). Storage access goes through
@@ -58,8 +60,10 @@ export function generateSecret(): Uint8Array {
 
 let getOrCreatePromise: Promise<Uint8Array> | null = null;
 
-// Get-or-create the persisted master secret. Concurrent callers within the same
-// lifetime share one in-flight creation so a race can't generate two secrets.
+// Get-or-create the persisted master secret. Concurrent callers share one
+// in-flight creation so a race can't generate two secrets. The memo clears
+// once it settles, so a later call re-reads the store and sees a secret that
+// browser account sync replaced meanwhile.
 export async function getOrCreateSyncSecret(): Promise<Uint8Array> {
   if (!getOrCreatePromise) {
     getOrCreatePromise = (async () => {
@@ -69,20 +73,18 @@ export async function getOrCreateSyncSecret(): Promise<Uint8Array> {
       const created = generateSecret();
       await syncSecretStore.write(created);
       return created;
-    })().catch(error => {
+    })().finally(() => {
       getOrCreatePromise = null;
-      throw error;
     });
   }
   return getOrCreatePromise;
 }
 
-// Replace the stored master secret (adopt-secret flow). Resets the in-flight
-// get-or-create memo so a subsequent getOrCreateSyncSecret() call returns the
-// newly adopted secret rather than a stale in-memory one.
+// Replace the stored master secret (adopt-secret flow). The store caches the
+// written value, so the next getOrCreateSyncSecret() call returns it.
 export async function replaceSyncSecret(secret: Uint8Array): Promise<void> {
   await syncSecretStore.write(secret);
-  getOrCreatePromise = Promise.resolve(secret);
+  getOrCreatePromise = null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

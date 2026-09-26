@@ -51,7 +51,8 @@ function installChromeFake() {
 
 const mockFetchRequest = vi.fn();
 
-vi.mock('@/background/icons/platform', () => ({
+vi.mock('@/background/icons/platform', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/background/icons/platform')>()),
   isFirefox: () => false,
   firefoxSafeFetchRequest: (...args: unknown[]) => mockFetchRequest(...args),
 }));
@@ -160,6 +161,18 @@ describe('sync-client: syncPull', () => {
     const mod = await importSyncClient();
 
     await expect(mod.syncPull()).rejects.toMatchObject({ kind: 'network' });
+  });
+
+  it('reports an oversized response as payload-too-large, not as a network failure', async () => {
+    const mod = await importSyncClient();
+    const { ResponseTooLargeError } = await import('@/background/icons/platform');
+    const { SYNC_MAX_PAYLOAD_BYTES } = await import('@/shared/constants');
+    mockFetchRequest.mockRejectedValue(new ResponseTooLargeError(SYNC_MAX_PAYLOAD_BYTES));
+
+    await expect(mod.syncPull()).rejects.toMatchObject({ kind: 'payload-too-large' });
+    const code = await mod.getSyncPairingCode();
+    await expect(mod.previewPull(code)).rejects.toMatchObject({ kind: 'payload-too-large' });
+    expect(mockFetchRequest.mock.calls.every(call => call[3] === SYNC_MAX_PAYLOAD_BYTES)).toBe(true);
   });
 });
 

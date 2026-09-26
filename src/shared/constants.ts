@@ -36,6 +36,8 @@ export const EAGER_ICON_PREFETCH = true;
 // Bearer header (see shared/sync-crypto.ts). https://*/* host permission
 // already covers this host, so no manifest change is required.
 export const SYNC_ENDPOINT = 'https://api.flippflix.com/sync';
+// Matches the sync server's own per-namespace body limit.
+export const SYNC_MAX_PAYLOAD_BYTES = 5 * 1024 * 1024;
 
 // Deletion markers live as long as the sync server keeps an idle namespace
 // (90 days without a PUT evicts it); after that nothing can still hold the item.

@@ -31,6 +31,7 @@ import {
   pressSyncNow,
   removeFolder,
   selectedLinkMode,
+  setFolderIcon,
   showWorkspace,
   shownTabIds,
   workspaceView,
@@ -359,7 +360,7 @@ test('linking from a freshly onboarded browser previews what it will add and pre
   const code = await revealPairingCode(a.sync);
 
   // B runs onboarding for real and keeps what it created untouched.
-  await addFolder(b.sync, { root: 'bar', path: ['Onboard Picks'], bookmarks: [{ title: 'Pick One', url: 'https://example.com/picks/one' }] });
+  const picks = await addFolder(b.sync, { root: 'bar', path: ['Onboard Picks'], bookmarks: [{ title: 'Pick One', url: 'https://example.com/picks/one' }] });
   await b.sync.reload();
   const onboard = b.page.locator('.ff-onboard');
   await expect(onboard).toBeVisible();
@@ -368,6 +369,7 @@ test('linking from a freshly onboarded browser previews what it will add and pre
   await expect(onboard).toHaveCount(0);
   const onboarded = (await readWorkspaces(b.sync)).map((ws) => ws.name);
   expect(onboarded).toHaveLength(1);
+  await setFolderIcon(b.sync, picks);
 
   await openSyncSettings(b.sync);
   await submitPairingCode(b.sync, code);
@@ -376,11 +378,14 @@ test('linking from a freshly onboarded browser previews what it will add and pre
   const replacePreview = await linkPreviewSummary(b.sync);
   expect(replacePreview).toContain('This browser will get: “Alpha Reading”');
   expect(replacePreview).toContain(`Removed from this browser and your other signed-in Chrome devices: “${onboarded[0]!}”`);
+  // Replace drops this browser's folder icon too, and says so before it happens.
+  expect(replacePreview).toContain('0 folder icon(s) arrive; 1 local folder icon(s) are removed first.');
   // Merge instead would push the onboarding workspace to the other browser, and says so.
   await chooseLinkMode(b.sync, 'Merge');
   const mergePreview = await waitFor(b.sync, { selector: '[data-testid="link-preview-summary"]', text: 'This browser will add' });
   expect(mergePreview).toContain(`This browser will add: “${onboarded[0]!}”`);
   expect(mergePreview).toContain('This browser will get: “Alpha Reading”');
+  expect(mergePreview).not.toContain('folder icon');
 
   await waitFor(b.sync, { selector: '.ff-dialog__actions .ff-btn--ghost', text: 'Cancel', click: true });
   expect(await traceFor(syncStub, code)).toEqual(['GET 404', 'PUT 204', 'GET 200']);

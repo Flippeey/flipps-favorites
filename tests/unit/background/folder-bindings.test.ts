@@ -60,6 +60,19 @@ describe('backfillBindings', () => {
     expect(once).toEqual({ a: bound('f1'), c: bound('f2') });
     expect(bindings.backfillBindings(records, once, tree(dir('f1', 'One'), dir('f2', 'Two')))).toEqual(once);
   });
+
+  const workLocator = buildFolderLocator(tree(dir('w1', 'Work', WORK_URLS)), 'w1') ?? undefined;
+
+  it('does not bind a record whose id only collides with an unrelated folder here', () => {
+    const record = workspace('w', { rootFolderId: 'f9', rootFolder: workLocator });
+    const here = tree(dir('f9', 'Recipes', ['https://stew.example', 'https://bread.example']), dir('w1', 'Work', WORK_URLS));
+    expect(bindings.backfillBindings([record], {}, here)).toEqual({});
+  });
+
+  it('binds a record whose locator confirms the stored folder', () => {
+    const record = workspace('w', { rootFolderId: 'w1', rootFolder: workLocator });
+    expect(bindings.backfillBindings([record], {}, tree(dir('w1', 'Work', WORK_URLS)))).toEqual({ w: bound('w1', record) });
+  });
 });
 
 describe('nextBindings', () => {

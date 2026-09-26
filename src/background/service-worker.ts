@@ -1,6 +1,6 @@
 import { extensionApi } from '../shared/browser';
 import { IconFetchError, SyncFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetSyncPairingCodeResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type SyncErrorResponse, type SyncPullResponse, type SyncPullNotFoundResponse, type SyncPushResponse, type AdoptSyncSecretResponse, type WebSearchResponse, type FolderLocator, type WorkspaceRecord, type WorkspaceView } from '../shared/messages';
-import { createWorkspaceFromUser, deleteWorkspaceFromUser, ensurePerBrowserSettingsMove, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, patchSettingsFromUser, patchWorkspaceFromUser, readBookmarkUsageRecords, readFolderBindings, readFolderIconOverride, readNotUsedWorkspaceIds, readSettings, readWorkspaces, setWorkspaceNotUsed, updateFolderBindings, writeBookmarkUsageRecord } from '../shared/storage';
+import { createWorkspaceFromUser, deleteWorkspaceFromUser, ensurePerBrowserSettingsMove, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markBindingsBackfilled, markOnboardingPending, patchSettingsFromUser, patchWorkspaceFromUser, readBookmarkUsageRecords, readFolderBindings, readFolderIconOverride, readNotUsedWorkspaceIds, readSettings, readWorkspaces, setWorkspaceNotUsed, updateFolderBindings, writeBookmarkUsageRecord } from '../shared/storage';
 import { buildFolderLocator, folderExists, locatorHash } from '../shared/folder-locator';
 import { overlayWorkspace, readWorkspaceViews, resolveFolderBindings } from './folder-bindings';
 import { getIcon, invalidateIcon, removeFolderIcon, removeIconOverride, searchIcons, setFolderIcon, setFolderIconFromUrl, setIconOverride, setIconOverrideFromUrl, sweepFolderIcons, sweepGeneratedRecords } from './icons/icon-service';
@@ -10,7 +10,11 @@ import { performWebSearch } from './search-shim';
 extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }) => {
   const reason = details.reason ?? 'unknown';
   if (details.reason === 'install') {
-    await markOnboardingPending();
+    // A fresh install never showed any folder, so none is trusted by id.
+    // Browser account sync can deliver workspace records before the first
+    // page opens; they must be resolved from their locators instead. Both
+    // writes start together so the newtab still sees onboarding as pending.
+    await Promise.all([markBindingsBackfilled(), markOnboardingPending()]);
     await invalidateIcon();
   }
   // Free chrome.storage.local quota that was used by icon cache/overrides (now in IndexedDB).

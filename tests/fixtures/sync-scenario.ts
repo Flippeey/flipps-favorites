@@ -8,7 +8,7 @@
 // created through each browser's own bookmarks API, so every browser has its
 // own folder ids, as in real life.
 import type { AppSettings, WorkspaceRecord, WorkspaceView } from '@/shared/models';
-import { DEFAULT_WORKSPACE_SETTINGS } from './test-data.js';
+import { DEFAULT_WORKSPACE_SETTINGS, MOCK_FAVICON_PNG } from './test-data.js';
 import {
   confirmLink,
   openSyncSettings,
@@ -92,6 +92,17 @@ export async function addFolder(page: SyncPage, seed: FolderSeed): Promise<strin
     }
     return parentId;
   }, seed);
+}
+
+/** Give a folder a custom icon the way the folder edit dialog's upload does. */
+export async function setFolderIcon(page: SyncPage, folderId: string): Promise<void> {
+  await send(page, {
+    type: 'icons/set-folder-icon',
+    folderId,
+    dataUrl: `data:image/png;base64,${MOCK_FAVICON_PNG.toString('base64')}`,
+    mimeType: 'image/png',
+    fileName: 'folder-icon.png',
+  });
 }
 
 export async function removeFolder(page: SyncPage, folderId: string): Promise<void> {
