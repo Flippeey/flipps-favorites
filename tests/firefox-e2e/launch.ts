@@ -1,6 +1,6 @@
 // Firefox launch helpers for the Puppeteer (WebDriver BiDi) smoke suite.
 //
-// Spike-proven recipe (see docs/plan/20260703-firefox-e2e/plan.md, Phase 0):
+// Recipe:
 // - `installExtension(<dist/firefox dir>)` installs as a temporary addon;
 //   the *returned* id is the gecko id, NOT the URL-usable UUID.
 // - The UUID is deterministic because we set `extensions.webextensions.uuids`
@@ -11,10 +11,13 @@
 //   `page.reload()`.
 // - `page.url()` reports `about:blank` even when the page is fully live —
 //   never assert on it.
-import puppeteer, { type Browser, type Page } from 'puppeteer';
+import puppeteer, { type Browser as PuppeteerBrowser, type Page } from 'puppeteer';
+import { Browser, computeExecutablePath } from '@puppeteer/browsers';
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import firefoxBuild from './firefox-build.json' with { type: 'json' };
 
 const rootDir = resolve(fileURLToPath(import.meta.url), '..', '..', '..');
 const DIST_FIREFOX = resolve(rootDir, 'dist', 'firefox');
@@ -26,6 +29,48 @@ export const FF_UUID = 'd0c70de1-32d3-4b62-a1c9-c07c98c86e64';
 export const EXTENSION_ORIGIN = `moz-extension://${FF_UUID}`;
 export const NEWTAB_URL = `${EXTENSION_ORIGIN}/newtab.html`;
 
+/**
+ * Firefox build id the suite launches, pinned independently of the
+ * `puppeteer` package version. Current stable Firefox rejects WebDriver
+ * BiDi navigation to moz-extension:// origins (browsingContext.navigate and
+ * same-process location.href/window.open all fail), so the suite stays on
+ * the last build where that navigation worked until upstream restores it.
+ * Single source of truth: `tests/firefox-e2e/firefox-build.json`, read here
+ * and by `scripts/install-pinned-firefox.mjs` (used by the npm script and by
+ * CI provisioning) — change it in that one file, never inline elsewhere.
+ */
+export const PINNED_FIREFOX_BUILD_ID: string = firefoxBuild.buildId;
+
+function firefoxCacheDir(): string {
+  return process.env['PUPPETEER_CACHE_DIR'] ?? join(homedir(), '.cache', 'puppeteer');
+}
+
+/** The exact command that provisions `PINNED_FIREFOX_BUILD_ID` locally or in CI. */
+export function firefoxInstallCommand(): string {
+  return 'npm run test:firefox:e2e:install-browser';
+}
+
+/**
+ * Resolve the pinned Firefox executable, independent of whatever build
+ * `puppeteer` itself bundles. Throws with the install command rather than
+ * silently falling back to puppeteer's default Firefox, which may be a
+ * version the suite has not been validated against.
+ */
+export function resolvePinnedFirefoxExecutable(): string {
+  const executablePath = computeExecutablePath({
+    browser: Browser.FIREFOX,
+    buildId: PINNED_FIREFOX_BUILD_ID,
+    cacheDir: firefoxCacheDir(),
+  });
+  if (!existsSync(executablePath)) {
+    throw new Error(
+      `Pinned Firefox build ${PINNED_FIREFOX_BUILD_ID} not found at ${executablePath}. ` +
+        `Run \`${firefoxInstallCommand()}\` before the Firefox E2E suite.`,
+    );
+  }
+  return executablePath;
+}
+
 /** Assert the Firefox build exists, mirroring tests/global-setup.ts (build is never run implicitly). */
 export function assertFirefoxBuildExists(): void {
   if (!existsSync(resolve(DIST_FIREFOX, 'manifest.json'))) {
@@ -36,7 +81,7 @@ export function assertFirefoxBuildExists(): void {
 }
 
 export interface FirefoxSession {
-  browser: Browser;
+  browser: PuppeteerBrowser;
   /** Open a fresh page navigated to the extension's newtab.html and ready (`.ff-app` mounted). */
   newtabPage(): Promise<Page>;
   close(): Promise<void>;
@@ -51,7 +96,7 @@ export interface LaunchOptions {
 
 /**
  * Launch Firefox with the extension installed as a temporary addon at a
- * deterministic origin, per the Phase 0 spike recipe.
+ * deterministic origin.
  */
 export async function launchFirefoxWithExtension(opts: LaunchOptions = {}): Promise<FirefoxSession> {
   assertFirefoxBuildExists();
@@ -60,6 +105,7 @@ export async function launchFirefoxWithExtension(opts: LaunchOptions = {}): Prom
   const browser = await puppeteer.launch({
     browser: 'firefox',
     headless,
+    executablePath: resolvePinnedFirefoxExecutable(),
     extraPrefsFirefox: {
       'extensions.webextensions.uuids': JSON.stringify({ [GECKO_ID]: FF_UUID }),
       ...opts.extraPrefsFirefox,
@@ -84,13 +130,12 @@ export async function launchFirefoxWithExtension(opts: LaunchOptions = {}): Prom
 /**
  * Navigate to a moz-extension:// URL and wait for the app shell to mount.
  * NEVER use `waitUntil: 'load'` or `'domcontentloaded'` here — both hang
- * indefinitely for moz-extension pages over BiDi (spike-confirmed).
+ * indefinitely for moz-extension pages over BiDi.
  */
 export async function gotoAndWaitForApp(page: Page, url: string): Promise<void> {
-  // Empty array = wait for no lifecycle event ("fire and forget"). Same
-  // runtime effect as the spike's 'none' string (neither 'load' nor
-  // 'domcontentloaded' match anything internally), but empty array is the
-  // type-safe way to express it — 'none' is not a valid PuppeteerLifeCycleEvent.
+  // Empty array = wait for no lifecycle event ('fire and forget'). Neither
+  // 'load' nor 'domcontentloaded' ever fire for moz-extension pages over
+  // BiDi, so this is the type-safe equivalent of the no-op wait.
   await page.goto(url, { waitUntil: [], timeout: 15_000 });
   await page.waitForSelector('.ff-app', { timeout: 15_000 });
 }

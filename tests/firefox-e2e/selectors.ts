@@ -2,7 +2,7 @@
 // to return plain CSS strings (Puppeteer has no Locator equivalent — callers
 // use page.$, page.$$, page.waitForSelector with these directly). Source of
 // truth for the DOM contract stays .claude/conventions.md; keep in sync with
-// tests/fixtures/selectors.ts by hand until Phase 3 evaluates a shared module.
+// tests/fixtures/selectors.ts by hand.
 
 /** A bookmark/folder tile by its stable bookmark id. */
 export function tileByIdSelector(id: string): string {
