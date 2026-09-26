@@ -97,6 +97,8 @@ export async function firefoxSafeFetch(url: string, init?: RequestInit, timeoutM
   return fetch(url, init);
 }
 
+const NULL_BODY_STATUSES = new Set([204, 205, 304]);
+
 /**
  * XHR-backed fetch shim for arbitrary methods + binary bodies (settings sync,
  * #7). Unlike xhrFetch() above (icon pipeline: GET-only, blob response), this
@@ -123,7 +125,9 @@ export function xhrFetchRequest(
     }
 
     xhr.onload = () => {
-      const body = (xhr.response as ArrayBuffer) ?? new ArrayBuffer(0);
+      // XHR reports an empty ArrayBuffer even for a bodiless 204, but the
+      // Response constructor throws on any body paired with a null-body status.
+      const body = NULL_BODY_STATUSES.has(xhr.status) ? null : ((xhr.response as ArrayBuffer | null) ?? new ArrayBuffer(0));
       resolve(new Response(body, { status: xhr.status, statusText: xhr.statusText }));
     };
 
