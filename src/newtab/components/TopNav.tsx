@@ -227,6 +227,8 @@ function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace, o
         className="ff-pill"
         onClick={() => setOpen(o => !o)}
         onKeyDown={onTriggerKeyDown}
+        role="combobox"
+        aria-controls={open ? `${uid}-listbox` : undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`${workspaces.length} workspaces`}
@@ -237,7 +239,7 @@ function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace, o
         <span className="ff-ws-dropdown__count" aria-hidden="true">{workspaces.length}</span>
       </button>
       {open && (
-        <ul className="ff-sort__panel ff-ws-dropdown__panel" role="listbox" aria-activedescendant={`${uid}-${String(activeIndex)}`}>
+        <ul id={`${uid}-listbox`} className="ff-sort__panel ff-ws-dropdown__panel" role="listbox">
           {workspaces.map((ws, i) => (
             <li
               key={ws.id}
@@ -383,6 +385,8 @@ export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
             className="ff-pill"
             aria-label={`Sort bookmarks (current: ${sortLabel})`}
             title="Sort bookmarks"
+            role="combobox"
+            aria-controls={sortOpen ? `${sortUid}-listbox` : undefined}
             aria-haspopup="listbox"
             aria-expanded={sortOpen}
             aria-activedescendant={sortOpen ? `${sortUid}-${String(sortActiveIndex)}` : undefined}
@@ -394,7 +398,7 @@ export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
             <Ico name="chevronDown" size={12} />
           </button>
           {sortOpen && (
-            <ul className="ff-sort__panel" role="listbox" aria-activedescendant={`${sortUid}-${String(sortActiveIndex)}`}>
+            <ul id={`${sortUid}-listbox`} className="ff-sort__panel" role="listbox">
               {SORT_OPTIONS.map((o, i) => (
                 <li
                   key={o.value}

@@ -84,6 +84,8 @@ function SortDropdown({ value, onSelect }: SortDropdownProps) {
       <button
         type="button"
         className="ff-pill ff-sort__trigger"
+        role="combobox"
+        aria-controls={open ? `${uid}-listbox` : undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Sort bookmarks (current: ${label})`}
@@ -97,7 +99,7 @@ function SortDropdown({ value, onSelect }: SortDropdownProps) {
         <Ico name="chevronDown" size={12} />
       </button>
       {open && (
-        <ul className="ff-sort__panel" role="listbox" aria-activedescendant={`${uid}-${String(activeIndex)}`}>
+        <ul id={`${uid}-listbox`} className="ff-sort__panel" role="listbox">
           {SORT_OPTIONS.map((o, i) => (
             <li
               key={o.value}

@@ -110,6 +110,10 @@ test.describe('dropdown keyboard navigation', () => {
     const panel = newtabPage.locator('.ff-nav .ff-sort__panel');
     await expect(panel).toBeVisible();
     await expect(trigger).toHaveAttribute('aria-activedescendant', /.+/);
+    // Screen readers ignore aria-activedescendant on a plain button, so the trigger
+    // must be a combobox that points at the open listbox.
+    await expect(trigger).toHaveAttribute('role', 'combobox');
+    await expect(trigger).toHaveAttribute('aria-controls', String(await panel.getAttribute('id')));
 
     const initialId = await trigger.getAttribute('aria-activedescendant');
     await newtabPage.keyboard.press('ArrowDown');
@@ -145,6 +149,10 @@ test.describe('dropdown keyboard navigation', () => {
     const panel = newtabPage.locator('.ff-drawer .ff-sort__panel');
     await expect(panel).toBeVisible();
     await expect(trigger).toHaveAttribute('aria-activedescendant', /.+/);
+    // Screen readers ignore aria-activedescendant on a plain button, so the trigger
+    // must be a combobox that points at the open listbox.
+    await expect(trigger).toHaveAttribute('role', 'combobox');
+    await expect(trigger).toHaveAttribute('aria-controls', String(await panel.getAttribute('id')));
 
     await newtabPage.keyboard.press('ArrowDown');
     const targetId = await trigger.getAttribute('aria-activedescendant');
@@ -182,6 +190,10 @@ test.describe('dropdown keyboard navigation', () => {
     const panel = newtabPage.locator('.ff-ws-dropdown__panel');
     await expect(panel).toBeVisible();
     await expect(trigger).toHaveAttribute('aria-activedescendant', /.+/);
+    // Screen readers ignore aria-activedescendant on a plain button, so the trigger
+    // must be a combobox that points at the open listbox.
+    await expect(trigger).toHaveAttribute('role', 'combobox');
+    await expect(trigger).toHaveAttribute('aria-controls', String(await panel.getAttribute('id')));
 
     await newtabPage.keyboard.press('ArrowDown');
     const activeOptionId = await trigger.getAttribute('aria-activedescendant');
