@@ -373,7 +373,6 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
             onPreviewLoad={handlePreviewLoad}
             onPickCandidate={handlePickCandidate}
             onPickCandidateAndClose={handlePickCandidateAndClose}
-            working={working}
           />
     </ModalDialog>
   );

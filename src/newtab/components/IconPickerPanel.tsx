@@ -62,7 +62,6 @@ interface IconSearchSectionProps {
   onPreviewLoad: (imageUrl: string, image: HTMLImageElement) => void;
   onPickCandidate: (candidate: IconSearchCandidate) => void;
   onPickCandidateAndClose: (candidate: IconSearchCandidate) => void;
-  working: boolean;
   heading?: string;
   description?: string;
   unmanagedHint?: string;
@@ -159,7 +158,7 @@ export function IconPickerPanel(props: IconPickerPanelProps) {
 
   const {
     canManage, query, onQueryChange, onSearchSubmit, searching, results, validatedPreviews,
-    onPreviewLoad, onPickCandidate, onPickCandidateAndClose, working, heading, description, unmanagedHint,
+    onPreviewLoad, onPickCandidate, onPickCandidateAndClose, heading, description, unmanagedHint,
   } = props;
 
   return (

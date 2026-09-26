@@ -321,7 +321,6 @@ export function FolderNameDialog({ tree, target, siblingNames, onClose, onSaved 
         onPreviewLoad={handlePreviewLoad}
         onPickCandidate={handlePickCandidate}
         onPickCandidateAndClose={handlePickCandidateAndClose}
-        working={working}
         heading="Search folder icons"
       />
     </ModalDialog>
