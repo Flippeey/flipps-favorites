@@ -3,7 +3,7 @@
 // attributes + ff- class hooks) — query those, never ad-hoc CSS, so a markup
 // refactor only touches this file.
 import type { Locator, Page } from '@playwright/test';
-import type { BookmarkSortMode, SortDirection, ThemeMode, TileShape } from '@/shared/models';
+import type { BookmarkSortMode, SortDirection } from '@/shared/models';
 
 /** A bookmark/folder tile by its stable bookmark id. */
 export function tileById(page: Page, id: string): Locator {
@@ -45,11 +45,6 @@ export function sortOption(page: Page, mode: BookmarkSortMode, direction: SortDi
   return page.locator('.ff-sort__option', { hasText: labels[value] });
 }
 
-/** A settings/workspace drawer nav item by its visible label. */
-export function drawerNavItem(page: Page, label: string): Locator {
-  return page.locator('.ff-drawer__navitem', { hasText: label });
-}
-
 /** A workspace tab in the top nav by workspace id. */
 export function workspaceTab(page: Page, id: string): Locator {
   return page.locator(`[data-workspace-id="${id}"]`);
@@ -60,44 +55,12 @@ export function contextMenu(page: Page): Locator {
   return page.locator('.ff-ctx[role="menu"]');
 }
 
-/** A context-menu item by its visible label. */
-export function contextMenuItem(page: Page, label: string): Locator {
-  return contextMenu(page).locator('.ff-ctx__item', { hasText: label });
-}
-
-/** An accent color chip by its aria-label (the preset's display name). */
-export function accentChip(page: Page, label: string): Locator {
-  return page.locator(`.ff-accentchip[aria-label="${label}"]`);
-}
-
-/** The theme card for a given mode (Light/Dark/System) by visible label. */
-export function themeCard(page: Page, mode: ThemeMode): Locator {
-  const label = mode === 'light' ? 'Light' : mode === 'dark' ? 'Dark' : 'System';
-  return page.locator('.ff-pill, .ff-segmented button, button', { hasText: label });
-}
-
 /** The app shell root — carries data-theme / data-bg / data-tile-shape. */
 export function appShell(page: Page): Locator {
   return page.locator('.ff-app');
 }
 
-/** The wallpaper paint layer (data-active="true" when a wallpaper is set). */
-export function wallpaperLayer(page: Page): Locator {
-  return page.locator('.ff-bg-wallpaper');
-}
-
-/** A dock item by its aria-label (the bookmark title). */
-export function dockItem(page: Page, title: string): Locator {
-  return page.locator(`.ff-dock-wrap [aria-label="${title}"]`);
-}
-
 /** An overlay breadcrumb by the folder id it links to. */
 export function overlayCrumb(page: Page, folderId: string): Locator {
   return page.locator(`[data-overlay-crumb-id="${folderId}"]`);
-}
-
-/** Assert helper: read data-tile-shape off the app shell. */
-export async function tileShapeOf(page: Page): Promise<TileShape | null> {
-  const value = await appShell(page).getAttribute('data-tile-shape');
-  return value as TileShape | null;
 }

@@ -710,11 +710,7 @@ describe('detectForeignBrandInImage — own-brand descriptor logos', () => {
     )).toBeNull();
   });
 
-  it('returns null for android-logo.png (brand "google" present as... wait, it is not)', () => {
-    // android-logo.png for brand "google" — brand is NOT in filename,
-    // but "android" is not a foreign brand, it's a product. However, without
-    // "google" in the filename, this WOULD flag "android" as foreign.
-    // This test documents current behavior: brand absent → foreign detected.
+  it('returns "android" for android-logo.png when brand "google" is absent from the filename (known false-positive limitation)', () => {
     expect(detectForeignBrandInImage(
       'https://google.com/images/android-logo.png',
       'google',
