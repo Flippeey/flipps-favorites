@@ -77,4 +77,34 @@ test.describe('context menu', () => {
     await expect(menu.locator('.ff-ctx__label', { hasText: 'Add folder' })).toBeVisible();
     await expect(menu.locator('.ff-ctx__label', { hasText: 'Settings' })).toBeVisible();
   });
+
+  // WHY: a selection that mixes bookmarks and folders opens tabs for the
+  // bookmarks only — a plain "Open 2 in new tabs" count would silently
+  // disagree with the bookmark-only count "Delete 2 items" reports, so the
+  // label must call out that it's bookmarks being counted.
+  test('mixed-selection "Open in new tabs" label counts only bookmarks', async ({ newtabPage, world }) => {
+    const folderTile = tileById(newtabPage, world.bookmarkIdByTitle('Project Apollo'));
+    const bookmarkTile = tileById(newtabPage, world.bookmarkIdByTitle('GitHub'));
+    const modKey = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+    await folderTile.click({ modifiers: [modKey] });
+    await bookmarkTile.click({ modifiers: [modKey] });
+
+    const menu = await openContextMenu(newtabPage, bookmarkTile);
+    await expect(menu.locator('.ff-ctx__label', { hasText: 'Open 1 bookmark in new tabs' })).toBeVisible();
+    await expect(menu.locator('.ff-ctx__label', { hasText: 'Open 1 bookmark in new window' })).toBeVisible();
+  });
+
+  test('pure-bookmark multi-selection keeps the plain "Open N in new tabs" label', async ({ newtabPage, world }) => {
+    const tileA = tileById(newtabPage, world.bookmarkIdByTitle('GitHub'));
+    const tileB = tileById(newtabPage, world.bookmarkIdByTitle('Slack'));
+    const modKey = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+    await tileA.click({ modifiers: [modKey] });
+    await tileB.click({ modifiers: [modKey] });
+
+    const menu = await openContextMenu(newtabPage, tileB);
+    await expect(menu.locator('.ff-ctx__label', { hasText: 'Open 2 in new tabs' })).toBeVisible();
+    await expect(menu.locator('.ff-ctx__label', { hasText: 'Open 2 in new window' })).toBeVisible();
+  });
 });

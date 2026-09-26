@@ -9,6 +9,7 @@ import { IS_MAC } from '../lib/platform';
 import { MAX_WORKSPACES } from '@/shared/constants';
 import { normalizeBookmarkUrl } from '../lib/url';
 import { openTab } from '../lib/messaging';
+import type { PushToastInput } from './useToasts';
 
 interface UseContextMenuBuilderArgs {
   tree: BookmarkNode[];
@@ -37,6 +38,7 @@ interface UseContextMenuBuilderArgs {
   setConfirmDeleteWorkspace: (ws: WorkspaceRecord | null) => void;
   onDeleteBookmark: (item: BookmarkNode) => void | Promise<void>;
   onCreateFromFolderResult: (result: 'created' | 'at_max' | 'already_exists', folderTitle: string) => void;
+  pushToast: (input: PushToastInput) => void;
 }
 
 // Folder id + every descendant folder id, so a "Move to…" destination picker
@@ -91,6 +93,7 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
     setConfirmDeleteWorkspace,
     onDeleteBookmark,
     onCreateFromFolderResult,
+    pushToast,
   } = args;
 
   const buildContextMenuItems = useCallback((target: BookmarkNode | null, sectionFolder: BookmarkNode | null = null): ContextMenuItem[] => {
@@ -147,15 +150,43 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
       ? () => setConfirmDeleteBatch(Array.from(selection.ids))
       : () => { void onDeleteBookmark(target); };
     const targetIds = isInSelection ? Array.from(selection.ids) : [target.id];
-    const bookmarkUrls = targetIds
-      .map(id => findNode(tree, id))
-      .filter((n): n is BookmarkNode => !!n?.url)
-      .map(n => normalizeBookmarkUrl(n.url!));
+    const selectedNodes = targetIds.map(id => findNode(tree, id)).filter((n): n is BookmarkNode => !!n);
+    const bookmarkUrls = selectedNodes
+      .filter((n): n is BookmarkNode & { url: string } => !!n.url)
+      .map(n => normalizeBookmarkUrl(n.url));
+    // A selection that includes one or more folders must not offer any of
+    // those folders, or their descendants, as a "Move to…" destination —
+    // same reasoning as the single-folder branch above (self/descendant
+    // moves orphan the folder from the tree).
+    const selectedFolders = selectedNodes.filter(isFolder);
+    const moveExcludeIds = selectedFolders.length > 0
+      ? selectedFolders.reduce((ids, folder) => {
+          for (const id of collectFolderIds(folder)) ids.add(id);
+          return ids;
+        }, new Set<string>())
+      : undefined;
+    const mixedSelection = targetIds.length > bookmarkUrls.length;
     const multi = bookmarkUrls.length > 1;
-    const newTabLabel = multi ? `Open ${bookmarkUrls.length} in new tabs` : 'Open in new tab';
-    const newWindowLabel = multi ? `Open ${bookmarkUrls.length} in new window` : 'Open in new window';
+    const newTabLabel = mixedSelection
+      ? `Open ${bookmarkUrls.length} ${bookmarkUrls.length === 1 ? 'bookmark' : 'bookmarks'} in new tabs`
+      : multi ? `Open ${bookmarkUrls.length} in new tabs` : 'Open in new tab';
+    const newWindowLabel = mixedSelection
+      ? `Open ${bookmarkUrls.length} ${bookmarkUrls.length === 1 ? 'bookmark' : 'bookmarks'} in new window`
+      : multi ? `Open ${bookmarkUrls.length} in new window` : 'Open in new window';
     const openInNewTabs = () => {
-      for (const url of bookmarkUrls) openTab(url).catch(() => { /* ignore */ });
+      void (async () => {
+        let failed = 0;
+        for (const url of bookmarkUrls) {
+          try {
+            await openTab(url);
+          } catch {
+            failed += 1;
+          }
+        }
+        if (failed > 0) {
+          pushToast({ kind: 'error', message: `Couldn’t open ${failed} of ${bookmarkUrls.length} tabs.` });
+        }
+      })();
     };
     const openInNewWindow = () => {
       if (bookmarkUrls.length === 0) return;
@@ -168,7 +199,7 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
       { kind: 'item', icon: 'copy',         label: 'Copy URL',        onClick: () => target.url && navigator.clipboard?.writeText(normalizeBookmarkUrl(target.url)) },
       { kind: 'separator' },
       { kind: 'item', icon: 'pencil',       label: 'Edit…',           onClick: () => handleEditBookmark(target) },
-      { kind: 'item', icon: 'folderTree',   label: 'Move to…',        onClick: () => onMoveTo(targetIds) },
+      { kind: 'item', icon: 'folderTree',   label: 'Move to…',        onClick: () => onMoveTo(targetIds, moveExcludeIds) },
       ...(isInSelection
         ? [{ kind: 'item' as const, icon: 'folderPlus' as const, label: `Move ${selection.ids.size} to new folder…`,
             onClick: () => onMoveSelectionToNewFolder(targetIds) }]
@@ -177,7 +208,7 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
       { kind: 'item', icon: 'trash',        label: deleteLabel,       kbd: IS_MAC ? '⌫' : 'Del', destructive: true,
         onClick: deleteAction },
     ];
-  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, handleAddWorkspace, handleCreateWorkspaceFromFolder, onCreateFromFolderResult, workspaces, selection, onDeleteBookmark, onMoveSelectionToNewFolder, onMoveTo, onOpenAllInTabs]);
+  }, [tree, defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, handleAddWorkspace, handleCreateWorkspaceFromFolder, onCreateFromFolderResult, workspaces, selection, onDeleteBookmark, onMoveSelectionToNewFolder, onMoveTo, onOpenAllInTabs, pushToast]);
 
   const handleOpenAddMenu = useCallback((x: number, y: number) => {
     const atMax = workspaces.length >= MAX_WORKSPACES;

@@ -1,5 +1,5 @@
 /**
- * Bug #35 — Stale drag-source attributes after workspace switch.
+ * Stale drag-source attributes after workspace switch.
  *
  * WHY this test matters: if data-drag-source="true" persists on tiles after
  * a workspace switch, those tiles render at 0.35 opacity (the drag-source

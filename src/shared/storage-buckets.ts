@@ -264,7 +264,7 @@ export function createCachedRecordStore<T>(args: {
   // Chain every writeOne/deleteOne onto a per-store tail promise so the
   // readFresh -> merge -> write sequence runs serially. Without this, concurrent
   // writes for DIFFERENT keys both read the same pre-write map and the second
-  // write's `...records` spread overwrites the first write's key (#41).
+  // write's `...records` spread overwrites the first write's key.
   let writeTail: Promise<unknown> = Promise.resolve();
 
   function enqueueWrite<R>(run: () => Promise<R>): Promise<R> {

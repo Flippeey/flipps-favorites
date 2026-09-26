@@ -26,7 +26,7 @@ export function getHostname(url: string): string {
  * Pure math: compute the drawImage rect for cover scaling.
  * Cover (Math.max scale) always fills the canvas and matches the tile's
  * objectFit:cover rendering — chosen as the fixed default when the inert
- * contain/cover fit control was removed (issue #29).
+ * contain/cover fit control was removed.
  */
 export function computeIconDrawRect(
   naturalWidth: number,

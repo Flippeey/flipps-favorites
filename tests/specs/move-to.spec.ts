@@ -12,7 +12,7 @@
  * so a wrong destination pick isn't a one-way trip.
  */
 import { test, expect } from '../fixtures/world.js';
-import { openContextMenu, tileById } from '../fixtures/bookmark-helpers.js';
+import { openContextMenu, tileById, createSubFolder, reloadNewtab } from '../fixtures/bookmark-helpers.js';
 
 test.describe('move to…', () => {
   test('bookmark menu exposes a "Move to…" action', async ({ newtabPage, world }) => {
@@ -94,5 +94,57 @@ test.describe('move to…', () => {
     // …and now lives at the root of the Personal workspace.
     await newtabPage.locator(`[data-workspace-id="${world.workspaceIds.Personal}"]`).click();
     await expect(newtabPage.locator(`.ff-canvas [data-item-id="${bmId}"]`)).toBeVisible({ timeout: 8_000 });
+  });
+
+  // WHY: moving a mixed selection (a folder plus a bookmark) must not offer
+  // that folder, or any of its own subfolders, as a destination — dropping a
+  // folder into itself or a descendant would orphan it from the tree. This is
+  // the multi-select counterpart to the single-folder "Move to…" guard
+  // covered by the folder-menu test above.
+  test('multi-select Move to… disables the selected folder and its subfolders as destinations', async ({ newtabPage, world }) => {
+    const folderId = world.bookmarkIdByTitle('Project Apollo');
+    const subFolderId = await createSubFolder(newtabPage, folderId, 'Nested Sub');
+    await reloadNewtab(newtabPage);
+
+    const folderTile = tileById(newtabPage, folderId);
+    const bookmarkId = world.bookmarkIdByTitle('GitHub');
+    const bookmarkTile = tileById(newtabPage, bookmarkId);
+    const modKey = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+    await folderTile.click({ modifiers: [modKey] });
+    await bookmarkTile.click({ modifiers: [modKey] });
+
+    const menu = await openContextMenu(newtabPage, bookmarkTile);
+    await menu.getByRole('menuitem', { name: /Move to/i }).click();
+
+    const dialog = newtabPage.locator('.ff-dialog[role="dialog"]');
+    await dialog.waitFor({ state: 'visible', timeout: 5_000 });
+
+    await dialog.locator('button[aria-label="Expand Other bookmarks"]').click();
+    await dialog.locator('button[aria-label="Expand Work"]').click();
+
+    // The selected folder itself is disabled…
+    const apolloRow = dialog.locator('.ff-card', { hasText: 'Project Apollo' });
+    await expect(apolloRow).toBeDisabled();
+
+    // …and so is its own subfolder, once expanded.
+    await dialog.locator('button[aria-label="Expand Project Apollo"]').click();
+    const nestedRow = dialog.locator('.ff-card', { hasText: 'Nested Sub' });
+    await expect(nestedRow).toBeDisabled();
+
+    // An unrelated folder in the same workspace stays selectable, and the
+    // move actually completes into it.
+    const docRow = dialog.locator('.ff-card', { hasText: 'Documentation' });
+    await expect(docRow).toBeEnabled();
+    await docRow.click();
+    await dialog.getByRole('button', { name: /Move here/i }).click();
+    await dialog.waitFor({ state: 'hidden', timeout: 5_000 });
+
+    await expect(
+      newtabPage.locator(`.ff-canvas [data-item-id="${folderId}"]`),
+    ).toHaveCount(0, { timeout: 8_000 });
+    await expect(
+      newtabPage.locator(`.ff-canvas [data-item-id="${bookmarkId}"]`),
+    ).toHaveCount(0, { timeout: 8_000 });
   });
 });

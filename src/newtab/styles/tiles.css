@@ -157,7 +157,7 @@
   border-radius: inherit;
 }
 
-/* Custom folder icon (opt-in, issue #44). The image replaces the 2x2 collage
+/* Custom folder icon (opt-in). The image replaces the 2x2 collage
    *inside* the default folder frame rather than filling the tile edge-to-edge:
    a full-bleed image is indistinguishable from a bookmark tile, so the base
    .ff-folder-tile gradient backplate + hairline border + padding are what still
