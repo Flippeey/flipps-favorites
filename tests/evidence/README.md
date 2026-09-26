@@ -64,10 +64,12 @@ branch cannot leak a spec into `main`.
   against `dist/chrome`, the release artifact, not the `dist/chrome-test`
   build this suite runs against.
 - Capture with `capture(page, testInfo, label)` from `../evidence.js`. Output is
-  `<spec-basename>--<label>.png`.
-- Call `settle(locator)` before capturing anything animated. Dialogs run
-  `ffScaleIn` for 240ms; a screenshot taken the instant one becomes visible
-  catches it half-transparent and scaled over the page behind it.
+  `<spec-basename>--<label>.png`. It brings the page to front, waits out
+  running animations and two animation frames on its own — specs don't need
+  to settle anything before calling it.
+- Reach for `settle(locator)` only mid-spec, when you need to wait for one
+  element's own animation to finish before interacting with it further
+  (not before a capture).
 - Keep each spec small: a handful of labeled captures at the moments that
   actually show the new behavior (before/after a toggle, a dialog open,
   a result state) — not a full walkthrough.
