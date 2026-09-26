@@ -7,8 +7,9 @@
  * so we assert on the visible `.ff-ctx__label` text instead of the role name.
  */
 import { test, expect } from '../fixtures/world.js';
-import { createTestBookmark, openContextMenu, removeBookmarkTree } from '../fixtures/bookmark-helpers.js';
-import { tileById } from '../fixtures/selectors.js';
+import { createTestBookmark, openContextMenu, removeBookmarkTree, reloadNewtab, patchWorkspace } from '../fixtures/bookmark-helpers.js';
+import { resetStorage, seedMinimal } from '../fixtures/seeding.js';
+import { tileById, tilesInScope } from '../fixtures/selectors.js';
 
 test.describe('context menu', () => {
   test('bookmark menu exposes open / edit / delete actions', async ({ newtabPage, world }) => {
@@ -64,6 +65,50 @@ test.describe('context menu', () => {
     } finally {
       await removeBookmarkTree(newtabPage, bmId);
     }
+  });
+
+  test('multi-select "Open" label narrows the count when folders are mixed into the selection', async ({ newtabPage }) => {
+    // Regression: "Open" labels used to report only the openable-bookmark count
+    // (folders silently filtered out, since they have no URL) while "Delete"
+    // reported the full selection count -> "Open 2 in new tabs" next to
+    // "Delete 3 items" read as a mismatch/bug even though both were individually
+    // correct. The fix makes the narrowing explicit: "Open 2 bookmarks in new tabs".
+    await resetStorage(newtabPage);
+    const seeded = await seedMinimal(newtabPage, { rootBookmarks: 2, folders: 1 });
+    await reloadNewtab(newtabPage);
+    await patchWorkspace(newtabPage, { folderMode: 'grid', bookmarkSortMode: 'manual' }, 'ws-minimal');
+    await reloadNewtab(newtabPage);
+
+    const tiles = tilesInScope(newtabPage, seeded.rootFolderId);
+    const modKey = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+    // BM 01, BM 02, then Folder 1 (seed order) -> select all three: 2 bookmarks + 1 folder.
+    await tiles.nth(0).click({ modifiers: [modKey] });
+    await tiles.nth(1).click({ modifiers: [modKey] });
+    await tiles.nth(2).click({ modifiers: [modKey] });
+
+    const menu = await openContextMenu(newtabPage, tiles.nth(1));
+    await expect(menu.locator('.ff-ctx__label', { hasText: 'Open 2 bookmarks in new tabs' })).toBeVisible();
+    await expect(menu.locator('.ff-ctx__label', { hasText: 'Open 2 bookmarks in new window' })).toBeVisible();
+    await expect(menu.locator('.ff-ctx__label', { hasText: 'Delete 3 items' })).toBeVisible();
+  });
+
+  test('multi-select "Open" label is unchanged when the selection has no folders', async ({ newtabPage }) => {
+    await resetStorage(newtabPage);
+    const seeded = await seedMinimal(newtabPage, { rootBookmarks: 3 });
+    await reloadNewtab(newtabPage);
+    await patchWorkspace(newtabPage, { folderMode: 'grid', bookmarkSortMode: 'manual' }, 'ws-minimal');
+    await reloadNewtab(newtabPage);
+
+    const tiles = tilesInScope(newtabPage, seeded.rootFolderId);
+    const modKey = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+    await tiles.nth(0).click({ modifiers: [modKey] });
+    await tiles.nth(1).click({ modifiers: [modKey] });
+
+    const menu = await openContextMenu(newtabPage, tiles.nth(1));
+    await expect(menu.locator('.ff-ctx__label', { hasText: 'Open 2 in new tabs' })).toBeVisible();
+    await expect(menu.locator('.ff-ctx__label', { hasText: 'Open 2 in new window' })).toBeVisible();
   });
 
   test('empty-canvas menu exposes add + settings actions', async ({ newtabPage }) => {

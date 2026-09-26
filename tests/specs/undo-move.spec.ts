@@ -188,7 +188,7 @@ test.describe('undo move', () => {
     ).toBeVisible({ timeout: 8_000 });
   });
 
-  // WHY: "Move N to new folder" creates a folder AND moves items. A true reversal
+  // WHY: "Move N items to folder" creates a folder AND moves items. A true reversal
   // restores the items to origin AND deletes the now-empty folder — otherwise
   // Undo leaves orphan clutter behind.
   test('move to new folder shows Undo, and Undo restores items and removes the new folder', async ({ newtabPage }) => {
@@ -204,7 +204,7 @@ test.describe('undo move', () => {
       .count();
 
     // Ctrl/Meta-click selects tiles (a plain click would navigate to the URL).
-    // "Move N to new folder…" only renders for a multi-selection (size > 1).
+    // "Move N items to folder…" only renders for a multi-selection (size > 1).
     await firstTile.click({ modifiers: ['ControlOrMeta'] });
     await secondTile.click({ modifiers: ['ControlOrMeta'] });
     await expect(firstTile).toHaveAttribute('data-selected', 'true', { timeout: 5_000 });
@@ -212,10 +212,16 @@ test.describe('undo move', () => {
     await secondTile.click({ button: 'right' });
     const menu = newtabPage.locator('.ff-ctx[role="menu"]');
     await menu.waitFor({ state: 'visible', timeout: 5_000 });
-    await menu.locator('[role="menuitem"]', { hasText: /Move .* to new folder/i }).click();
+    await menu.locator('[role="menuitem"]', { hasText: /Move .* items to folder/i }).click();
 
-    // Name the new folder, then create it.
-    const dialog = newtabPage.locator('.ff-dialog[role="dialog"]').first();
+    // The picker opens first (a plain <div>, not a <form>) — choose "Create
+    // new folder in ..." to reach the existing create-folder dialog.
+    const picker = newtabPage.locator('div.ff-dialog[role="dialog"]').first();
+    await picker.waitFor({ state: 'visible', timeout: 5_000 });
+    await picker.locator('button', { hasText: /Create new folder in/i }).click();
+
+    // Name the new folder, then create it (FolderNameDialog renders as a <form>).
+    const dialog = newtabPage.locator('form.ff-dialog[role="dialog"]').first();
     await dialog.waitFor({ state: 'visible', timeout: 5_000 });
     await dialog.locator('input.ff-input').fill('Undo Target');
     await dialog.locator('button', { hasText: /Create folder/i }).click();
@@ -245,5 +251,82 @@ test.describe('undo move', () => {
     await expect(
       newtabPage.locator('.ff-canvas [data-item-id][data-item-kind="folder"]'),
     ).toHaveCount(foldersBefore, { timeout: 8_000 });
+  });
+
+  // WHY: "Move into existing folder" is the PRIMARY path — it must not delete the
+  // destination folder on Undo. The destination folder count stays the same before
+  // and after the move+undo cycle. This is the asymmetric undo: created folders are
+  // removed on undo, but existing folders survive.
+  test('move into existing folder shows Undo, and Undo restores items WITHOUT deleting the destination folder', async ({ newtabPage }) => {
+    const rootBookmarks = newtabPage.locator('.ff-canvas [data-item-id][data-item-kind="bookmark"]');
+    const folders = newtabPage.locator('.ff-canvas [data-item-id][data-item-kind="folder"]');
+
+    const firstTile = rootBookmarks.nth(0);
+    const secondTile = rootBookmarks.nth(1);
+    const destFolderTile = folders.first();
+
+    const firstId = await firstTile.getAttribute('data-item-id');
+    const secondId = await secondTile.getAttribute('data-item-id');
+    const destFolderId = await destFolderTile.getAttribute('data-item-id');
+    if (!firstId || !secondId || !destFolderId) throw new Error('tiles not found');
+
+    const folderCountBefore = await folders.count();
+
+    // Ctrl/Meta-click to select two root bookmarks.
+    await firstTile.click({ modifiers: ['ControlOrMeta'] });
+    await secondTile.click({ modifiers: ['ControlOrMeta'] });
+    await expect(firstTile).toHaveAttribute('data-selected', 'true', { timeout: 5_000 });
+    await expect(secondTile).toHaveAttribute('data-selected', 'true', { timeout: 5_000 });
+
+    // Open the context menu and select "Move N items to folder".
+    await secondTile.click({ button: 'right' });
+    const menu = newtabPage.locator('.ff-ctx[role="menu"]');
+    await menu.waitFor({ state: 'visible', timeout: 5_000 });
+    await menu.locator('[role="menuitem"]', { hasText: /Move .* items to folder/i }).click();
+
+    // The picker opens (a <div>.ff-dialog, not a <form>). Select a pre-existing folder.
+    const picker = newtabPage.locator('div.ff-dialog[role="dialog"]').first();
+    await picker.waitFor({ state: 'visible', timeout: 5_000 });
+
+    // The FolderPicker renders folder buttons with data-folder-id. Select the second one
+    // (the first existing folder, not the root).
+    const folderButtons = picker.locator('button[data-folder-id]');
+    await folderButtons.nth(1).click();
+
+    // Click "Move here".
+    await picker.getByRole('button', { name: /Move here/ }).click();
+    await picker.waitFor({ state: 'hidden', timeout: 5_000 });
+
+    // Both items left root.
+    await expect(
+      newtabPage.locator(`.ff-canvas [data-item-id="${firstId}"][data-item-kind="bookmark"]`),
+    ).toHaveCount(0, { timeout: 8_000 });
+    await expect(
+      newtabPage.locator(`.ff-canvas [data-item-id="${secondId}"][data-item-kind="bookmark"]`),
+    ).toHaveCount(0, { timeout: 8_000 });
+
+    // Folder count is UNCHANGED (destination folder was NOT created).
+    const folderCountAfterMove = await newtabPage
+      .locator('.ff-canvas [data-item-id][data-item-kind="folder"]')
+      .count();
+    expect(folderCountAfterMove).toBe(folderCountBefore);
+
+    // Undo → items back in root.
+    const toast = undoToast(newtabPage);
+    await expect(toast).toBeVisible({ timeout: 5_000 });
+    await toast.locator('.ff-toast__action', { hasText: 'Undo' }).click();
+
+    await expect(
+      newtabPage.locator(`.ff-canvas [data-item-id="${firstId}"][data-item-kind="bookmark"]`),
+    ).toBeVisible({ timeout: 8_000 });
+    await expect(
+      newtabPage.locator(`.ff-canvas [data-item-id="${secondId}"][data-item-kind="bookmark"]`),
+    ).toBeVisible({ timeout: 8_000 });
+
+    // Folder count still UNCHANGED — destination was never deleted.
+    const folderCountAfterUndo = await newtabPage
+      .locator('.ff-canvas [data-item-id][data-item-kind="folder"]')
+      .count();
+    expect(folderCountAfterUndo).toBe(folderCountBefore);
   });
 });

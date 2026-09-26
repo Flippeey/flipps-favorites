@@ -152,8 +152,13 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
       .filter((n): n is BookmarkNode => !!n?.url)
       .map(n => normalizeBookmarkUrl(n.url!));
     const multi = bookmarkUrls.length > 1;
-    const newTabLabel = multi ? `Open ${bookmarkUrls.length} in new tabs` : 'Open in new tab';
-    const newWindowLabel = multi ? `Open ${bookmarkUrls.length} in new window` : 'Open in new window';
+    const narrowedByFolders = multi && targetIds.length > bookmarkUrls.length;
+    const newTabLabel = multi
+      ? (narrowedByFolders ? `Open ${bookmarkUrls.length} bookmarks in new tabs` : `Open ${bookmarkUrls.length} in new tabs`)
+      : 'Open in new tab';
+    const newWindowLabel = multi
+      ? (narrowedByFolders ? `Open ${bookmarkUrls.length} bookmarks in new window` : `Open ${bookmarkUrls.length} in new window`)
+      : 'Open in new window';
     const openInNewTabs = () => {
       for (const url of bookmarkUrls) openTab(url).catch(() => { /* ignore */ });
     };
@@ -170,7 +175,7 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
       { kind: 'item', icon: 'pencil',       label: 'Edit…',           onClick: () => handleEditBookmark(target) },
       { kind: 'item', icon: 'folderTree',   label: 'Move to…',        onClick: () => onMoveTo(targetIds) },
       ...(isInSelection
-        ? [{ kind: 'item' as const, icon: 'folderPlus' as const, label: `Move ${selection.ids.size} to new folder…`,
+        ? [{ kind: 'item' as const, icon: 'folderPlus' as const, label: `Move ${selection.ids.size} items to folder…`,
             onClick: () => onMoveSelectionToNewFolder(targetIds) }]
         : []),
       { kind: 'separator' },

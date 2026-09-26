@@ -251,7 +251,7 @@ test.describe('selection', () => {
 
   // -------------------------------------------------------------------------
   // WHY: bulk-organising is the payoff of multi-select. The context menu must
-  // offer "move to new folder", and creating the folder must actually relocate
+  // offer "move to folder", and creating the folder must actually relocate
   // every selected bookmark into it — not just open an empty dialog.
   test('multi-select context menu moves the selected bookmarks into a new folder', async ({ newtabPage }) => {
     // Use overlay folders so we can open the new folder and verify its contents.
@@ -270,10 +270,16 @@ test.describe('selection', () => {
 
     // Right-click a selected tile → the menu offers the batch action.
     const menu = await openContextMenu(newtabPage, tiles.nth(1));
-    await clickMenuItem(menu, /Move 2 to new folder/);
+    await clickMenuItem(menu, /Move 2 items to folder/);
 
-    // Name + create the folder.
-    const dialog = newtabPage.locator('.ff-dialog');
+    // The picker opens first (a plain <div>, not a <form>) — choose "Create
+    // new folder in ..." to reach the existing create-folder dialog.
+    const picker = newtabPage.locator('div.ff-dialog');
+    await picker.waitFor({ state: 'visible', timeout: 5_000 });
+    await picker.getByRole('button', { name: /Create new folder in/ }).click();
+
+    // Name + create the folder (FolderNameDialog renders as a <form>).
+    const dialog = newtabPage.locator('form.ff-dialog');
     await dialog.waitFor({ state: 'visible', timeout: 5_000 });
     await dialog.locator('input.ff-input').fill('Grouped');
     await dialog.getByRole('button', { name: /Create folder/ }).click();
@@ -292,5 +298,42 @@ test.describe('selection', () => {
     await overlay.waitFor({ state: 'visible', timeout: 5_000 });
     await expect(overlay.locator(`[data-item-id="${id0}"]`)).toBeVisible();
     await expect(overlay.locator(`[data-item-id="${id1}"]`)).toBeVisible();
+  });
+
+  // -------------------------------------------------------------------------
+  // WHY: the PRIMARY path for bulk organization is "Move into an existing
+  // folder", not "Create new". The picker must let users select a pre-existing
+  // folder and move items into it in one action. User-visible outcome:
+  // selected items leave root and the folder survives (unlike create-new,
+  // where Undo deletes it). The undo-move.spec.ts covers the full move+undo cycle.
+  test('multi-select context menu opens picker for moving into existing folder', async ({ newtabPage }) => {
+    const tiles = tilesInScope(newtabPage, rootFolderId);
+    const modKey = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+    const id0 = await tiles.nth(0).getAttribute('data-item-id');
+    const id1 = await tiles.nth(1).getAttribute('data-item-id');
+    if (!id0 || !id1) throw new Error('expected bookmark tiles');
+
+    // Select first two root bookmarks.
+    await tiles.nth(0).click({ modifiers: [modKey] });
+    await tiles.nth(1).click({ modifiers: [modKey] });
+    await expect(tiles.nth(0)).toHaveAttribute('data-selected', 'true', { timeout: 5_000 });
+    await expect(tiles.nth(1)).toHaveAttribute('data-selected', 'true', { timeout: 5_000 });
+
+    // Right-click to open the context menu.
+    const menu = await openContextMenu(newtabPage, tiles.nth(1));
+    await clickMenuItem(menu, /Move 2 items to folder/);
+
+    // The picker opens (a plain <div>.ff-dialog, not a <form>). It renders the
+    // FolderPicker component with folder options (data-folder-id buttons).
+    const picker = newtabPage.locator('div.ff-dialog[role="dialog"]');
+    await picker.waitFor({ state: 'visible', timeout: 5_000 });
+
+    // The picker must have folder buttons and a "Move here" action (not just "Create new").
+    // This verifies the PRIMARY path UI is correctly wired up.
+    const folderButtons = picker.locator('button[data-folder-id]');
+    await expect(folderButtons.first()).toBeVisible(); // At least one folder option is listed
+    await expect(picker.getByRole('button', { name: /Move here/ })).toBeVisible();
+    await expect(picker.getByRole('button', { name: /Create new folder/ })).toBeVisible();
   });
 });

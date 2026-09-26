@@ -8,6 +8,7 @@ import { ConfirmOpenAllTabsDialog } from './components/ConfirmOpenAllTabsDialog'
 import { FolderNameDialog, type FolderNameDialogTarget } from './components/FolderNameDialog';
 import { FolderOverlay } from './components/FolderOverlay';
 import { MoveToDialog } from './components/MoveToDialog';
+import { MoveToFolderDialog, type MoveToFolderTarget } from './components/MoveToFolderDialog';
 import { NewWorkspaceDialog } from './components/NewWorkspaceDialog';
 import { QuickAddDialog } from './components/QuickAddDialog';
 import { buildSearchIndex, ClockGreeting, ClockMini, HeroSearch, type FlatSearchResult } from './components/HeroSearch';
@@ -101,6 +102,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [quickAddTarget, setQuickAddTarget] = useState<{ parentId: string; parentTitle?: string } | null>(null);
   const [folderNameTarget, setFolderNameTarget] = useState<FolderNameDialogTarget | null>(null);
+  const [moveToFolderTarget, setMoveToFolderTarget] = useState<MoveToFolderTarget | null>(null);
   const [appSettingsOpen, setAppSettingsOpen] = useState(false);
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false);
   const [workspaceSettingsInitialSection, setWorkspaceSettingsInitialSection] = useState<WorkspaceSectionId>('appearance');
@@ -421,12 +423,56 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setEditTarget({ id: item.id, parentId: item.parentId, title: item.title, url: item.url ?? '' });
   }, []);
 
-  // Multi-select → "Move N to new folder": open the create-folder dialog carrying
-  // the selected ids; the move happens once the folder exists (see onSaved below).
-  // The folder lands in the selection's own scope so it appears in the current view.
+  // Relocates `moveIds` into `folder` (sequential moveBookmark to preserve
+  // selection order), moves selection into the destination, and shows an Undo
+  // toast that replays each item back to its captured origin. Shared by both
+  // the "move into an existing folder" path and the "create + move" path —
+  // `removeFolderOnUndo` distinguishes them: the create path also deletes the
+  // now-empty new folder on Undo, the existing-folder path does not.
+  const moveSelectionIntoFolder = useCallback(async (
+    moveIds: string[],
+    folder: BookmarkNode,
+    removeFolderOnUndo: boolean,
+  ) => {
+    // Capture origins before relocating so Undo can replay each item back to
+    // its parent + index.
+    const snapshots = captureMoveSnapshots(tree, moveIds);
+    try {
+      // Sequential to preserve selection order in the destination folder.
+      for (const id of moveIds) await moveBookmark(id, folder.id);
+      setSelection({ ids: new Set(moveIds), scopeFolderId: folder.id });
+      pushToast({
+        kind: 'info',
+        message: `Moved ${moveIds.length} ${moveIds.length === 1 ? 'item' : 'items'} to “${folder.title}”.`,
+        action: snapshots.length > 0
+          ? {
+              label: 'Undo',
+              onClick: () => {
+                void (async () => {
+                  try {
+                    await restoreMoveSnapshots(snapshots, moveBookmark);
+                    if (removeFolderOnUndo) await removeBookmark(folder.id, true);
+                    await refreshTree();
+                  } catch {
+                    pushToast({ kind: 'error', message: 'Couldn’t undo the move.' });
+                  }
+                })();
+              },
+            }
+          : undefined,
+      });
+    } catch {
+      pushToast({ kind: 'error', message: 'Couldn’t move the selected bookmarks.' });
+    }
+    await refreshTree();
+  }, [tree, setSelection, pushToast, refreshTree]);
+
+  // Multi-select → "Move N items to folder": open a folder-tree picker carrying
+  // the selected ids. The picker offers "Move here" (existing folder) or
+  // "Create new folder in <selected>" (opens FolderNameDialog).
   const handleMoveSelectionToNewFolder = useCallback((ids: string[]) => {
     if (ids.length === 0) return;
-    setFolderNameTarget({ mode: 'create', parentId: selection.scopeFolderId || defaultParentId(), moveIds: ids });
+    setMoveToFolderTarget({ ids, parentId: selection.scopeFolderId || defaultParentId() });
   }, [selection.scopeFolderId, defaultParentId]);
 
   // "Move to…" — opens a folder picker spanning every workspace (the tree is
@@ -635,7 +681,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   // Arrow-key grid navigation. Active only when no dialog/overlay/input has focus —
   // otherwise we'd hijack typing or contend with active surfaces.
   const anyOverlayOpen = Boolean(
-    appSettingsOpen || workspaceSettingsOpen || renameWorkspaceTarget || confirmDeleteWorkspace || editTarget || quickAddTarget || folderNameTarget || onboardOpen
+    appSettingsOpen || workspaceSettingsOpen || renameWorkspaceTarget || confirmDeleteWorkspace || editTarget || quickAddTarget || folderNameTarget || moveToFolderTarget || onboardOpen
     || newWorkspaceOpen || confirmDeleteFolder || confirmDeleteBatch || openFolderId || contextMenu,
   );
 
@@ -926,39 +972,29 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             const moveIds = folderNameTarget.mode === 'create' ? folderNameTarget.moveIds : undefined;
             setFolderNameTarget(null);
             if (moveIds && moveIds.length > 0) {
-              // Capture origins before relocating so Undo can replay each item
-              // back to its parent + index (the new folder is empty at this point).
-              const snapshots = captureMoveSnapshots(tree, moveIds);
-              try {
-                // Sequential to preserve selection order in the new folder.
-                for (const id of moveIds) await moveBookmark(id, folder.id);
-                setSelection({ ids: new Set(moveIds), scopeFolderId: folder.id });
-                pushToast({
-                  kind: 'info',
-                  message: `Moved ${moveIds.length} ${moveIds.length === 1 ? 'item' : 'items'} to “${folder.title}”.`,
-                  action: snapshots.length > 0
-                    ? {
-                        label: 'Undo',
-                        onClick: () => {
-                          void (async () => {
-                            try {
-                              // Restore items to origin, then remove the now-empty new folder.
-                              await restoreMoveSnapshots(snapshots, moveBookmark);
-                              await removeBookmark(folder.id, true);
-                              await refreshTree();
-                            } catch {
-                              pushToast({ kind: 'error', message: 'Couldn’t undo the move.' });
-                            }
-                          })();
-                        },
-                      }
-                    : undefined,
-                });
-              } catch {
-                pushToast({ kind: 'error', message: 'Couldn’t move the selected bookmarks.' });
-              }
+              // New folder is empty at this point — remove it on Undo too.
+              await moveSelectionIntoFolder(moveIds, folder, true);
+            } else {
+              await refreshTree();
             }
-            await refreshTree();
+          }}
+        />
+      )}
+
+      {moveToFolderTarget && (
+        <MoveToFolderDialog
+          tree={tree}
+          target={moveToFolderTarget}
+          onClose={() => setMoveToFolderTarget(null)}
+          onMoveHere={(folder) => {
+            const ids = moveToFolderTarget.ids;
+            setMoveToFolderTarget(null);
+            void moveSelectionIntoFolder(ids, folder, false);
+          }}
+          onCreateNew={(folder) => {
+            const ids = moveToFolderTarget.ids;
+            setMoveToFolderTarget(null);
+            setFolderNameTarget({ mode: 'create', parentId: folder.id, parentTitle: folder.title, moveIds: ids });
           }}
         />
       )}
