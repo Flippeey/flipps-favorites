@@ -126,6 +126,15 @@
 .ff-btn--danger-ghost:active {
   background: color-mix(in oklab, var(--danger) 16%, transparent);
 }
+.ff-btn:disabled,
+.ff-btn:disabled:hover,
+.ff-btn:disabled:active {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: none;
+  transform: none;
+  box-shadow: none;
+}
 
 .ff-confirm__message {
   margin: 0;
