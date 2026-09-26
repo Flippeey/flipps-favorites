@@ -26,7 +26,7 @@ import {
   retiredFolderIconMarker,
   sameValue,
 } from '@/shared/sync-stamps';
-import { bookmarkUrl, folderExists, locatorHash, normalizeUrlForMatch, resolveFolder, uniqueBookmarkForUrl } from './folder-locator';
+import { bookmarkUrl, folderExists, locatorHash, normalizeUrlForMatch, resolveFolder, uniqueBookmarkForUrl } from '@/shared/folder-locator';
 
 export const WORKSPACE_SCHEMA = 'flipps-workspace-transfer' as const;
 // v3: per-workspace view/sort. v4: folder custom icons. v5: stamps, deletion

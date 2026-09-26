@@ -17,7 +17,7 @@ import {
   writePendingUsage,
 } from '@/shared/storage';
 import { compareFolderIcons, retiredFolderIconMarker } from '@/shared/sync-stamps';
-import { folderExists, locatorHash, resolveFolder, uniqueBookmarkForUrl } from '@/newtab/lib/folder-locator';
+import { folderExists, locatorHash, resolveFolder, uniqueBookmarkForUrl } from '@/shared/folder-locator';
 
 // A workspace as this browser shows it. Only a bound binding yields a folder:
 // the synced rootFolderId names a folder in some other browser and is never

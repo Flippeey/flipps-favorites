@@ -1,7 +1,7 @@
 import { extensionApi } from '../shared/browser';
 import { IconFetchError, SyncFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetSyncPairingCodeResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type SyncErrorResponse, type SyncPullResponse, type SyncPullNotFoundResponse, type SyncPushResponse, type AdoptSyncSecretResponse, type WebSearchResponse, type FolderLocator, type WorkspaceRecord, type WorkspaceView } from '../shared/messages';
 import { createWorkspaceFromUser, deleteWorkspaceFromUser, ensurePerBrowserSettingsMove, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, patchSettingsFromUser, patchWorkspaceFromUser, readBookmarkUsageRecords, readFolderBindings, readFolderIconOverride, readNotUsedWorkspaceIds, readSettings, readWorkspaces, setWorkspaceNotUsed, updateFolderBindings, writeBookmarkUsageRecord } from '../shared/storage';
-import { buildFolderLocator, folderExists, locatorHash } from '../newtab/lib/folder-locator';
+import { buildFolderLocator, folderExists, locatorHash } from '../shared/folder-locator';
 import { overlayWorkspace, readWorkspaceViews, resolveFolderBindings } from './folder-bindings';
 import { getIcon, invalidateIcon, removeFolderIcon, removeIconOverride, searchIcons, setFolderIcon, setFolderIconFromUrl, setIconOverride, setIconOverrideFromUrl, sweepFolderIcons, sweepGeneratedRecords } from './icons/icon-service';
 import { adoptSyncSecret, getSyncPairingCode, previewPull, syncPull, syncPush } from './sync-client';

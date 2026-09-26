@@ -1,10 +1,11 @@
 import type { BookmarkNode, FolderBinding, FolderLocator, FolderRootKind } from '@/shared/models';
-import { isFolder } from './tree';
 
 // Finds this browser's own copy of a folder described by a FolderLocator.
 // Bookmark ids are browser-local, so a folder is recognised by the kind of
 // root it sits under, its path of titles below that root, and a sample of what
 // it directly contains. Root titles are localized and never compared.
+
+const isFolder = (node: BookmarkNode): boolean => Array.isArray(node.children);
 
 const FINGERPRINT_SIZE = 16;
 const MIN_SCORE = 0.6;

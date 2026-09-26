@@ -6,7 +6,7 @@ import {
   normalizeUrlForMatch,
   resolveFolder,
   uniqueBookmarkForUrl,
-} from '@/newtab/lib/folder-locator';
+} from '@/shared/folder-locator';
 
 // Fixture trees follow what each browser's bookmark importer produces:
 // Firefox's ChromeProfileMigrator (current and ESR102), Firefox ESR91's

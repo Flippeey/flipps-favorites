@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BookmarkNode, FolderIconOverrideRecord, IconOverrideRecord, WorkspaceRecord } from '@/shared/models';
-import { buildFolderLocator } from '@/newtab/lib/folder-locator';
+import { buildFolderLocator } from '@/shared/folder-locator';
 import {
   accountSyncCopy,
   createArea,

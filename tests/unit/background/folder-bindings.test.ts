@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BookmarkNode, FolderBinding, FolderIconOverrideRecord, WorkspaceRecord } from '@/shared/models';
-import { buildFolderLocator, locatorHash } from '@/newtab/lib/folder-locator';
+import { buildFolderLocator, locatorHash } from '@/shared/folder-locator';
 import { createBrowser, idbModule, setCurrentBrowser, type FakeBrowser } from '../lib/sync-browser-fake';
 
 vi.mock('@/shared/icon-idb', () => idbModule);

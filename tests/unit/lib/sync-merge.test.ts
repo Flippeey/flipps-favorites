@@ -19,7 +19,7 @@ import {
   type WorkspaceExportPayload,
 } from '@/newtab/lib/sync-merge';
 import { nextStamp, readStamp } from '@/shared/sync-stamps';
-import { buildFolderLocator } from '@/newtab/lib/folder-locator';
+import { buildFolderLocator } from '@/shared/folder-locator';
 import { DELETION_MARKER_RETENTION_MS, MAX_WORKSPACES } from '@/shared/constants';
 
 // Pure planner tests: every sync path (Sync now, link Merge/Replace, file
