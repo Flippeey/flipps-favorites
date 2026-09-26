@@ -31,6 +31,23 @@ Chrome Playwright specs load a **test build** to eliminate flake from `chrome.st
 - `tests/unit/state/*.test.ts` — `useSelection`, `useWorkspaceActions`, `useToasts`, `useContextMenuBuilder` (state hooks with side effects that need the full component tree)
 - `tests/unit/interaction/deferred-to-e2e.test.ts` — all 8 interaction hooks (`useDrag`, `useMarquee`, `useKeyboardNav`, etc.; require real DOM + event simulation)
 
+## Settings-sync specs (local sync server)
+
+Sync specs never reach the real `api.flippflix.com`. `tests/fixtures/sync-stub.ts` is a local stand-in
+implementing the server contract (per-token blob store, 204/200/404/413/401, CORS headers copied from the
+Worker), with call capture and one-shot fault injection (status or dropped connection). Browsers reach it at
+the real hostname: Chromium via `stub.chromeArgs` (`--host-resolver-rules` + `--ignore-certificate-errors`),
+Firefox via `stub.firefoxPrefs` (PAC to a local CONNECT proxy) plus `acceptInsecureCerts`.
+
+- `tests/fixtures/sync-ui.ts` — harness-agnostic UI driver + seeding over `page.evaluate`; wrap a page with
+  `syncPageFromPlaywright` (`sync-world.ts`) or `syncPageFromPuppeteer` (`tests/firefox-e2e/sync-page.ts`).
+- `tests/fixtures/sync-traffic.ts` — `findTrafficLeaks`: what the server may learn (token shape/derivation, no
+  key material, ciphertext only, not decryptable with the token).
+- `tests/specs/sync.spec.ts` — Chrome ↔ Chrome (Playwright, `openSyncBrowser` launches any number of profiles).
+- `tests/firefox-e2e/specs/sync-cross-browser.test.ts` — Chrome ↔ Firefox in one Puppeteer process;
+  `launchChromeWithExtension` uses Playwright's Chromium and `dist/chrome-test`, so it needs
+  `npm run build:chrome:test` and `npx playwright install chromium` first.
+
 ## Evidence specs
 
 Screenshot-driven specs that prove a UI feature works — **not** assertion tests. Reviewers see the

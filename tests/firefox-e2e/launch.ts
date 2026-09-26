@@ -17,7 +17,9 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { chromium } from '@playwright/test';
 import firefoxBuild from './firefox-build.json' with { type: 'json' };
+import { chromeExtPath } from '../fixtures/launch';
 
 const rootDir = resolve(fileURLToPath(import.meta.url), '..', '..', '..');
 const DIST_FIREFOX = resolve(rootDir, 'dist', 'firefox');
@@ -92,6 +94,8 @@ export interface LaunchOptions {
   headless?: boolean;
   /** Extra Firefox prefs merged into the launch profile (e.g. to blackhole specific hosts for a hermetic test). */
   extraPrefsFirefox?: Record<string, string | number | boolean>;
+  /** Accept self-signed certs session-wide (a local TLS stand-in for a real host). */
+  acceptInsecureCerts?: boolean;
 }
 
 /**
@@ -106,6 +110,7 @@ export async function launchFirefoxWithExtension(opts: LaunchOptions = {}): Prom
     browser: 'firefox',
     headless,
     executablePath: resolvePinnedFirefoxExecutable(),
+    acceptInsecureCerts: opts.acceptInsecureCerts ?? false,
     extraPrefsFirefox: {
       'extensions.webextensions.uuids': JSON.stringify({ [GECKO_ID]: FF_UUID }),
       ...opts.extraPrefsFirefox,
@@ -125,6 +130,46 @@ export async function launchFirefoxWithExtension(opts: LaunchOptions = {}): Prom
   };
 
   return { browser, newtabPage, close };
+}
+
+export type ChromeSession = FirefoxSession;
+
+export interface ChromeLaunchOptions {
+  /** Extra Chromium CLI args (e.g. routing a host to a local stub server). */
+  extraArgs?: string[];
+}
+
+/**
+ * Launch Chromium with the Chrome test build loaded, so a spec can drive a
+ * Chrome and a Firefox extension side by side from one process. Uses
+ * Playwright's Chromium: branded Chrome ignores unpacked-extension loading
+ * flags, and CI already installs this binary for the Playwright suite.
+ */
+export async function launchChromeWithExtension(opts: ChromeLaunchOptions = {}): Promise<ChromeSession> {
+  if (!existsSync(resolve(chromeExtPath, 'manifest.json'))) {
+    throw new Error('dist/chrome-test/manifest.json not found. Run `npm run build:chrome:test` first.');
+  }
+  const browser = await puppeteer.launch({
+    browser: 'chrome',
+    executablePath: chromium.executablePath(),
+    headless: true,
+    pipe: true,
+    enableExtensions: [chromeExtPath],
+    args: ['--no-first-run', '--disable-default-apps', ...(opts.extraArgs ?? [])],
+  });
+  const worker = await browser.waitForTarget(
+    (target) => target.type() === 'service_worker' && target.url().startsWith('chrome-extension://'),
+    { timeout: 15_000 },
+  );
+  const newtabUrl = `chrome-extension://${new URL(worker.url()).hostname}/newtab.html`;
+
+  const newtabPage = async (): Promise<Page> => {
+    const page = await browser.newPage();
+    await gotoAndWaitForApp(page, newtabUrl);
+    return page;
+  };
+
+  return { browser, newtabPage, close: () => browser.close() };
 }
 
 /**
