@@ -17,6 +17,10 @@ docs/*
 !.claude/architecture.md
 !.claude/conventions.md
 !.claude/testing.md
+# Track the run-flipps-favorites skill only — every other skill (personal/local) stays ignored.
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/run-flipps-favorites/
 # Explicitly keep ignored (defense-in-depth; already covered by .claude/* since these are top-level):
 .claude/settings.local.json
 .mcp.json
