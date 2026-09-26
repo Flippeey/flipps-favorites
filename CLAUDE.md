@@ -23,7 +23,7 @@ React 19 SPA in newtab; vanilla TS service worker.
 ## Layout (src/)
 
 - `background/service-worker.ts` — MV3 message router + lifecycle. `background/icons/` — icon resolution pipeline (entry: `icon-service.ts`).
-- `newtab/App.tsx` — owns top-level state; composes hooks from `newtab/state/` (`useSelection`, `useWorkspaceActions`, `useToasts`, `useContextMenuBuilder`, `useOptimisticPatch`). Child components are presentational (props + `on*` callbacks).
+- `newtab/App.tsx` — owns top-level state; composes hooks from `newtab/state/` (`useSelection`, `useWorkspaceActions`, `useToasts`, `useContextMenuBuilder`). Child components are presentational (props + `on*` callbacks).
 - `newtab/components/` — React components; `components/settings/` holds per-section drawer panels (Appearance, Layout, Clock, Dock, Navigation, Backup, Help). `TemplatePicker.tsx` — onboarding template selector.
 - `newtab/lib/tree-profile.ts`, `archetype-match.ts` — archetype classification pipeline (structural profiling + 3-class matcher).
 - `shared/organization-templates.ts` — per-archetype view/sort template bundles.

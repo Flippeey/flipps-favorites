@@ -3,7 +3,7 @@
 ## File Naming
 
 - React components: `PascalCase.tsx` (`Tile.tsx`, `HeroSearch.tsx`). Multi-export files are fine (`views.tsx`, `Tile.tsx` export several components).
-- Custom hooks: `useFoo.ts`. Pointer/keyboard interaction hooks live in `src/newtab/interaction/`; state-owning hooks (selection, workspaces, toasts, optimistic patch, context-menu builder) live in `src/newtab/state/`.
+- Custom hooks: `useFoo.ts`. Pointer/keyboard interaction hooks live in `src/newtab/interaction/`; state-owning hooks (selection, workspaces, toasts, context-menu builder) live in `src/newtab/state/`.
 - Utility modules: `kebab-case.ts` (`icon-helpers.ts`, `write-manifest.mjs`).
 - Tests: `<feature>.spec.ts` in `tests/specs/`.
 - CSS: `kebab-case.css`.

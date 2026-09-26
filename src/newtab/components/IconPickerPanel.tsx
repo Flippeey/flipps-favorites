@@ -235,7 +235,6 @@ export function IconPickerPanel(props: IconPickerPanelProps) {
                 title={`${candidate.label} — ${candidateSourceLabel(candidate)} — double-click to apply and close`}
                 onClick={() => onPickCandidate(candidate)}
                 onDoubleClick={() => { void onPickCandidateAndClose(candidate); }}
-                data-busy={working || undefined}
                 style={{ display: isValidated ? undefined : 'none' }}
               >
                 <img

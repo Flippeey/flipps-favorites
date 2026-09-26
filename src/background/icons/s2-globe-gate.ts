@@ -89,8 +89,3 @@ async function probeS2Sentinel(): Promise<ByteSignature | null> {
     return null; // fail-open: probe failed, globe detection disabled this session
   }
 }
-
-/** Reset the memoized sentinel (for testing only). */
-export function resetS2GlobeSignature(): void {
-  globeSignaturePromise = null;
-}

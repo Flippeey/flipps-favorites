@@ -14,7 +14,7 @@ src/newtab/                       # React 19 SPA (new-tab page)
   App.tsx                         # Root: owns all top-level state
   components/                     # React components
     settings/                     # Per-section settings panels
-  state/                          # State-owning hooks: useSelection, useWorkspaceActions, useToasts, useContextMenuBuilder, useOptimisticPatch
+  state/                          # State-owning hooks: useSelection, useWorkspaceActions, useToasts, useContextMenuBuilder
   interaction/                    # Interaction hooks: useDrag, useDragWiring, useMarquee, useKeyboardNav, useFocusTrap, useQuickAddShortcuts, useWorkspaceShortcut, useEscapeKey
   lib/                            # Utilities (messaging, tree, classification, URL, accent, theming, dock-mode, folder-scoring, platform, workspace-transfer)
   styles/                         # Import chain in index.css (order matters); see root CLAUDE.md for chain
@@ -44,7 +44,7 @@ scripts/
 | `src/shared/models.ts` | Shared data models used across both contexts. |
 | `src/shared/organization-templates.ts` | Template bundles: per-archetype view/sort overrides. |
 | `src/newtab/App.tsx` | Top-level state orchestration; composes the `state/` hooks + dialogs/drawers |
-| `src/newtab/state/` | State-owning hooks (selection, workspaces, toasts, optimistic patch, context menu) |
+| `src/newtab/state/` | State-owning hooks (selection, workspaces, toasts, context menu) |
 | `src/newtab/main.tsx` | App bootstrap (preloads settings + tree, then renders `<App>`) |
 | `src/newtab/lib/tree-profile.ts` | profileTree: O(n) structural metrics (totalBookmarks, folderedRatio, domainDiversity, etc.). |
 | `src/newtab/lib/archetype-match.ts` | classify: 3-class archetype matcher (hoarder, power-user, casual) w/ overlays. |
