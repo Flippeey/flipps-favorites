@@ -19,7 +19,7 @@ Chrome Playwright specs load a **test build** to eliminate flake from `chrome.st
 - `npm run build:chrome:test` — builds `dist/chrome-test` with `__FF_TEST_STORAGE_LOCAL__` true (defined in vite.config.mjs). The flag forces storage writes onto `chrome.storage.local` instead of sync-preferred, killing the persists-after-reload race under parallel load. Gitignored, test-only.
 - `tests/fixtures/launch.ts` — Chrome specs launch `dist/chrome-test`, NOT `dist/chrome`. Firefox specs launch `dist/firefox` (no flag; Firefox's async storage model has no sync race).
 - `dist/chrome` — the real release artifact for `ff-release` / publish, byte-identical to before. The flag is compile-time only, never a runtime toggle.
-- Flake eliminated, so the suite runs `retries: 0`.
+- Kills the specific persists-after-reload race from the sync flush, so `retries` stays `0`. It is not a blanket flake fix: rare intermittent Chrome E2E failures still turn up (seen once each across months on undo-delete, folder-picker-dialogs, selection, folders, and sort specs, always at a folder-tile click whose overlay never opened; root cause not yet confirmed). Each failure keeps a Playwright trace in the CI report artifact (`playwright.config.ts` `use.trace: 'retain-on-failure'`); inspect one without a GUI by unzipping `trace.zip` and reading its JSONL action log rather than running `playwright show-trace` (which opens a browser).
 
 ## Component/React Testing: Intentionally Out of Scope
 
@@ -146,7 +146,7 @@ CI/xvfb-only. `npm run test:ui` for interactive debugging.
 - Add a new spec to `tests/specs/` for new user-flow behavior. Use `@/` alias for cross-area imports; Playwright resolves tsconfig `paths` at runtime.
 - Tests should encode *why* the behavior matters (the user-visible outcome), not just *what* the current DOM happens to look like. A test that can't fail when business logic changes is wrong.
 - Reuse fixture data + helpers. Seed bookmarks through `bookmark-helpers.ts` rather than reaching into `chrome.bookmarks.*` directly.
-- Keep specs deterministic — no time-based flake. `fullyParallel: false` (tests within a file run serially); spec files run in parallel across `workers: 3` (CI: 2), each worker getting its own isolated Chrome + profile via the world fixture. **`retries: 0`** (eliminated via storage.local test flag).
+- Keep specs deterministic — no time-based flake. `fullyParallel: false` (tests within a file run serially); spec files run in parallel across `workers: 3` (CI: 2), each worker getting its own isolated Chrome + profile via the world fixture. **`retries: 0`** (the storage.local test flag kills the sync-flush race; see Storage Test Flag & Dist for the rare failures that remain).
 - Seed through the `world` fixture (`tests/fixtures/world.ts`): import `{ test, expect }` from it for the promo-seeded `world` + `newtabPage`, or `freshPage` for unseeded fresh-install flows. `tests/fixtures/seeding.ts` / `selectors.ts` hold the typed seeding + locator helpers.
 
 ### E2E Tests (Puppeteer Firefox)

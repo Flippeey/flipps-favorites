@@ -57,10 +57,13 @@ export async function launchChrome(options: LaunchChromeOptions = {}): Promise<L
   return { context, profileDir };
 }
 
-/** Launch Firefox with the built extension loaded via a temp profile dir. */
+/**
+ * Launch Firefox with the built extension loaded via a temp profile dir.
+ * Headless by default so runs need no display; set HEADED=1 to watch it.
+ */
 export async function launchFirefox(): Promise<LaunchedContext> {
   const profileDir = await mkdtemp(join(tmpdir(), 'ff-ext-'));
-  const context = await firefox.launchPersistentContext(profileDir, { headless: false });
+  const context = await firefox.launchPersistentContext(profileDir, { headless: process.env.HEADED !== '1' });
   return { context, profileDir };
 }
 

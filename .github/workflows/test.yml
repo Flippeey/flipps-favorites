@@ -51,18 +51,15 @@ jobs:
       - name: Build Chrome test target
         run: npm run build:chrome:test
 
-      # Run headed under a virtual display (xvfb). Chrome's new headless
-      # (--headless=new, the LOCAL default — see tests/fixtures/extension-context.ts)
-      # loads MV3 extensions fine, but in CI its tighter timing worsens under
-      # load; the dist/chrome-test build above removes the previously
-      # documented sync-storage-race flake. Headed-in-xvfb is CI's stable path;
-      # HEADED=1 forces it. Locals stay headless to avoid stealing window focus.
-      # Reporter config (github + job-summary table + html) comes from
-      # playwright.config.ts — don't override it with a CLI --reporter flag.
+      # CI runs the same headless mode as local (tests/fixtures/launch.ts runs
+      # Chrome and Firefox headless unless HEADED=1) so any CI failure is
+      # reproducible locally without a display. A side-by-side run of 6
+      # headed-in-xvfb jobs against 6 headless jobs showed equal reliability,
+      # so xvfb no longer earns its extra moving part. Reporter config (github
+      # + job-summary table + html) comes from playwright.config.ts, so don't
+      # override it with a CLI --reporter flag.
       - name: Run Playwright tests
-        env:
-          HEADED: '1'
-        run: xvfb-run -a npx playwright test
+        run: npx playwright test
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
