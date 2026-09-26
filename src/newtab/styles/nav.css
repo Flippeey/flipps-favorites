@@ -159,6 +159,11 @@
 .ff-sort__option[data-active="true"], .ff-fpicker__option[data-active="true"] {
   background: var(--accent-soft); color: var(--accent-on-surface, var(--accent)); font-weight: 500;
 }
+/* Keyboard-highlighted option in an open sort/workspace dropdown, distinct from the
+   selected value so ArrowUp/ArrowDown can move focus without changing the pill's label. */
+.ff-sort__option[data-highlighted="true"] {
+  background: var(--accent-soft); outline: 1px solid var(--accent);
+}
 /* Full-width block variant: used inside the settings drawer (Layout → Sort). */
 .ff-sort--block { display: block; }
 .ff-sort--block .ff-sort__trigger { width: 100%; justify-content: space-between; }

@@ -23,6 +23,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y });
   const [hovered, setHovered] = useState(-1);
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -48,11 +49,15 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         const cur = enabled.indexOf(hovered);
-        setHovered(cur === -1 ? enabled[0] : enabled[(cur + 1) % enabled.length]);
+        const next = cur === -1 ? enabled[0] : enabled[(cur + 1) % enabled.length];
+        setHovered(next);
+        itemRefs.current[next]?.focus();
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         const cur = enabled.indexOf(hovered);
-        setHovered(cur === -1 ? enabled[enabled.length - 1] : enabled[(cur - 1 + enabled.length) % enabled.length]);
+        const next = cur === -1 ? enabled[enabled.length - 1] : enabled[(cur - 1 + enabled.length) % enabled.length];
+        setHovered(next);
+        itemRefs.current[next]?.focus();
       } else if (e.key === 'Enter' && hovered >= 0) {
         e.preventDefault();
         items[hovered]?.onClick?.();
@@ -75,6 +80,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
         ) : (
           <button
             key={i}
+            ref={(el) => { itemRefs.current[i] = el; }}
             role="menuitem"
             disabled={it.disabled}
             title={it.title}

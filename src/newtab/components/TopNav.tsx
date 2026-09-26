@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { BookmarkNode, BookmarkSortMode, SortDirection, ViewMode, WorkspaceRecord } from '@/shared/messages';
 import { altShortcut } from '../lib/platform';
 import { useScrollCollapsed } from '../lib/useScrollCollapsed';
@@ -169,7 +169,9 @@ function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace, o
   overflow: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
+  const uid = useId();
 
   useEffect(() => {
     if (!open) return;
@@ -185,28 +187,68 @@ function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace, o
     };
   }, [open]);
 
+  const last = workspaces.length - 1;
+
+  const commitActive = () => {
+    const ws = workspaces[activeIndex];
+    if (ws) onSwitchWorkspace(ws.id);
+    setOpen(false);
+  };
+
+  const onTriggerKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!open) {
+        setActiveIndex(Math.max(0, workspaces.findIndex(w => w.id === activeWorkspaceId)));
+        setOpen(true);
+      } else if (last >= 0) {
+        setActiveIndex(i => (i >= last ? 0 : i + 1));
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!open) {
+        setActiveIndex(Math.max(0, workspaces.findIndex(w => w.id === activeWorkspaceId)));
+        setOpen(true);
+      } else if (last >= 0) {
+        setActiveIndex(i => (i <= 0 ? last : i - 1));
+      }
+    } else if ((e.key === 'Enter' || e.key === ' ') && open) {
+      e.preventDefault();
+      e.stopPropagation();
+      commitActive();
+    }
+  };
+
   return (
     <div className="ff-ws-dropdown" ref={ref} data-ws-overflow={overflow ? 'true' : 'false'}>
       <button
         className="ff-pill"
         onClick={() => setOpen(o => !o)}
+        onKeyDown={onTriggerKeyDown}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`${workspaces.length} workspaces`}
+        aria-activedescendant={open ? `${uid}-${String(activeIndex)}` : undefined}
         title="Jump to workspace"
       >
         <Ico name="chevronDown" size={12} />
         <span className="ff-ws-dropdown__count" aria-hidden="true">{workspaces.length}</span>
       </button>
       {open && (
-        <ul className="ff-sort__panel ff-ws-dropdown__panel" role="listbox">
+        <ul className="ff-sort__panel ff-ws-dropdown__panel" role="listbox" aria-activedescendant={`${uid}-${String(activeIndex)}`}>
           {workspaces.map((ws, i) => (
             <li
               key={ws.id}
+              id={`${uid}-${String(i)}`}
               role="option"
               aria-selected={ws.id === activeWorkspaceId}
               className="ff-sort__option"
               data-active={ws.id === activeWorkspaceId}
+              data-highlighted={i === activeIndex ? 'true' : undefined}
+              data-option-workspace-id={ws.id}
+              onMouseEnter={() => setActiveIndex(i)}
               onClick={() => { onSwitchWorkspace(ws.id); setOpen(false); }}
             >
               <span className="ff-ws-tab__dot" style={{ background: ws.accentColor }} />
@@ -223,8 +265,10 @@ function WorkspaceDropdown({ workspaces, activeWorkspaceId, onSwitchWorkspace, o
 export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWorkspaceContextMenu, onReorderWorkspaces, onOpenAddMenu, path, onCrumb, sortValue, onSort, folderMode, onToggleViewMode, onOpenAppSettings, onOpenWorkspaceSettings, folderDragActive = false, atWorkspaceCap = false }: TopNavProps) {
   const scrolled = useScrollCollapsed();
   const [sortOpen, setSortOpen] = useState(false);
+  const [sortActiveIndex, setSortActiveIndex] = useState(0);
   const [tabsOverflow, setTabsOverflow] = useState(false);
   const sortRef = useRef<HTMLDivElement>(null);
+  const sortUid = useId();
 
   useEffect(() => {
     if (!sortOpen) return;
@@ -241,6 +285,39 @@ export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
   }, [sortOpen]);
 
   const sortLabel = SORT_OPTIONS.find(o => o.value === sortValue)?.label ?? 'Manual';
+  const sortLast = SORT_OPTIONS.length - 1;
+
+  const commitActiveSort = () => {
+    const choice = SORT_OPTIONS[sortActiveIndex];
+    if (choice) onSort(choice);
+    setSortOpen(false);
+  };
+
+  const onSortTriggerKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!sortOpen) {
+        setSortActiveIndex(Math.max(0, SORT_OPTIONS.findIndex(o => o.value === sortValue)));
+        setSortOpen(true);
+      } else {
+        setSortActiveIndex(i => (i >= sortLast ? 0 : i + 1));
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!sortOpen) {
+        setSortActiveIndex(Math.max(0, SORT_OPTIONS.findIndex(o => o.value === sortValue)));
+        setSortOpen(true);
+      } else {
+        setSortActiveIndex(i => (i <= 0 ? sortLast : i - 1));
+      }
+    } else if ((e.key === 'Enter' || e.key === ' ') && sortOpen) {
+      e.preventDefault();
+      e.stopPropagation();
+      commitActiveSort();
+    }
+  };
 
   return (
     <nav className={`ff-nav ${scrolled ? 'is-scrolled' : ''}`} aria-label="Workspace">
@@ -308,21 +385,26 @@ export function TopNav({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
             title="Sort bookmarks"
             aria-haspopup="listbox"
             aria-expanded={sortOpen}
+            aria-activedescendant={sortOpen ? `${sortUid}-${String(sortActiveIndex)}` : undefined}
             onClick={() => setSortOpen(o => !o)}
+            onKeyDown={onSortTriggerKeyDown}
           >
             <Ico name="sort" size={14} />
-            <span>{sortLabel}</span>
+            <span className="ff-sort__current">{sortLabel}</span>
             <Ico name="chevronDown" size={12} />
           </button>
           {sortOpen && (
-            <ul className="ff-sort__panel" role="listbox">
-              {SORT_OPTIONS.map(o => (
+            <ul className="ff-sort__panel" role="listbox" aria-activedescendant={`${sortUid}-${String(sortActiveIndex)}`}>
+              {SORT_OPTIONS.map((o, i) => (
                 <li
                   key={o.value}
+                  id={`${sortUid}-${String(i)}`}
                   role="option"
                   aria-selected={o.value === sortValue}
                   className="ff-sort__option"
                   data-active={o.value === sortValue}
+                  data-highlighted={i === sortActiveIndex ? 'true' : undefined}
+                  onMouseEnter={() => setSortActiveIndex(i)}
                   onClick={() => { onSort(o); setSortOpen(false); }}
                 >
                   <span>{o.label}</span>

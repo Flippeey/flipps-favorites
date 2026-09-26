@@ -34,12 +34,13 @@ export const CUSTOM_LAYOUT_PRESET: { id: LayoutPresetId; label: string; desc: st
   id: 'custom', label: 'Custom', desc: 'Fine-tune',
 };
 
-export function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+export function Toggle({ on, onChange, labelledBy }: { on: boolean; onChange: (v: boolean) => void; labelledBy?: string }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={on}
+      aria-labelledby={labelledBy}
       className="ff-toggle"
       data-on={on}
       onClick={() => onChange(!on)}
@@ -55,19 +56,21 @@ interface SegmentedOption<T extends string> {
   icon?: string;
 }
 
-export function Segmented<T extends string>({ options, value, onChange }: {
+export function Segmented<T extends string>({ options, value, onChange, labelledBy }: {
   options: SegmentedOption<T>[];
   value: T;
   onChange: (v: T) => void;
+  labelledBy?: string;
 }) {
   return (
-    <div className="ff-segmented">
+    <div className="ff-segmented" role="group" aria-labelledby={labelledBy}>
       {options.map(o => (
         <button
           key={o.id}
           type="button"
           className="ff-segmented__option"
           data-active={value === o.id}
+          aria-pressed={value === o.id}
           onClick={() => onChange(o.id)}
         >
           {o.icon && <Ico name={o.icon} size={14} />}{o.label}
@@ -283,13 +286,14 @@ interface SliderProps {
   onChange: (v: number) => void;
   onPreview?: (v: number) => void;
   formatValue?: (v: number) => string;
+  labelledBy?: string;
 }
 
 // Local drag state keeps the range input responsive at 60fps without
 // dispatching a settings patch on every frame. onPreview lets the parent
 // reflect intermediate values (e.g. by writing a CSS variable directly to the
 // DOM) for live feedback while a settings commit only happens on release.
-export function Slider({ value, min, max, step = 1, onChange, onPreview, formatValue }: SliderProps) {
+export function Slider({ value, min, max, step = 1, onChange, onPreview, formatValue, labelledBy }: SliderProps) {
   const [dragValue, setDragValue] = useState<number | null>(null);
   const displayValue = dragValue ?? value;
 
@@ -311,6 +315,7 @@ export function Slider({ value, min, max, step = 1, onChange, onPreview, formatV
         max={max}
         step={step}
         value={displayValue}
+        aria-labelledby={labelledBy}
         onChange={(e) => {
           const next = Number(e.target.value);
           setDragValue(next);

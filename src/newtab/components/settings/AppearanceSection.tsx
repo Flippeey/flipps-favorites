@@ -1,4 +1,4 @@
-import { type CSSProperties } from 'react';
+import { type CSSProperties, useId } from 'react';
 import type {
   BackgroundFitMode,
   BackgroundMode,
@@ -31,6 +31,7 @@ interface AppearanceSectionProps {
 export function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSetWallpaper, settings }: AppearanceSectionProps) {
   const ws = workspace ?? FALLBACK_WORKSPACE;
   const themeMode: ThemeMode = ws.themeMode ?? settings.themeMode;
+  const systemPrefLabelId = useId();
   return (
     <>
       <div className="ff-set-section">
@@ -38,10 +39,10 @@ export function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSe
         <div className="ff-card" style={{ marginBottom: 16 }}>
           <div className="ff-row" style={{ padding: 0 }}>
             <div>
-              <div className="ff-row__label">Use system preference</div>
+              <div className="ff-row__label" id={systemPrefLabelId}>Use system preference</div>
               <div className="ff-row__hint">The cards below reflect the active mode.</div>
             </div>
-            <Toggle
+            <Toggle labelledBy={systemPrefLabelId}
               on={themeMode === 'system'}
               onChange={(v) => onPatch({ themeMode: (v ? 'system' : 'dark') as ThemeMode })}
             />
@@ -196,6 +197,7 @@ function GradientPanel({ workspace, onPatch }: WorkspaceSectionProps) {
   const isAccent = ws.gradientColorSource === 'accent';
   const customActive = !isAccent;
   const resolvedColor = isAccent ? ws.accentColor : ws.gradientCustomColor;
+  const intensityLabelId = useId();
 
   return (
     <>
@@ -248,10 +250,11 @@ function GradientPanel({ workspace, onPatch }: WorkspaceSectionProps) {
       <div className="ff-bg-row">
         <div className="ff-bg-row__head">
           <div>
-            <div className="ff-row__label">Intensity</div>
+            <div className="ff-row__label" id={intensityLabelId}>Intensity</div>
             <div className="ff-row__hint">Dial the gradient strength up or down.</div>
           </div>
           <Slider
+            labelledBy={intensityLabelId}
             value={ws.gradientIntensity}
             min={0}
             max={200}
@@ -279,6 +282,9 @@ interface WallpaperPickerProps {
 function WallpaperPicker({ wallpaper, onSetWallpaper, workspace, onPatch }: WallpaperPickerProps) {
   const previewUrl = useBlobUrl(wallpaper);
   const ws = workspace ?? FALLBACK_WORKSPACE;
+  const opacityLabelId = useId();
+  const fitLabelId = useId();
+  const positionLabelId = useId();
   return (
     <>
       <div className="ff-card" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12 }}>
@@ -329,10 +335,11 @@ function WallpaperPicker({ wallpaper, onSetWallpaper, workspace, onPatch }: Wall
           <div className="ff-bg-row">
             <div className="ff-bg-row__head">
               <div>
-                <div className="ff-row__label">Opacity</div>
+                <div className="ff-row__label" id={opacityLabelId}>Opacity</div>
                 <div className="ff-row__hint">Blend the wallpaper toward the theme color.</div>
               </div>
               <Slider
+                labelledBy={opacityLabelId}
                 value={ws.backgroundOpacity}
                 min={0}
                 max={100}
@@ -347,8 +354,9 @@ function WallpaperPicker({ wallpaper, onSetWallpaper, workspace, onPatch }: Wall
           </div>
           <div className="ff-bg-row">
             <div className="ff-bg-row__head">
-              <div className="ff-row__label">Fit</div>
+              <div className="ff-row__label" id={fitLabelId}>Fit</div>
               <Segmented<BackgroundFitMode>
+                labelledBy={fitLabelId}
                 options={[
                   { id: 'cover',   label: 'Cover' },
                   { id: 'contain', label: 'Contain' },
@@ -361,8 +369,9 @@ function WallpaperPicker({ wallpaper, onSetWallpaper, workspace, onPatch }: Wall
           </div>
           <div className="ff-bg-row">
             <div className="ff-bg-row__head">
-              <div className="ff-row__label">Position</div>
+              <div className="ff-row__label" id={positionLabelId}>Position</div>
               <Segmented<BackgroundPositionMode>
+                labelledBy={positionLabelId}
                 options={[
                   { id: 'top',    label: 'Top' },
                   { id: 'center', label: 'Center' },
