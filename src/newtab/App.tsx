@@ -565,7 +565,6 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     if (folder) handlePickFolder(folder);
   }, [tree, handlePickFolder]);
 
-
   // Reset keyboard focus when navigation context changes (workspace switch, folder open/close).
   useEffect(() => {
     setFocusedTileId(null);
