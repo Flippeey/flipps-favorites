@@ -13,30 +13,30 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: light)" srcset="promo/screenshots/light/02-workspaces-1280x800.png" />
-    <img src="promo/screenshots/dark/02-workspaces-1280x800.png" width="800" alt="Workspaces — switch between isolated, themed dashboards in one click" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/readme/light/02-workspaces-1280x800.png" />
+    <img src="assets/readme/dark/02-workspaces-1280x800.png" width="800" alt="Workspaces — switch between isolated, themed dashboards in one click" />
   </picture>
 </p>
 <p align="center"><em>Workspaces — turn any folder into its own isolated, themed dashboard.</em></p>
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: light)" srcset="promo/screenshots/light/01-hero-1280x800.png" />
-    <img src="promo/screenshots/dark/01-hero-1280x800.png" width="49%" alt="New-tab bookmark dashboard" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/readme/light/01-hero-1280x800.png" />
+    <img src="assets/readme/dark/01-hero-1280x800.png" width="49%" alt="New-tab bookmark dashboard" />
   </picture>
   <picture>
-    <source media="(prefers-color-scheme: light)" srcset="promo/screenshots/light/04-search-results-1280x800.png" />
-    <img src="promo/screenshots/dark/04-search-results-1280x800.png" width="49%" alt="Live fuzzy search across all bookmarks" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/readme/light/04-search-results-1280x800.png" />
+    <img src="assets/readme/dark/04-search-results-1280x800.png" width="49%" alt="Live fuzzy search across all bookmarks" />
   </picture>
 </p>
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: light)" srcset="promo/screenshots/light/03-folder-open-1280x800.png" />
-    <img src="promo/screenshots/dark/03-folder-open-1280x800.png" width="49%" alt="Folder overlay" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/readme/light/03-folder-open-1280x800.png" />
+    <img src="assets/readme/dark/03-folder-open-1280x800.png" width="49%" alt="Folder overlay" />
   </picture>
   <picture>
-    <source media="(prefers-color-scheme: light)" srcset="promo/screenshots/light/05-settings-appearance-1280x800.png" />
-    <img src="promo/screenshots/dark/05-settings-appearance-1280x800.png" width="49%" alt="Appearance settings drawer" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/readme/light/05-settings-appearance-1280x800.png" />
+    <img src="assets/readme/dark/05-settings-appearance-1280x800.png" width="49%" alt="Appearance settings drawer" />
   </picture>
 </p>
 
@@ -51,11 +51,11 @@
 - 🚀 **The Dock** — a quick-access strip for your most-used folders and sites; always-visible, hover-only, or hidden.
 - 🖼️ **Visual tiles with icon control** — automatic favicon detection with a 30-day smart cache; override any icon with a custom image, a URL, or a result from the built-in icon search (which shows where each icon came from).
 - 🔍 **Live fuzzy search** — filters across your entire bookmark library instantly from the hero search bar, and understands your folder structure as you type.
-- 🎨 **Flexible theming** — light, dark, and system-auto modes; ten hand-crafted accent colours plus a custom colour picker; configurable per Workspace.
+- 🎨 **Flexible theming** — light, dark, and system-auto modes; twelve hand-crafted accent colours plus a custom colour picker; configurable per Workspace.
 - 🌈 **Custom backgrounds** — solid colour, rich gradients (aurora, mesh, vignette, and more), or your own wallpaper with opacity, fit, and position controls.
 - 🖱️ **Drag & drop everywhere** — reorder bookmarks and folders, move items between Workspaces, drop into the dock, or resize layout sections; every change applies live.
-- ✏️ **Inline editing & folder management** — rename, retag, create, and delete folders directly from the page; no browser bookmark manager required.
-- ☑️ **Multi-select** — marquee or `Ctrl`/`Cmd`-click to select many items, then cut, copy, paste, or bulk-delete with confirmation.
+- ✏️ **Inline editing & folder management** — rename, create, and delete folders directly from the page; no browser bookmark manager required.
+- ☑️ **Multi-select** — marquee or `Ctrl`/`Cmd`-click to select many items, then move them to a folder or bulk-delete with confirmation.
 - 💾 **Import / export** — back up and restore your full settings and icon overrides as a single JSON file; portable across devices and browsers.
 - 🔒 **Privacy-first** — no accounts, no third-party servers, no telemetry, no ads. Requests only the permissions it actually needs.
 

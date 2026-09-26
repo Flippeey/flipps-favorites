@@ -21,7 +21,7 @@ src/newtab/                       # React 19 SPA (new-tab page)
 
 src/shared/                       # Cross-context code
   messages.ts                     # SOURCE OF TRUTH: message types + contracts
-  models.ts, browser.ts, storage.ts, storage-buckets.ts, icon-idb.ts
+  models.ts, browser.ts, storage.ts, storage-buckets.ts, icon-idb.ts, icon-scope.ts
   organization-templates.ts, icon-fallback.ts, seed-data.ts, constants.ts, url-brand.ts, globals.d.ts
 
 tests/
@@ -30,10 +30,12 @@ tests/
   specs/                          # Playwright E2E specs (one per user-flow area)
   unit/                           # Vitest unit tests (mirrored to src layout)
   firefox-e2e/                    # Puppeteer + WebDriver BiDi Firefox suite (separate global-setup, launch, seed, vitest config)
+  evidence/                       # Evidence-spec harness + example; per-PR specs go in gitignored evidence/pr/ (see testing.md)
 
 scripts/
   write-manifest.mjs              # Post-build manifest generator
   promo/                          # Promo asset generation (screenshots, videos, etc.)
+  store/                          # Store-listing lint + sync (store:lint, store:firefox, store:chrome)
 ```
 
 ## Key File Index
