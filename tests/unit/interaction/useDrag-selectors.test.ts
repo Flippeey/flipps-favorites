@@ -47,7 +47,7 @@ describe('itemIdSelector', () => {
     expect(selector).toBe('[data-item-id="id\\:with\\:colons"]');
   });
 
-  it('escapes an id that starts with a digit (invalid as a bare CSS identifier)', () => {
+  it('escapes a quote in an id that starts with a digit', () => {
     const selector = itemIdSelector('1"leading-digit');
     expect(selector).toBe('[data-item-id="1\\"leading-digit"]');
   });
