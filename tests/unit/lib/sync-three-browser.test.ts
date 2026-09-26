@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FolderIconOverrideRecord, IconOverrideRecord, WorkspaceRecord } from '@/shared/models';
+import type { BookmarkNode, FolderIconOverrideRecord, IconOverrideRecord, WorkspaceRecord } from '@/shared/models';
+import { buildFolderLocator } from '@/newtab/lib/folder-locator';
 import {
   accountSyncCopy,
   createArea,
@@ -29,9 +30,18 @@ import {
 
 vi.mock('@/shared/icon-idb', () => idbModule);
 
+// Every profile holds the same bookmarks. Folder icons carry a locator, as the
+// background writes them, so each browser places a synced icon on its folder.
+const TREE: BookmarkNode[] = [{ id: '0', title: '', children: [
+  { id: '1', title: 'Bookmarks bar', folderType: 'bookmarks-bar', children: [
+    { id: '100', title: 'Alpha', children: [{ id: '1000', title: 'A', url: 'https://alpha.example/' }] },
+    { id: '101', title: 'Beta', children: [{ id: '1010', title: 'B', url: 'https://beta.example/' }] },
+  ] },
+] }];
+
 let server: unknown = null;
 vi.mock('@/newtab/lib/messaging', () => ({
-  getBookmarkTree: async () => { throw new Error('no bookmark tree in unit tests'); },
+  getBookmarkTree: async () => structuredClone(TREE),
   invalidateIcon: async () => undefined,
   syncPull: async () => (server === null ? null : structuredClone(server)),
   syncPush: async (bundle: unknown) => { server = structuredClone(bundle); },
@@ -250,7 +260,8 @@ async function runScenario(seed: number, accountSync: AccountSync): Promise<void
       } else if (roll < 0.63) {
         const folderId = pick(FOLDER_IDS);
         const dataUrl = `data:image/png;base64,f${step}`;
-        const stored: FolderIconOverrideRecord = await current.storage.writeFolderIconFromUser({ folderId, dataUrl, mimeType: 'image/png', updatedAt: 0 });
+        const locator = buildFolderLocator(TREE, folderId) ?? undefined;
+        const stored: FolderIconOverrideRecord = await current.storage.writeFolderIconFromUser({ folderId, dataUrl, mimeType: 'image/png', updatedAt: 0, locator });
         folderIcons.wrote(stored.syncId ?? '', stored.updatedAt, dataUrl);
         folderOf.set(stored.syncId ?? '', folderId);
       } else if (roll < 0.65) {

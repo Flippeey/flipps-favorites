@@ -19,6 +19,9 @@ vi.mock('@/shared/icon-idb', () => ({
   readFolderIconRecord: async () => null,
   writeFolderIconRecord: async () => undefined,
   deleteFolderIconRecord: async () => undefined,
+  readAllPendingFolderIconRecords: async () => [],
+  writePendingFolderIconRecord: async () => undefined,
+  deletePendingFolderIconRecord: async () => undefined,
 }));
 
 // workspace-transfer calls getBookmarkTree() for cross-browser folder
@@ -638,6 +641,12 @@ describe('applyWorkspaceImport — cross-browser folder re-matching', () => {
     return all[`workspace:${id}`] as WorkspaceRecord | undefined;
   }
 
+  async function boundFolder(id: string): Promise<string | undefined> {
+    const local = (globalThis as unknown as { chrome: { storage: { local: StorageAreaFake } } }).chrome.storage.local;
+    const bindings = (await local.get('bookmark-bindings'))['bookmark-bindings'] as Record<string, { localId: string }> | undefined;
+    return bindings?.[id]?.localId;
+  }
+
   it('keeps a pointer that already resolves in this browser', async () => {
     mockGetBookmarkTree.mockReset().mockResolvedValue(REMATCH_TREE);
     const transfer = await importTransfer();
@@ -650,7 +659,7 @@ describe('applyWorkspaceImport — cross-browser folder re-matching', () => {
     expect((await storedWorkspace('w1'))?.rootFolderId).toBe('f-jason');
   });
 
-  it('re-matches a broken pointer by unique folder title', async () => {
+  it('stores a foreign pointer unchanged; this browser finds its folder when it next resolves bindings', async () => {
     mockGetBookmarkTree.mockReset().mockResolvedValue(REMATCH_TREE);
     const transfer = await importTransfer();
 
@@ -659,7 +668,10 @@ describe('applyWorkspaceImport — cross-browser folder re-matching', () => {
     );
     await transfer.applyWorkspaceImport(parsed, 'merge');
 
-    expect((await storedWorkspace('w2'))?.rootFolderId).toBe('f-jason');
+    // The synced record keeps the other browser's id; rewriting it would
+    // break that browser's copy on the next sync.
+    expect(await boundFolder('w2')).toBeUndefined();
+    expect((await storedWorkspace('w2'))?.rootFolderId).toBe('firefox-guid-123');
   });
 
   it('leaves a broken pointer unchanged when the title match is ambiguous', async () => {
@@ -687,7 +699,10 @@ describe('applyWorkspaceImport — cross-browser folder re-matching', () => {
           bookmarkSortDirection: 'asc',
         },
       },
-      localSeed: { 'workspaces-per-key-migrated': true },
+      localSeed: {
+        'workspaces-per-key-migrated': true,
+        'bookmark-bindings': { w4: { localId: 'f-jason', locatorHash: '', state: 'bound' } },
+      },
     });
     mockGetBookmarkTree.mockReset().mockResolvedValue(REMATCH_TREE);
     const transfer = await importTransfer();
@@ -704,7 +719,7 @@ describe('applyWorkspaceImport — cross-browser folder re-matching', () => {
 
     const stored = await storedWorkspace('w4');
     // The working local folder link survives the collision...
-    expect(stored?.rootFolderId).toBe('f-jason');
+    expect(await boundFolder('w4')).toBe('f-jason');
     // ...but the record content still follows the payload (remote wins).
     expect(stored?.accentColor).toBe('#112233');
   });
@@ -760,8 +775,11 @@ describe('buildSyncPreview — link-dialog dry run', () => {
         { bookmarkUrl: 'https://x.com/a', dataUrl: 'data:image/png;base64,AAA', fileName: 'a.png', mimeType: 'image/png', updatedAt: 1 },
         { bookmarkUrl: 'https://x.com/a', dataUrl: 'data:image/png;base64,BBB', fileName: 'b.png', mimeType: 'image/png', updatedAt: 2 },
       ],
-      bookmarkUsage: [{ bookmarkId: 'b1', usedAt: 1 }],
+      bookmarkUsage: [{ url: 'https://x.com/used', usedAt: 1 }],
     }));
+    mockGetBookmarkTree.mockReset().mockResolvedValue([
+      { id: '0', title: '', children: [{ id: '1', title: 'Bar', children: [{ id: 'b1', title: 'Used', url: 'https://x.com/used' }] }] },
+    ]);
     const preview = await transfer.buildSyncPreview(parsed, 'merge');
 
     expect(preview.newWorkspaceNames).toEqual(['Workspace b']);
@@ -875,6 +893,10 @@ describe('buildSyncPreview — link-dialog dry run', () => {
       },
       localSeed: { 'workspaces-per-key-migrated': true },
     });
+    // Both records predate locators, so each is found here by its unique title.
+    mockGetBookmarkTree.mockReset().mockResolvedValue([
+      { id: '0', title: '', children: [{ id: '1', title: 'Bar', children: [{ id: 'f1', title: 'Favorites', children: [] }] }] },
+    ]);
     const transfer = await importTransfer();
 
     const parsed = transfer.normalizeWorkspaceExportPayload(previewPayload({

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AppSettings, BookmarkNode, WorkspaceRecord } from '@/shared/messages';
+import type { AppSettings, BookmarkNode, WorkspaceRecord, WorkspaceView } from '@/shared/messages';
 import type { PushToastInput } from '../state/useToasts';
 import { useFocusTrap } from '../interaction/useFocusTrap';
 import { Ico } from './Ico';
@@ -47,11 +47,13 @@ interface AppSettingsDrawerProps {
   onPatchGlobal: (patch: Partial<AppSettings>) => void;
   onAfterImport: (settings: AppSettings) => void;
   pushToast: (input: PushToastInput) => void;
+  waitingWorkspaces: WorkspaceView[];
+  onWorkspacesChanged: () => void;
   onReplaySetup: () => void;
   onClose: () => void;
 }
 
-export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation', onPatchGlobal, onAfterImport, pushToast, onReplaySetup, onClose }: AppSettingsDrawerProps) {
+export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation', onPatchGlobal, onAfterImport, pushToast, waitingWorkspaces, onWorkspacesChanged, onReplaySetup, onClose }: AppSettingsDrawerProps) {
   const [section, setSection] = useState<AppSectionId>(initialSection);
   const [closing, setClosing] = useState(false);
   const drawerRef = useRef<HTMLElement | null>(null);
@@ -100,7 +102,7 @@ export function AppSettingsDrawer({ settings, tree, initialSection = 'navigation
             {section === 'navigation' && <NavigationSection settings={settings} onPatch={onPatchGlobal} />}
             {section === 'dock'       && <DockSection settings={settings} tree={tree} onPatch={onPatchGlobal} />}
             {section === 'clock'      && <ClockSection settings={settings} onPatch={onPatchGlobal} />}
-            {section === 'backup'     && <BackupSection onAfterImport={onAfterImport} pushToast={pushToast} />}
+            {section === 'backup'     && <BackupSection onAfterImport={onAfterImport} pushToast={pushToast} waiting={waitingWorkspaces} tree={tree} onWorkspacesChanged={onWorkspacesChanged} />}
             {section === 'help'       && <HelpSection onReplaySetup={onReplaySetup} />}
           </div>
         </div>

@@ -6,8 +6,11 @@ import {
   deleteFolderIconRecord,
   deleteIconOverride,
   readAllCachedIcons,
+  deletePendingFolderIconRecord,
   readAllFolderIconRecords,
   readAllIconOverrides,
+  readAllPendingFolderIconRecords,
+  writePendingFolderIconRecord,
   readCachedIcon,
   readFolderIconRecord,
   readIconOverride,
@@ -15,7 +18,8 @@ import {
   writeIconOverride,
   writeCachedIcon,
 } from './icon-idb';
-import type { AppSettings, BookmarkSortMode, BookmarkUsageRecord, DeletionMarker, FolderIconOverrideRecord, IconCacheRecord, IconOverrideRecord, PerBrowserSettingKey, SettingsStamps, SortDirection, SyncedSettingKey, ViewMode, WorkspaceRecord } from './messages';
+import { MAX_PENDING_USAGE } from './constants';
+import type { AppSettings, BookmarkSortMode, BookmarkUsageRecord, DeletionMarker, FolderBinding, FolderIconOverrideRecord, IconCacheRecord, IconOverrideRecord, PerBrowserSettingKey, SettingsStamps, SortDirection, SyncedSettingKey, ViewMode, WorkspaceRecord } from './messages';
 import { PER_BROWSER_SETTING_KEYS } from './messages';
 import type { ArchetypeId } from './organization-templates';
 import { getOverrideLookupKeys } from './icon-scope';
@@ -506,6 +510,104 @@ export async function deleteFolderIconFromUser(folderId: string): Promise<void> 
     key: existing.syncId ?? legacyFolderIconSyncId(folderId),
     deletedAt: nextStamp(existing.updatedAt),
   }]);
+}
+
+export async function readPendingFolderIcons(): Promise<FolderIconOverrideRecord[]> {
+  return readAllPendingFolderIconRecords();
+}
+
+export async function writePendingFolderIcon(record: FolderIconOverrideRecord): Promise<void> {
+  await writePendingFolderIconRecord(record);
+}
+
+export async function deletePendingFolderIcon(syncId: string): Promise<void> {
+  await deletePendingFolderIconRecord(syncId);
+}
+
+// Which local folder each synced workspace shows, plus data waiting for its
+// bookmarks to appear here. All storage.local: folder and bookmark ids are
+// browser-local, and two computers on one Chrome account bind different ids.
+const folderBindingsKey = 'bookmark-bindings';
+const notUsedWorkspacesKey = 'workspaces-not-used-here';
+const pendingUsageKey = 'pending-usage';
+const bindingsBackfillMarkerKey = 'bookmark-bindings-backfilled';
+
+async function readLocal(key: string): Promise<unknown> {
+  const area = extensionApi.storage?.local;
+  if (!area?.get) return undefined;
+  return (await area.get(key) as Record<string, unknown>)[key];
+}
+
+async function writeLocal(key: string, value: unknown): Promise<void> {
+  const area = extensionApi.storage?.local;
+  if (!area?.set) throw new Error('Local storage is unavailable.');
+  await area.set({ [key]: value });
+}
+
+let localStateQueue: Promise<unknown> = Promise.resolve();
+
+// Read-modify-write on fresh storage values, one at a time in this context.
+function updateLocal<T>(key: string, read: (raw: unknown) => T, mutate: (current: T) => T): Promise<T> {
+  const run = localStateQueue.then(async () => {
+    const current = read(await readLocal(key));
+    const next = mutate(current);
+    if (!sameValue(current, next)) await writeLocal(key, next);
+    return next;
+  });
+  localStateQueue = run.catch(() => undefined);
+  return run;
+}
+
+function toBindings(raw: unknown): Record<string, FolderBinding> {
+  if (!raw || typeof raw !== 'object') return {};
+  const valid = Object.entries(raw as Record<string, Partial<FolderBinding> | undefined>).flatMap(([id, b]) =>
+    typeof b?.localId === 'string' && typeof b.locatorHash === 'string' && (b.state === 'bound' || b.state === 'lost')
+      ? [[id, { localId: b.localId, locatorHash: b.locatorHash, state: b.state }] as const]
+      : []);
+  return Object.fromEntries(valid);
+}
+
+const toIdList = (raw: unknown): string[] => (Array.isArray(raw) ? raw.filter((id): id is string => typeof id === 'string') : []);
+
+function toPendingUsage(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== 'object') return {};
+  return Object.fromEntries(Object.entries(raw as Record<string, unknown>).filter(([, usedAt]) => readStamp(usedAt) > 0)) as Record<string, number>;
+}
+
+export async function readFolderBindings(): Promise<Record<string, FolderBinding>> {
+  return toBindings(await readLocal(folderBindingsKey));
+}
+
+export function updateFolderBindings(
+  mutate: (current: Record<string, FolderBinding>) => Record<string, FolderBinding>,
+): Promise<Record<string, FolderBinding>> {
+  return updateLocal(folderBindingsKey, toBindings, mutate);
+}
+
+export async function readNotUsedWorkspaceIds(): Promise<string[]> {
+  return toIdList(await readLocal(notUsedWorkspacesKey));
+}
+
+export async function setWorkspaceNotUsed(id: string, notUsed: boolean): Promise<void> {
+  await updateLocal(notUsedWorkspacesKey, toIdList, ids => (notUsed ? [...new Set([...ids, id])] : ids.filter(x => x !== id)));
+}
+
+export async function readPendingUsage(): Promise<Record<string, number>> {
+  return toPendingUsage(await readLocal(pendingUsageKey));
+}
+
+// Keeps the newest MAX_PENDING_USAGE entries.
+export async function writePendingUsage(pending: Record<string, number>): Promise<void> {
+  const kept = Object.fromEntries(Object.entries(pending).sort(([, a], [, b]) => b - a).slice(0, MAX_PENDING_USAGE));
+  await updateLocal(pendingUsageKey, toPendingUsage, () => kept);
+}
+
+export async function readBindingsBackfilled(): Promise<boolean> {
+  return (await readLocal(bindingsBackfillMarkerKey)) === true;
+}
+
+export async function markBindingsBackfilled(): Promise<void> {
+  await writeLocal(bindingsBackfillMarkerKey, true);
 }
 
 // Deletion markers live beside the records they delete, so any path that

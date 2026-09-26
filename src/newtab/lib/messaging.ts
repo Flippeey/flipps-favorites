@@ -30,6 +30,7 @@ import type {
   PingResponse,
   RecordBookmarkUseResponse,
   WorkspaceRecord,
+  WorkspaceView,
   GetWorkspacesResponse,
   CreateWorkspaceResponse,
   PatchWorkspaceResponse,
@@ -204,19 +205,28 @@ export async function recordBookmarkUse(bookmarkId: string): Promise<number> {
   return res.usedAt;
 }
 
-export async function getWorkspaces(): Promise<WorkspaceRecord[]> {
+export async function getWorkspaces(): Promise<WorkspaceView[]> {
   const res = await send<GetWorkspacesResponse>({ type: messageTypes.getWorkspaces });
   return res.workspaces;
 }
 
-export async function createWorkspace(workspace: WorkspaceRecord): Promise<WorkspaceRecord> {
+export async function createWorkspace(workspace: WorkspaceRecord): Promise<WorkspaceView> {
   const res = await send<CreateWorkspaceResponse>({ type: messageTypes.createWorkspace, workspace });
   return res.workspace;
 }
 
-export async function patchWorkspace(id: string, patch: Partial<WorkspaceRecord>): Promise<WorkspaceRecord> {
+export async function patchWorkspace(id: string, patch: Partial<WorkspaceRecord>): Promise<WorkspaceView> {
   const res = await send<PatchWorkspaceResponse>({ type: messageTypes.patchWorkspace, id, patch });
   return res.workspace;
+}
+
+export async function bindWorkspaceFolder(id: string, folderId: string): Promise<WorkspaceView> {
+  const res = await send<PatchWorkspaceResponse>({ type: messageTypes.bindWorkspaceFolder, id, folderId });
+  return res.workspace;
+}
+
+export async function setWorkspaceNotUsed(id: string, notUsed: boolean): Promise<void> {
+  await send<DeleteWorkspaceResponse>({ type: messageTypes.setWorkspaceNotUsed, id, notUsed });
 }
 
 export async function deleteWorkspace(id: string): Promise<void> {

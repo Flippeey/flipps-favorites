@@ -175,7 +175,40 @@ export async function deleteFolderIconRecord(folderId: string): Promise<void> {
   await idbDelete(STORE_FOLDER_ICONS, getFolderIconKey(folderId));
 }
 
+function idbEntries<T>(storeName: string): Promise<Array<[string, T]>> {
+  return getDB().then(db => new Promise((resolve, reject) => {
+    const store = db.transaction(storeName, 'readonly').objectStore(storeName);
+    const keys = store.getAllKeys();
+    const values = store.getAll();
+    // Requests in one transaction complete in order, so keys are ready here.
+    values.onsuccess = () => resolve(keys.result.map((key, i) => [String(key), values.result[i] as T]));
+    values.onerror = () => reject(values.error);
+    keys.onerror = () => reject(keys.error);
+  }));
+}
+
+async function folderIconEntries(prefix: string): Promise<FolderIconOverrideRecord[]> {
+  const entries = await idbEntries<FolderIconOverrideRecord>(STORE_FOLDER_ICONS);
+  return entries.filter(([key]) => key.startsWith(prefix)).map(([, record]) => record);
+}
+
 export async function readAllFolderIconRecords(): Promise<Record<string, FolderIconOverrideRecord>> {
-  const all = await idbGetAll<FolderIconOverrideRecord>(STORE_FOLDER_ICONS);
-  return Object.fromEntries(all.map(r => [r.folderId, r]));
+  const bound = await folderIconEntries(getFolderIconKey(''));
+  return Object.fromEntries(bound.map(r => [r.folderId, r]));
+}
+
+// A synced folder icon whose folder isn't found in this browser yet, kept by
+// syncId until it is.
+const getPendingFolderIconKey = (syncId: string): string => `pending-folder:${syncId}`;
+
+export async function readAllPendingFolderIconRecords(): Promise<FolderIconOverrideRecord[]> {
+  return folderIconEntries(getPendingFolderIconKey(''));
+}
+
+export async function writePendingFolderIconRecord(record: FolderIconOverrideRecord): Promise<void> {
+  await idbPut(STORE_FOLDER_ICONS, record, getPendingFolderIconKey(record.syncId ?? ''));
+}
+
+export async function deletePendingFolderIconRecord(syncId: string): Promise<void> {
+  await idbDelete(STORE_FOLDER_ICONS, getPendingFolderIconKey(syncId));
 }

@@ -19,6 +19,7 @@ import {
   type WorkspaceExportPayload,
 } from '@/newtab/lib/sync-merge';
 import { nextStamp, readStamp } from '@/shared/sync-stamps';
+import { buildFolderLocator } from '@/newtab/lib/folder-locator';
 import { DELETION_MARKER_RETENTION_MS, MAX_WORKSPACES } from '@/shared/constants';
 
 // Pure planner tests: every sync path (Sync now, link Merge/Replace, file
@@ -62,6 +63,9 @@ function local(state: Omit<Partial<LocalSyncSnapshot>, 'settings'> & { settings?
     folderIcons: [],
     usage: [],
     deletions: [],
+    bindings: {},
+    pendingFolderIcons: [],
+    pendingUsage: {},
     ...state,
     settings: { ...DEFAULTS, activeWorkspaceId: '', dockFolderId: '', settingsUpdatedAt: {}, ...state.settings },
   };
@@ -95,6 +99,7 @@ function applyPlan(snapshot: LocalSyncSnapshot, result: SyncPlan): LocalSyncSnap
   const gone = new Set(result.workspaceDeletes);
   const overrideKeys = new Set([...result.overrideDeletes, ...result.overrideWrites.map(r => r.overrideKey)]);
   const folderIds = new Set([...result.folderIconDeletes, ...result.folderIconWrites.map(r => r.folderId)]);
+  const pendingIds = new Set([...result.pendingFolderIconDeletes, ...result.pendingFolderIconWrites.map(r => r.syncId ?? '')]);
   return {
     settings: { ...snapshot.settings, ...result.settings },
     workspaces: [...snapshot.workspaces.filter(w => !written.has(w.id) && !gone.has(w.id)), ...result.workspaceWrites],
@@ -109,6 +114,12 @@ function applyPlan(snapshot: LocalSyncSnapshot, result: SyncPlan): LocalSyncSnap
       ...result.usageWrites,
     ],
     deletions: result.deletions,
+    bindings: {
+      ...Object.fromEntries(Object.entries(snapshot.bindings).filter(([id]) => !gone.has(id))),
+      ...result.bindingWrites,
+    },
+    pendingFolderIcons: [...snapshot.pendingFolderIcons.filter(r => !pendingIds.has(r.syncId ?? '')), ...result.pendingFolderIconWrites],
+    pendingUsage: result.pendingUsage,
   };
 }
 
@@ -278,9 +289,10 @@ describe('scenarios', () => {
 
   it('a freshly onboarded browser lists what it will add and pairs its "Favorites" with the other browser’s', () => {
     const tree: BookmarkNode[] = [{ id: '0', title: '', children: [{ id: '1', title: 'Bookmarks bar', children: [] }] }];
+    const rootFolder = buildFolderLocator(tree, '1') ?? undefined;
     const result = plan(
-      payload({ workspaces: [ws('zz-remote', 10, { name: 'Favorites', rootFolderId: '1' })] }),
-      local({ workspaces: [ws('aa-local', 5, { name: 'Favorites', rootFolderId: '1' }), ws('extra', 5)] }),
+      payload({ workspaces: [ws('zz-remote', 10, { name: 'Favorites', rootFolderId: '1', rootFolder })] }),
+      local({ workspaces: [ws('aa-local', 5, { name: 'Favorites', rootFolderId: '1', rootFolder }), ws('extra', 5)] }),
       { tree },
     );
     expect(result.newWorkspaceNames).toEqual([]);
@@ -344,7 +356,8 @@ describe('clock skew', () => {
 
 describe('identity convergence', () => {
   const tree: BookmarkNode[] = [{ id: '0', title: '', children: [{ id: 'bar', title: 'Bar', children: [] }] }];
-  const favorites = (id: string, updatedAt: number): WorkspaceRecord => ws(id, updatedAt, { name: 'Favorites', rootFolderId: 'bar' });
+  const rootFolder = buildFolderLocator(tree, 'bar') ?? undefined;
+  const favorites = (id: string, updatedAt: number): WorkspaceRecord => ws(id, updatedAt, { name: 'Favorites', rootFolderId: 'bar', rootFolder });
 
   function converge(): { a: LocalSyncSnapshot; b: LocalSyncSnapshot; server: WorkspaceExportPayload } {
     let a = local({ workspaces: [favorites('id-b', 10)], settings: { workspaceOrder: ['id-b'] } });
@@ -488,9 +501,10 @@ describe('file import', () => {
 
   it('adopts the local id for an identity match instead of converging', () => {
     const tree: BookmarkNode[] = [{ id: '0', title: '', children: [{ id: 'bar', title: 'Bar', children: [] }] }];
+    const rootFolder = buildFolderLocator(tree, 'bar') ?? undefined;
     const result = plan(
-      payload({ workspaces: [ws('aaa', 5, { name: 'Favorites', rootFolderId: 'bar', accentColor: '#file' })] }),
-      local({ workspaces: [ws('zzz', 1, { name: 'Favorites', rootFolderId: 'bar' })] }),
+      payload({ workspaces: [ws('aaa', 5, { name: 'Favorites', rootFolderId: 'bar', rootFolder, accentColor: '#file' })] }),
+      local({ workspaces: [ws('zzz', 1, { name: 'Favorites', rootFolderId: 'bar', rootFolder })] }),
       { origin: 'file', tree },
     );
     expect(result.rekeys).toEqual([]);
@@ -500,13 +514,17 @@ describe('file import', () => {
 });
 
 describe('folder icons', () => {
+  const tree: BookmarkNode[] = [{ id: '0', title: '', children: [{ id: '1', title: 'Bar', children: [
+    { id: '5', title: 'Work', children: [{ id: '50', title: 'Mail', url: 'https://mail.example' }] },
+  ] }] }];
+  const locator = buildFolderLocator(tree, '5') ?? undefined;
   const icon = (syncId: string | undefined, folderId: string, updatedAt: number): FolderIconOverrideRecord => ({
-    folderId, dataUrl: 'data:image/png;base64,A', mimeType: 'image/png', updatedAt, ...(syncId ? { syncId } : {}),
+    folderId, dataUrl: 'data:image/png;base64,A', mimeType: 'image/png', updatedAt, ...(syncId ? { syncId, locator } : {}),
   });
 
   it('gives an icon stored before syncIds existed a deterministic legacy id', () => {
     const result = plan(payload(), local({ folderIcons: [icon(undefined, '12', 3)] }));
-    expect(result.folderIconWrites).toEqual([icon('legacy:12', '12', 3)]);
+    expect(result.folderIconWrites).toEqual([{ ...icon(undefined, '12', 3), syncId: 'legacy:12' }]);
     expect(result.merged.folderIcons.map(r => r.syncId)).toEqual(['legacy:12']);
   });
 
@@ -514,6 +532,7 @@ describe('folder icons', () => {
     const result = plan(
       payload({ folderIcons: [{ ...icon('remote', '5', NOW - 20), syncId: 'remote' }] }),
       local({ folderIcons: [icon('local', '5', NOW - 30)] }),
+      { tree },
     );
     expect(result.folderIconWrites.map(r => r.syncId)).toEqual(['remote']);
     expect(result.deletions).toContainEqual(marker('folderIcon', 'local', NOW - 20));
@@ -524,6 +543,7 @@ describe('folder icons', () => {
     const result = plan(
       payload({ folderIcons: [{ ...icon('b-id', '5', NOW - 10), syncId: 'b-id' }] }),
       local({ folderIcons: [icon('a-id', '5', NOW - 10)] }),
+      { tree },
     );
     expect(result.merged.folderIcons.map(r => r.syncId)).toEqual(['a-id']);
     expect(result.deletions).toContainEqual(marker('folderIcon', 'b-id', NOW - 9));
@@ -531,13 +551,23 @@ describe('folder icons', () => {
 });
 
 describe('usage', () => {
-  it('keeps the latest use per bookmark and carries entries without a bookmark id', () => {
+  it('keeps the latest use per bookmark, matched by URL, and carries uses whose URL is not bookmarked here', () => {
+    const tree: BookmarkNode[] = [{ id: '0', title: '', children: [{ id: '1', title: 'Bar', children: [
+      { id: 'b1', title: 'One', url: 'https://one.example/' },
+      { id: 'b2', title: 'Two', url: 'https://two.example' },
+    ] }] }];
     const result = plan(
-      payload({ bookmarkUsage: [{ bookmarkId: 'b1', usedAt: 50 }, { url: 'https://only-url.example', usedAt: 7 }] }),
+      payload({ bookmarkUsage: [{ url: 'https://one.example', usedAt: 50 }, { url: 'https://only-url.example', usedAt: 7 }] }),
       local({ usage: [{ bookmarkId: 'b1', usedAt: 40 }, { bookmarkId: 'b2', usedAt: 9 }] }),
+      { tree },
     );
     expect(result.usageWrites).toEqual([{ bookmarkId: 'b1', usedAt: 50 }]);
-    expect(result.merged.bookmarkUsage).toEqual(expect.arrayContaining([{ url: 'https://only-url.example', usedAt: 7 }, { bookmarkId: 'b2', usedAt: 9 }]));
+    expect(result.pendingUsage).toEqual({ 'https://only-url.example': 7 });
+    expect(result.merged.bookmarkUsage).toEqual(expect.arrayContaining([
+      { url: 'https://one.example', usedAt: 50 },
+      { url: 'https://only-url.example', usedAt: 7 },
+      { url: 'https://two.example', usedAt: 9 },
+    ]));
   });
 });
 
@@ -557,6 +587,7 @@ describe('quiet syncs', () => {
     const empty = {
       settingsChanged: false, workspaceWrites: [], workspaceDeletes: [], wallpaperWrites: [], overrideWrites: [],
       overrideDeletes: [], folderIconWrites: [], folderIconDeletes: [], usageWrites: [], usageDeletes: [],
+      pendingFolderIconWrites: [], pendingFolderIconDeletes: [], bindingWrites: {},
     };
     expect(second.result).toMatchObject(empty);
     expect(second.result.deletions).toEqual(first.state.deletions);

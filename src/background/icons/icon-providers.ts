@@ -1,4 +1,4 @@
-import type { FolderIconOverrideRecord, GetIconRequest, IconCacheRecord, IconOverrideRecord, IconSearchCandidate, ResolvedIcon } from '@/shared/messages';
+import type { FolderIconOverrideRecord, FolderLocator, GetIconRequest, IconCacheRecord, IconOverrideRecord, IconSearchCandidate, ResolvedIcon } from '@/shared/messages';
 import { IconFetchError } from '@/shared/messages';
 import { writeIconOverrideFromUser, deleteIconCacheRecord, writeFolderIconFromUser } from '@/shared/storage';
 import {
@@ -518,6 +518,7 @@ export async function downloadAndPersistFolderIcon(
   folderId: string,
   imageUrl: string,
   fileName?: string,
+  locator?: FolderLocator,
 ): Promise<FolderIconOverrideRecord> {
   let response: Response;
   try {
@@ -572,6 +573,7 @@ export async function downloadAndPersistFolderIcon(
     fileName: fileName || getFileNameFromUrl(imageUrl),
     mimeType,
     updatedAt: 0,
+    ...(locator ? { locator } : {}),
   };
 
   return writeFolderIconFromUser(record);

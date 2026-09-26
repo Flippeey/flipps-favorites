@@ -1,4 +1,4 @@
-import type { FolderIconOverrideRecord, GetIconRequest, IconCacheRecord, IconSearchCandidate, ResolvedIcon, SetIconOverrideRequest, IconOverrideRecord } from '@/shared/messages';
+import type { FolderIconOverrideRecord, FolderLocator, GetIconRequest, IconCacheRecord, IconSearchCandidate, ResolvedIcon, SetIconOverrideRequest, IconOverrideRecord } from '@/shared/messages';
 import { extensionApi } from '@/shared/browser';
 import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverridesForUrlFromUser, readIconCacheRecord, readIconCacheRecords, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideFromUser, deleteFolderIconOverride, deleteFolderIconFromUser, readAllFolderIconOverrides, writeFolderIconFromUser } from '@/shared/storage';
 import { evictExpiredCachedIcons } from '@/shared/icon-idb';
@@ -120,7 +120,7 @@ export async function removeIconOverride(bookmarkUrl: string, bookmarkTitle?: st
   return getIcon({ type: 'icons/get', bookmarkUrl, bookmarkTitle });
 }
 
-export async function setFolderIcon(folderId: string, dataUrl: string, mimeType: string, fileName?: string): Promise<FolderIconOverrideRecord> {
+export async function setFolderIcon(folderId: string, dataUrl: string, mimeType: string, fileName?: string, locator?: FolderLocator): Promise<FolderIconOverrideRecord> {
   const normalizedDataUrl = normalizeDataUrl(dataUrl, mimeType);
   return writeFolderIconFromUser({
     folderId,
@@ -128,6 +128,7 @@ export async function setFolderIcon(folderId: string, dataUrl: string, mimeType:
     fileName,
     mimeType,
     updatedAt: 0,
+    ...(locator ? { locator } : {}),
   });
 }
 
@@ -136,15 +137,16 @@ export async function setFolderIconFromUrl(
   imageUrl: string,
   fileName?: string,
   fallbackImageUrl?: string,
+  locator?: FolderLocator,
 ): Promise<FolderIconOverrideRecord> {
   try {
-    return await downloadAndPersistFolderIcon(folderId, imageUrl, fileName);
+    return await downloadAndPersistFolderIcon(folderId, imageUrl, fileName, locator);
   } catch (primaryError) {
     if (!fallbackImageUrl || fallbackImageUrl === imageUrl) {
       throw primaryError;
     }
     try {
-      return await downloadAndPersistFolderIcon(folderId, fallbackImageUrl, fileName);
+      return await downloadAndPersistFolderIcon(folderId, fallbackImageUrl, fileName, locator);
     } catch {
       throw primaryError;
     }

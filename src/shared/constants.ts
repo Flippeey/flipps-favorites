@@ -44,6 +44,8 @@ export const DELETION_MARKER_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 // folder-icon markers share one storage.local key.
 export const MAX_WORKSPACE_DELETION_MARKERS = 50;
 export const MAX_ICON_DELETION_MARKERS = 1000;
+// Synced usage entries whose URL is not (uniquely) bookmarked here yet.
+export const MAX_PENDING_USAGE = 1000;
 
 // "Open all in new tabs" (folder context menu) asks for confirmation above
 // this count to avoid tab-bombing the browser from a single click.

@@ -62,6 +62,25 @@ export interface WorkspaceRecord {
   bookmarkSortDirection: SortDirection;
 }
 
+// This browser's link from a synced record to one of its own folders. Kept in
+// storage.local only: two profiles sharing one account bind different ids.
+export interface FolderBinding {
+  localId: string;
+  locatorHash: string;
+  state: 'bound' | 'lost';
+}
+
+// How this browser sees a workspace's folder; absent when found here.
+// waiting: never found here; lost: found before, since removed; unused: the
+// user said the workspace isn't used in this browser.
+export type WorkspaceFolderState = 'waiting' | 'lost' | 'unused';
+
+// A workspace as this browser shows it: rootFolderId is the bound local
+// folder, or '' with a folderState. Never written back to storage.
+export interface WorkspaceView extends WorkspaceRecord {
+  folderState?: WorkspaceFolderState;
+}
+
 export interface AppSettings {
   // Identity
   activeWorkspaceId: string;
@@ -111,6 +130,10 @@ export interface BookmarkNode {
   url?: string;
   dateAdded?: number;
   children?: BookmarkNode[];
+  // Chrome 134+: which root a top-level folder is, and whether it is the
+  // account-synced copy.
+  folderType?: string;
+  syncing?: boolean;
 }
 
 export interface BookmarkUsageRecord {

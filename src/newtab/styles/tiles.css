@@ -293,3 +293,14 @@
 /* Labels tweak (data-labels="false" hides tile labels) */
 .ff-app[data-labels="false"] .ff-tile__label { display: none; }
 .ff-app[data-labels="false"] .ff-tile { gap: 0; }
+
+.ff-folder-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 64px 16px;
+  color: var(--fg-2);
+  font-size: 14px;
+}

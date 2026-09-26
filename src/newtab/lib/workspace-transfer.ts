@@ -15,23 +15,30 @@ import {
   deleteBookmarkUsageRecord,
   deleteFolderIconOverride,
   deleteIconOverrideRecord,
+  deletePendingFolderIcon,
   deleteWorkspace,
   normalizeSettings,
   readAllFolderIconOverrides,
   readBookmarkUsageRecords,
   readDeletionMarkers,
+  readFolderBindings,
   readIconOverrideRecords,
   readOnboardingState,
+  readPendingFolderIcons,
+  readPendingUsage,
   readSettings,
   readWorkspaces,
   readWorkspaceWallpaper,
   removeWorkspaceWallpaper,
   syncedSettingKeys,
+  updateFolderBindings,
   withoutPerBrowserSettings,
   writeBookmarkUsageRecord,
   writeDeletionMarkers,
   writeFolderIconOverride,
   writeIconOverrideRecord,
+  writePendingFolderIcon,
+  writePendingUsage,
   writeSettings,
   writeWorkspace,
   writeWorkspaceWallpaper,
@@ -121,7 +128,7 @@ export async function buildWorkspaceExport(): Promise<WorkspaceExportPayload> {
     workspaces: local.workspaces,
     workspaceWallpapers: local.wallpapers,
     iconOverrides: local.iconOverrides.map(toOverrideTransfer),
-    folderIcons: local.folderIcons.map(toFolderIconTransfer),
+    folderIcons: [...local.folderIcons, ...local.pendingFolderIcons].map(toFolderIconTransfer),
     bookmarkUsage: [],
   };
 }
@@ -309,13 +316,16 @@ function isSortDirection(value: unknown): value is SortDirection {
 }
 
 async function readLocalSnapshot(): Promise<LocalSyncSnapshot> {
-  const [settings, workspaces, overrides, folderIcons, usage, deletions] = await Promise.all([
+  const [settings, workspaces, overrides, folderIcons, usage, deletions, bindings, pendingFolderIcons, pendingUsage] = await Promise.all([
     readSettings(),
     readWorkspaces(),
     readIconOverrideRecords(),
     readAllFolderIconOverrides(),
     readBookmarkUsageRecords(),
     readDeletionMarkers(),
+    readFolderBindings(),
+    readPendingFolderIcons(),
+    readPendingUsage(),
   ]);
   const wallpapers: WorkspaceWallpaperMap = {};
   for (const ws of workspaces.filter(w => w.backgroundMode === 'wallpaper')) {
@@ -330,6 +340,9 @@ async function readLocalSnapshot(): Promise<LocalSyncSnapshot> {
     folderIcons: Object.values(folderIcons),
     usage: Object.values(usage),
     deletions,
+    bindings,
+    pendingFolderIcons,
+    pendingUsage,
   };
 }
 
@@ -338,13 +351,14 @@ async function planFor(
   mode: WorkspaceImportMode,
   origin: ImportOrigin,
 ): Promise<{ local: LocalSyncSnapshot; plan: SyncPlan }> {
-  // Best-effort tree fetch for folder re-matching and identity pairing. A
-  // failed fetch must not fail the import — records then keep their pointers.
+  // Best-effort tree fetch for finding folders here and identity pairing. A
+  // failed fetch must not fail the import: nothing new is placed, and the
+  // next page load resolves what it can.
   let tree: BookmarkNode[] | null = null;
   const [local] = await Promise.all([
     readLocalSnapshot(),
     getBookmarkTree().then(nodes => { tree = nodes; }, (error: unknown) => {
-      console.warn('Bookmark tree unavailable; imported workspaces keep their folder ids.', error);
+      console.warn('Bookmark tree unavailable; imported items wait for their folders.', error);
     }),
   ]);
   const { settingsUpdatedAt: _stamps, ...defaults } = withoutPerBrowserSettings(defaultSettings);
@@ -394,13 +408,21 @@ export async function applyWorkspaceImport(
       console.warn('Failed to remove a workspace during import.', error);
     }
   }
+  const deleted = new Set(plan.workspaceDeletes);
+  await updateFolderBindings(current => ({
+    ...Object.fromEntries(Object.entries(current).filter(([id]) => !deleted.has(id))),
+    ...plan.bindingWrites,
+  }));
 
   for (const record of plan.overrideWrites) await writeIconOverrideRecord(record);
   for (const key of plan.overrideDeletes) await deleteIconOverrideRecord(key);
   for (const record of plan.folderIconWrites) await writeFolderIconOverride(record);
   for (const folderId of plan.folderIconDeletes) await deleteFolderIconOverride(folderId);
+  for (const record of plan.pendingFolderIconWrites) await writePendingFolderIcon(record);
+  for (const syncId of plan.pendingFolderIconDeletes) await deletePendingFolderIcon(syncId);
   for (const record of plan.usageWrites) await writeBookmarkUsageRecord(record);
   for (const bookmarkId of plan.usageDeletes) await deleteBookmarkUsageRecord(bookmarkId);
+  await writePendingUsage(plan.pendingUsage);
   await writeDeletionMarkers(plan.deletions);
 
   if (plan.overrideWrites.length || plan.overrideDeletes.length) {
@@ -419,7 +441,7 @@ export async function applyWorkspaceImport(
     workspaceFailedCount,
     iconOverrideCount: plan.overrideWrites.length,
     iconOverrideSkippedCount: payload.skipped.oversizedDataUrlCount,
-    folderIconCount: plan.folderIconWrites.length,
+    folderIconCount: plan.folderIconWrites.length + plan.pendingFolderIconWrites.length,
     bookmarkUsageCount: plan.usageWrites.length,
     settings,
     merged: plan.merged,
@@ -464,7 +486,7 @@ export async function buildSyncPreview(
     iconOverrideIncomingCount: plan.overrideWrites.length,
     iconOverrideRemovedCount: plan.overrideDeletes.length,
     bookmarkUsageIncomingCount: plan.usageWrites.length,
-    folderIconIncomingCount: plan.folderIconWrites.length,
+    folderIconIncomingCount: plan.folderIconWrites.length + plan.pendingFolderIconWrites.length,
     folderIconRemovedCount: plan.folderIconDeletes.length,
     recommendedMode: recommendLinkMode(local, onboarding.completedAt ?? onboarding.skippedAt),
   };

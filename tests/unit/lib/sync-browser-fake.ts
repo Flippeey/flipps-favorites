@@ -37,6 +37,7 @@ export interface FakeBrowser {
   readonly sync: AreaFake;
   readonly overrides: Map<string, IconOverrideRecord>;
   readonly folderIcons: Map<string, FolderIconOverrideRecord>;
+  readonly pendingFolderIcons: Map<string, FolderIconOverrideRecord>;
   idbWrites: number;
   readonly chrome: unknown;
 }
@@ -114,6 +115,7 @@ export function createBrowser(name: string, offset = 0, sync: AreaFake = createA
     sync,
     overrides: new Map(),
     folderIcons: new Map(),
+    pendingFolderIcons: new Map(),
     idbWrites: 0,
     chrome: {
       runtime: { id: `test-${name}` },
@@ -208,6 +210,17 @@ export const idbModule = {
     b.idbWrites += 1;
   },
   readAllFolderIconRecords: async () => Object.fromEntries([...currentBrowser().folderIcons].map(([k, v]) => [k, clone(v)])),
+  readAllPendingFolderIconRecords: async () => [...currentBrowser().pendingFolderIcons.values()].map(clone),
+  writePendingFolderIconRecord: async (record: FolderIconOverrideRecord) => {
+    const b = currentBrowser();
+    b.pendingFolderIcons.set(record.syncId ?? '', clone(record));
+    b.idbWrites += 1;
+  },
+  deletePendingFolderIconRecord: async (syncId: string) => {
+    const b = currentBrowser();
+    b.pendingFolderIcons.delete(syncId);
+    b.idbWrites += 1;
+  },
 };
 
 // Deterministic PRNG (mulberry32) so a failing seed replays exactly.

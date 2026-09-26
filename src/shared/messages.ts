@@ -24,6 +24,8 @@ export const messageTypes = {
   createWorkspace: 'workspaces/create',
   patchWorkspace: 'workspaces/patch',
   deleteWorkspace: 'workspaces/delete',
+  bindWorkspaceFolder: 'workspaces/bind-folder',
+  setWorkspaceNotUsed: 'workspaces/set-not-used',
   openTab: 'tabs/open',
   syncPush: 'sync/push',
   syncPull: 'sync/pull',
@@ -45,6 +47,7 @@ import type {
   IconSearchCandidate,
   ResolvedIcon,
   WorkspaceRecord,
+  WorkspaceView,
 } from './models';
 import type { IconOverrideScope } from './icon-scope';
 
@@ -274,8 +277,9 @@ export interface GetWorkspacesRequest {
   type: typeof messageTypes.getWorkspaces;
 }
 
+// Workspaces as this browser shows them (see WorkspaceView).
 export interface GetWorkspacesResponse {
-  workspaces: WorkspaceRecord[];
+  workspaces: WorkspaceView[];
 }
 
 export interface CreateWorkspaceRequest {
@@ -284,7 +288,7 @@ export interface CreateWorkspaceRequest {
 }
 
 export interface CreateWorkspaceResponse {
-  workspace: WorkspaceRecord;
+  workspace: WorkspaceView;
 }
 
 export interface PatchWorkspaceRequest {
@@ -294,7 +298,21 @@ export interface PatchWorkspaceRequest {
 }
 
 export interface PatchWorkspaceResponse {
-  workspace: WorkspaceRecord;
+  workspace: WorkspaceView;
+}
+
+// Shows the workspace from a folder the user picked in this browser only.
+export interface BindWorkspaceFolderRequest {
+  type: typeof messageTypes.bindWorkspaceFolder;
+  id: string;
+  folderId: string;
+}
+
+// Local only: the workspace stays stored, synced and counted.
+export interface SetWorkspaceNotUsedRequest {
+  type: typeof messageTypes.setWorkspaceNotUsed;
+  id: string;
+  notUsed: boolean;
 }
 
 export interface DeleteWorkspaceRequest {
@@ -408,6 +426,8 @@ export type AppRequest =
   | CreateWorkspaceRequest
   | PatchWorkspaceRequest
   | DeleteWorkspaceRequest
+  | BindWorkspaceFolderRequest
+  | SetWorkspaceNotUsedRequest
   | OpenTabRequest
   | SyncPushRequest
   | SyncPullRequest

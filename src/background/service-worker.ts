@@ -1,6 +1,8 @@
 import { extensionApi } from '../shared/browser';
-import { IconFetchError, SyncFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetSyncPairingCodeResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type SyncErrorResponse, type SyncPullResponse, type SyncPullNotFoundResponse, type SyncPushResponse, type AdoptSyncSecretResponse, type WebSearchResponse, type WorkspaceRecord } from '../shared/messages';
-import { createWorkspaceFromUser, deleteWorkspaceFromUser, ensurePerBrowserSettingsMove, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, patchSettingsFromUser, patchWorkspaceFromUser, readBookmarkUsageRecords, readFolderIconOverride, readSettings, readWorkspaces, writeBookmarkUsageRecord } from '../shared/storage';
+import { IconFetchError, SyncFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetSyncPairingCodeResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type SyncErrorResponse, type SyncPullResponse, type SyncPullNotFoundResponse, type SyncPushResponse, type AdoptSyncSecretResponse, type WebSearchResponse, type FolderLocator, type WorkspaceRecord, type WorkspaceView } from '../shared/messages';
+import { createWorkspaceFromUser, deleteWorkspaceFromUser, ensurePerBrowserSettingsMove, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, patchSettingsFromUser, patchWorkspaceFromUser, readBookmarkUsageRecords, readFolderBindings, readFolderIconOverride, readNotUsedWorkspaceIds, readSettings, readWorkspaces, setWorkspaceNotUsed, updateFolderBindings, writeBookmarkUsageRecord } from '../shared/storage';
+import { buildFolderLocator, folderExists, locatorHash } from '../newtab/lib/folder-locator';
+import { overlayWorkspace, readWorkspaceViews, resolveFolderBindings } from './folder-bindings';
 import { getIcon, invalidateIcon, removeFolderIcon, removeIconOverride, searchIcons, setFolderIcon, setFolderIconFromUrl, setIconOverride, setIconOverrideFromUrl, sweepFolderIcons, sweepGeneratedRecords } from './icons/icon-service';
 import { adoptSyncSecret, getSyncPairingCode, previewPull, syncPull, syncPush } from './sync-client';
 import { performWebSearch } from './search-shim';
@@ -192,10 +194,14 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
       return { ok: true };
     case messageTypes.getFolderIcon:
       return { icon: await readFolderIconOverride(message.folderId) };
-    case messageTypes.setFolderIcon:
-      return { icon: await setFolderIcon(message.folderId, message.dataUrl, message.mimeType, message.fileName) };
-    case messageTypes.setFolderIconFromUrl:
-      return { icon: await setFolderIconFromUrl(message.folderId, message.imageUrl, message.fileName, message.fallbackImageUrl) };
+    case messageTypes.setFolderIcon: {
+      const locator = buildFolderLocator(await getBookmarkTree(), message.folderId) ?? undefined;
+      return { icon: await setFolderIcon(message.folderId, message.dataUrl, message.mimeType, message.fileName, locator) };
+    }
+    case messageTypes.setFolderIconFromUrl: {
+      const locator = buildFolderLocator(await getBookmarkTree(), message.folderId) ?? undefined;
+      return { icon: await setFolderIconFromUrl(message.folderId, message.imageUrl, message.fileName, message.fallbackImageUrl, locator) };
+    }
     case messageTypes.removeFolderIcon:
       await removeFolderIcon(message.folderId, message.recordDeletion === true);
       return { ok: true };
@@ -211,19 +217,54 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
       return { ok: true, usedAt };
     }
     case messageTypes.getWorkspaces: {
-      const workspaces = await readWorkspaces();
-      return { workspaces } satisfies GetWorkspacesResponse;
+      try {
+        await resolveFolderBindings(await getBookmarkTree());
+      } catch (error) {
+        // Unresolved workspaces stay hidden; the next page load retries.
+        console.warn('Folder resolution failed.', error);
+      }
+      return { workspaces: await readWorkspaceViews() } satisfies GetWorkspacesResponse;
     }
     case messageTypes.createWorkspace: {
-      return { workspace: await createWorkspaceFromUser(message.workspace) } satisfies CreateWorkspaceResponse;
+      const { folderState: _state, ...record } = message.workspace as WorkspaceView;
+      const rootFolder = await locateFolder(record.rootFolderId);
+      await bindFolder(record.id, record.rootFolderId, locatorHash(rootFolder));
+      return { workspace: await createWorkspaceFromUser({ ...record, rootFolder }) } satisfies CreateWorkspaceResponse;
     }
     case messageTypes.patchWorkspace: {
-      const updated = await patchWorkspaceFromUser(message.id, message.patch);
-      return { workspace: updated } satisfies PatchWorkspaceResponse;
+      const { folderState: _state, rootFolderId, rootFolder: _locator, ...rest } = message.patch as Partial<WorkspaceView>;
+      const bound = (await readFolderBindings())[message.id];
+      const rootChanged = Boolean(rootFolderId) && !(bound?.state === 'bound' && bound.localId === rootFolderId);
+      let patch: Partial<WorkspaceView> = rest;
+      if (rootFolderId && rootChanged) {
+        const rootFolder = await locateFolder(rootFolderId);
+        await bindFolder(message.id, rootFolderId, locatorHash(rootFolder));
+        patch = { ...rest, rootFolderId, rootFolder };
+      }
+      // A patch that only restated the shown folder changes nothing.
+      const updated = Object.keys(patch).length || !Object.keys(message.patch).length
+        ? await patchWorkspaceFromUser(message.id, patch)
+        : (await readWorkspaces()).find(w => w.id === message.id);
+      if (!updated) throw new Error(`Workspace ${message.id} not found`);
+      return { workspace: await viewOf(updated) } satisfies PatchWorkspaceResponse;
+    }
+    case messageTypes.bindWorkspaceFolder: {
+      const record = (await readWorkspaces()).find(w => w.id === message.id);
+      if (!record) throw new Error(`Workspace ${message.id} not found`);
+      if (!folderExists(await getBookmarkTree(), message.folderId)) throw new Error('That folder no longer exists.');
+      // Local only: no stamp and no locator change, so nothing propagates.
+      await bindFolder(record.id, message.folderId, locatorHash(record.rootFolder));
+      await setWorkspaceNotUsed(record.id, false);
+      return { workspace: await viewOf(record) } satisfies PatchWorkspaceResponse;
+    }
+    case messageTypes.setWorkspaceNotUsed: {
+      await setWorkspaceNotUsed(message.id, message.notUsed);
+      return { ok: true } satisfies DeleteWorkspaceResponse;
     }
     case messageTypes.deleteWorkspace: {
       await deleteWorkspaceFromUser(message.id);
-
+      await updateFolderBindings(({ [message.id]: _removed, ...rest }) => rest);
+      await setWorkspaceNotUsed(message.id, false);
       return { ok: true } satisfies DeleteWorkspaceResponse;
     }
     case messageTypes.openTab: {
@@ -263,6 +304,22 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
   }
 }
 
+async function locateFolder(folderId: string): Promise<FolderLocator> {
+  const locator = folderId ? buildFolderLocator(await getBookmarkTree(), folderId) : null;
+  if (!locator) throw new Error('That folder no longer exists.');
+  return locator;
+}
+
+// Written before the record it serves, so a new workspace is never unbound.
+async function bindFolder(workspaceId: string, localId: string, hash: string): Promise<void> {
+  await updateFolderBindings(current => ({ ...current, [workspaceId]: { localId, locatorHash: hash, state: 'bound' } }));
+}
+
+async function viewOf(record: WorkspaceRecord): Promise<WorkspaceView> {
+  const [bindings, notUsed] = await Promise.all([readFolderBindings(), readNotUsedWorkspaceIds()]);
+  return overlayWorkspace(record, bindings, notUsed);
+}
+
 async function getBookmarkTree(): Promise<BookmarkNode[]> {
   const nodes = await extensionApi.bookmarks.getTree();
   return normalizeBookmarkNodes(nodes);
@@ -275,6 +332,8 @@ interface RawBookmarkNode {
   url?: string;
   dateAdded?: number;
   children?: RawBookmarkNode[];
+  folderType?: string;
+  syncing?: boolean;
 }
 
 function normalizeBookmarkNode(node: RawBookmarkNode): BookmarkNode {
@@ -285,6 +344,8 @@ function normalizeBookmarkNode(node: RawBookmarkNode): BookmarkNode {
     url: node.url,
     dateAdded: typeof node.dateAdded === 'number' ? node.dateAdded : undefined,
     children: node.children ? normalizeBookmarkNodes(node.children) : undefined,
+    ...(typeof node.folderType === 'string' ? { folderType: node.folderType } : {}),
+    ...(typeof node.syncing === 'boolean' ? { syncing: node.syncing } : {}),
   };
 }
 

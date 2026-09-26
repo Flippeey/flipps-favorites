@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import type { AppSettings } from '@/shared/messages';
+import type { AppSettings, BookmarkNode, WorkspaceView } from '@/shared/messages';
 import { SyncFetchError } from '@/shared/messages';
 import { adoptSyncSecret, getSyncPairingCode, syncPreviewPull } from '@/newtab/lib/messaging';
 import { completeLinkFromPreview, runSyncNow } from '@/newtab/lib/sync-now';
@@ -20,10 +20,14 @@ import {
 import { Ico } from '../Ico';
 import { Segmented } from '../settings-controls';
 import { LinkPreviewDialog } from './LinkPreviewDialog';
+import { WaitingWorkspaces } from './WaitingWorkspaces';
 
 interface BackupSectionProps {
   onAfterImport: (settings: AppSettings) => void;
   pushToast: (input: PushToastInput) => void;
+  waiting: WorkspaceView[];
+  tree: BookmarkNode[];
+  onWorkspacesChanged: () => void;
 }
 
 type BackupStatus = { kind: 'success' | 'error'; text: string } | null;
@@ -66,7 +70,7 @@ function describeSyncError(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong while syncing.';
 }
 
-export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) {
+export function BackupSection({ onAfterImport, pushToast, waiting, tree, onWorkspacesChanged }: BackupSectionProps) {
   const [busy, setBusy] = useState<'idle' | 'exporting' | 'importing'>('idle');
   const [status, setStatus] = useState<BackupStatus>(null);
   const [importMode, setImportMode] = useState<WorkspaceImportMode>('merge');
@@ -355,10 +359,13 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
         End-to-end encrypted sync between your own browsers, via our server. The server only ever
         stores encrypted bytes — it can never read your workspaces, bookmarks, or icons.
         {' '}<strong>Synced:</strong> settings, workspaces, wallpapers, icon overrides, and usage stats.
-        {' '}<strong>Not synced:</strong> your browser&rsquo;s actual bookmarks — each workspace points at a
-        folder in this browser&rsquo;s bookmarks. On a newly linked browser we re-match that folder by
-        name; only when no unique name match exists does a workspace need manual repointing.
+        {' '}<strong>Not synced:</strong> your browser&rsquo;s actual bookmarks — each workspace shows a
+        folder in this browser&rsquo;s bookmarks. Another browser finds its own copy of that folder by
+        where it sits and what it holds; until it does, the workspace waits here for you to import your
+        bookmarks or choose a folder.
       </p>
+
+      <WaitingWorkspaces waiting={waiting} tree={tree} onChanged={onWorkspacesChanged} pushToast={pushToast} />
 
       <div className="ff-card" style={{ marginBottom: 16 }}>
         <div className="ff-row">

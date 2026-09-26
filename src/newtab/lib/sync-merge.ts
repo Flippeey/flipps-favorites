@@ -4,6 +4,7 @@ import type {
   BookmarkUsageRecord,
   DeletionMarker,
   DeletionMarkerKind,
+  FolderBinding,
   FolderIconOverrideRecord,
   FolderLocator,
   IconOverrideRecord,
@@ -14,8 +15,18 @@ import type {
 } from '@/shared/models';
 import { getOverrideKeyForScope, normalizeOverrideScope, type IconOverrideScope } from '@/shared/icon-scope';
 import { MAX_WORKSPACES } from '@/shared/constants';
-import { compareText, legacyFolderIconSyncId, markerId, nextStamp, pruneDeletionMarkers, readStamp, sameValue } from '@/shared/sync-stamps';
-import { findFolder, isFolder } from './tree';
+import {
+  compareFolderIcons,
+  compareText,
+  legacyFolderIconSyncId,
+  markerId,
+  nextStamp,
+  pruneDeletionMarkers,
+  readStamp,
+  retiredFolderIconMarker,
+  sameValue,
+} from '@/shared/sync-stamps';
+import { bookmarkUrl, folderExists, locatorHash, normalizeUrlForMatch, resolveFolder, uniqueBookmarkForUrl } from './folder-locator';
 
 export const WORKSPACE_SCHEMA = 'flipps-workspace-transfer' as const;
 // v3: per-workspace view/sort. v4: folder custom icons. v5: stamps, deletion
@@ -80,6 +91,10 @@ export interface LocalSyncSnapshot {
   folderIcons: FolderIconOverrideRecord[];
   usage: BookmarkUsageRecord[];
   deletions: DeletionMarker[];
+  // Browser-local: see storage.ts.
+  bindings: Record<string, FolderBinding>;
+  pendingFolderIcons: FolderIconOverrideRecord[];
+  pendingUsage: Record<string, number>;
 }
 
 export interface PlanContext {
@@ -111,8 +126,14 @@ export interface SyncPlan {
   overrideDeletes: string[];
   folderIconWrites: FolderIconOverrideRecord[];
   folderIconDeletes: string[];
+  // Keyed by syncId; icons whose folder isn't found here.
+  pendingFolderIconWrites: FolderIconOverrideRecord[];
+  pendingFolderIconDeletes: string[];
   usageWrites: BookmarkUsageRecord[];
   usageDeletes: string[];
+  // The whole next pending-usage map (URL -> usedAt).
+  pendingUsage: Record<string, number>;
+  bindingWrites: Record<string, FolderBinding>;
   deletions: DeletionMarker[];
   // The shared copy to push: every winner, including ones not stored here.
   merged: WorkspaceExportPayload;
@@ -182,26 +203,31 @@ export function planIncomingWorkspaces(
   const remoteOrigin = new Map<string, string>();
   const renamed = new Map<string, string>();
   const rekeys: Array<{ from: string; to: string }> = [];
-  const resolve = (record: WorkspaceRecord): WorkspaceRecord =>
-    ctx.tree ? rematchRootFolder(record, ctx.tree, localById) : record;
+  const { tree } = ctx;
+  // The folder a record shows in this browser; with no tree, none.
+  const folderHere = (record: WorkspaceRecord, binding?: FolderBinding): string | null =>
+    tree ? resolveFolder(record.rootFolder, tree, { binding, hintId: record.rootFolderId, title: record.name }) : null;
 
   // Identity: an incoming workspace with an unknown id that matches exactly
   // one local workspace (same name, same folder here) is that workspace under
   // a second id, e.g. onboarding's "Favorites" created on both browsers.
   const paired = new Set<string>();
+  const pairedFolders = new Map<string, string>();
   for (const incoming of [...remoteById.values()]) {
     if (localById.has(incoming.id)) continue;
     const marker = markerFor('workspace', incoming.id);
     if (!mirror && marker && marker.deletedAt > workspaceStamp(incoming)) continue;
-    const folderId = resolve(incoming).rootFolderId;
-    const matches = [...localById.values()].filter(w =>
-      !paired.has(w.id) && !remoteById.has(w.id) && w.name === incoming.name && w.rootFolderId === folderId);
+    const folderId = folderHere(incoming);
+    if (!folderId) continue;
+    const matches = [...localById.values()].filter(w => !paired.has(w.id) && !remoteById.has(w.id)
+      && w.name === incoming.name && folderHere(w, local.bindings[w.id]) === folderId);
     if (matches.length !== 1) continue;
     const [match] = matches;
     const keep = syncMerge
       ? (compareText(match.id, incoming.id) <= 0 ? match.id : incoming.id)
       : ctx.origin === 'file' ? match.id : incoming.id;
     paired.add(keep);
+    pairedFolders.set(keep, folderId);
     if (keep === incoming.id) {
       localById.delete(match.id);
       localById.set(keep, { ...match, id: keep });
@@ -250,13 +276,19 @@ export function planIncomingWorkspaces(
     if (hasWallpaper) mergedWallpapers[id] = wallpaper;
     if (!fromRemote && !sameValue(remoteById.get(id), record)) names.outbound.push(record.name);
     if (skipped.has(id)) continue;
-    const form = fromRemote ? resolve(record) : record;
-    if (!sameValue(storedById.get(id), form)) {
-      workspaceWrites.push(form);
-      if (!localById.has(id)) names.added.push(form.name);
-      else if (fromRemote) names.updated.push(form.name);
+    if (!sameValue(storedById.get(id), record)) {
+      workspaceWrites.push(record);
+      if (!localById.has(id)) names.added.push(record.name);
+      else if (fromRemote) names.updated.push(record.name);
     }
     if (hasWallpaper && local.wallpapers[id] !== wallpaper) wallpaperWrites.push({ id, dataUrl: wallpaper });
+  }
+  const bindingWrites: Record<string, FolderBinding> = {};
+  for (const [id, localId] of pairedFolders) {
+    const winner = winners.get(id);
+    if (!winner || skipped.has(id)) continue;
+    const binding: FolderBinding = { localId, locatorHash: locatorHash(winner.record.rootFolder), state: 'bound' };
+    if (!sameValue(local.bindings[id], binding)) bindingWrites[id] = binding;
   }
   const workspaceDeletes = rekeys.map(k => k.from);
   for (const stored of local.workspaces) {
@@ -326,61 +358,74 @@ export function planIncomingWorkspaces(
     .map(w => w.record);
   const overrideKeys = new Set(overrideWinners.map(r => r.overrideKey));
 
-  // Folder icons, keyed by syncId; the local copy lives under its folder id.
+  // Folder icons, keyed by syncId. The copy shown here lives under this
+  // browser's folder id; one whose folder isn't found here waits as pending.
+  const iconStamp = (r: FolderIconOverrideRecord): number => readStamp(r.updatedAt);
   const storedFolderIcons = new Map(local.folderIcons.map(r => [r.folderId, r]));
-  const storedBySyncId = newestByKey(local.folderIcons.map(withSyncId), r => r.syncId ?? '', r => readStamp(r.updatedAt));
+  const storedPending = new Map(local.pendingFolderIcons.map(r => [r.syncId ?? '', r]));
+  const boundBySyncId = new Map(local.folderIcons.map(withSyncId).map(r => [r.syncId ?? '', r]));
+  const storedBySyncId = newestByKey([...boundBySyncId.values(), ...local.pendingFolderIcons], r => r.syncId ?? '', iconStamp);
   const localFolderIcons = fileReplace ? new Map<string, FolderIconOverrideRecord>() : storedBySyncId;
   // Payloads from before folder icons existed (v3 and earlier) have no list.
-  const remoteFolderIcons = newestByKey((payload.folderIcons ?? []).map(toFolderIconRecord), r => r.syncId ?? '', r => readStamp(r.updatedAt));
+  const remoteFolderIcons = newestByKey((payload.folderIcons ?? []).map(toFolderIconRecord), r => r.syncId ?? '', iconStamp);
   if (fileReplace) {
     for (const [key, record] of remoteFolderIcons) {
       remoteFolderIcons.set(key, { ...record, updatedAt: restamp(storedBySyncId.get(key)?.updatedAt, 'folderIcon', key) });
     }
   }
   const folderWinners = [...new Set([...localFolderIcons.keys(), ...remoteFolderIcons.keys()])]
-    .map(key => pick(localFolderIcons.get(key), remoteFolderIcons.get(key), r => readStamp(r.updatedAt), 'folderIcon', key))
+    .map(key => pick(localFolderIcons.get(key), remoteFolderIcons.get(key), iconStamp, 'folderIcon', key))
     .filter((w): w is Winner<FolderIconOverrideRecord> => w !== null)
     .map(w => w.record);
-  // Two icons for one folder: the newer keeps it (an exact tie goes to the
-  // smaller syncId); a sync merge retires the other with a marker every
-  // browser stamps the same way.
+  const placeFolderIcon = (record: FolderIconOverrideRecord): string | null => {
+    const bound = boundBySyncId.get(record.syncId ?? '');
+    if (bound && sameValue(bound.locator, record.locator) && (!tree || folderExists(tree, bound.folderId))) return bound.folderId;
+    return tree ? resolveFolder(record.locator, tree, { hintId: record.folderId }) : null;
+  };
+  const placements = new Map(folderWinners.map(r => [r, placeFolderIcon(r)] as const));
   const byFolder = new Map<string, FolderIconOverrideRecord>();
   const retired = new Set<FolderIconOverrideRecord>();
-  for (const record of [...folderWinners].sort(compareFolderIcons)) {
-    const holder = byFolder.get(record.folderId);
+  for (const record of folderWinners.filter(r => placements.get(r)).sort(compareFolderIcons)) {
+    const folderId = placements.get(record) ?? '';
+    const holder = byFolder.get(folderId);
     if (!holder) {
-      byFolder.set(record.folderId, record);
-      continue;
-    }
-    if (syncMerge) {
+      byFolder.set(folderId, record);
+    } else if (syncMerge) {
       retired.add(record);
-      addMarker({
-        kind: 'folderIcon',
-        key: record.syncId ?? '',
-        deletedAt: Math.max(readStamp(holder.updatedAt), readStamp(record.updatedAt) + 1),
-      });
+      addMarker(retiredFolderIconMarker(holder, record));
     }
   }
+  const boundIcons = [...byFolder].map(([folderId, record]) => ({ ...record, folderId }));
+  const pendingIcons = folderWinners.filter(r => !placements.get(r));
+  const pendingIconIds = new Set(pendingIcons.map(r => r.syncId ?? ''));
 
-  // Usage: the latest use wins; entries without a bookmark id only travel.
-  const usageKey = (r: BookmarkUsageTransferRecord): string => (r.bookmarkId ? r.bookmarkId : `url:${r.url ?? ''}`);
+  // Usage: this browser's entries stay keyed by bookmark id; synced ones
+  // travel by URL and bind only to the one bookmark here with that URL.
   const storedUsage = new Map(local.usage.map(r => [r.bookmarkId, r.usedAt]));
-  const mergedUsage = new Map<string, BookmarkUsageTransferRecord>();
-  const addUsage = (r: BookmarkUsageTransferRecord): void => {
-    const key = usageKey(r);
-    if ((mergedUsage.get(key)?.usedAt ?? 0) < r.usedAt) mergedUsage.set(key, r);
+  const usageById = new Map(mirror ? [] : storedUsage);
+  const pendingUsage = new Map<string, number>();
+  const note = (map: Map<string, number>, key: string, usedAt: number): void => {
+    if ((map.get(key) ?? 0) < usedAt) map.set(key, usedAt);
   };
-  if (!mirror) local.usage.forEach(r => addUsage({ bookmarkId: r.bookmarkId, usedAt: r.usedAt }));
-  if (!fileReplace) payload.bookmarkUsage.forEach(addUsage);
-  const usageRecords = [...mergedUsage.values()].filter((r): r is BookmarkUsageRecord => typeof r.bookmarkId === 'string');
-  const usageIds = new Set(usageRecords.map(r => r.bookmarkId));
+  const incomingUsage: Array<readonly [string, number]> = [
+    ...(mirror ? [] : Object.entries(local.pendingUsage)),
+    ...(fileReplace ? [] : payload.bookmarkUsage.flatMap(r => (r.url ? [[r.url, r.usedAt] as const] : []))),
+  ];
+  for (const [url, usedAt] of incomingUsage) {
+    const bookmarkId = tree ? uniqueBookmarkForUrl(tree, url) : null;
+    if (bookmarkId) note(usageById, bookmarkId, usedAt);
+    else note(pendingUsage, normalizeUrlForMatch(url), usedAt);
+  }
+  const usageByUrl = new Map(pendingUsage);
+  for (const [bookmarkId, usedAt] of usageById) {
+    const url = tree ? bookmarkUrl(tree, bookmarkId) : null;
+    if (url) note(usageByUrl, url, usedAt);
+  }
 
   const deletions = mirror
     ? pruneDeletionMarkers(payload.deletions ?? [], ctx.now)
     : pruneDeletionMarkers([...markers.values()], ctx.now);
-  const localFolderWinners = [...byFolder.values()];
   const { settingsUpdatedAt: _stamps, ...syncedValues } = settings;
-  const liveFolderIds = new Set(localFolderWinners.map(r => r.folderId));
 
   return {
     settings,
@@ -396,10 +441,14 @@ export function planIncomingWorkspaces(
     workspaceSkippedCount: skipped.size,
     overrideWrites: overrideWinners.filter(r => !sameValue(storedOverrides.get(r.overrideKey), r)),
     overrideDeletes: [...storedOverrides.keys()].filter(key => !overrideKeys.has(key)),
-    folderIconWrites: localFolderWinners.filter(r => !sameValue(storedFolderIcons.get(r.folderId), r)),
-    folderIconDeletes: [...storedFolderIcons.keys()].filter(id => !liveFolderIds.has(id)),
-    usageWrites: usageRecords.filter(r => storedUsage.get(r.bookmarkId) !== r.usedAt),
-    usageDeletes: [...storedUsage.keys()].filter(id => !usageIds.has(id)),
+    folderIconWrites: boundIcons.filter(r => !sameValue(storedFolderIcons.get(r.folderId), r)),
+    folderIconDeletes: [...storedFolderIcons.keys()].filter(id => !byFolder.has(id)),
+    pendingFolderIconWrites: pendingIcons.filter(r => !sameValue(storedPending.get(r.syncId ?? ''), r)),
+    pendingFolderIconDeletes: [...storedPending.keys()].filter(id => !pendingIconIds.has(id)),
+    usageWrites: [...usageById].filter(([id, usedAt]) => storedUsage.get(id) !== usedAt).map(([bookmarkId, usedAt]) => ({ bookmarkId, usedAt })),
+    usageDeletes: [...storedUsage.keys()].filter(id => !usageById.has(id)),
+    pendingUsage: Object.fromEntries(pendingUsage),
+    bindingWrites,
     deletions,
     merged: {
       schema: WORKSPACE_SCHEMA,
@@ -411,7 +460,7 @@ export function planIncomingWorkspaces(
       workspaceWallpapers: mergedWallpapers,
       iconOverrides: overrideWinners.map(toOverrideTransfer),
       folderIcons: folderWinners.filter(r => !retired.has(r)).map(toFolderIconTransfer),
-      bookmarkUsage: [...mergedUsage.values()],
+      bookmarkUsage: [...usageByUrl].map(([url, usedAt]) => ({ url, usedAt })),
       deletions,
     },
   };
@@ -429,10 +478,6 @@ export function recommendLinkMode(local: LocalSyncSnapshot, onboardedAt: number 
 
 function withSyncId(record: FolderIconOverrideRecord): FolderIconOverrideRecord {
   return record.syncId ? record : { ...record, syncId: legacyFolderIconSyncId(record.folderId) };
-}
-
-function compareFolderIcons(a: FolderIconOverrideRecord, b: FolderIconOverrideRecord): number {
-  return readStamp(b.updatedAt) - readStamp(a.updatedAt) || compareText(a.syncId ?? '', b.syncId ?? '');
 }
 
 function newestByKey<T>(items: T[], keyOf: (item: T) => string, stamp: (item: T) => number): Map<string, T> {
@@ -493,37 +538,4 @@ export function toFolderIconTransfer(record: FolderIconOverrideRecord): FolderIc
     syncId: withId.syncId ?? legacyFolderIconSyncId(withId.folderId),
     ...(withId.locator ? { locator: withId.locator } : {}),
   };
-}
-
-// Folder resolution: rootFolderId is a browser-local bookmark id, so a record
-// from another browser or profile usually points at a folder that doesn't
-// exist here. Best-effort, in order: keep a pointer that resolves; else keep
-// the resolving pointer of the local record with the same id; else adopt the
-// folder whose title uniquely equals the workspace name. Otherwise the record
-// keeps its foreign pointer, and the page falls back to its default folder.
-export function rematchRootFolder(
-  record: WorkspaceRecord,
-  tree: BookmarkNode[],
-  localById: Map<string, WorkspaceRecord>,
-): WorkspaceRecord {
-  if (findFolder(tree, record.rootFolderId)) return record;
-  const local = localById.get(record.id);
-  if (local && findFolder(tree, local.rootFolderId)) {
-    return { ...record, rootFolderId: local.rootFolderId };
-  }
-  const titleMatches = collectFoldersByTitle(tree, record.name);
-  return titleMatches.length === 1 ? { ...record, rootFolderId: titleMatches[0].id } : record;
-}
-
-function collectFoldersByTitle(tree: BookmarkNode[], title: string): BookmarkNode[] {
-  const matches: BookmarkNode[] = [];
-  const walk = (nodes: BookmarkNode[]): void => {
-    for (const node of nodes) {
-      if (!isFolder(node)) continue;
-      if (node.title === title) matches.push(node);
-      walk(node.children ?? []);
-    }
-  };
-  walk(tree);
-  return matches;
 }

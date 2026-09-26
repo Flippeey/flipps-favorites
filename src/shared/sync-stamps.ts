@@ -1,4 +1,4 @@
-import type { DeletionMarker, DeletionMarkerKind } from './models';
+import type { DeletionMarker, DeletionMarkerKind, FolderIconOverrideRecord } from './models';
 import {
   DELETION_MARKER_RETENTION_MS,
   MAX_ICON_DELETION_MARKERS,
@@ -68,6 +68,21 @@ export function pruneDeletionMarkers(markers: DeletionMarker[], now: number): De
 
 export function compareText(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
+}
+
+// Two icons for one folder: the newer keeps it, an exact tie goes to the
+// smaller syncId. Sorts the keeper first.
+export function compareFolderIcons(a: FolderIconOverrideRecord, b: FolderIconOverrideRecord): number {
+  return readStamp(b.updatedAt) - readStamp(a.updatedAt) || compareText(a.syncId ?? '', b.syncId ?? '');
+}
+
+// The retired icon's marker, stamped the same way on every browser.
+export function retiredFolderIconMarker(keeper: FolderIconOverrideRecord, retired: FolderIconOverrideRecord): DeletionMarker {
+  return {
+    kind: 'folderIcon',
+    key: retired.syncId ?? legacyFolderIconSyncId(retired.folderId),
+    deletedAt: Math.max(readStamp(keeper.updatedAt), readStamp(retired.updatedAt) + 1),
+  };
 }
 
 // Folder icons stored before they carried a syncId get a deterministic one,

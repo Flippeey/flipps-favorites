@@ -6,7 +6,7 @@ import { getBookmarkTree, getSettings, getWorkspaces } from './lib/messaging';
 import { readOnboardingState } from '../shared/storage';
 import { EAGER_ICON_PREFETCH } from '../shared/constants';
 import { prefetchAllIconsEager } from './lib/icon-prefetch';
-import { orderWorkspaces } from './lib/workspace-order';
+import { orderWorkspaces, shownWorkspaces } from './lib/workspace-order';
 
 
 async function bootstrap() {
@@ -28,7 +28,7 @@ async function bootstrap() {
     // the App never needs to distinguish boot-time from runtime switches.
     let settings = rawSettings;
     if (!settings.rememberLastFolder && workspaces.length > 0) {
-      const firstId = orderWorkspaces(workspaces, settings.workspaceOrder)[0]?.id;
+      const firstId = orderWorkspaces(shownWorkspaces(workspaces), settings.workspaceOrder)[0]?.id;
       if (firstId != null && firstId !== settings.activeWorkspaceId) {
         settings = { ...settings, activeWorkspaceId: firstId };
       }

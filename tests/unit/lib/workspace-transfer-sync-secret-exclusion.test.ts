@@ -22,6 +22,9 @@ vi.mock('@/shared/icon-idb', () => ({
   readFolderIconRecord: async () => null,
   writeFolderIconRecord: async () => undefined,
   deleteFolderIconRecord: async () => undefined,
+  readAllPendingFolderIconRecords: async () => [],
+  writePendingFolderIconRecord: async () => undefined,
+  deletePendingFolderIconRecord: async () => undefined,
 }));
 
 interface StorageAreaFake {
