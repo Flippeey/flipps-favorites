@@ -5,15 +5,20 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci
@@ -45,6 +50,8 @@ jobs:
     # Secrets live in the prod environment; required-reviewer approval gates this job.
     environment: prod
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -59,7 +66,7 @@ jobs:
       # then leaves a clean uploaded draft the maintainer can publish from the
       # dashboard, instead of red-X-ing the whole run after a successful upload.
       - name: Upload draft to Chrome Web Store
-        uses: wdzeng/chrome-extension@ccb488e04fba014a4b574a533ccee8bc1b772f0a # v2.0.1
+        uses: wdzeng/chrome-extension@37f4f9cdc664959bafef36b1f4da03dec5141620 # v2.0.0
         with:
           action: upload
           zip-path: flipps-favorites-chrome.zip
@@ -72,7 +79,7 @@ jobs:
       - name: Publish Chrome Web Store draft
         id: cws_publish
         continue-on-error: true
-        uses: wdzeng/chrome-extension@ccb488e04fba014a4b574a533ccee8bc1b772f0a # v2.0.1
+        uses: wdzeng/chrome-extension@37f4f9cdc664959bafef36b1f4da03dec5141620 # v2.0.0
         with:
           action: publish
           extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
@@ -90,12 +97,14 @@ jobs:
     needs: build
     environment: prod
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci
