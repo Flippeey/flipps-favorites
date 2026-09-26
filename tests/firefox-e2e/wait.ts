@@ -61,7 +61,7 @@ export async function waitForAttribute(
 /**
  * Click a button/element whose visible text matches `text` (substring), found
  * among elements matching `selector`. Puppeteer's `text/...` selectors
- * silently fail on BiDi/Firefox (spike-confirmed) — this is the replacement.
+ * silently fail on BiDi/Firefox — this is the replacement.
  */
 export async function clickByText(page: Page, selector: string, text: string): Promise<void> {
   const clicked = await page.evaluate(

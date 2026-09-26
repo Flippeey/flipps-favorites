@@ -2,13 +2,12 @@
 // tests/fixtures/seeding.ts: Playwright's `page.evaluate(fn, arg)` and
 // Puppeteer's `page.evaluate(fn, arg)` share the same signature, so the
 // evaluate-callback bodies are copied verbatim. Kept as a separate copy
-// per the Phase 1 plan (extraction into tests/shared/ deferred to Phase 3
-// to avoid risking the Playwright suite's green state).
+// rather than a shared module, so changes to the Playwright fixtures can't
+// destabilize this suite's green state (and vice versa).
 import type { Page } from 'puppeteer';
 import type { AppSettings, WorkspaceRecord } from '../../src/shared/models';
-// STORAGE_KEYS has no Playwright dependency — imported directly from the
-// existing fixture rather than duplicated (plan: tests/fixtures/test-data.ts
-// "import directly, no Playwright dependency in that file").
+// STORAGE_KEYS has no Playwright dependency, so it's imported directly from
+// the existing fixture rather than duplicated here.
 import { STORAGE_KEYS } from '../fixtures/test-data';
 
 export type PromoPersona = 'Work' | 'Personal' | 'AI' | 'Design' | 'Gaming';
@@ -78,9 +77,9 @@ export async function resetStorage(page: Page): Promise<void> {
  * Resolve a stable "seed under here" folder id: prefer a folder titled
  * "Other Bookmarks" (Chrome) or "Other Bookmarks"/"Unfiled Bookmarks"
  * (Firefox uses id 'unfiled_____'); fall back to the second top-level root,
- * then the first. Mirrors the discovery the Phase 0 spike used for the
- * toolbar, generalized to the "other/unfiled" root the Playwright fixtures
- * seed under (parentId '2' on Chrome).
+ * then the first. Generalizes the toolbar-root discovery to the
+ * "other/unfiled" root the Playwright fixtures seed under (parentId '2' on
+ * Chrome).
  */
 async function resolveSeedRootId(page: Page): Promise<string> {
   return page.evaluate(async () => {
