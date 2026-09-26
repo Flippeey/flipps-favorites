@@ -1,6 +1,6 @@
 // Firefox-only regression guard: middle-clicking a bookmark tile must open
-// the bookmark's URL in a new tab (see CLAUDE.md / plan Phase 2). Root cause
-// of the original bug was `window.open(...)` called from an `auxclick`
+// the bookmark's URL in a new tab. Root cause of the original bug was
+// `window.open(...)` called from an `auxclick`
 // handler on a non-anchor element — Firefox's popup blocker silently drops
 // that call (Chrome permits it). The fix routes the open through the message
 // pipeline (`openTab` -> service worker `extensionApi.tabs.create`, see
@@ -8,12 +8,12 @@
 // deterministically — no user gesture required, since it's a genuine
 // WebExtension API call, not a window.open() heuristic.
 //
-// This spec cannot use real mouse synthesis: the Phase 0 spike proved BiDi's
-// synthesized `page.mouse.click(x, y, { button: 'middle' })` never triggers
-// Firefox's native tab-spawning gesture at all. Instead it tests app
-// *intent*: dispatch the exact DOM event BookmarkTile listens for
-// (`auxclick`, e.button === 1, see src/newtab/components/Tile.tsx) and
-// assert a new tab lands at the bookmark's URL.
+// This spec cannot use real mouse synthesis: BiDi's synthesized
+// `page.mouse.click(x, y, { button: 'middle' })` never triggers Firefox's
+// native tab-spawning gesture at all. Instead it tests app *intent*: dispatch
+// the exact DOM event BookmarkTile listens for (`auxclick`, e.button === 1,
+// see src/newtab/components/Tile.tsx) and assert a new tab lands at the
+// bookmark's URL.
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Page } from 'puppeteer';
 import { launchFirefoxWithExtension, reloadAndWaitForApp, type FirefoxSession } from '../launch';

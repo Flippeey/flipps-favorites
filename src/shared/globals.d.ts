@@ -7,3 +7,7 @@ declare const browser: typeof chrome | undefined;
 // non-test build — see storage-buckets.ts for the gated branch and
 // vite.config.mjs for how the literal is injected.
 declare const __FF_TEST_STORAGE_LOCAL__: boolean;
+
+// TypeScript 7 errors (TS2882) on side-effect imports of non-module files;
+// Vite handles CSS imports at build time, so declare them as ambient modules.
+declare module '*.css';

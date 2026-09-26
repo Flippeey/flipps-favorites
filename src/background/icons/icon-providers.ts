@@ -1,6 +1,6 @@
-import type { GetIconRequest, IconCacheRecord, IconOverrideRecord, IconSearchCandidate, ResolvedIcon } from '@/shared/messages';
+import type { FolderIconOverrideRecord, GetIconRequest, IconCacheRecord, IconOverrideRecord, IconSearchCandidate, ResolvedIcon } from '@/shared/messages';
 import { IconFetchError } from '@/shared/messages';
-import { writeIconOverrideRecord, deleteIconCacheRecord } from '@/shared/storage';
+import { writeIconOverrideRecord, deleteIconCacheRecord, writeFolderIconOverride } from '@/shared/storage';
 import {
   faviconProviderUrl,
   faviconRequestSize,
@@ -509,4 +509,72 @@ export async function downloadAndPersistOverride(
     lastUpdated: now,
     isFallback: false,
   };
+}
+
+// Folder custom-icon equivalent of downloadAndPersistOverride: fetches a remote
+// image (search-result apply flow) and persists it as a FolderIconOverrideRecord.
+// Folders have no URL to scope by, so this is a flat per-folder-id record — no
+// scope concept, unlike bookmark overrides.
+export async function downloadAndPersistFolderIcon(
+  folderId: string,
+  imageUrl: string,
+  fileName?: string,
+): Promise<FolderIconOverrideRecord> {
+  let response: Response;
+  try {
+    response = await firefoxSafeFetch(imageUrl, { cache: 'force-cache' });
+  } catch (error) {
+    throw new IconFetchError('network', `Could not reach the icon URL: ${describeError(error)}`);
+  }
+
+  if (!response.ok) {
+    throw new IconFetchError('http-status', `Icon image request failed with ${String(response.status)}.`, response.status);
+  }
+
+  let blob = await response.blob().catch((error: unknown) => {
+    throw new IconFetchError('decode-fail', `Could not read icon body: ${describeError(error)}`);
+  });
+
+  let mimeType = blob.type || 'image/png';
+  if (!mimeType.startsWith('image/')) {
+    throw new IconFetchError('not-image', 'Remote icon response is not an image.');
+  }
+
+  const bytes = new Uint8Array(await blob.arrayBuffer().catch(() => new ArrayBuffer(0)));
+  if (isIcoBytes(bytes)) {
+    const extracted = extractLargestIcoPng(bytes);
+    if (extracted) {
+      blob = new Blob([extracted.png as BlobPart], { type: 'image/png' });
+      mimeType = 'image/png';
+    }
+  }
+
+  let dimensions: { width: number; height: number };
+  try {
+    dimensions = await getImageDimensions(blob);
+  } catch (error) {
+    throw new IconFetchError('decode-fail', `Could not decode icon image: ${describeError(error)}`);
+  }
+
+  if (
+    dimensions.width < minimumOverrideIconSize ||
+    dimensions.height < minimumOverrideIconSize
+  ) {
+    throw new IconFetchError(
+      'too-small',
+      `Icon is ${String(dimensions.width)}x${String(dimensions.height)}; minimum is ${String(minimumOverrideIconSize)}x${String(minimumOverrideIconSize)}.`,
+    );
+  }
+
+  const dataUrl = await blobToDataUrl(blob, mimeType);
+  const record: FolderIconOverrideRecord = {
+    folderId,
+    dataUrl,
+    fileName: fileName || getFileNameFromUrl(imageUrl),
+    mimeType,
+    updatedAt: Date.now(),
+  };
+
+  await writeFolderIconOverride(record);
+  return record;
 }

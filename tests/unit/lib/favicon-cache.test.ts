@@ -5,6 +5,7 @@ vi.mock('@/newtab/lib/messaging', () => ({
 }));
 
 import { getIcon } from '@/newtab/lib/messaging';
+import type { ResolvedIcon } from '@/shared/models';
 import {
   iconCache,
   inflight,
@@ -17,6 +18,12 @@ import {
 } from '@/newtab/lib/favicon-cache';
 
 const mockGetIcon = vi.mocked(getIcon);
+
+// getIcon resolves a full ResolvedIcon; favicon-cache only reads dataUrl, but
+// the mock honors the real contract so ResolvedIcon shape drift surfaces here.
+function resolvedIcon(dataUrl: string): ResolvedIcon {
+  return { cacheKey: 'icon:host:test', sourceKind: 'origin', dataUrl, lastUpdated: 0, isFallback: false };
+}
 
 // Directly seeds the module-level caches so scope-invalidation tests don't
 // depend on fetchIcon's async plumbing — the caches are just Maps keyed by URL.
@@ -189,12 +196,12 @@ describe('fetchIcon', () => {
 
   it('dedupes concurrent calls for the same URL into a single getIcon request', async () => {
     const url = 'https://concurrent.test/';
-    let resolveIcon: (v: { dataUrl: string }) => void;
-    mockGetIcon.mockReturnValue(new Promise(resolve => { resolveIcon = resolve; }) as ReturnType<typeof getIcon>);
+    let resolveIcon: (v: ResolvedIcon) => void;
+    mockGetIcon.mockReturnValue(new Promise<ResolvedIcon>(resolve => { resolveIcon = resolve; }));
 
     const first = fetchIcon(url);
     const second = fetchIcon(url);
-    resolveIcon!({ dataUrl: 'data:resolved' });
+    resolveIcon!(resolvedIcon('data:resolved'));
 
     const [a, b] = await Promise.all([first, second]);
 
@@ -205,7 +212,7 @@ describe('fetchIcon', () => {
 
   it('caches the resolved value for subsequent calls', async () => {
     const url = 'https://resolve-once.test/';
-    mockGetIcon.mockResolvedValue({ dataUrl: 'data:once' });
+    mockGetIcon.mockResolvedValue(resolvedIcon('data:once'));
 
     await fetchIcon(url);
     await fetchIcon(url);

@@ -25,7 +25,7 @@ src/shared/                       # Cross-context code
   organization-templates.ts, icon-fallback.ts, seed-data.ts, constants.ts, url-brand.ts, globals.d.ts
 
 tests/
-  global-setup.ts                 # Asserts dist/{chrome,firefox} exist (does NOT build)
+  global-setup.ts                 # Asserts dist/{chrome-test,firefox} exist (does NOT build)
   fixtures/                       # Playwright fixtures (world, extension-context, seeding, selectors, helpers)
   specs/                          # Playwright E2E specs (one per user-flow area)
   unit/                           # Vitest unit tests (mirrored to src layout)

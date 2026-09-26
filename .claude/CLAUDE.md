@@ -1,13 +1,12 @@
 # Project: Flipp's Favorites
 
-# Memory Bank: flipps-favorites
-
 The tracked root [`CLAUDE.md`](../CLAUDE.md) is the source of truth for project summary,
 critical rules, tech stack, layout, commands, and workflow. Read it first — it is not
 duplicated here, to avoid drift between the two files.
 
-This file, plus `structure.md`, `architecture.md`, `conventions.md`, `testing.md`, and `settings.json`, are tracked in git.
-Local-only files (`settings.local.json`, `memory.db`, `skills/`, and runtime data) stay gitignored.
+This file, plus `structure.md`, `architecture.md`, `conventions.md`, `testing.md`, `settings.json`, and
+`skills/run-flipps-favorites/`, are tracked in git.
+Local-only files (`settings.local.json`, `memory.db`, every other `skills/` entry, and runtime data) stay gitignored.
 
 ## Detailed References
 

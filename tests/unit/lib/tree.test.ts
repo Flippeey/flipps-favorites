@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BookmarkNode } from '@/shared/messages';
-import { ancestorFolderIds, flattenFolderTree } from '@/newtab/lib/tree';
+import { ancestorFolderIds, collectFolderIds, findFolder, flattenFolderTree } from '@/newtab/lib/tree';
 
 // Browser-shaped tree: an outer root whose children are the user folders.
 // `a` nests three folder levels deep (a → a1 → a1a); `a2` is a bookmark, not a folder.
@@ -60,5 +60,26 @@ describe('ancestorFolderIds', () => {
 
   it('returns empty for a top-level folder with no folder ancestor below root', () => {
     expect(ancestorFolderIds(tree, 'a')).toEqual(['vroot']);
+  });
+});
+
+// collectFolderIds backs the folder-delete cleanup call sites (App.tsx): when a
+// folder subtree is deleted, every descendant folder's custom-icon record (IDB,
+// issue #44) must be removed too, or it leaks forever since removeBookmark only
+// wipes the browser bookmark tree, not the separate icon store.
+describe('collectFolderIds', () => {
+  it('includes the folder itself plus every nested descendant folder', () => {
+    const a = findFolder(tree, 'a')!;
+    expect(collectFolderIds(a)).toEqual(new Set(['a', 'a1', 'a1a']));
+  });
+
+  it('excludes bookmark children — only folder ids are collected', () => {
+    const a = findFolder(tree, 'a')!;
+    expect(collectFolderIds(a).has('a2')).toBe(false);
+  });
+
+  it('a leaf folder with no subfolders collects only itself', () => {
+    const b = findFolder(tree, 'b')!;
+    expect(collectFolderIds(b)).toEqual(new Set(['b']));
   });
 });

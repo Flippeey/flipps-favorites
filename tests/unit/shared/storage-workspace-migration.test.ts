@@ -164,6 +164,9 @@ describe('ensureWorkspaceViewSortMigration — upgrade', () => {
     const storage = await importStorage();
     await storage.ensureWorkspaceViewSortMigration();
 
+    // withSync defaults to true, so the sync fake must exist; fail loud if not.
+    if (!sync) throw new Error('sync area fake expected');
+
     // No legacy global keys → nothing to copy; per-key record stays untouched.
     expect((sync.data[perKey('a')] as WorkspaceRecord).folderMode).toBe('grid');
     expect((sync.data[perKey('a')] as WorkspaceRecord).bookmarkSortMode).toBe('manual');

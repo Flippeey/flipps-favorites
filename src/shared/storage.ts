@@ -3,15 +3,19 @@ import {
   clearCachedIcons,
   clearIconOverrides,
   deleteCachedIcon,
+  deleteFolderIconRecord,
   deleteIconOverride,
   readAllCachedIcons,
+  readAllFolderIconRecords,
   readAllIconOverrides,
   readCachedIcon,
+  readFolderIconRecord,
   readIconOverride,
+  writeFolderIconRecord,
   writeIconOverride,
   writeCachedIcon,
 } from './icon-idb';
-import type { AppSettings, BookmarkSortMode, BookmarkUsageRecord, IconCacheRecord, IconOverrideRecord, SortDirection, ViewMode, WorkspaceRecord } from './messages';
+import type { AppSettings, BookmarkSortMode, BookmarkUsageRecord, FolderIconOverrideRecord, IconCacheRecord, IconOverrideRecord, SortDirection, ViewMode, WorkspaceRecord } from './messages';
 import type { ArchetypeId } from './organization-templates';
 import { getOverrideLookupKeys } from './icon-scope';
 import { createCachedRecordStore, createCachedValueStore, createPerKeyRecordStore } from './storage-buckets';
@@ -139,6 +143,7 @@ export const defaultSettings: AppSettings = {
   clockHourFormat: '24',
   showSearchBar: true,
   folderOpenMode: 'overlay',
+  folderCountBadgeMode: 'always',
 };
 
 export const defaultWorkspaceSettings: Omit<WorkspaceRecord, 'id' | 'name' | 'rootFolderId'> = {
@@ -235,6 +240,8 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     showSearchBar: typeof settings.showSearchBar === 'boolean' ? settings.showSearchBar : defaultSettings.showSearchBar,
     folderOpenMode: settings.folderOpenMode === 'overlay' || settings.folderOpenMode === 'page'
       ? settings.folderOpenMode : defaultSettings.folderOpenMode,
+    folderCountBadgeMode: settings.folderCountBadgeMode === 'always' || settings.folderCountBadgeMode === 'hover'
+      ? settings.folderCountBadgeMode : defaultSettings.folderCountBadgeMode,
   };
 }
 
@@ -284,6 +291,22 @@ export async function deleteIconOverrideRecord(overrideKey: string): Promise<voi
 // Remove every override that currently applies to this URL, across all scopes.
 export async function deleteIconOverrideRecordsForUrl(bookmarkUrl: string): Promise<void> {
   await Promise.all(getOverrideLookupKeys(bookmarkUrl).map(key => deleteIconOverride(key)));
+}
+
+export async function readFolderIconOverride(folderId: string): Promise<FolderIconOverrideRecord | null> {
+  return readFolderIconRecord(folderId);
+}
+
+export async function writeFolderIconOverride(record: FolderIconOverrideRecord): Promise<void> {
+  await writeFolderIconRecord(record);
+}
+
+export async function deleteFolderIconOverride(folderId: string): Promise<void> {
+  await deleteFolderIconRecord(folderId);
+}
+
+export async function readAllFolderIconOverrides(): Promise<Record<string, FolderIconOverrideRecord>> {
+  return readAllFolderIconRecords();
 }
 
 export async function readBookmarkUsageRecords(): Promise<Record<string, BookmarkUsageRecord>> {

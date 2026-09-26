@@ -53,6 +53,24 @@ export function countDescendants(folder: BookmarkNode): DescendantCount {
   return { bookmarks, folders };
 }
 
+// folder's own id + every descendant folder id. Used to clean up per-folder
+// custom-icon records (folder-icons IDB store) when a folder subtree is
+// deleted — a recursive removeBookmark wipes the bookmarks but not our
+// separate icon store, so callers must walk this set explicitly.
+export function collectFolderIds(folder: BookmarkNode): Set<string> {
+  const ids = new Set<string>([folder.id]);
+  const visit = (node: BookmarkNode): void => {
+    for (const child of node.children ?? []) {
+      if (isFolder(child)) {
+        ids.add(child.id);
+        visit(child);
+      }
+    }
+  };
+  visit(folder);
+  return ids;
+}
+
 export function topLevelFolders(tree: BookmarkNode[]): BookmarkNode[] {
   // tree from browser comes as root with virtual roots; flatten to first user folders
   const out: BookmarkNode[] = [];

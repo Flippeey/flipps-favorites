@@ -1,20 +1,43 @@
 import { test as base, type BrowserContext, type Page } from '@playwright/test';
 import { closeLaunched, launchChrome, launchFirefox, originFrom } from './launch.js';
+import { startStubHost } from './network-stub.js';
 
 export interface ExtensionFixtures {
   context: BrowserContext;
   extensionOrigin: string;
   newtabPage: Page;
+  /**
+   * Hostnames to redirect to a local HTTPS stub server via Chromium
+   * `--host-resolver-rules` (empty = no stub, the default). Set via
+   * `test.use({ stubHosts: [...] })` for specs that assert a real
+   * extension-opened-tab navigation without depending on live DNS/network.
+   */
+  stubHosts: string[];
 }
 
 export const test = base.extend<ExtensionFixtures>({
-  context: async ({ }, use, testInfo) => {
+  stubHosts: [[], { option: true }],
+
+  context: async ({ stubHosts }, use, testInfo) => {
     const isFirefox = testInfo.project.name === 'firefox';
-    const launched = isFirefox ? await launchFirefox() : await launchChrome();
+    if (isFirefox) {
+      const launched = await launchFirefox();
+      await use(launched.context);
+      await closeLaunched(launched);
+      return;
+    }
+
+    const stub = stubHosts.length > 0 ? await startStubHost(stubHosts) : null;
+    const launched = await launchChrome({
+      extraArgs: stub
+        ? [`--host-resolver-rules=${stub.hostResolverRules}`, '--ignore-certificate-errors']
+        : [],
+    });
 
     await use(launched.context);
 
     await closeLaunched(launched);
+    await stub?.close();
   },
 
   extensionOrigin: async ({ context }, use, testInfo) => {

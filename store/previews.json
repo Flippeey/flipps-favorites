@@ -1,0 +1,33 @@
+{
+  "_comment": "AMO preview images, in listing order (index = position). Captions sync via scripts/store/amo-sync.mjs; image files are only read by --replace-previews. File mapping below is the best-guess scene match for the previews uploaded manually before this file existed (all are light theme, 1920x1080) — verify before the first --replace-previews run.",
+  "previews": [
+    {
+      "file": "promo/screenshots/light/01-hero-1920x1080.png",
+      "caption": "Your bookmarks, already there — every new tab, a fast visual workspace."
+    },
+    {
+      "file": "promo/screenshots/light/03-folder-open-1920x1080.png",
+      "caption": "Open any folder in a quick overlay — see everything inside without leaving the tab."
+    },
+    {
+      "file": "promo/screenshots/light/04-search-results-1920x1080.png",
+      "caption": "Live search across every bookmark. Start typing, hit Enter, go."
+    },
+    {
+      "file": "promo/screenshots/light/05-settings-appearance-1920x1080.png",
+      "caption": "Make it yours — themes, 10 accent colors, custom picker, per Workspace."
+    },
+    {
+      "file": "promo/screenshots/light/11-onboarding-welcome-1920x1080.png",
+      "caption": "Set up in under a minute — the wizard scans your bookmarks and suggests Workspaces."
+    },
+    {
+      "file": "promo/screenshots/light/06-settings-layout-1920x1080.png",
+      "caption": "Folders, dock, and layout — arranged how you think."
+    },
+    {
+      "file": "promo/screenshots/light/16-icon-picker-1920x1080.png",
+      "caption": "Override any icon. Pick from the built-in icon search or upload your own."
+    }
+  ]
+}

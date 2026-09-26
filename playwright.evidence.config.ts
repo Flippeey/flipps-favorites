@@ -6,8 +6,18 @@ import { defineConfig } from '@playwright/test';
 // bolted onto the main test job. See
 // docs/plan/20260711-pr-evidence-and-wiki-capture/ws1-evidence-decision.md
 // for the full rationale.
+//
+// testDir is `tests/evidence/pr` — the gitignored drop-zone for the current PR's
+// throwaway spec — NOT `tests/evidence`. Two reasons: per-PR specs are never
+// committed to this repo (they live on the disposable pr-evidence branch and CI
+// copies them in here), and scoping the run to that one directory keeps a PR's
+// evidence comment to that PR's own screenshots. When the runner walked all of
+// tests/evidence, every PR re-ran and re-posted every committed spec's captures —
+// PR #64's evidence led with unrelated example-edit-dialog shots.
+// `example-edit-dialog.evidence.spec.ts` therefore sits outside this testDir: it
+// is a typechecked reference to copy, not something that runs.
 export default defineConfig({
-  testDir: './tests/evidence',
+  testDir: './tests/evidence/pr',
   testMatch: '**/*.evidence.spec.ts',
   timeout: 30_000,
   expect: { timeout: 8_000 },

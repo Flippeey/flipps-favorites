@@ -197,7 +197,7 @@ test.describe('folder CRUD', () => {
     const tile = tileById(newtabPage, folderId);
 
     const menu = await openContextMenu(newtabPage, tile);
-    await clickMenuItem(menu, 'Rename');
+    await clickMenuItem(menu, 'Edit…');
 
     // FolderNameDialog opens in rename mode.
     const dialog = newtabPage.locator('.ff-modal-scrim');
@@ -208,7 +208,7 @@ test.describe('folder CRUD', () => {
     await expect(input).toHaveValue('Documentation');
 
     await input.fill('Docs Renamed');
-    await newtabPage.getByRole('button', { name: 'Rename' }).click();
+    await newtabPage.getByRole('button', { name: 'Save folder' }).click();
 
     await dialog.waitFor({ state: 'detached', timeout: 5_000 });
 

@@ -6,17 +6,17 @@ React 19 SPA in newtab; vanilla TS service worker.
 ## Rules
 
 - Keep working files and tests in `tests/` or `docs/` — not the repo root.
-- After every code change, run `npm run build` — typecheck runs automatically via hook. Both Chrome and Firefox builds must pass.
+- After every code change, run `npm run build` and `npm run typecheck`. Both Chrome and Firefox builds must pass.
 - Cross-context calls go through the message pipeline (`shared/messages.ts` → `lib/messaging.ts` → `service-worker.ts`). Use `extensionApi` from `shared/browser.ts` for any browser API — never raw `chrome.*` / `browser.*`.
 - Strict TS: `unknown` + narrowing at boundaries, never `any`. Treat React state as immutable (`{ ...prev }` / `new Set(prev.ids)`).
 - Prefer JSX text children for rendering (React escapes). Avoid `innerHTML`.
 
 ## Tech Stack
 
-- TypeScript 5.8 (strict, ES2022, `moduleResolution: Bundler`). `@/*` path alias → `src/*` (tsconfig + vite); prefer it over deep relative imports.
+- TypeScript 7.0 (native compiler; strict, ES2022, `moduleResolution: Bundler`). `@/*` path alias → `src/*` (tsconfig + vite); prefer it over deep relative imports.
 - React 19 + ReactDOM 19 — functional components + hooks only.
-- Vite 6 + `@vitejs/plugin-react` 5 — dual output via `--mode chrome` / `--mode firefox`. Manifest V3 both targets.
-- Tests: Playwright 1.58 (`tests/specs/*.spec.ts`) + Vitest 3 (`tests/unit/**/*.test.ts`).
+- Vite 8 + `@vitejs/plugin-react` 6 — dual output via `--mode chrome` / `--mode firefox`. Manifest V3 both targets.
+- Tests: Playwright 1.61 (`tests/specs/*.spec.ts`) + Vitest 4 (`tests/unit/**/*.test.ts`).
 - Plain CSS, no preprocessor. Import chain (order matters): `styles/index.css` → `tokens`, `base`, `nav`, `hero`, `tiles`, `overlay`, `dock`, `dialogs`, `settings-drawer`, `onboarding`, `interactions`, `responsive`.
 - npm, `type: module`. Runtime deps: `react`, `react-dom` only. Discuss before adding any new top-level dependency, state library, or CSS framework.
 
@@ -36,11 +36,12 @@ React 19 SPA in newtab; vanilla TS service worker.
 ```bash
 npm run build            # Both targets → dist/{chrome,firefox}
 npm run build:chrome     # / build:firefox — single target
-npm run typecheck        # tsc --noEmit
+npm run typecheck        # tsc --noEmit (app) + tsc -p tsconfig.test.json --noEmit (tests)
 npm run test:unit        # Vitest unit tests (fast, no browser)
-npm test                 # Playwright chrome project — needs a fresh `npm run build` first (global-setup only checks dist exists, it does NOT build)
-npm run test:firefox     # Firefox project (icons only) — also needs a prior build
+npm test                 # Playwright, chrome project only, headless — needs dist/chrome-test + dist/firefox fresh; `npm run build` alone is NOT enough (global-setup only checks, it does NOT build)
+npm run test:firefox     # Firefox project (icons only) — headed (Playwright Firefox can't load extensions headless); CI runs it under xvfb, run it yourself only when debugging icon code
 npm run test:build       # build + test (use this to avoid testing a stale build)
+npm run verify           # One command, all headless: typecheck -> test:unit -> build -> build:chrome:test -> test (chrome) -> test:firefox:e2e; stops on first failure
 npm run evidence         # Evidence specs — UI-feature screenshots for PRs (separate runner, not part of npm test)
 ```
 

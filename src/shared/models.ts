@@ -13,6 +13,7 @@ export type LayoutPresetId = 'balanced' | 'compact' | 'spacious' | 'presentation
 export type ClockHourFormat = '12' | '24';
 export type ViewMode = 'grid' | 'list';
 export type FolderOpenMode = 'overlay' | 'page';
+export type FolderCountBadgeMode = 'always' | 'hover';
 export type TileShape = 'squircle' | 'rounded' | 'circle';
 export type BackgroundMode = 'solid' | 'gradient' | 'wallpaper';
 export type GradientStyle = 'top' | 'top-bottom' | 'bottom' | 'aurora' | 'mesh' | 'vignette';
@@ -67,6 +68,7 @@ export interface AppSettings {
   showSearchBar: boolean;
   // Folder behaviour (global)
   folderOpenMode: FolderOpenMode;
+  folderCountBadgeMode: FolderCountBadgeMode;
 }
 
 export interface BookmarkNode {
@@ -173,6 +175,18 @@ export interface IconOverrideRecord {
   bookmarkUrl: string;
   dataUrl: string;
   fileName: string;
+  mimeType: string;
+  updatedAt: number;
+}
+
+// Opt-in custom icon for a folder. Independent of the bookmark icon-override
+// system (icon-scope.ts) — folders have no URL to scope by, so this is keyed
+// directly by the folder's bookmark id. Absent = default rendering (favicon
+// collage in grid, folder glyph in list) — zero-diff for existing users.
+export interface FolderIconOverrideRecord {
+  folderId: string;
+  dataUrl: string;
+  fileName?: string;
   mimeType: string;
   updatedAt: number;
 }

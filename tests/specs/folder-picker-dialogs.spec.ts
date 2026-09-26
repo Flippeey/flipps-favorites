@@ -343,7 +343,7 @@ test.describe('add-folder create mode parent picker', () => {
 
     const folderTile = newtabPage.locator('.ff-tile[data-item-kind="folder"]').filter({ hasText: 'Folder to Rename' });
     const menu = await openContextMenu(newtabPage, folderTile);
-    await clickMenuItem(menu, /Rename/i);
+    await clickMenuItem(menu, /Edit/i);
 
     const dialog = newtabPage.locator('.ff-dialog');
     await expect(dialog).toBeVisible({ timeout: 5_000 });
@@ -358,7 +358,7 @@ test.describe('add-folder create mode parent picker', () => {
 
     const nameInput = dialog.locator('input[type="text"]');
     await nameInput.fill('Renamed Folder');
-    await dialog.getByRole('button', { name: /Rename/i }).click();
+    await dialog.getByRole('button', { name: /Save folder/i }).click();
 
     await expect(dialog).toBeHidden({ timeout: 5_000 });
 

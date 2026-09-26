@@ -1,9 +1,9 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "moduleResolution": "Node",
+    "moduleResolution": "Bundler",
     "allowImportingTsExtensions": false,
-    "types": ["firefox-webext-browser", "node"]
+    "types": ["chrome", "firefox-webext-browser", "node"]
   },
   "include": ["tests/**/*.ts", "playwright.config.ts", "src/shared/**/*.ts"]
 }

@@ -3,68 +3,81 @@
 ## Three Test Surfaces
 
 - **Vitest unit tests** — `tests/unit/**/*.test.ts`. Pure logic only: utilities, helpers, pure functions (e.g. icon parsing, dock-mode resolution, URL normalization). Fast, no browser. Run with `npm run test:unit` or `npm run test:unit:watch`.
-- **Playwright E2E (Chrome)** — `tests/specs/*.spec.ts`. User flows, integration, DOM + cross-context messaging. Chrome project runs all specs; Firefox project runs `icons.spec.ts` only. Playwright's built-in esbuild TS transform wires `@/` path alias (tsconfig `paths` resolved at runtime with zero extra config). Run with `npm test` (default: chrome) or `npm run test:chrome` / `npm run test:firefox`.
+- **Playwright E2E (Chrome)** — `tests/specs/*.spec.ts`. User flows, integration, DOM + cross-context messaging. Chrome project runs all specs, headless; Firefox project runs `icons.spec.ts` only, headed (Playwright Firefox can't load extensions headless — CI runs it under xvfb, run it yourself only when debugging icon code). Playwright's built-in esbuild TS transform wires `@/` path alias (tsconfig `paths` resolved at runtime with zero extra config). Run with `npm test` (chrome, headless) or `npm run test:chrome` / `npm run test:firefox`.
 - **Puppeteer WebDriver BiDi suite (Firefox)** — `tests/firefox-e2e/specs/**/*.test.ts`. Broad Firefox E2E coverage — bookmarks, boot, context-menu, icons, middle-click, onboarding, search, settings, workspaces. Uses Puppeteer + Firefox WebDriver BiDi (the only way to load a MV3 extension in headless Firefox; Playwright's juggler backend cannot). Separate Vitest config + separate `vitest run -c` invocation so it doesn't get picked up by `npm run test:unit`. Run with `npm run test:firefox:e2e` or `npm run test:firefox:e2e:build`.
 
 ### Why Three?
 
-**Unit**: Vitest is fast and deterministic for pure logic extraction.
-
-**Playwright Chrome**: All specs run via Playwright on Chrome. All projects (product + test) use Chrome as primary because: real Chrome/MV3 support, Playwright maturity, live-network fallbacks built in.
-
-**Puppeteer Firefox**: Full Firefox coverage via Puppeteer's WebDriver BiDi support (unique ability to install a MV3 extension + set the required UUID pref). Validates both targets; E2E-only (no unit/component coverage).
+- **Unit** — fast and deterministic for extracted pure logic.
+- **Playwright Chrome** — primary harness: real Chrome/MV3 support, Playwright maturity, live-network fallbacks built in.
+- **Puppeteer Firefox** — the only path to full Firefox coverage: WebDriver BiDi can install an MV3 extension and set the required UUID pref. E2E-only, no unit or component coverage.
 
 ## Storage Test Flag & Dist
 
 Chrome Playwright specs load a **test build** to eliminate flake from `chrome.storage.sync`'s async flush race:
 
-- `npm run build:chrome:test` — builds `dist/chrome-test` with `__FF_TEST_STORAGE_LOCAL__` define true (set in vite.config.mjs). This compile-time flag forces all storage writes onto `chrome.storage.local` instead of sync-preferred, eliminating the persists-after-reload race under parallel test load. `dist/chrome-test` is gitignored test-only output.
-- `tests/fixtures/launch.ts` — Chrome specs launch `dist/chrome-test`, NOT `dist/chrome`. Firefox specs launch `dist/firefox` (not built with the flag; no sync race on Firefox's async storage model).
-- `dist/chrome` (the real release artifact used by `ff-release` / publish) stays unmodified and byte-identical to before. The flag is compile-time only, not a runtime toggle.
-- **Flake eliminated** by the storage.local test build. Suite runs with `retries: 0`.
+- `npm run build:chrome:test` — builds `dist/chrome-test` with `__FF_TEST_STORAGE_LOCAL__` true (defined in vite.config.mjs). The flag forces storage writes onto `chrome.storage.local` instead of sync-preferred, killing the persists-after-reload race under parallel load. Gitignored, test-only.
+- `tests/fixtures/launch.ts` — Chrome specs launch `dist/chrome-test`, NOT `dist/chrome`. Firefox specs launch `dist/firefox` (no flag; Firefox's async storage model has no sync race).
+- `dist/chrome` — the real release artifact for `ff-release` / publish, byte-identical to before. The flag is compile-time only, never a runtime toggle.
+- Flake eliminated, so the suite runs `retries: 0`.
 
 ## Component/React Testing: Intentionally Out of Scope
 
 **Decision**: Settings panels and other React components stay E2E-only. No RTL or component-level unit testing.
 
-**Reason**: Component tests either test implementation (brittle, fail on safe refactors) or retest E2E coverage redundantly. The extension's architecture (state in `App.tsx`, presentational children, extracted pure functions) already isolates unit-testable logic from component render. Pure logic lives in unit tests (`lib/`, `shared/`); components are validated via E2E.
+**Reason**: Component tests either test implementation (brittle — they fail on safe refactors) or redundantly retest E2E coverage. The architecture (state in `App.tsx`, presentational children, extracted pure functions) already isolates unit-testable logic from render. Pure logic lives in unit tests (`lib/`, `shared/`); components are validated via E2E.
 
-**Deferred E2E markers**: Some hooks are documented as E2E-only with reasons in their own test files rather than given fake unit coverage:
+**Deferred E2E markers**: some hooks are documented as E2E-only in their own test files, with reasons, rather than given fake unit coverage:
 - `tests/unit/state/*.test.ts` — `useSelection`, `useWorkspaceActions`, `useToasts`, `useContextMenuBuilder` (state hooks with side effects that need the full component tree)
 - `tests/unit/interaction/deferred-to-e2e.test.ts` — all 8 interaction hooks (`useDrag`, `useMarquee`, `useKeyboardNav`, etc.; require real DOM + event simulation)
 
 ## Evidence specs
 
-UI-affecting PRs capture feature moments via evidence specs — **not** assertions-based tests, but
-screenshot-driven specs that prove the feature works. Reviewers see the evidence in a sticky PR
-comment without checking out the branch.
+Screenshot-driven specs that prove a UI feature works — **not** assertion tests. Reviewers see the
+evidence in a sticky PR comment without checking out the branch.
 
-**Rule:** UI-affecting PRs MUST add/update an evidence spec. Non-UI PRs (refactor, docs, config)
-skip evidence specs; CI skips gracefully.
+**Rule:** UI-affecting PRs MUST stage an evidence spec. Non-UI PRs (refactor, docs, config) skip
+them; CI skips gracefully.
+
+**Evidence specs are NEVER committed to this repo.** A per-PR spec is throwaway scaffolding and its
+screenshots are deleted on PR close, so committing one left a file nobody would ever run again in a
+public repo's permanent history. Specs live on the disposable orphan `pr-evidence` branch at
+`pr-<N>/spec/`, beside the screenshots they produce; CI copies them in at capture time and the
+cleanup job deletes spec + PNGs together on close.
 
 **Location & execution:**
-- Files: `tests/evidence/*.evidence.spec.ts` (separate `testDir`, excluded from all suites).
-- Runner: `playwright.evidence.config.ts` (chrome-only, workers:1, deterministic screenshot ordering).
-- Script: `npm run evidence` (builds `dist/chrome-test` + runs specs + writes PNGs to `tests/evidence/output/`).
-- Fixture: `capture(page, testInfo, label)` from `tests/evidence/evidence.ts` auto-derives naming
-  as `<spec-basename>--<label>.png`.
-- How-to & examples: `tests/evidence/README.md`, `tests/evidence/example-edit-dialog.evidence.spec.ts`.
+- Authoring: write to `tests/evidence/pr/<name>.evidence.spec.ts` — **gitignored**, so a stray
+  `git add -A` can't leak it into `main`. Push it to `pr-<N>/spec/` on `pr-evidence` (exact
+  commands in `tests/evidence/README.md`).
+- Runner: `playwright.evidence.config.ts` (chrome-only, workers:1, deterministic ordering).
+  `testDir` is `tests/evidence/pr` — scoping it there is what keeps a PR's evidence comment to
+  that PR's own screenshots.
+- Script: `npm run evidence` (builds `dist/chrome-test` + runs `tests/evidence/pr/` + writes
+  PNGs to `tests/evidence/output/`).
+- Harness: `capture(page, testInfo, label)` names output `<spec-basename>--<label>.png`;
+  `settle(locator)` waits out CSS animations (dialogs run `ffScaleIn` for 240ms — capture
+  without it and you screenshot a half-faded dialog).
+- Committed here: `evidence.ts` (harness), `global-setup.ts`, and
+  `example-edit-dialog.evidence.spec.ts` — a reference to copy that sits outside `testDir`, so
+  it never runs but is still typechecked by `tsconfig.test.json`.
 
 **Exclusion from other suites:** Evidence specs run **only** via `playwright.evidence.config.ts`.
 `npm test` / `test:chrome` / `test:firefox` use `playwright.config.ts` (testDir `tests/specs`).
 `test:unit` scans `tests/unit/**/*.test.ts`. `test:firefox:e2e` scans `tests/firefox-e2e/specs/**/*.test.ts`.
 Zero collision.
 
-**CI consumption:** `.github/workflows/pr-evidence.yml` on each PR (diff-based gate: runs only if
-a `*.evidence.spec.ts` file changed) builds, captures, and posts a sticky comment embedding
-screenshots from an orphan `pr-evidence` branch. No evidence spec changes → CI posts a graceful
-skip note (expected for non-UI work). No assertions, no failure gate — a missing screenshot
-just means the PR carries no evidence.
+**CI consumption:** `.github/workflows/pr-evidence.yml` runs on each PR. Gate: does
+`pr-<N>/spec/*.evidence.spec.ts` exist on `pr-evidence`? If so it copies the spec into
+`tests/evidence/pr/`, builds, captures, publishes PNGs to `pr-<N>/`, and posts a sticky comment
+embedding them plus a link back to the spec — evidence a reviewer can't audit is worth nothing. No
+staged spec → graceful skip (expected for non-UI work). On close, the cleanup job deletes `pr-<N>/`
+entirely. No assertions and no failure gate: a missing screenshot just means the PR carries no
+evidence.
 
 ## Layout
 
-- `playwright.config.ts` — Chrome (all specs) + Firefox (icons-only) projects; global-setup verifies `dist/{chrome,firefox}` exist.
-- `tests/global-setup.ts` — Playwright global setup; asserts `dist/{chrome,firefox}` exist (does NOT build).
+- `playwright.config.ts` — Chrome (all specs) + Firefox (icons-only) projects; global-setup verifies `dist/{chrome-test,firefox}` exist.
+- `tests/global-setup.ts` — Playwright global setup; asserts `dist/{chrome-test,firefox}` exist (does NOT build). Both are checked on every run, whichever project you select.
 - `tests/firefox-e2e/global-setup.ts` — Puppeteer suite global setup; asserts `dist/firefox` exists.
 - `tests/fixtures/launch.ts` — Single source of truth for browser launch (Chrome loads `dist/chrome-test`, Firefox loads `dist/firefox`).
 - `tests/fixtures/` — Playwright fixtures: `world` (worker-scoped with seeded bookmarks), `extension-context`, `test-data`, `bookmark-helpers`, `seeding`, `selectors`.
@@ -79,22 +92,25 @@ just means the PR carries no evidence.
 npm run test:unit              # Vitest: tests/unit/**/*.test.ts
 npm run test:unit:watch        # Vitest watch mode
 
-# Playwright E2E (Chrome + Firefox icons)
-npm test                       # Playwright: all specs on chrome + icons.spec.ts on firefox
-npm run test:chrome            # Chrome project only
-npm run test:firefox           # Firefox project only (icons.spec.ts)
+# Playwright E2E (Chrome, headless)
+npm test                       # Chrome project only, headless (icons.spec.ts on firefox is NOT included)
+npm run test:chrome            # Same as npm test
+npm run test:firefox           # Firefox project only (icons.spec.ts) — headed; CI/xvfb or manual icon debugging only
 npm run test:ui                # Playwright interactive debugger
 npm run test:headed            # Chrome project with visible window
 npm run test:report            # Generate HTML report
 
 # Puppeteer Firefox E2E
-npm run test:firefox:e2e       # Run tests/firefox-e2e/**/*.test.ts (requires dist/firefox)
+npm run test:firefox:e2e       # Run tests/firefox-e2e/**/*.test.ts (requires dist/firefox), headless by default
 npm run test:firefox:e2e:build # Build dist/firefox first, then run firefox-e2e
 
-# Full CI
-npm run test:build             # Build everything (dist/chrome + dist/chrome-test + dist/firefox), run Playwright
-npm run test:ci                # Same as test:build (used in CI/CD)
-npm run test:all               # build + build:chrome:test + Playwright test + test:firefox:e2e
+# One-command local/agent verification (all headless)
+npm run verify                  # typecheck -> test:unit -> build -> build:chrome:test -> test (chrome) -> test:firefox:e2e, stops on first failure
+
+# Full CI (build + Playwright; only test:ci runs both projects — headed firefox, CI/xvfb only, do not run test:ci locally without xvfb)
+npm run test:build             # Build everything (dist/chrome + dist/chrome-test + dist/firefox), run Playwright (chrome only — calls npm test)
+npm run test:ci                # build + build:chrome:test + `playwright test` (BOTH projects — used by .github/workflows/test.yml under xvfb)
+npm run test:all               # build + build:chrome:test + Playwright (chrome only) + test:firefox:e2e
 ```
 
 ## Workflow
@@ -105,18 +121,16 @@ When editing code exercised by tests:
 npm run test:unit              # Vitest — fast, run first
 npm run build                  # rebuild dist/chrome + dist/firefox (for release artifact validation)
 npm run build:chrome:test      # rebuild dist/chrome-test (for Playwright)
-npm test                       # run Playwright chrome project
-npm run test:firefox           # if change touches icon code
+npm test                       # run Playwright chrome project, headless
+npm run test:firefox           # if change touches icon code (headed; CI/xvfb or manual only)
 npm run test:firefox:e2e       # if change needs broad Firefox validation
 ```
 
-Or use the all-in-one:
-```bash
-npm run test:build             # build + build:chrome:test + Playwright
-npm run test:all               # build + build:chrome:test + Playwright + Puppeteer Firefox
-```
-
-Use `npm run test:ui` for interactive Playwright debugging.
+All-in-one, headless: `npm run verify` (typecheck + test:unit + build + build:chrome:test +
+Playwright chrome + test:firefox:e2e, stops on first failure) — the standard command before
+opening a PR. `npm run test:build` / `npm run test:all` cover the same ground without the
+typecheck gate. `npm run test:ci` additionally runs the headed Firefox Playwright project and is
+CI/xvfb-only. `npm run test:ui` for interactive debugging.
 
 ## Writing Tests
 

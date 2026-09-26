@@ -3,6 +3,7 @@ import type {
   BookmarkNode,
   BookmarkSortMode,
   BookmarkUsageRecord,
+  FolderIconOverrideRecord,
   IconOverrideRecord,
   SortDirection,
   ViewMode,
@@ -12,8 +13,10 @@ import {
   defaultSettings,
   defaultWorkspaceSettings,
   deleteBookmarkUsageRecord,
+  deleteFolderIconOverride,
   deleteIconOverrideRecord,
   deleteWorkspace,
+  readAllFolderIconOverrides,
   readBookmarkUsageRecords,
   readIconOverrideRecords,
   readSettings,
@@ -21,6 +24,7 @@ import {
   readWorkspaceWallpaper,
   removeWorkspaceWallpaper,
   writeBookmarkUsageRecord,
+  writeFolderIconOverride,
   writeIconOverrideRecord,
   writeSettings,
   writeWorkspace,
@@ -35,9 +39,19 @@ export const WORKSPACE_SCHEMA = 'flipps-workspace-transfer' as const;
 // v3: per-workspace view/sort. v2 (and earlier) exports stored folderMode/
 // bookmarkSortMode/bookmarkSortDirection as GLOBAL settings; on import they are
 // upcast onto each WorkspaceRecord that lacks them (see legacyViewSortFromSettings).
-export const WORKSPACE_SCHEMA_VERSION = 3;
+// v4: folder custom icons (issue #44). v3-and-earlier exports simply lack the
+// `folderIcons` array — treated as empty on import (legacyUpcastFolderIcons).
+export const WORKSPACE_SCHEMA_VERSION = 4;
 
 export type WorkspaceImportMode = 'merge' | 'replace';
+
+interface FolderIconTransferRecord {
+  folderId: string;
+  dataUrl: string;
+  fileName?: string;
+  mimeType: string;
+  updatedAt: number;
+}
 
 interface IconOverrideTransferRecord {
   bookmarkUrl: string;
@@ -66,6 +80,7 @@ export interface WorkspaceExportPayload {
   workspaces: WorkspaceRecord[];
   workspaceWallpapers: WorkspaceWallpaperMap;
   iconOverrides: IconOverrideTransferRecord[];
+  folderIcons: FolderIconTransferRecord[];
   bookmarkUsage: BookmarkUsageTransferRecord[];
 }
 
@@ -92,15 +107,17 @@ export interface WorkspaceImportSummary {
   iconOverrideCount: number;
   // Icon overrides dropped for exceeding MAX_IMPORT_DATA_URL_BYTES.
   iconOverrideSkippedCount: number;
+  folderIconCount: number;
   bookmarkUsageCount: number;
   settings: AppSettings;
 }
 
 export async function buildWorkspaceExport(): Promise<WorkspaceExportPayload> {
-  const [settings, workspaces, overrideRecords, usageRecords] = await Promise.all([
+  const [settings, workspaces, overrideRecords, folderIconRecords, usageRecords] = await Promise.all([
     readSettings(),
     readWorkspaces(),
     readIconOverrideRecords(),
+    readAllFolderIconOverrides(),
     readBookmarkUsageRecords(),
   ]);
 
@@ -122,6 +139,7 @@ export async function buildWorkspaceExport(): Promise<WorkspaceExportPayload> {
     workspaces,
     workspaceWallpapers,
     iconOverrides: Object.values(overrideRecords).map(toTransferOverride),
+    folderIcons: Object.values(folderIconRecords).map(toTransferFolderIcon),
     bookmarkUsage: Object.values(usageRecords).map(toTransferUsage),
   };
 }
@@ -198,6 +216,19 @@ export function normalizeWorkspaceExportPayload(parsed: unknown): ParsedWorkspac
         })
         .filter((r): r is IconOverrideTransferRecord => r !== null)
     : [];
+  // Absent in exports made before folder custom icons existed (schema <= 3) —
+  // treated as an empty list, same pattern as the v2->v3 view/sort upcast above.
+  const folderIcons = Array.isArray(candidate.folderIcons)
+    ? candidate.folderIcons
+        .map(entry => {
+          if (isOversizedDataUrlCandidate(entry)) {
+            oversizedDataUrlCount += 1;
+            return null;
+          }
+          return normalizeFolderIcon(entry);
+        })
+        .filter((r): r is FolderIconTransferRecord => r !== null)
+    : [];
   const bookmarkUsage = Array.isArray(candidate.bookmarkUsage)
     ? candidate.bookmarkUsage.map(normalizeUsage).filter((r): r is BookmarkUsageTransferRecord => r !== null)
     : [];
@@ -220,6 +251,7 @@ export function normalizeWorkspaceExportPayload(parsed: unknown): ParsedWorkspac
     workspaces,
     workspaceWallpapers,
     iconOverrides,
+    folderIcons,
     bookmarkUsage,
     skipped: { oversizedDataUrlCount },
   };
@@ -286,15 +318,20 @@ export async function applyWorkspaceImport(
     (a, b) => b.updatedAt - a.updatedAt,
   );
   const dedupedUsage = dedupeByKey(payload.bookmarkUsage, r => r.bookmarkId, (a, b) => b.usedAt - a.usedAt);
+  // Defaulted defensively: payload objects built directly (rather than via
+  // parseWorkspaceFile, which always populates the array) may predate this field.
+  const dedupedFolderIcons = dedupeByKey(payload.folderIcons ?? [], r => r.folderId, (a, b) => b.updatedAt - a.updatedAt);
 
   if (mode === 'replace') {
-    const [existingOverrides, existingUsage] = await Promise.all([
+    const [existingOverrides, existingUsage, existingFolderIcons] = await Promise.all([
       readIconOverrideRecords(),
       readBookmarkUsageRecords(),
+      readAllFolderIconOverrides(),
     ]);
     await Promise.all([
       ...Object.keys(existingOverrides).map(key => deleteIconOverrideRecord(key)),
       ...Object.keys(existingUsage).map(key => deleteBookmarkUsageRecord(key)),
+      ...Object.keys(existingFolderIcons).map(id => deleteFolderIconOverride(id)),
     ]);
   }
 
@@ -380,6 +417,17 @@ export async function applyWorkspaceImport(
     await writeBookmarkUsageRecord(fullRecord);
   }
 
+  for (const record of dedupedFolderIcons) {
+    const fullRecord: FolderIconOverrideRecord = {
+      folderId: record.folderId,
+      dataUrl: record.dataUrl,
+      fileName: record.fileName,
+      mimeType: record.mimeType,
+      updatedAt: record.updatedAt,
+    };
+    await writeFolderIconOverride(fullRecord);
+  }
+
   try {
     await invalidateIcon();
   } catch {
@@ -393,6 +441,7 @@ export async function applyWorkspaceImport(
     workspaceFailedCount,
     iconOverrideCount: dedupedOverrides.length,
     iconOverrideSkippedCount: payload.skipped.oversizedDataUrlCount,
+    folderIconCount: dedupedFolderIcons.length,
     bookmarkUsageCount: dedupedUsage.length,
     settings: nextSettings,
   };
@@ -413,6 +462,9 @@ export interface SyncPreviewSummary {
   // Replace mode wipes local overrides before applying; 0 in merge mode.
   iconOverrideRemovedCount: number;
   bookmarkUsageIncomingCount: number;
+  folderIconIncomingCount: number;
+  // Replace mode wipes local folder icons before applying; 0 in merge mode.
+  folderIconRemovedCount: number;
 }
 
 // Dry run of applyWorkspaceImport for the link-preview dialog: reports what
@@ -424,9 +476,10 @@ export async function buildSyncPreview(
   payload: ParsedWorkspaceImport,
   mode: WorkspaceImportMode,
 ): Promise<SyncPreviewSummary> {
-  const [existingWorkspaces, existingOverrides] = await Promise.all([
+  const [existingWorkspaces, existingOverrides, existingFolderIcons] = await Promise.all([
     readWorkspaces(),
     readIconOverrideRecords(),
+    readAllFolderIconOverrides(),
   ]);
 
   let tree: BookmarkNode[] | null = null;
@@ -444,6 +497,7 @@ export async function buildSyncPreview(
     (a, b) => b.updatedAt - a.updatedAt,
   );
   const dedupedUsage = dedupeByKey(payload.bookmarkUsage, r => r.bookmarkId, (a, b) => b.usedAt - a.usedAt);
+  const dedupedFolderIcons = dedupeByKey(payload.folderIcons ?? [], r => r.folderId, (a, b) => b.updatedAt - a.updatedAt);
 
   return {
     newWorkspaceNames: plan.toWrite.filter(r => r.isNew).map(r => r.record.name),
@@ -453,6 +507,8 @@ export async function buildSyncPreview(
     iconOverrideIncomingCount: dedupedOverrides.length,
     iconOverrideRemovedCount: mode === 'replace' ? Object.keys(existingOverrides).length : 0,
     bookmarkUsageIncomingCount: dedupedUsage.length,
+    folderIconIncomingCount: dedupedFolderIcons.length,
+    folderIconRemovedCount: mode === 'replace' ? Object.keys(existingFolderIcons).length : 0,
   };
 }
 
@@ -553,6 +609,37 @@ function collectFoldersByTitle(tree: BookmarkNode[], title: string): BookmarkNod
   };
   walk(tree);
   return matches;
+}
+
+function toTransferFolderIcon(record: FolderIconOverrideRecord): FolderIconTransferRecord {
+  return {
+    folderId: record.folderId,
+    dataUrl: record.dataUrl,
+    fileName: record.fileName,
+    mimeType: record.mimeType,
+    updatedAt: record.updatedAt,
+  };
+}
+
+function normalizeFolderIcon(value: unknown): FolderIconTransferRecord | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as Partial<FolderIconTransferRecord>;
+  if (typeof candidate.folderId !== 'string' || !candidate.folderId.trim()) return null;
+  if (typeof candidate.dataUrl !== 'string' || !candidate.dataUrl.startsWith('data:image/')) return null;
+  if (exceedsDataUrlSizeCap(candidate.dataUrl)) return null;
+  if (typeof candidate.mimeType !== 'string' || !candidate.mimeType.startsWith('image/')) return null;
+
+  const updatedAt = typeof candidate.updatedAt === 'number' && Number.isFinite(candidate.updatedAt)
+    ? Math.max(0, Math.floor(candidate.updatedAt))
+    : Date.now();
+
+  return {
+    folderId: candidate.folderId,
+    dataUrl: candidate.dataUrl,
+    fileName: typeof candidate.fileName === 'string' ? candidate.fileName : undefined,
+    mimeType: candidate.mimeType,
+    updatedAt,
+  };
 }
 
 function toTransferOverride(record: IconOverrideRecord): IconOverrideTransferRecord {
