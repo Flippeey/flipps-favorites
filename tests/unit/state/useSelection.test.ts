@@ -6,8 +6,9 @@ import { describe, expect, it } from 'vitest';
 //
 // Calling a hook outside a component tree throws (no dispatcher) — there is
 // no jsdom / react-test-renderer / @testing-library dependency in this repo,
-// and adding one is deliberately avoided (see .claude/testing.md). Extracting the transition logic into a
-// standalone pure function would require restructuring useSelection.ts.
+// and adding one is deliberately avoided (see .claude/testing.md).
+// Extracting the transition logic into a standalone pure function would
+// require restructuring useSelection.ts.
 //
 // Net: this hook's selection-model transitions (single click clears, Ctrl
 // toggles within scope, Shift range-selects from the last-clicked anchor,

@@ -74,8 +74,8 @@ test('favicon images have no muted styling after multiple workspace switches', a
 
     // --- Invariant 3: no favicon img has reduced opacity ---
     // Favicon images should render at full opacity. A value below 1 on the
-    // img element itself (as opposed to the parent tile)
-    // indicates a leaked interaction style.
+    // img element itself (as opposed to the parent tile, which
+    // drag-state-cleanup.spec.ts covers) indicates a leaked interaction style.
     const mutedFaviconImages = await newtabPage.evaluate(() => {
       const imgs = document.querySelectorAll<HTMLElement>('.ff-canvas .ff-favicon img');
       let count = 0;
