@@ -476,7 +476,7 @@ describe('buildWorkspaceExport — schema v4', () => {
   });
 });
 
-// Folder custom icons (issue #44) round-trip through export/import, and a v3-
+// Folder custom icons round-trip through export/import, and a v3-
 // and-earlier backup (predating the feature) upcasts to an empty list rather
 // than failing to parse.
 describe('folder icon export/import round-trip', () => {

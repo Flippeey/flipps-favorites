@@ -1,5 +1,5 @@
 /**
- * Folder custom icons (opt-in) — issue #44.
+ * Folder custom icons (opt-in).
  *
  * Why this matters: the feature is explicitly opt-in and must be a zero-diff
  * change for existing users (default collage/glyph rendering unless a custom

@@ -2,20 +2,17 @@ import { describe, expect, it } from 'vitest';
 
 // useContextMenuBuilder (src/newtab/state/useContextMenuBuilder.ts) is a
 // React hook: `buildContextMenuItems` and friends are wrapped in
-// `useCallback`, and the hook is on this task's read-only file list (t8
-// handoff: touch only the 3 new test files; the hook itself belongs to a
-// different wave/task).
+// `useCallback`.
 //
 // `buildContextMenuItems`'s body is a plain function of its closed-over args
 // (no hooks called inside it), so in principle it's separable — but lifting
 // it out from under `useCallback` into a standalone exported pure function
-// would mean editing useContextMenuBuilder.ts, which is out of scope here.
+// would mean restructuring useContextMenuBuilder.ts.
 // Calling the hook itself requires a React dispatcher (jsdom / react-test-
 // renderer / @testing-library), none of which are installed, and adding one
-// is explicitly out of scope for issue #54 ("DECIDED: no RTL / no
-// component-testing dep").
+// is deliberately avoided (see .claude/testing.md).
 //
-// Net: the menu-item branches this task called out (single bookmark, single
+// Net: the menu-item branches (single bookmark, single
 // folder, multi-select, folder-in-overlay/section) are irreducibly
 // DOM/React-runtime-bound under these constraints and are covered instead by
 // tests/specs/context-menu.spec.ts (Playwright, drives real right-clicks

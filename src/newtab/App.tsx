@@ -407,7 +407,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setFolderNameTarget({ mode: 'rename', id: folder.id, title: folder.title });
   }, []);
 
-  // Best-effort cleanup for the folder-icons IDB store (issue #44): removeBookmark
+  // Best-effort cleanup for the folder-icons IDB store: removeBookmark
   // only deletes the browser bookmark subtree, not our separate custom-icon
   // records, so every deleted folder (plus any deleted descendant folders) needs
   // its icon record removed explicitly or it leaks forever. Fire-and-forget —

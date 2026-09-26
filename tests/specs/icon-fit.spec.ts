@@ -1,5 +1,5 @@
 /**
- * Icon upload / override — spec after fit control removal (issue #29).
+ * Icon upload / override — spec after fit control removal.
  *
  * WHY: The contain/cover fit control was removed because it had no visible
  * effect — icons are baked into a fixed 160px canvas at upload time, and most

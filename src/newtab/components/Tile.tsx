@@ -5,7 +5,7 @@ import { fetchFolderIcon, folderIconCache, subscribeFolderIconCache } from '../l
 import { Favicon } from './Favicon';
 import { Ico } from './Ico';
 
-// Opt-in per-folder custom icon (issue #44). Returns null (default rendering:
+// Opt-in per-folder custom icon. Returns null (default rendering:
 // favicon collage in grid, folder glyph in list) unless the user has set one.
 function useFolderCustomIcon(folderId: string): string | null {
   const [src, setSrc] = useState<string | null>(() => folderIconCache.get(folderId) ?? null);

@@ -216,7 +216,7 @@ export async function clearWorkspaces(page: Page): Promise<void> {
  * the dialog before seeding their own deterministic workspace set.
  *
  * WHY: clicking Skip on a fresh install creates a default "Favorites"
- * workspace (PR #29 feature — correct product behaviour). Tests that seed
+ * workspace (correct product behaviour). Tests that seed
  * their own workspaces afterward would otherwise find an extra workspace in
  * storage that inflates tab counts and breaks ordering assertions.
  *

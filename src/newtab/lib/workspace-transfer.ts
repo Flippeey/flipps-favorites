@@ -35,7 +35,7 @@ export const WORKSPACE_SCHEMA = 'flipps-workspace-transfer' as const;
 // v3: per-workspace view/sort. v2 (and earlier) exports stored folderMode/
 // bookmarkSortMode/bookmarkSortDirection as GLOBAL settings; on import they are
 // upcast onto each WorkspaceRecord that lacks them (see legacyViewSortFromSettings).
-// v4: folder custom icons (issue #44). v3-and-earlier exports simply lack the
+// v4: folder custom icons. v3-and-earlier exports simply lack the
 // `folderIcons` array — treated as empty on import (legacyUpcastFolderIcons).
 export const WORKSPACE_SCHEMA_VERSION = 4;
 

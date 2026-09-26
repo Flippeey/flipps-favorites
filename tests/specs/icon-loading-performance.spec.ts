@@ -3,7 +3,7 @@
  * icons are already cached in IDB render real <img> favicons within a strict
  * 500 ms budget of the app becoming interactive (.ff-app visible).
  *
- * Complements icon-prefetch.spec.ts (task #32) which validates the end-to-end
+ * Complements icon-prefetch.spec.ts, which validates the end-to-end
  * prefetch pipeline with a generous 10 s budget. This spec isolates the
  * render-swap latency by pre-warming the icon cache so no network resolution
  * is involved — the measurement is purely "cached icon in IDB → visible <img>
@@ -156,7 +156,7 @@ test.describe('icon loading performance', () => {
     const elapsed = Date.now() - t0;
 
     // The budget assertion: all icons must have rendered within the ceiling.
-    // This is the regression guard — if eager prefetch (task #32) regresses
+    // This is the regression guard — if eager prefetch regresses
     // or the Favicon component adds unnecessary async hops, this fails.
     expect(
       elapsed,

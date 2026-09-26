@@ -1,5 +1,5 @@
 /**
- * Task #34 — Icon visual consistency across workspace switches.
+ * Icon visual consistency across workspace switches.
  *
  * WHY this test matters: after switching workspaces multiple times, stale
  * interaction state (drag-source attributes, selection styling) can leak
@@ -8,7 +8,7 @@
  * CSS filters (grayscale, desaturation), making perfectly healthy icons
  * look muted or broken.
  *
- * This spec complements drag-state-cleanup.spec.ts (bug #35) by focusing
+ * This spec complements drag-state-cleanup.spec.ts by focusing
  * on the favicon *image* elements specifically: it asserts that no
  * `.ff-favicon img` carries an unexpected `filter: grayscale()` or
  * reduced `opacity`, and that no non-selected tile retains
@@ -74,8 +74,8 @@ test('favicon images have no muted styling after multiple workspace switches', a
 
     // --- Invariant 3: no favicon img has reduced opacity ---
     // Favicon images should render at full opacity. A value below 1 on the
-    // img element itself (as opposed to the parent tile, which #35 covers)
-    // indicates a leaked interaction style.
+    // img element itself (as opposed to the parent tile, which
+    // drag-state-cleanup.spec.ts covers) indicates a leaked interaction style.
     const mutedFaviconImages = await newtabPage.evaluate(() => {
       const imgs = document.querySelectorAll<HTMLElement>('.ff-canvas .ff-favicon img');
       let count = 0;
