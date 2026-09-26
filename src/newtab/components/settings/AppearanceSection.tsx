@@ -7,6 +7,7 @@ import type {
   ThemeMode,
   WorkspaceRecord,
 } from '@/shared/messages';
+import { resolveThemeAttr } from '@/newtab/lib/accent';
 import { useBlobUrl } from '@/newtab/lib/useBlobUrl';
 import { Ico } from '../Ico';
 import {
@@ -43,7 +44,7 @@ export function AppearanceSection({ workspace, workspaceWallpaper, onPatch, onSe
             </div>
             <Toggle
               on={themeMode === 'system'}
-              onChange={(v) => onPatch({ themeMode: (v ? 'system' : 'dark') as ThemeMode })}
+              onChange={(v) => onPatch({ themeMode: v ? 'system' : resolveThemeAttr(themeMode) })}
             />
           </div>
         </div>

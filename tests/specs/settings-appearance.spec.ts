@@ -56,6 +56,35 @@ test.describe('settings-appearance: theme', () => {
     await expect(toggleRow.locator('.ff-toggle')).toHaveAttribute('aria-checked', 'true');
   });
 
+  test('turning system mode off keeps the currently shown theme', async ({ newtabPage }) => {
+    // The OS reports light. While system mode is on the app shows light. Turning
+    // system mode back off must keep showing light — not silently fall back to
+    // whatever hardcoded mode the toggle used to reset to.
+    await newtabPage.emulateMedia({ colorScheme: 'light' });
+    await openAppearance(newtabPage);
+
+    const toggleRow = newtabPage.locator('.ff-row', { hasText: 'Use system preference' });
+    await toggleRow.locator('.ff-toggle').click();
+    await expect.poll(() =>
+      newtabPage.evaluate(() => document.documentElement.dataset.theme),
+    ).toBe('light');
+
+    await toggleRow.locator('.ff-toggle').click();
+    await expect.poll(() =>
+      newtabPage.evaluate(() => document.documentElement.dataset.theme),
+    ).toBe('light');
+    await expect(newtabPage.locator('.ff-themecard--light')).toHaveAttribute('data-active', 'true');
+
+    await reloadNewtab(newtabPage);
+    await expect.poll(() =>
+      newtabPage.evaluate(() => document.documentElement.dataset.theme),
+    ).toBe('light');
+    // The drawer itself doesn't survive a reload (it's transient UI state) —
+    // reopen it to confirm the persisted mode still shows Light as active.
+    await openAppearance(newtabPage);
+    await expect(newtabPage.locator('.ff-themecard--light')).toHaveAttribute('data-active', 'true');
+  });
+
   test('theme choice persists after reload', async ({ newtabPage }) => {
     await openAppearance(newtabPage);
     await newtabPage.locator('.ff-themecard--light').click();

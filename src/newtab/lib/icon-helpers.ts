@@ -4,7 +4,13 @@ import { ALLOWED_BOOKMARK_SCHEMES } from '@/shared/constants';
 export function isValidBookmarkUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
-    return (ALLOWED_BOOKMARK_SCHEMES as readonly string[]).includes(parsed.protocol);
+    if (!(ALLOWED_BOOKMARK_SCHEMES as readonly string[]).includes(parsed.protocol)) return false;
+    // http(s) URLs need a real host — "www." alone (an unedited default with no
+    // registrable domain typed after it) must not pass as a bookmarkable URL.
+    if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && (parsed.hostname === '' || parsed.hostname === 'www.')) {
+      return false;
+    }
+    return true;
   } catch {
     return false;
   }
