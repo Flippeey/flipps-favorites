@@ -478,12 +478,24 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     await refreshTree();
   }, [moveToState, tree, refreshTree, pushToast, setSelection]);
 
-  const openFolderBookmarksInTabs = useCallback((folder: BookmarkNode) => {
+  const openFolderBookmarksInTabs = useCallback(async (folder: BookmarkNode) => {
     const urls = (folder.children ?? [])
       .filter((c): c is BookmarkNode & { url: string } => !!c.url)
       .map(c => normalizeBookmarkUrl(c.url));
-    for (const url of urls) openTab(url).catch(() => { /* ignore */ });
-  }, []);
+    // Open sequentially (not Promise.all) so tab order matches bookmark order;
+    // count failures instead of swallowing them so the user learns a tab never opened.
+    let failed = 0;
+    for (const url of urls) {
+      try {
+        await openTab(url);
+      } catch {
+        failed += 1;
+      }
+    }
+    if (failed > 0) {
+      pushToast({ kind: 'error', message: `Couldn’t open ${failed} of ${urls.length} tabs.` });
+    }
+  }, [pushToast]);
 
   // "Open all in new tabs" (folder context menu) — direct children only (no
   // recursion into subfolders). Above the threshold, require confirmation so
