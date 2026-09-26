@@ -59,9 +59,12 @@ jobs:
           # first push on a new branch.
           fetch-depth: 0
 
+      # This checks out the PR head merged into base, which is not guaranteed to contain
+      # .nvmrc for a PR opened before it landed on main (e.g. a concurrent dependabot PR) -
+      # so the version is pinned literally here rather than read from the file.
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       # Gate rule: an evidence-carrying PR is one that has a spec staged for it at

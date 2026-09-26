@@ -23,3 +23,8 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+    ignore:
+      # v2.0.1 ships no built index.cjs (upstream broken release) and fails the
+      # publish job at start; pinned to the last working build (v2.0.0) instead.
+      - dependency-name: wdzeng/chrome-extension
+        versions: ["2.0.1"]
