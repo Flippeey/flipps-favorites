@@ -155,7 +155,9 @@ export async function launchChromeWithExtension(opts: ChromeLaunchOptions = {}):
     headless: true,
     pipe: true,
     enableExtensions: [chromeExtPath],
-    args: ['--no-first-run', '--disable-default-apps', ...(opts.extraArgs ?? [])],
+    // Same as Playwright's default (chromiumSandbox: false): Ubuntu 24.04 CI
+    // runners block the unprivileged user namespaces Chromium's sandbox needs.
+    args: ['--no-sandbox', '--no-first-run', '--disable-default-apps', ...(opts.extraArgs ?? [])],
   });
   const worker = await browser.waitForTarget(
     (target) => target.type() === 'service_worker' && target.url().startsWith('chrome-extension://'),
