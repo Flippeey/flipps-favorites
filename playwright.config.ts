@@ -16,6 +16,9 @@ export default defineConfig({
   // race from async sync flush under parallel reseed load. Retries: 0.
   retries: 0,
   workers: process.env.CI ? 2 : 3,
+  // Keep a trace for any failure so a rare intermittent E2E failure is
+  // diagnosable from the CI report artifact without needing to reproduce it live.
+  use: { trace: 'retain-on-failure' },
   reporter: process.env.CI
     ? [
         ['github'],
