@@ -6,7 +6,7 @@ React 19 SPA in newtab; vanilla TS service worker.
 ## Rules
 
 - Keep working files and tests in `tests/` or `docs/` — not the repo root.
-- After every code change, run `npm run build` — typecheck runs automatically via hook. Both Chrome and Firefox builds must pass.
+- After every code change, run `npm run build` and `npm run typecheck`. Both Chrome and Firefox builds must pass.
 - Cross-context calls go through the message pipeline (`shared/messages.ts` → `lib/messaging.ts` → `service-worker.ts`). Use `extensionApi` from `shared/browser.ts` for any browser API — never raw `chrome.*` / `browser.*`.
 - Strict TS: `unknown` + narrowing at boundaries, never `any`. Treat React state as immutable (`{ ...prev }` / `new Set(prev.ids)`).
 - Prefer JSX text children for rendering (React escapes). Avoid `innerHTML`.
@@ -36,11 +36,12 @@ React 19 SPA in newtab; vanilla TS service worker.
 ```bash
 npm run build            # Both targets → dist/{chrome,firefox}
 npm run build:chrome     # / build:firefox — single target
-npm run typecheck        # tsc --noEmit
+npm run typecheck        # tsc --noEmit (app) + tsc -p tsconfig.test.json --noEmit (tests)
 npm run test:unit        # Vitest unit tests (fast, no browser)
-npm test                 # Playwright chrome project — needs dist/chrome-test + dist/firefox fresh; `npm run build` alone is NOT enough (global-setup only checks, it does NOT build)
-npm run test:firefox     # Firefox project (icons only) — same prerequisite: global-setup checks both paths regardless of project
+npm test                 # Playwright, chrome project only, headless — needs dist/chrome-test + dist/firefox fresh; `npm run build` alone is NOT enough (global-setup only checks, it does NOT build)
+npm run test:firefox     # Firefox project (icons only) — headed (Playwright Firefox can't load extensions headless); CI runs it under xvfb, run it yourself only when debugging icon code
 npm run test:build       # build + test (use this to avoid testing a stale build)
+npm run verify           # One command, all headless: typecheck -> test:unit -> build -> build:chrome:test -> test (chrome) -> test:firefox:e2e; stops on first failure
 npm run evidence         # Evidence specs — UI-feature screenshots for PRs (separate runner, not part of npm test)
 ```
 

@@ -10,7 +10,7 @@
     "build:firefox": "vite build --mode firefox --outDir dist/firefox && node scripts/write-manifest.mjs firefox dist/firefox",
     "build:chrome:test": "vite build --mode chrome-test --outDir dist/chrome-test && node scripts/write-manifest.mjs chrome dist/chrome-test",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "test": "playwright test",
+    "test": "playwright test --project=chrome",
     "test:firefox": "playwright test --project=firefox",
     "test:chrome": "playwright test --project=chrome",
     "test:ui": "playwright test --ui",
@@ -33,7 +33,8 @@
     "test:firefox:e2e": "vitest run -c tests/firefox-e2e/vitest.config.ts",
     "test:firefox:e2e:build": "npm run build:firefox && npm run test:firefox:e2e",
     "test:all": "npm run build && npm run build:chrome:test && npm test && npm run test:firefox:e2e",
-    "evidence": "npm run build:chrome:test && playwright test -c playwright.evidence.config.ts --pass-with-no-tests"
+    "evidence": "npm run build:chrome:test && playwright test -c playwright.evidence.config.ts --pass-with-no-tests",
+    "verify": "npm run typecheck && npm run test:unit && npm run build && npm run build:chrome:test && npm test && npm run test:firefox:e2e"
   },
   "devDependencies": {
     "@estruyf/github-actions-reporter": "^1.12.0",
