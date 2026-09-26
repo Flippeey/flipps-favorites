@@ -538,6 +538,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     setConfirmDeleteWorkspace,
     onDeleteBookmark: handleDeleteBookmark,
     onCreateFromFolderResult: handleCreateFromFolderResult,
+    pushToast,
   });
 
   const searchIndex = useMemo(() => buildSearchIndex(tree, workspaces), [tree, workspaces]);
