@@ -37,6 +37,15 @@ let newtabPage = null;
 let extensionOrigin = null;
 let profileDir = null;
 
+// Batch mode's exit code: set by every failure path so `--run` surfaces a
+// failing command as a non-zero process exit instead of a silent, ignorable
+// log line.
+let hadError = false;
+function fail(...args) {
+  hadError = true;
+  console.log(...args);
+}
+
 // Lazily load the project's own seed helpers. We reuse the SAME seed data the
 // promo scripts + Playwright fixtures use (single source of truth in
 // src/shared/seed-data.ts) rather than duplicating it. Node ≥22.18 strips TS
@@ -63,13 +72,13 @@ const COMMANDS = {
     // Preflight: extension must be built. Fail loud with the real cause.
     const manifestPath = join(chromeExtPath, 'manifest.json');
     if (!fs.existsSync(manifestPath)) {
-      console.log(`ERROR: no extension build at ${chromeExtPath}`);
+      fail(`ERROR: no extension build at ${chromeExtPath}`);
       console.log('  manifest.json missing — run `npm run build:chrome:test` first.');
       return;
     }
 
     try {
-      profileDir = await mkdtemp(join(tmpdir(), 'ff-ext-'));
+      profileDir = await mkdtemp(join(tmpdir(), 'cr-ext-'));
       console.log('launching Chrome with extension...');
       context = await chromium.launchPersistentContext(profileDir, {
         // Headless mode is driven by the `--headless=new` arg below, not this
@@ -95,14 +104,14 @@ const COMMANDS = {
       extensionOrigin = `chrome-extension://${extId}`;
       console.log(`extension loaded: ${extensionOrigin}`);
     } catch (e) {
-      console.log('ERROR launching:', e.message);
+      fail('ERROR launching:', e.message);
       return;
     }
   },
 
   async navigate() {
-    if (!context) return console.log('ERROR: launch first');
-    if (!extensionOrigin) return console.log('ERROR: extension origin not set');
+    if (!context) return fail('ERROR: launch first');
+    if (!extensionOrigin) return fail('ERROR: extension origin not set');
 
     try {
       if (newtabPage) await newtabPage.close();
@@ -113,7 +122,11 @@ const COMMANDS = {
       await newtabPage.waitForSelector('.ff-app', { timeout: 15_000 });
       console.log('newtab page loaded');
     } catch (e) {
-      console.log('ERROR navigating:', e.message);
+      // Leave no half-opened page behind — later commands must hit the
+      // "navigate first" guard rather than act on a blank/errored page.
+      await newtabPage?.close().catch(() => {});
+      newtabPage = null;
+      fail('ERROR navigating:', e.message);
     }
   },
 
@@ -124,7 +137,7 @@ const COMMANDS = {
   // Rich 5-workspace world (Work/Personal/AI/Design/Gaming) + dock, from the
   // promo seed data. Best default for exercising a real, populated UI.
   async 'seed-promo'() {
-    if (!newtabPage) return console.log('ERROR: navigate first');
+    if (!newtabPage) return fail('ERROR: navigate first');
     try {
       const { lib } = await loadHelpers();
       await lib.skipOnboarding(newtabPage);
@@ -134,14 +147,14 @@ const COMMANDS = {
       await newtabPage.waitForSelector('.ff-app', { timeout: 15_000 });
       console.log('seeded promo world (Work active; Personal/AI/Design/Gaming) + dock');
     } catch (e) {
-      console.log('ERROR seeding promo:', e.message);
+      fail('ERROR seeding promo:', e.message);
     }
   },
 
   // Lean single workspace: N flat bookmarks (default 6). Args: [count].
   // Predictable titles "BM 01"… for deterministic assertions.
   async 'seed-minimal'(arg) {
-    if (!newtabPage) return console.log('ERROR: navigate first');
+    if (!newtabPage) return fail('ERROR: navigate first');
     try {
       const count = parseInt(arg, 10) > 0 ? parseInt(arg, 10) : 6;
       const { lib, DEFAULT_WORKSPACE_SETTINGS } = await loadHelpers();
@@ -168,13 +181,13 @@ const COMMANDS = {
       await newtabPage.waitForSelector('.ff-app', { timeout: 15_000 });
       console.log(`seeded minimal world: ${count} bookmarks`);
     } catch (e) {
-      console.log('ERROR seeding minimal:', e.message);
+      fail('ERROR seeding minimal:', e.message);
     }
   },
 
   // Wipe all bookmarks + workspace records (back to empty).
   async clear() {
-    if (!newtabPage) return console.log('ERROR: navigate first');
+    if (!newtabPage) return fail('ERROR: navigate first');
     try {
       const { lib } = await loadHelpers();
       await lib.clearAllBookmarks(newtabPage);
@@ -187,13 +200,13 @@ const COMMANDS = {
       });
       console.log('cleared all bookmarks + workspaces (reload to see)');
     } catch (e) {
-      console.log('ERROR clearing:', e.message);
+      fail('ERROR clearing:', e.message);
     }
   },
 
   // Dismiss onboarding without seeding (writes completed state + reloads).
   async 'skip-onboarding'() {
-    if (!newtabPage) return console.log('ERROR: navigate first');
+    if (!newtabPage) return fail('ERROR: navigate first');
     try {
       const { lib } = await loadHelpers();
       await lib.skipOnboarding(newtabPage);
@@ -201,12 +214,12 @@ const COMMANDS = {
       await newtabPage.waitForSelector('.ff-app', { timeout: 15_000 });
       console.log('onboarding skipped');
     } catch (e) {
-      console.log('ERROR skipping onboarding:', e.message);
+      fail('ERROR skipping onboarding:', e.message);
     }
   },
 
   async screenshot(name) {
-    if (!newtabPage) return console.log('ERROR: navigate first');
+    if (!newtabPage) return fail('ERROR: navigate first');
 
     try {
       const filename = (name || `ss-${Date.now()}`) + '.png';
@@ -214,12 +227,12 @@ const COMMANDS = {
       await newtabPage.screenshot({ path: filepath });
       console.log(`screenshot: ${filepath}`);
     } catch (e) {
-      console.log('ERROR taking screenshot:', e.message);
+      fail('ERROR taking screenshot:', e.message);
     }
   },
 
   async click(selector) {
-    if (!newtabPage) return console.log('ERROR: navigate first');
+    if (!newtabPage) return fail('ERROR: navigate first');
 
     try {
       const result = await newtabPage.evaluate(sel => {
@@ -230,12 +243,12 @@ const COMMANDS = {
       }, selector);
       console.log(`click "${selector}" → ${result}`);
     } catch (e) {
-      console.log('ERROR clicking:', e.message);
+      fail('ERROR clicking:', e.message);
     }
   },
 
   async 'click-text'(text) {
-    if (!newtabPage) return console.log('ERROR: navigate first');
+    if (!newtabPage) return fail('ERROR: navigate first');
 
     try {
       const result = await newtabPage.evaluate(t => {
@@ -248,46 +261,46 @@ const COMMANDS = {
       }, text);
       console.log(`click-text "${text}" → ${result}`);
     } catch (e) {
-      console.log('ERROR clicking text:', e.message);
+      fail('ERROR clicking text:', e.message);
     }
   },
 
   async fill(selector, text) {
-    if (!newtabPage) return console.log('ERROR: navigate first');
+    if (!newtabPage) return fail('ERROR: navigate first');
 
     try {
       const loc = newtabPage.locator(selector).first();
       await loc.fill(text);
       console.log(`filled "${selector}" with "${text}"`);
     } catch (e) {
-      console.log('ERROR filling:', e.message);
+      fail('ERROR filling:', e.message);
     }
   },
 
   async type(text) {
-    if (!newtabPage) return console.log('ERROR: navigate first');
+    if (!newtabPage) return fail('ERROR: navigate first');
 
     try {
       await newtabPage.keyboard.type(text, { delay: 30 });
       console.log(`typed: ${text}`);
     } catch (e) {
-      console.log('ERROR typing:', e.message);
+      fail('ERROR typing:', e.message);
     }
   },
 
   async press(key) {
-    if (!newtabPage) return console.log('ERROR: navigate first');
+    if (!newtabPage) return fail('ERROR: navigate first');
 
     try {
       await newtabPage.keyboard.press(key);
       console.log(`pressed: ${key}`);
     } catch (e) {
-      console.log('ERROR pressing key:', e.message);
+      fail('ERROR pressing key:', e.message);
     }
   },
 
   async wait(selector) {
-    if (!newtabPage) return console.log('ERROR: navigate first');
+    if (!newtabPage) return fail('ERROR: navigate first');
 
     try {
       await newtabPage.waitForSelector(selector, { timeout: 10_000 });
@@ -298,18 +311,18 @@ const COMMANDS = {
   },
 
   async eval(expression) {
-    if (!newtabPage) return console.log('ERROR: navigate first');
+    if (!newtabPage) return fail('ERROR: navigate first');
 
     try {
       const result = await newtabPage.evaluate(expression);
       console.log(JSON.stringify(result));
     } catch (e) {
-      console.log('ERROR:', e.message);
+      fail('ERROR:', e.message);
     }
   },
 
   async text(selector) {
-    if (!newtabPage) return console.log('ERROR: navigate first');
+    if (!newtabPage) return fail('ERROR: navigate first');
 
     try {
       const text = await newtabPage.evaluate(sel => {
@@ -318,12 +331,12 @@ const COMMANDS = {
       }, selector || null);
       console.log(text);
     } catch (e) {
-      console.log('ERROR:', e.message);
+      fail('ERROR:', e.message);
     }
   },
 
   async 'console-errors'() {
-    if (!newtabPage) return console.log('ERROR: navigate first');
+    if (!newtabPage) return fail('ERROR: navigate first');
 
     try {
       const errors = [];
@@ -335,17 +348,17 @@ const COMMANDS = {
       console.log(`console errors: ${errors.length}`);
       errors.forEach(e => console.log(`  ${e}`));
     } catch (e) {
-      console.log('ERROR:', e.message);
+      fail('ERROR:', e.message);
     }
   },
 
   async url() {
-    if (!newtabPage) return console.log('ERROR: navigate first');
+    if (!newtabPage) return fail('ERROR: navigate first');
     console.log(newtabPage.url());
   },
 
   async 'network-errors'() {
-    if (!newtabPage) return console.log('ERROR: navigate first');
+    if (!newtabPage) return fail('ERROR: navigate first');
 
     try {
       const failures = [];
@@ -359,18 +372,18 @@ const COMMANDS = {
       console.log(`network failures: ${failures.length}`);
       failures.forEach(f => console.log(`  ${f}`));
     } catch (e) {
-      console.log('ERROR:', e.message);
+      fail('ERROR:', e.message);
     }
   },
 
   async reload() {
-    if (!newtabPage) return console.log('ERROR: navigate first');
+    if (!newtabPage) return fail('ERROR: navigate first');
 
     try {
       await newtabPage.reload();
       console.log('page reloaded');
     } catch (e) {
-      console.log('ERROR reloading:', e.message);
+      fail('ERROR reloading:', e.message);
     }
   },
 
@@ -379,7 +392,7 @@ const COMMANDS = {
     if (context) await context.close().catch(() => {});
     if (profileDir) await rm(profileDir, { recursive: true, force: true }).catch(() => {});
     console.log('quit');
-    process.exit(0);
+    process.exit(hadError ? 1 : 0);
   },
 
   help() {
@@ -396,7 +409,7 @@ const runIdx = process.argv.indexOf('--run');
 if (runIdx !== -1) {
   const scriptPath = process.argv[runIdx + 1];
   if (!scriptPath || !fs.existsSync(scriptPath)) {
-    console.log(`ERROR: --run needs a readable command file (got: ${scriptPath})`);
+    fail(`ERROR: --run needs a readable command file (got: ${scriptPath})`);
     process.exit(1);
   }
   const lines = fs
@@ -408,7 +421,7 @@ if (runIdx !== -1) {
     const [cmd, ...rest] = line.split(/\s+/);
     const fn = COMMANDS[cmd];
     if (!fn) {
-      console.log(`unknown: "${cmd}"`);
+      fail(`unknown: "${cmd}"`);
       continue;
     }
     console.log(`> ${line}`);

@@ -12,7 +12,7 @@ an unpacked extension, then driven at its `chrome-extension://<id>/newtab.html` 
 The driver — [driver.mjs](driver.mjs) (at
 `.claude/skills/run-flipps-favorites/driver.mjs`) —
 launches Chrome with the built `dist/chrome-test` extension loaded (reusing the same
-flags as `tests/fixtures/extension-context.ts`), derives the extension id from its
+flags as `launchChrome()` in `tests/fixtures/launch.ts`), derives the extension id from its
 service worker, opens the newtab page, and exposes click / type / eval / screenshot
 commands. Reuses the already-installed `@playwright/test` — **no new deps**.
 
@@ -74,6 +74,10 @@ EOF
 env -u DISPLAY -u WAYLAND_DISPLAY nice -n 19 node .claude/skills/run-flipps-favorites/driver.mjs --run /tmp/ff-cmds.txt
 ```
 
+`--run` exits non-zero (1) if any command in the file fails (an `ERROR:`
+log line, an unknown command, or an unreadable script file) and 0 when every
+command succeeds — check the exit code in the shell before trusting the output.
+
 Screenshots land in [screenshots/](screenshots/) (i.e.
 `.claude/skills/run-flipps-favorites/screenshots/<name>.png`). Read the PNG back
 to confirm the UI actually rendered.
@@ -119,7 +123,7 @@ data, and reloads:
 These reuse the project's **single source of truth** for seed data
 (`src/shared/seed-data.ts` via `scripts/promo/lib.mjs`, plus
 `DEFAULT_WORKSPACE_SETTINGS` from `tests/fixtures/test-data.ts`) — no duplicated
-fixtures. This relies on Node ≥22.18 stripping TS types on import (you have v22.x).
+fixtures. This relies on Node ≥22.18 stripping TS types on import; the repo pins Node 24 via `.nvmrc`.
 For richer archetype trees (deep-organized, flat-hoarder) see the helpers in
 `tests/fixtures/bookmark-helpers.ts`.
 
@@ -172,8 +176,8 @@ substitute for the test suites.
   it's absent.
 - **Fresh profile = onboarding.** Each launch uses a throwaway temp profile, so you
   always start on the onboarding modal. Click `Skip` (or `click-text Next`) to reach
-  the dashboard. There are no seeded bookmarks — for seeded flows use the Playwright
-  `world` fixture in `tests/`, not this driver.
+  the dashboard, or run `seed-promo` / `seed-minimal` after `navigate` to skip
+  onboarding and populate bookmarks in one step.
 
 ## Troubleshooting
 
