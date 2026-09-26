@@ -11,8 +11,8 @@ import { describe, expect, it } from 'vitest';
 // dispatcher — calling the hook outside a component tree throws. No jsdom /
 // react-test-renderer / @testing-library dependency exists in this repo, and
 // adding one is deliberately avoided (see .claude/testing.md). Extracting
-// the enqueue/dismiss logic into a standalone pure function (mirroring the
-// useOptimisticPatch.ts pattern) would require restructuring useToasts.ts.
+// the enqueue/dismiss logic into a standalone pure function (a common pattern)
+// would require restructuring useToasts.ts.
 //
 // Net: irreducibly DOM/React-runtime-bound under these constraints. Toast
 // enqueue/auto-dismiss/dismiss-with-action behavior is covered instead by
