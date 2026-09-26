@@ -1,6 +1,6 @@
 // Pure structural profiler over a set of selected workspace root folders.
 // Performs a single O(n) walk and returns signals consumed by the persona
-// classifier (Wave 6). All ratios are guarded against division-by-zero;
+// classifier. All ratios are guarded against division-by-zero;
 // an empty or tiny tree returns a zeroed profile with no NaN values.
 
 import type { BookmarkNode } from '@/shared/messages';

@@ -2,16 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 // useSelection (src/newtab/state/useSelection.ts) is a React hook: its
 // selection-transition logic (Ctrl/Cmd toggle, Shift range-select, scope
-// reset) lives inside `useState`/`useCallback`/`useRef` closures, and the
-// hook itself is on this task's read-only file list (t8 handoff: touch only
-// the 3 new test files, hooks stay untouched).
+// reset) lives inside `useState`/`useCallback`/`useRef` closures.
 //
 // Calling a hook outside a component tree throws (no dispatcher) — there is
 // no jsdom / react-test-renderer / @testing-library dependency in this repo,
-// and adding one is explicitly out of scope ("DECIDED: no RTL
-// / no component-testing dep"). Extracting the transition logic into a
-// standalone pure function would require editing useSelection.ts, which is
-// also out of scope here (read-only; a different wave/task owns it).
+// and adding one is deliberately avoided (see .claude/testing.md). Extracting the transition logic into a
+// standalone pure function would require restructuring useSelection.ts.
 //
 // Net: this hook's selection-model transitions (single click clears, Ctrl
 // toggles within scope, Shift range-selects from the last-clicked anchor,

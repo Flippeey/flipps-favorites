@@ -1,12 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-// All 8 hooks in src/newtab/interaction/ were audited for separable pure logic
-// None qualify for a Vitest unit test without either mounting
-// a component (RTL/component-testing dep — explicitly out of scope, "DECIDED:
-// no RTL / no component-testing dep", same constraint t8 hit for state/ hooks)
-// or extracting new pure functions from production code (out of scope for this
-// task — extraction for useDrag.ts belongs to t11, which is running in parallel
-// and already owns that file).
+// All 8 hooks in src/newtab/interaction/ were audited for separable pure logic.
+// None qualify for a Vitest unit test without either mounting a component
+// (the repo deliberately has no RTL / component-testing dependency; see
+// .claude/testing.md) or restructuring the hook to extract new pure functions.
 //
 // Per-hook reasoning:
 //
@@ -31,8 +28,7 @@ import { describe, expect, it } from 'vitest';
 //   inside `useEffect` and captures `canvasEl`/`navItems`/`focusedTileId` from
 //   the hook's own parameters — it is not exported or otherwise callable in
 //   isolation. Extracting the index math into a standalone pure function would
-//   require editing useKeyboardNav.ts, which is out of scope here (read-only
-//   production files per this task's handoff). Covered by Playwright specs
+//   require restructuring useKeyboardNav.ts. Covered by Playwright specs
 //   exercising arrow-key navigation and Delete/Backspace (e.g.
 //   tests/specs/folders.spec.ts, tests/specs/bookmarks.spec.ts).
 //
@@ -60,8 +56,7 @@ import { describe, expect, it } from 'vitest';
 //   a DOM-mutation procedure (deletes dataset attributes), not a pure decision
 //   function — nothing to assert against beyond "did it delete the attribute",
 //   which requires constructing DOM elements without exercising any of the
-//   hook's actual decision logic. This file is out of scope for t9 regardless
-//   (t11 owns useDrag.ts in the same wave). Covered by Playwright specs
+//   hook's actual decision logic. Covered by Playwright specs
 //   exercising drag-drop (tests/specs/dragdrop.spec.ts).
 //
 // - useDragWiring.ts — wires three useDrag instances together; its own
