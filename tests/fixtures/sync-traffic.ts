@@ -82,6 +82,18 @@ export interface TrafficExpectations {
   plaintextMarkers: string[];
 }
 
+/** The JSON each PUT carried, opened with HKDF(secret, "enc"), in arrival order. */
+export async function decryptPushes(calls: SyncStubCall[], pairingCode: string): Promise<unknown[]> {
+  const encKey = await hkdf(decodePairingSecret(pairingCode), 'enc');
+  const pushes: unknown[] = [];
+  for (const call of calls.filter((c) => c.method === 'PUT')) {
+    const plaintext = await openWire(encKey, call.body);
+    if (plaintext === null) throw new Error('A pushed body does not open with this pairing code');
+    pushes.push(JSON.parse(plaintext) as unknown);
+  }
+  return pushes;
+}
+
 /**
  * Returns one line per violation (empty = the captured traffic leaks nothing):
  * - every sync request carries `Bearer <64 lowercase hex>`;
