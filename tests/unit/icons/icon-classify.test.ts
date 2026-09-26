@@ -43,6 +43,13 @@ describe('isCollageTitle / stripHtml', () => {
     expect(isCollageTitle('Acme logo')).toBe(false);
     expect(stripHtml('<b>Hi</b> there')).toBe('Hi there');
   });
+
+  it('never leaves a `<` behind for unterminated or empty tags', () => {
+    const survivorsOfASinglePass = ['<script', 'x<img src=y', '<>'];
+    for (const input of survivorsOfASinglePass) {
+      expect(stripHtml(input)).not.toContain('<');
+    }
+  });
 });
 
 describe('clampFaviconSize', () => {
