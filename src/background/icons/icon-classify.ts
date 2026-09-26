@@ -381,7 +381,17 @@ export function isCollageTitle(title: string): boolean {
 }
 
 export function stripHtml(value: string): string {
-  return value.replace(/<[^>]+>/g, '').trim();
+  // A single replace pass leaves a stray `<` behind for a tag with no
+  // closing `>` (truncated input) and misses zero-width tags like `<>`.
+  // Loop the tag-removal to a fixed point, then drop any leftover `<`
+  // so untrusted text can never smuggle an unclosed tag start through.
+  let previous: string;
+  let current = value;
+  do {
+    previous = current;
+    current = current.replace(/<[^>]*>/g, '');
+  } while (current !== previous);
+  return current.replace(/</g, '').trim();
 }
 
 /**
