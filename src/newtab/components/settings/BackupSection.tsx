@@ -373,8 +373,8 @@ export function BackupSection({ onAfterImport, pushToast, waiting, tree, onWorks
             <div className="ff-row__label">Sync now</div>
             <div className="ff-row__hint">
               Pulls the latest synced data, merges it with what&rsquo;s here, then pushes the result.
-              If the same item changed on two browsers, whichever browser synced last takes over —
-              syncing never deletes anything.
+              When the same item changed on two browsers, the newer change is kept, and deletions
+              carry over.
             </div>
           </div>
           <button

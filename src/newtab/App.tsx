@@ -244,8 +244,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       if (waiting > waitingWorkspaces.length) {
         pushToast({
           kind: 'info',
-          message: `${String(waiting)} ${waiting === 1 ? 'workspace is' : 'workspaces are'} waiting for their bookmarks`,
-          action: { label: 'Choose folders', onClick: () => openAppSettings('backup') },
+          message: `${String(waiting)} synced ${waiting === 1 ? 'workspace needs' : 'workspaces need'} a folder`,
+          action: { label: waiting === 1 ? 'Choose folder' : 'Choose folders', onClick: () => openAppSettings('backup') },
         });
       }
     } catch {
@@ -840,7 +840,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
               </>
             ) : waitingWorkspaces.length > 0 ? (
               <>
-                <span>Your workspaces are waiting for their bookmarks</span>
+                <span>Your synced workspaces need a folder in this browser</span>
                 <button type="button" className="ff-btn ff-btn--ghost" onClick={() => openAppSettings('backup')}>Choose folders</button>
               </>
             ) : (

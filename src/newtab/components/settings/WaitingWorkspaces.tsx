@@ -28,8 +28,8 @@ export function WaitingWorkspaces({ waiting, tree, onChanged, pushToast }: Waiti
   return (
     <div className="ff-card" style={{ marginBottom: 16 }} data-testid="waiting-workspaces">
       <p className="ff-row__hint" style={{ marginTop: 0 }}>
-        {waiting.length === 1 ? '1 synced workspace is' : `${String(waiting.length)} synced workspaces are`} waiting
-        for their bookmarks — import your bookmarks or choose a folder.
+        {waiting.length === 1 ? '1 synced workspace needs' : `${String(waiting.length)} synced workspaces need`} a
+        folder in this browser — import your bookmarks or choose one.
       </p>
       {waiting.map(workspace => (
         <div className="ff-row" key={workspace.id}>
