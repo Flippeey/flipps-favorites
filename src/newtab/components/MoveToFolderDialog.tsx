@@ -13,14 +13,24 @@ export interface MoveToFolderTarget {
 interface MoveToFolderDialogProps {
   tree: BookmarkNode[];
   target: MoveToFolderTarget;
+  // Folder ids that must not be chosen as a destination — the moving folders
+  // themselves and their own descendants (dropping a folder into itself or a
+  // child would orphan it).
+  excludeIds?: Set<string>;
   onClose: () => void;
   onMoveHere: (folder: BookmarkNode) => void;
   onCreateNew: (folder: BookmarkNode) => void;
 }
 
-export function MoveToFolderDialog({ tree, target, onClose, onMoveHere, onCreateNew }: MoveToFolderDialogProps) {
-  const [selectedId, setSelectedId] = useState(target.parentId);
+export function MoveToFolderDialog({ tree, target, excludeIds, onClose, onMoveHere, onCreateNew }: MoveToFolderDialogProps) {
+  // The current folder is a sensible default for "Create new folder in…", but
+  // it must never default to an excluded folder.
+  const [selectedId, setSelectedId] = useState(() =>
+    excludeIds?.has(target.parentId) ? '' : target.parentId,
+  );
   const selectedFolder = findFolder(tree, selectedId);
+  const isSelectionExcluded = excludeIds?.has(selectedId) ?? false;
+  const isSameAsCurrent = selectedId === target.parentId;
   const count = target.ids.length;
 
   return (
@@ -34,14 +44,14 @@ export function MoveToFolderDialog({ tree, target, onClose, onMoveHere, onCreate
     >
       <div className="ff-field">
         <label className="ff-field__label">Destination folder</label>
-        <FolderPicker tree={tree} selectedId={selectedId} onSelect={setSelectedId} />
+        <FolderPicker tree={tree} selectedId={selectedId} onSelect={setSelectedId} excludeIds={excludeIds} />
       </div>
       <div className="ff-dialog__actions">
         <button type="button" className="ff-btn ff-btn--ghost" onClick={onClose}>Cancel</button>
         <button
           type="button"
           className="ff-btn ff-btn--ghost"
-          disabled={!selectedFolder}
+          disabled={!selectedFolder || isSelectionExcluded}
           onClick={() => selectedFolder && onCreateNew(selectedFolder)}
         >
           <Ico name="folderPlus" size={14} /> Create new folder in {selectedFolder?.title ?? '…'}
@@ -49,7 +59,7 @@ export function MoveToFolderDialog({ tree, target, onClose, onMoveHere, onCreate
         <button
           type="button"
           className="ff-btn"
-          disabled={!selectedFolder}
+          disabled={!selectedFolder || isSelectionExcluded || isSameAsCurrent}
           onClick={() => selectedFolder && onMoveHere(selectedFolder)}
         >
           <Ico name="check" size={14} /> Move here

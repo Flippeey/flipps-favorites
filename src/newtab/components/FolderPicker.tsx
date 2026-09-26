@@ -13,9 +13,13 @@ export interface FolderPickerProps {
   // When true (default), the tree opens to the path of the selected folder on
   // mount. Set false for compact contexts that want a collapsed tree.
   autoExpand?: boolean;
+  // Folder ids that must not be chosen as a destination. Rows stay visible
+  // (hiding one would hide its whole subtree) but their select button is
+  // disabled — mirrors FolderMultiPicker's excludeIds.
+  excludeIds?: Set<string>;
 }
 
-export function FolderPicker({ tree, selectedId, onSelect, embedded, autoExpand = true }: FolderPickerProps) {
+export function FolderPicker({ tree, selectedId, onSelect, embedded, autoExpand = true, excludeIds }: FolderPickerProps) {
   // Seed expansion with the path to the selected folder so a deep selection is
   // visible without the user having to drill back down to it.
   const [expanded, setExpanded] = useState<Set<string>>(() =>
@@ -35,6 +39,7 @@ export function FolderPicker({ tree, selectedId, onSelect, embedded, autoExpand 
   return (
     <div style={{ display: 'grid', gap: 4, ...(embedded ? {} : { maxHeight: 240, overflowY: 'auto' }), paddingRight: 2 }}>
       {rows.map(f => {
+        const excluded = excludeIds?.has(f.id) ?? false;
         const active = f.id === selectedId;
         const isOpen = expanded.has(f.id);
         return (
@@ -59,14 +64,16 @@ export function FolderPicker({ tree, selectedId, onSelect, embedded, autoExpand 
             )}
             <button
               type="button"
-              onClick={() => onSelect(f.id)}
+              onClick={() => { if (!excluded) onSelect(f.id); }}
+              disabled={excluded}
+              title={excluded ? 'Part of what you are moving' : undefined}
               className="ff-card"
               data-folder-id={f.id}
               data-folder-title={f.title}
               style={{
                 flex: 1, minWidth: 0,
-                textAlign: 'left', cursor: 'pointer', font: 'inherit',
-                color: 'var(--fg-1)',
+                textAlign: 'left', cursor: excluded ? 'default' : 'pointer', font: 'inherit',
+                color: 'var(--fg-1)', opacity: excluded ? 0.5 : 1,
                 borderColor: active ? 'var(--accent)' : 'var(--line-1)',
                 background: active ? 'color-mix(in oklab, var(--accent) 7%, var(--ink-2))' : 'var(--ink-2)',
                 boxShadow: active ? '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' : 'none',

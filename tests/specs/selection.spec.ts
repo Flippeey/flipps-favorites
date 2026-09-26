@@ -18,7 +18,7 @@
 import { test, expect } from '../fixtures/world.js';
 import { resetStorage, seedMinimal } from '../fixtures/seeding.js';
 import { tileById, tilesInScope } from '../fixtures/selectors.js';
-import { reloadNewtab, patchSettings, patchWorkspace, openContextMenu, clickMenuItem } from '../fixtures/bookmark-helpers.js';
+import { reloadNewtab, patchSettings, patchWorkspace, openContextMenu, clickMenuItem, createSubFolder } from '../fixtures/bookmark-helpers.js';
 import type { Page } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
@@ -303,25 +303,37 @@ test.describe('selection', () => {
   // -------------------------------------------------------------------------
   // WHY: the PRIMARY path for bulk organization is "Move into an existing
   // folder", not "Create new". The picker must let users select a pre-existing
-  // folder and move items into it in one action. User-visible outcome:
-  // selected items leave root and the folder survives (unlike create-new,
-  // where Undo deletes it). The undo-move.spec.ts covers the full move+undo cycle.
+  // folder and actually relocate items into it in one action. User-visible
+  // outcome: selected items leave root and land in that folder, which itself
+  // survives (unlike create-new, where Undo deletes it). The current folder is
+  // only a sane default for "Create new" — picking it back for "Move here"
+  // would be a no-op reorder in disguise, so a genuinely different folder must
+  // be chosen. undo-move.spec.ts covers the full move+undo cycle.
   test('multi-select context menu opens picker for moving into existing folder', async ({ newtabPage }) => {
-    const tiles = tilesInScope(newtabPage, rootFolderId);
+    const otherFolderId = await createSubFolder(newtabPage, rootFolderId, 'Existing Folder');
+    await reloadNewtab(newtabPage);
+
+    // data-item-id and data-item-kind live on the same tile element, so the
+    // kind filter must be part of the same selector — chaining a second
+    // .locator() call would search for a DESCENDANT with that attribute and
+    // never match.
+    const bookmarkTiles = newtabPage.locator(
+      `[data-scope-folder-id="${rootFolderId}"] [data-item-id][data-item-kind="bookmark"]`,
+    );
     const modKey = process.platform === 'darwin' ? 'Meta' : 'Control';
 
-    const id0 = await tiles.nth(0).getAttribute('data-item-id');
-    const id1 = await tiles.nth(1).getAttribute('data-item-id');
+    const id0 = await bookmarkTiles.nth(0).getAttribute('data-item-id');
+    const id1 = await bookmarkTiles.nth(1).getAttribute('data-item-id');
     if (!id0 || !id1) throw new Error('expected bookmark tiles');
 
     // Select first two root bookmarks.
-    await tiles.nth(0).click({ modifiers: [modKey] });
-    await tiles.nth(1).click({ modifiers: [modKey] });
-    await expect(tiles.nth(0)).toHaveAttribute('data-selected', 'true', { timeout: 5_000 });
-    await expect(tiles.nth(1)).toHaveAttribute('data-selected', 'true', { timeout: 5_000 });
+    await bookmarkTiles.nth(0).click({ modifiers: [modKey] });
+    await bookmarkTiles.nth(1).click({ modifiers: [modKey] });
+    await expect(bookmarkTiles.nth(0)).toHaveAttribute('data-selected', 'true', { timeout: 5_000 });
+    await expect(bookmarkTiles.nth(1)).toHaveAttribute('data-selected', 'true', { timeout: 5_000 });
 
     // Right-click to open the context menu.
-    const menu = await openContextMenu(newtabPage, tiles.nth(1));
+    const menu = await openContextMenu(newtabPage, bookmarkTiles.nth(1));
     await clickMenuItem(menu, /Move 2 items to folder/);
 
     // The picker opens (a plain <div>.ff-dialog, not a <form>). It renders the
@@ -329,11 +341,101 @@ test.describe('selection', () => {
     const picker = newtabPage.locator('div.ff-dialog[role="dialog"]');
     await picker.waitFor({ state: 'visible', timeout: 5_000 });
 
-    // The picker must have folder buttons and a "Move here" action (not just "Create new").
-    // This verifies the PRIMARY path UI is correctly wired up.
-    const folderButtons = picker.locator('button[data-folder-id]');
-    await expect(folderButtons.first()).toBeVisible(); // At least one folder option is listed
-    await expect(picker.getByRole('button', { name: /Move here/ })).toBeVisible();
-    await expect(picker.getByRole('button', { name: /Create new folder/ })).toBeVisible();
+    // The new folder sits under the workspace root, which the picker does not
+    // auto-expand (it only expands ANCESTORS of the preselected folder, not
+    // the preselected folder's own children) — expand it to reveal the row.
+    await picker.locator('button[aria-label="Expand Minimal"]').click();
+
+    // Pick the pre-existing folder (not the preselected current folder) and move.
+    await picker.locator(`button[data-folder-id="${otherFolderId}"]`).click();
+    await picker.getByRole('button', { name: /Move here/ }).click();
+    await picker.waitFor({ state: 'hidden', timeout: 5_000 });
+
+    // Both bookmarks actually relocated out of root.
+    await expect(newtabPage.locator(`[data-scope-folder-id="${rootFolderId}"] [data-item-id="${id0}"]`))
+      .toHaveCount(0, { timeout: 8_000 });
+    await expect(newtabPage.locator(`[data-scope-folder-id="${rootFolderId}"] [data-item-id="${id1}"]`))
+      .toHaveCount(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // WHY: dropping a folder into itself or one of its own children would orphan
+  // it from the tree. The picker must disable (not hide — hiding would orphan
+  // the subtree from view) both the selected folder's own row and every
+  // descendant row, so neither is reachable as a destination.
+  test('move picker disables the selected folder and its descendants as destinations', async ({ newtabPage }) => {
+    const movingFolderId = await createSubFolder(newtabPage, rootFolderId, 'Moving Folder');
+    const descendantId = await createSubFolder(newtabPage, movingFolderId, 'Descendant Folder');
+    await reloadNewtab(newtabPage);
+
+    // data-item-id and data-item-kind live on the same tile element (see the
+    // note in the "existing folder" test above), so both filters go in one
+    // selector rather than a chained .locator() call.
+    const bookmarkTile = newtabPage
+      .locator(`[data-scope-folder-id="${rootFolderId}"] [data-item-id][data-item-kind="bookmark"]`)
+      .first();
+    const folderTile = newtabPage.locator(`[data-scope-folder-id="${rootFolderId}"] [data-item-id="${movingFolderId}"]`);
+    const modKey = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+    // Select a bookmark and the folder together. Right-click the BOOKMARK —
+    // a folder target renders its own "folder menu" (Open/Edit/Delete), which
+    // has no "Move N items to folder…" item even when the folder is part of a
+    // multi-selection; only the bookmark branch offers it.
+    await bookmarkTile.click({ modifiers: [modKey] });
+    await folderTile.click({ modifiers: [modKey] });
+    await expect(folderTile).toHaveAttribute('data-selected', 'true', { timeout: 5_000 });
+
+    const menu = await openContextMenu(newtabPage, bookmarkTile);
+    await clickMenuItem(menu, /Move 2 items to folder/);
+
+    const picker = newtabPage.locator('div.ff-dialog[role="dialog"]');
+    await picker.waitFor({ state: 'visible', timeout: 5_000 });
+
+    // The moving folder sits under the workspace root, which the picker does
+    // not auto-expand by default — expand it to reveal the row.
+    await picker.locator('button[aria-label="Expand Minimal"]').click();
+
+    // The moving folder's own row is disabled…
+    await expect(picker.locator(`button[data-folder-id="${movingFolderId}"]`)).toBeDisabled();
+
+    // …and expanding it reveals its descendant, also disabled.
+    await picker.locator('button[aria-label="Expand Moving Folder"]').click();
+    await expect(picker.locator(`button[data-folder-id="${descendantId}"]`)).toBeDisabled();
+  });
+
+  // -------------------------------------------------------------------------
+  // WHY: "Move here" against the folder the items are already sitting in would
+  // be a silent no-op reorder disguised as a move. The preselected current
+  // folder must leave the button disabled until the user actually picks a
+  // different destination.
+  test('move picker disables Move here for the current folder until another is chosen', async ({ newtabPage }) => {
+    const otherFolderId = await createSubFolder(newtabPage, rootFolderId, 'Other Folder');
+    await reloadNewtab(newtabPage);
+
+    const bookmarkTiles = newtabPage.locator(
+      `[data-scope-folder-id="${rootFolderId}"] [data-item-id][data-item-kind="bookmark"]`,
+    );
+    const modKey = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+    await bookmarkTiles.nth(0).click({ modifiers: [modKey] });
+    await bookmarkTiles.nth(1).click({ modifiers: [modKey] });
+    await expect(bookmarkTiles.nth(0)).toHaveAttribute('data-selected', 'true', { timeout: 5_000 });
+
+    const menu = await openContextMenu(newtabPage, bookmarkTiles.nth(1));
+    await clickMenuItem(menu, /Move 2 items to folder/);
+
+    const picker = newtabPage.locator('div.ff-dialog[role="dialog"]');
+    await picker.waitFor({ state: 'visible', timeout: 5_000 });
+
+    // Preselected destination is the current folder — Move here starts disabled.
+    await expect(picker.getByRole('button', { name: /Move here/ })).toBeDisabled();
+
+    // The other folder sits under the workspace root, which the picker does
+    // not auto-expand by default — expand it to reveal the row.
+    await picker.locator('button[aria-label="Expand Minimal"]').click();
+
+    // Picking a different folder enables it.
+    await picker.locator(`button[data-folder-id="${otherFolderId}"]`).click();
+    await expect(picker.getByRole('button', { name: /Move here/ })).toBeEnabled();
   });
 });

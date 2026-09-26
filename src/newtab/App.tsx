@@ -33,7 +33,7 @@ import { effectiveViewSort } from './lib/effective-view-sort';
 import { prefetchAllIcons } from './lib/icon-prefetch';
 import { collectFolderIds, findFolder, findNode, findParentFolder, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 import { captureDeleteSnapshots, captureSubtree, restoreDeleteSnapshots, restoreSubtree } from './lib/subtree-snapshot';
-import { captureMoveSnapshots, moveIdsTracked, restoreMoveSnapshots } from './lib/move-snapshot';
+import { moveIdsTracked, restoreMoveSnapshots } from './lib/move-snapshot';
 import { MAX_WORKSPACES, OPEN_ALL_TABS_CONFIRM_THRESHOLD } from '../shared/constants';
 import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper } from '../shared/storage';
 import { useWorkspaceActions } from './state/useWorkspaceActions';
@@ -434,23 +434,22 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     folder: BookmarkNode,
     removeFolderOnUndo: boolean,
   ) => {
-    // Capture origins before relocating so Undo can replay each item back to
-    // its parent + index.
-    const snapshots = captureMoveSnapshots(tree, moveIds);
-    try {
-      // Sequential to preserve selection order in the destination folder.
-      for (const id of moveIds) await moveBookmark(id, folder.id);
-      setSelection({ ids: new Set(moveIds), scopeFolderId: folder.id });
+    // Tracks per-id success so a mid-batch failure only scopes the Undo/toast
+    // to the ids that actually relocated (see moveIdsTracked) — the ids that
+    // failed are surfaced via a separate error toast rather than silently dropped.
+    const outcome = await moveIdsTracked(tree, moveIds, folder.id, moveBookmark);
+    if (outcome.movedIds.length > 0) {
+      setSelection({ ids: new Set(outcome.movedIds), scopeFolderId: folder.id });
       pushToast({
         kind: 'info',
-        message: `Moved ${moveIds.length} ${moveIds.length === 1 ? 'item' : 'items'} to “${folder.title}”.`,
-        action: snapshots.length > 0
+        message: `Moved ${outcome.movedIds.length} ${outcome.movedIds.length === 1 ? 'item' : 'items'} to “${folder.title}”.`,
+        action: outcome.snapshots.length > 0
           ? {
               label: 'Undo',
               onClick: () => {
                 void (async () => {
                   try {
-                    await restoreMoveSnapshots(snapshots, moveBookmark);
+                    await restoreMoveSnapshots(outcome.snapshots, moveBookmark);
                     if (removeFolderOnUndo) await removeBookmark(folder.id, true);
                     await refreshTree();
                   } catch {
@@ -461,8 +460,18 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             }
           : undefined,
       });
-    } catch {
-      pushToast({ kind: 'error', message: 'Couldn’t move the selected bookmarks.' });
+    } else if (removeFolderOnUndo) {
+      // Nothing moved into the folder created for this action — remove it
+      // rather than leaving an empty folder behind.
+      await removeBookmark(folder.id, true).catch(() => { /* swept later */ });
+    }
+    if (outcome.failedIds.length > 0) {
+      pushToast({
+        kind: 'error',
+        message: outcome.movedIds.length > 0
+          ? `Couldn’t move ${outcome.failedIds.length} of ${moveIds.length} items.`
+          : `Couldn’t move the selected ${moveIds.length === 1 ? 'item' : 'items'}.`,
+      });
     }
     await refreshTree();
   }, [tree, setSelection, pushToast, refreshTree]);
@@ -985,6 +994,11 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
         <MoveToFolderDialog
           tree={tree}
           target={moveToFolderTarget}
+          excludeIds={moveToFolderTarget.ids.reduce((ids, id) => {
+            const node = findNode(tree, id);
+            if (node && isFolder(node)) for (const fid of collectFolderIds(node)) ids.add(fid);
+            return ids;
+          }, new Set<string>())}
           onClose={() => setMoveToFolderTarget(null)}
           onMoveHere={(folder) => {
             const ids = moveToFolderTarget.ids;
