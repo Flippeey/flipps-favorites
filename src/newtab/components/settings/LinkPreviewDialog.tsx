@@ -2,6 +2,11 @@ import { Ico } from '../Ico';
 import { ModalDialog } from '../ModalDialog';
 import { Segmented } from '../settings-controls';
 import type { SyncPreviewSummary, WorkspaceImportMode } from '@/newtab/lib/workspace-transfer';
+import { IS_FIREFOX } from '@/newtab/lib/platform';
+
+// On Chrome, workspaces and the sync secret also ride Chrome account sync, so
+// what changes here reaches the user's other signed-in Chrome devices too.
+const THIS_BROWSER = IS_FIREFOX ? 'this browser' : 'this browser and your other signed-in Chrome devices';
 
 interface LinkPreviewDialogProps {
   // null = the pasted code's namespace is empty (the other browser never pushed).
@@ -46,8 +51,8 @@ export function LinkPreviewDialog({ preview, mode, onModeChange, busy, onConfirm
             <div>
               <div className="ff-row__label">If both browsers have data</div>
               <div className="ff-row__hint">
-                Merge keeps what&rsquo;s here and adds theirs. Replace makes this browser&rsquo;s
-                synced setup an exact copy of theirs — workspaces not in their data are removed.
+                Merge keeps whichever version of each item is newer. Replace makes {THIS_BROWSER} an
+                exact copy of theirs — workspaces not in their data are removed.
               </div>
             </div>
             <Segmented<WorkspaceImportMode>
@@ -59,15 +64,18 @@ export function LinkPreviewDialog({ preview, mode, onModeChange, busy, onConfirm
           <ul className="ff-row__hint" style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4 }} data-testid="link-preview-summary">
             <li>
               {preview.newWorkspaceNames.length > 0
-                ? `New workspaces: ${names(preview.newWorkspaceNames)}.`
+                ? `This browser will get: ${names(preview.newWorkspaceNames)}.`
                 : 'No new workspaces arrive.'}
             </li>
+            {preview.outboundWorkspaceNames.length > 0 && (
+              <li>This browser will add: {names(preview.outboundWorkspaceNames)}.</li>
+            )}
             {preview.updatedWorkspaceNames.length > 0 && (
               <li>Updated by the other browser&rsquo;s copy: {names(preview.updatedWorkspaceNames)}.</li>
             )}
             {preview.removedWorkspaceNames.length > 0 && (
               <li>
-                <strong>Removed</strong> (not in the other browser&rsquo;s data):{' '}
+                <strong>Removed</strong> from {THIS_BROWSER}:{' '}
                 {names(preview.removedWorkspaceNames)}.
               </li>
             )}
@@ -81,7 +89,12 @@ export function LinkPreviewDialog({ preview, mode, onModeChange, busy, onConfirm
                 : '.'}
             </li>
             <li>{preview.bookmarkUsageIncomingCount} usage entr{preview.bookmarkUsageIncomingCount === 1 ? 'y' : 'ies'} arrive.</li>
-            <li>Settings ({mode === 'replace' ? 'reset to defaults, then ' : ''}overlaid with the other browser&rsquo;s values) apply on top of what&rsquo;s here.</li>
+            <li>
+              {mode === 'replace'
+                ? 'Settings are reset to defaults, then set to the other browser’s values.'
+                : 'Settings keep whichever value is newer, one setting at a time.'}
+            </li>
+
           </ul>
           <p className="ff-row__hint" style={{ margin: 0 }}>
             Your bookmarks and folders are never touched by sync — only workspace tabs, settings,

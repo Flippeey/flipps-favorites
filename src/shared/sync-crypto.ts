@@ -1,4 +1,4 @@
-// End-to-end-encryption core for settings sync (#7).
+// End-to-end-encryption core for settings sync.
 //
 // The master secret never leaves the client. Everything the sync server ever
 // sees is: the derived authToken (Bearer header) and opaque AES-GCM

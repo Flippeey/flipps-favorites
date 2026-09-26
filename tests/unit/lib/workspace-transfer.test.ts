@@ -277,11 +277,11 @@ describe('parseWorkspaceFile — forward-compat guard', () => {
     await expect(transfer.parseWorkspaceFile(file)).rejects.toThrow(/newer/i);
   });
 
-  it('rejects a concrete future v5 backup', async () => {
+  it('rejects a concrete future v6 backup with the file-import message', async () => {
     const transfer = await importTransfer();
     const file = makeFile({
       schema: WORKSPACE_SCHEMA,
-      schemaVersion: 5,
+      schemaVersion: 6,
       settings: {},
       workspaces: [baseRecordBody('a')],
       workspaceWallpapers: {},
@@ -290,7 +290,8 @@ describe('parseWorkspaceFile — forward-compat guard', () => {
       bookmarkUsage: [],
     });
 
-    await expect(transfer.parseWorkspaceFile(file)).rejects.toThrow();
+    await expect(transfer.parseWorkspaceFile(file)).rejects.toThrow(/Import file was made by a newer version/);
+    await expect(transfer.parseWorkspaceFile(file)).rejects.toBeInstanceOf(transfer.WorkspaceSchemaTooNewError);
   });
 });
 
@@ -465,8 +466,8 @@ describe('parseWorkspaceFile — oversized data URL caps', () => {
   });
 });
 
-describe('buildWorkspaceExport — schema v4', () => {
-  it('emits schemaVersion 4 and per-record view/sort fields', async () => {
+describe('buildWorkspaceExport — schema v5', () => {
+  it('emits schemaVersion 5 and per-record view/sort fields', async () => {
     // Seed using the per-key layout (workspace:<id>) — the storage refactor
     // stores each workspace record under its own sync key.
     installChromeFake({
@@ -480,7 +481,7 @@ describe('buildWorkspaceExport — schema v4', () => {
 
     const payload = await transfer.buildWorkspaceExport();
 
-    expect(payload.schemaVersion).toBe(4);
+    expect(payload.schemaVersion).toBe(5);
     const exported = payload.workspaces.find((w: WorkspaceRecord) => w.id === 'a');
     expect(exported?.folderMode).toBe('list');
     expect(exported?.bookmarkSortMode).toBe('name');
@@ -733,6 +734,7 @@ describe('buildSyncPreview — link-dialog dry run', () => {
   function previewPayload(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
     return {
       schema: WORKSPACE_SCHEMA,
+      schemaVersion: 5,
       settings: {},
       workspaces: [],
       workspaceWallpapers: {},
@@ -752,7 +754,8 @@ describe('buildSyncPreview — link-dialog dry run', () => {
     const transfer = await importTransfer();
 
     const parsed = transfer.normalizeWorkspaceExportPayload(previewPayload({
-      workspaces: [baseRecordBody('a'), baseRecordBody('b')],
+      // 'a' differs from the stored copy; an identical record is not an update.
+      workspaces: [{ ...baseRecordBody('a'), accentColor: '#112233' }, baseRecordBody('b')],
       iconOverrides: [
         { bookmarkUrl: 'https://x.com/a', dataUrl: 'data:image/png;base64,AAA', fileName: 'a.png', mimeType: 'image/png', updatedAt: 1 },
         { bookmarkUrl: 'https://x.com/a', dataUrl: 'data:image/png;base64,BBB', fileName: 'b.png', mimeType: 'image/png', updatedAt: 2 },
@@ -834,7 +837,8 @@ describe('buildSyncPreview — link-dialog dry run', () => {
     expect(preview.removedWorkspaceNames).toEqual(['Workspace a', 'Workspace b']);
 
     // ...and the confirm must delete exactly that, nothing else.
-    await transfer.applyWorkspaceImport(parsed, 'replace');
+    await transfer.applyWorkspaceImport(parsed, 'replace', 'sync');
+
     const sync = (globalThis as unknown as { chrome: { storage: { sync: StorageAreaFake } } }).chrome.storage.sync;
     const all = await sync.get(null);
     expect(all['workspace:c']).toBeDefined();
@@ -888,5 +892,78 @@ describe('buildSyncPreview — link-dialog dry run', () => {
     const all = await sync.get(null);
     expect(all['workspace:x']).toBeUndefined();
     expect((all['workspace:y'] as WorkspaceRecord).accentColor).toBe('#112233');
+  });
+});
+
+describe('file export and older payloads', () => {
+  it('a backup file carries stamps but no usage, no deletion markers and no per-browser choices', async () => {
+    installChromeFake({
+      syncSeed: {
+        'app-settings': { themeMode: 'dark', settingsUpdatedAt: { themeMode: 42 } },
+        'workspace:a': { ...baseRecordBody('a'), updatedAt: 7 },
+        'workspace-deleted:gone': { kind: 'workspace', key: 'gone', deletedAt: Date.now() },
+        'bookmark-usage-records': { b1: { bookmarkId: 'b1', usedAt: 5 } },
+      },
+      localSeed: {
+        'workspaces-per-key-migrated': true,
+        'browser-local-settings': { activeWorkspaceId: 'a', dockFolderId: '12' },
+      },
+    });
+    const transfer = await importTransfer();
+
+    const payload = await transfer.buildWorkspaceExport();
+
+    expect(payload.settingsUpdatedAt).toEqual({ themeMode: 42 });
+    expect(payload.workspaces[0].updatedAt).toBe(7);
+    expect(payload.bookmarkUsage).toEqual([]);
+    expect(payload).not.toHaveProperty('deletions');
+    expect(payload.settings).not.toHaveProperty('activeWorkspaceId');
+    expect(payload.settings).not.toHaveProperty('dockFolderId');
+  });
+
+  it('reads a v4 payload: no stamps (0), no markers, usage without a bookmark id dropped, legacy folder-icon ids', async () => {
+    const transfer = await importTransfer();
+    const parsed = transfer.normalizeWorkspaceExportPayload({
+      schema: WORKSPACE_SCHEMA,
+      schemaVersion: 4,
+      exportedAt: 1,
+      settings: { themeMode: 'dark' },
+      workspaces: [baseRecordBody('a')],
+      workspaceWallpapers: {},
+      iconOverrides: [],
+      folderIcons: [{ folderId: '12', dataUrl: 'data:image/png;base64,A', mimeType: 'image/png', updatedAt: 3 }],
+      bookmarkUsage: [{ bookmarkId: 'b1', usedAt: 5 }, { url: 'https://x.example/', usedAt: 6 }],
+    });
+
+    expect(parsed.workspaces[0].updatedAt ?? 0).toBe(0);
+    expect(parsed.settingsUpdatedAt ?? {}).toEqual({});
+    expect(parsed.deletions ?? []).toEqual([]);
+    expect(parsed.bookmarkUsage).toEqual([]);
+    expect(parsed.folderIcons[0].syncId).toBe('legacy:12');
+  });
+
+  it('file import ignores per-browser choices carried by an older backup', async () => {
+    installChromeFake({
+      localSeed: {
+        'workspaces-per-key-migrated': true,
+        'browser-local-settings': { activeWorkspaceId: 'mine', dockFolderId: '1' },
+      },
+    });
+    const transfer = await importTransfer();
+    const parsed = transfer.normalizeWorkspaceExportPayload({
+      schema: WORKSPACE_SCHEMA,
+      schemaVersion: 4,
+      settings: { activeWorkspaceId: 'theirs', dockFolderId: '99', showClock: true },
+      workspaces: [],
+      workspaceWallpapers: {},
+      iconOverrides: [],
+      bookmarkUsage: [],
+    });
+
+    for (const mode of ['merge', 'replace'] as const) {
+      const summary = await transfer.applyWorkspaceImport(parsed, mode);
+      expect(summary.settings.activeWorkspaceId).toBe('mine');
+      expect(summary.settings.dockFolderId).toBe('1');
+    }
   });
 });

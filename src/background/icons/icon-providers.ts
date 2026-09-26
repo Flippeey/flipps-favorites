@@ -1,6 +1,6 @@
 import type { FolderIconOverrideRecord, GetIconRequest, IconCacheRecord, IconOverrideRecord, IconSearchCandidate, ResolvedIcon } from '@/shared/messages';
 import { IconFetchError } from '@/shared/messages';
-import { writeIconOverrideRecord, deleteIconCacheRecord, writeFolderIconOverride } from '@/shared/storage';
+import { writeIconOverrideFromUser, deleteIconCacheRecord, writeFolderIconFromUser } from '@/shared/storage';
 import {
   faviconProviderUrl,
   faviconRequestSize,
@@ -484,7 +484,6 @@ export async function downloadAndPersistOverride(
   }
 
   const dataUrl = await blobToDataUrl(blob, mimeType);
-  const now = Date.now();
   const cacheKey = getIconCacheKey(bookmarkUrl);
   const normalizedScope = normalizeOverrideScope(scope);
   const overrideKey = getOverrideKeyForScope(bookmarkUrl, normalizedScope)
@@ -496,17 +495,17 @@ export async function downloadAndPersistOverride(
     dataUrl,
     fileName: fileName || getFileNameFromUrl(imageUrl),
     mimeType,
-    updatedAt: now,
+    updatedAt: 0,
   };
 
-  await writeIconOverrideRecord(record);
+  const stored = await writeIconOverrideFromUser(record);
   await deleteIconCacheRecord(cacheKey);
 
   return {
     cacheKey,
     sourceKind: 'override',
     dataUrl,
-    lastUpdated: now,
+    lastUpdated: stored.updatedAt,
     isFallback: false,
   };
 }
@@ -572,9 +571,9 @@ export async function downloadAndPersistFolderIcon(
     dataUrl,
     fileName: fileName || getFileNameFromUrl(imageUrl),
     mimeType,
-    updatedAt: Date.now(),
+    updatedAt: 0,
   };
 
-  await writeFolderIconOverride(record);
-  return record;
+  return writeFolderIconFromUser(record);
 }
+

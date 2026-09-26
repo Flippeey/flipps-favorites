@@ -31,11 +31,19 @@ export const ALLOWED_BOOKMARK_SCHEMES = ['http:', 'https:', 'chrome:', 'edge:', 
 // to revert to the deferred behaviour if startup-latency regressions appear.
 export const EAGER_ICON_PREFETCH = true;
 
-// Settings-sync server endpoint (#7). Owner-operated Cloudflare Worker + R2;
+// Settings-sync server endpoint. Owner-operated Cloudflare Worker + R2;
 // no API key needed here — auth is the HKDF-derived authToken sent as a
 // Bearer header (see shared/sync-crypto.ts). https://*/* host permission
 // already covers this host, so no manifest change is required.
 export const SYNC_ENDPOINT = 'https://api.flippflix.com/sync';
+
+// Deletion markers live as long as the sync server keeps an idle namespace
+// (90 days without a PUT evicts it); after that nothing can still hold the item.
+export const DELETION_MARKER_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+// Workspace markers ride storage.sync (one ~60 B key each); icon and
+// folder-icon markers share one storage.local key.
+export const MAX_WORKSPACE_DELETION_MARKERS = 50;
+export const MAX_ICON_DELETION_MARKERS = 1000;
 
 // "Open all in new tabs" (folder context menu) asks for confirmation above
 // this count to avoid tab-bombing the browser from a single click.

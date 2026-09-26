@@ -15,10 +15,12 @@ import {
   writeIconOverride,
   writeCachedIcon,
 } from './icon-idb';
-import type { AppSettings, BookmarkSortMode, BookmarkUsageRecord, FolderIconOverrideRecord, IconCacheRecord, IconOverrideRecord, SortDirection, ViewMode, WorkspaceRecord } from './messages';
+import type { AppSettings, BookmarkSortMode, BookmarkUsageRecord, DeletionMarker, FolderIconOverrideRecord, IconCacheRecord, IconOverrideRecord, PerBrowserSettingKey, SettingsStamps, SortDirection, SyncedSettingKey, ViewMode, WorkspaceRecord } from './messages';
+import { PER_BROWSER_SETTING_KEYS } from './messages';
 import type { ArchetypeId } from './organization-templates';
 import { getOverrideLookupKeys } from './icon-scope';
 import { createCachedRecordStore, createCachedValueStore, createPerKeyRecordStore } from './storage-buckets';
+import { legacyFolderIconSyncId, markerId, nextStamp, normalizeDeletionMarker, pruneDeletionMarkers, readStamp, sameValue } from './sync-stamps';
 
 const storageKey = 'app-settings';
 const iconCacheKey = 'icon-cache-records';
@@ -27,12 +29,28 @@ const bookmarkUsageKey = 'bookmark-usage-records';
 const onboardingStateKey = 'onboarding-state';
 const wallpaperKey = 'app-wallpaper';
 
+// The deserialized value still carries any activeWorkspaceId / dockFolderId
+// an older version left in app-settings: readSettings falls back to them
+// until this browser has its own per-browser record. Writes strip them.
 const settingsStore = createCachedValueStore<AppSettings>({
   storageKey,
   area: 'sync-preferred',
   migrateFromLocal: true,
   deserialize(storedValue) {
     return normalizeSettings((storedValue as Partial<AppSettings> | undefined) ?? {});
+  },
+  serialize: withoutPerBrowserSettings,
+});
+
+type PerBrowserSettings = Pick<AppSettings, PerBrowserSettingKey>;
+const perBrowserSettingsKey = 'browser-local-settings';
+
+const perBrowserSettingsStore = createCachedValueStore<PerBrowserSettings | null>({
+  storageKey: perBrowserSettingsKey,
+  area: 'local',
+  deserialize(storedValue) {
+    if (!storedValue || typeof storedValue !== 'object') return null;
+    return pickPerBrowserSettings(storedValue as Partial<AppSettings>);
   },
 });
 
@@ -185,6 +203,7 @@ export function normalizeWorkspaceRecord(value: unknown): WorkspaceRecord | null
 
   return {
     ...(raw as WorkspaceRecord),
+    ...(raw.updatedAt !== undefined ? { updatedAt: readStamp(raw.updatedAt) } : {}),
     folderMode: isViewMode(raw.folderMode) ? raw.folderMode : defaultWorkspaceSettings.folderMode,
     bookmarkSortMode: isBookmarkSortMode(raw.bookmarkSortMode) ? raw.bookmarkSortMode : defaultWorkspaceSettings.bookmarkSortMode,
     bookmarkSortDirection: isSortDirection(raw.bookmarkSortDirection) ? raw.bookmarkSortDirection : defaultWorkspaceSettings.bookmarkSortDirection,
@@ -203,26 +222,79 @@ function isSortDirection(value: unknown): value is SortDirection {
   return value === 'asc' || value === 'desc';
 }
 
+export const syncedSettingKeys = Object.keys(defaultSettings)
+  .filter(key => !(PER_BROWSER_SETTING_KEYS as readonly string[]).includes(key)) as SyncedSettingKey[];
+
 export async function readSettings(): Promise<AppSettings> {
-  return settingsStore.read();
+  const [stored, perBrowser] = await Promise.all([settingsStore.read(), perBrowserSettingsStore.read()]);
+  return perBrowser ? { ...stored, ...perBrowser } : stored;
 }
 
 let writeQueue: Promise<unknown> = Promise.resolve();
 
+function enqueueSettingsWrite<T>(run: () => Promise<T>): Promise<T> {
+  const scheduled = writeQueue.then(run);
+  writeQueue = scheduled.catch(() => undefined);
+  return scheduled;
+}
+
+// Raw writer: stores stamps exactly as given (import and sync pass the
+// incoming ones). Only patchSettingsFromUser stamps.
 export async function writeSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
-  const run = writeQueue.then(() => doWriteSettings(patch));
-  writeQueue = run.catch(() => undefined);
-  return run;
+  return enqueueSettingsWrite(() => doWriteSettings(patch));
+}
+
+// A user edit: every synced key whose value changes gets a fresh stamp.
+export async function patchSettingsFromUser(patch: Partial<AppSettings>): Promise<AppSettings> {
+  return enqueueSettingsWrite(async () => {
+    const current = await readSettings();
+    const next = normalizeSettings({ ...current, ...patch });
+    const stamps: SettingsStamps = { ...current.settingsUpdatedAt };
+    const now = Date.now();
+    for (const key of syncedSettingKeys) {
+      if (key in patch && !sameValue(current[key], next[key])) stamps[key] = nextStamp(stamps[key], now);
+    }
+    return doWriteSettings({ ...patch, settingsUpdatedAt: stamps });
+  });
 }
 
 async function doWriteSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
-  const current = await settingsStore.read();
+  const current = await readSettings();
   const merged = normalizeSettings({ ...current, ...patch });
-  await settingsStore.write(merged);
+  const perBrowser = pickPerBrowserSettings(merged);
+  if (!sameValue(await perBrowserSettingsStore.read(), perBrowser)) {
+    await perBrowserSettingsStore.write(perBrowser);
+  }
+  if (!sameValue(withoutPerBrowserSettings(current), withoutPerBrowserSettings(merged))) {
+    await settingsStore.write(merged);
+  }
   return merged;
 }
 
-function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
+function pickPerBrowserSettings(settings: Partial<AppSettings>): PerBrowserSettings {
+  return {
+    activeWorkspaceId: typeof settings.activeWorkspaceId === 'string' ? settings.activeWorkspaceId : defaultSettings.activeWorkspaceId,
+    dockFolderId: typeof settings.dockFolderId === 'string' ? settings.dockFolderId : defaultSettings.dockFolderId,
+  };
+}
+
+export function withoutPerBrowserSettings(settings: AppSettings): Omit<AppSettings, PerBrowserSettingKey> {
+  const { activeWorkspaceId: _active, dockFolderId: _dock, ...synced } = settings;
+  return synced;
+}
+
+function normalizeSettingsStamps(value: unknown): SettingsStamps {
+  if (!value || typeof value !== 'object') return {};
+  const raw = value as Record<string, unknown>;
+  const stamps: SettingsStamps = {};
+  for (const key of syncedSettingKeys) {
+    const stamp = readStamp(raw[key]);
+    if (stamp > 0) stamps[key] = stamp;
+  }
+  return stamps;
+}
+
+export function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
   return {
     activeWorkspaceId: typeof settings.activeWorkspaceId === 'string' ? settings.activeWorkspaceId : defaultSettings.activeWorkspaceId,
     workspaceOrder: Array.isArray(settings.workspaceOrder) && settings.workspaceOrder.every(id => typeof id === 'string')
@@ -242,6 +314,7 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
       ? settings.folderOpenMode : defaultSettings.folderOpenMode,
     folderCountBadgeMode: settings.folderCountBadgeMode === 'always' || settings.folderCountBadgeMode === 'hover'
       ? settings.folderCountBadgeMode : defaultSettings.folderCountBadgeMode,
+    settingsUpdatedAt: normalizeSettingsStamps(settings.settingsUpdatedAt),
   };
 }
 
@@ -281,6 +354,8 @@ export async function readIconOverrideRecord(bookmarkUrl: string): Promise<IconO
 }
 
 export async function writeIconOverrideRecord(record: IconOverrideRecord): Promise<void> {
+  const existing = await readIconOverride(record.overrideKey);
+  if (existing && sameValue(existing, record)) return;
   await writeIconOverride(record);
 }
 
@@ -298,6 +373,8 @@ export async function readFolderIconOverride(folderId: string): Promise<FolderIc
 }
 
 export async function writeFolderIconOverride(record: FolderIconOverrideRecord): Promise<void> {
+  const existing = await readFolderIconRecord(record.folderId);
+  if (existing && sameValue(existing, record)) return;
   await writeFolderIconRecord(record);
 }
 
@@ -349,16 +426,149 @@ export async function patchWorkspaceRecord(id: string, patch: Partial<WorkspaceR
   return run;
 }
 
-async function doPatchWorkspaceRecord(id: string, patch: Partial<WorkspaceRecord>): Promise<WorkspaceRecord> {
+// A user edit. An empty patch is an explicit touch (a wallpaper lives outside
+// the record but changing it is still an edit of the workspace); a non-empty
+// patch that changes nothing is a no-op and keeps the old stamp.
+export async function patchWorkspaceFromUser(id: string, patch: Partial<WorkspaceRecord>): Promise<WorkspaceRecord> {
+  const { updatedAt: _ignored, ...userPatch } = patch;
+  const previous = workspacePatchQueues.get(id) ?? Promise.resolve();
+  const run = previous.then(() => doPatchWorkspaceRecord(id, userPatch, true));
+  workspacePatchQueues.set(id, run.catch(() => undefined));
+  return run;
+}
+
+async function doPatchWorkspaceRecord(id: string, patch: Partial<WorkspaceRecord>, stamp = false): Promise<WorkspaceRecord> {
   // Re-read fresh INSIDE the critical section (after acquiring the queue slot) so
   // the merge is based on the latest persisted state, not a stale pre-queue snapshot.
   const current = await workspacesStore.readOne(id);
   if (!current) {
     throw new Error(`Workspace ${id} not found`);
   }
-  const updated: WorkspaceRecord = { ...current, ...patch, id };
+  const merged: WorkspaceRecord = { ...current, ...patch, id };
+  if (sameValue(current, merged) && (!stamp || Object.keys(patch).length > 0)) return current;
+  const updated = stamp ? { ...merged, updatedAt: nextStamp(current.updatedAt) } : merged;
   await workspacesStore.writeOne(id, updated);
   return updated;
+}
+
+export async function createWorkspaceFromUser(record: WorkspaceRecord): Promise<WorkspaceRecord> {
+  const stamped: WorkspaceRecord = { ...record, updatedAt: nextStamp(record.updatedAt) };
+  await workspacesStore.writeOne(stamped.id, stamped);
+  return stamped;
+}
+
+export async function deleteWorkspaceFromUser(id: string): Promise<void> {
+  const current = await workspacesStore.readOne(id);
+  await workspacesStore.deleteOne(id);
+  await addDeletionMarkers([{ kind: 'workspace', key: id, deletedAt: nextStamp(current?.updatedAt) }]);
+}
+
+export async function writeIconOverrideFromUser(record: IconOverrideRecord): Promise<IconOverrideRecord> {
+  const [existing, marker] = await Promise.all([
+    readIconOverride(record.overrideKey),
+    readDeletionMarker('iconOverride', record.overrideKey),
+  ]);
+  const previous = Math.max(readStamp(existing?.updatedAt), readStamp(marker?.deletedAt));
+  const stamped: IconOverrideRecord = { ...record, updatedAt: nextStamp(previous) };
+  await writeIconOverrideRecord(stamped);
+  return stamped;
+}
+
+// Removes every override that applies to this URL (any scope), with a marker
+// for each record actually removed.
+export async function deleteIconOverridesForUrlFromUser(bookmarkUrl: string): Promise<void> {
+  const markers: DeletionMarker[] = [];
+  for (const key of getOverrideLookupKeys(bookmarkUrl)) {
+    const existing = await readIconOverride(key);
+    if (!existing) continue;
+    await deleteIconOverride(key);
+    markers.push({ kind: 'iconOverride', key, deletedAt: nextStamp(existing.updatedAt) });
+  }
+  await addDeletionMarkers(markers);
+}
+
+export async function writeFolderIconFromUser(record: FolderIconOverrideRecord): Promise<FolderIconOverrideRecord> {
+  const existing = await readFolderIconRecord(record.folderId);
+  const syncId = existing?.syncId ?? (existing ? legacyFolderIconSyncId(record.folderId) : crypto.randomUUID());
+  const marker = await readDeletionMarker('folderIcon', syncId);
+  const previous = Math.max(readStamp(existing?.updatedAt), readStamp(marker?.deletedAt));
+  const stamped: FolderIconOverrideRecord = { ...record, syncId, updatedAt: nextStamp(previous) };
+  await writeFolderIconOverride(stamped);
+  return stamped;
+}
+
+export async function deleteFolderIconFromUser(folderId: string): Promise<void> {
+  const existing = await readFolderIconRecord(folderId);
+  if (!existing) return;
+  await deleteFolderIconRecord(folderId);
+  await addDeletionMarkers([{
+    kind: 'folderIcon',
+    key: existing.syncId ?? legacyFolderIconSyncId(folderId),
+    deletedAt: nextStamp(existing.updatedAt),
+  }]);
+}
+
+// Deletion markers live beside the records they delete, so any path that
+// carries a record also carries its deletion: workspace markers are
+// sync-preferred per-key records (`workspace-deleted:<id>`, which the
+// `workspace:` store never reads); icon and folder-icon markers share one
+// storage.local key.
+const workspaceMarkerStore = createPerKeyRecordStore<DeletionMarker>({
+  keyPrefix: 'workspace-deleted',
+  area: 'sync-preferred',
+  deserializeRecord: normalizeDeletionMarker,
+});
+
+const iconMarkerStore = createCachedValueStore<DeletionMarker[]>({
+  storageKey: 'sync-deletion-markers',
+  area: 'local',
+  deserialize(storedValue) {
+    if (!Array.isArray(storedValue)) return [];
+    return storedValue.map(normalizeDeletionMarker).filter((m): m is DeletionMarker => m !== null);
+  },
+});
+
+let markerQueue: Promise<unknown> = Promise.resolve();
+
+function enqueueMarkerWrite(run: () => Promise<void>): Promise<void> {
+  const scheduled = markerQueue.then(run);
+  markerQueue = scheduled.catch(() => undefined);
+  return scheduled;
+}
+
+export async function readDeletionMarkers(): Promise<DeletionMarker[]> {
+  const [workspaceMarkers, iconMarkers] = await Promise.all([workspaceMarkerStore.readAll(), iconMarkerStore.read()]);
+  return [...Object.values(workspaceMarkers), ...iconMarkers];
+}
+
+async function readDeletionMarker(kind: DeletionMarker['kind'], key: string): Promise<DeletionMarker | undefined> {
+  const id = markerId(kind, key);
+  return (await readDeletionMarkers()).find(m => markerId(m.kind, m.key) === id);
+}
+
+// Replaces the stored marker set (pruned to retention and caps), writing only
+// what changed: one set (plus one remove for pruned workspace markers) per
+// storage area.
+export async function writeDeletionMarkers(markers: DeletionMarker[], now: number = Date.now()): Promise<void> {
+  await enqueueMarkerWrite(() => doWriteDeletionMarkers(markers, now));
+}
+
+export async function addDeletionMarkers(added: DeletionMarker[]): Promise<void> {
+  if (!added.length) return;
+  await enqueueMarkerWrite(async () => doWriteDeletionMarkers([...(await readDeletionMarkers()), ...added], Date.now()));
+}
+
+async function doWriteDeletionMarkers(markers: DeletionMarker[], now: number): Promise<void> {
+  const next = pruneDeletionMarkers(markers, now);
+  const [storedWorkspace, storedIcons] = await Promise.all([workspaceMarkerStore.readAll(), iconMarkerStore.read()]);
+  const nextWorkspace = Object.fromEntries(next.filter(m => m.kind === 'workspace').map(m => [m.key, m]));
+  const changed = Object.fromEntries(
+    Object.entries(nextWorkspace).filter(([key, marker]) => !sameValue(storedWorkspace[key], marker)),
+  );
+  await workspaceMarkerStore.writeMany(changed);
+  await workspaceMarkerStore.deleteMany(Object.keys(storedWorkspace).filter(key => !(key in nextWorkspace)));
+  const nextIcons = next.filter(m => m.kind !== 'workspace');
+  if (!sameValue(storedIcons, nextIcons)) await iconMarkerStore.write(nextIcons);
 }
 
 // Wallpapers are data URLs too large to cache in memory — bypass CachedValueStore intentionally.
@@ -374,6 +584,7 @@ export async function writeWorkspaceWallpaper(workspaceId: string, dataUrl: stri
   const key = workspaceWallpaperKey(workspaceId);
   const area = extensionApi.storage?.local;
   if (!area?.set) return;
+  if (area.get && (await area.get(key) as Record<string, unknown>)[key] === dataUrl) return;
   await area.set({ [key]: dataUrl });
 }
 
@@ -384,7 +595,7 @@ export async function removeWorkspaceWallpaper(workspaceId: string): Promise<voi
   await area.remove(key);
 }
 
-// Last successful settings-sync completion on THIS browser (#7). Local-only —
+// Last successful settings-sync completion on THIS browser. Local-only —
 // deliberately not in the sync bundle, since "when did I last sync here" is a
 // per-device fact.
 const lastSyncedAtKey = 'sync-last-synced-at';
@@ -673,6 +884,37 @@ async function runWorkspacePerKeyMigration(): Promise<void> {
   }
 
   await localArea.set({ [workspacePerKeyMigrationMarkerKey]: true });
+}
+
+// One-time move of activeWorkspaceId / dockFolderId out of app-settings (which
+// Chrome account sync shares between computers) into this browser's own
+// record. Idempotent: the local record's presence is the done-marker.
+let perBrowserSettingsMovePromise: Promise<void> | null = null;
+
+export async function ensurePerBrowserSettingsMove(): Promise<void> {
+  if (!perBrowserSettingsMovePromise) {
+    perBrowserSettingsMovePromise = runPerBrowserSettingsMove().catch(error => {
+      perBrowserSettingsMovePromise = null;
+      console.warn('Failed to move per-browser settings to local storage.', error);
+    });
+  }
+  await perBrowserSettingsMovePromise;
+}
+
+async function runPerBrowserSettingsMove(): Promise<void> {
+  const localArea = asResolvedArea(extensionApi.storage?.local as MinimalStorageArea | undefined);
+  const area = await resolveSyncPreferredArea();
+  if (!localArea || !area) return;
+  if ((await localArea.get(perBrowserSettingsKey))[perBrowserSettingsKey] !== undefined) return;
+  const rawSettings = asRecord((await area.get(storageKey))[storageKey]);
+  await localArea.set({ [perBrowserSettingsKey]: pickPerBrowserSettings(rawSettings) });
+  perBrowserSettingsStore.clearCache();
+  if (PER_BROWSER_SETTING_KEYS.some(key => key in rawSettings)) {
+    const stripped = { ...rawSettings };
+    for (const key of PER_BROWSER_SETTING_KEYS) delete stripped[key];
+    await area.set({ [storageKey]: stripped });
+    settingsStore.clearCache();
+  }
 }
 
 async function ensureIconOverrideRecordsMigratedToLocal(): Promise<void> {

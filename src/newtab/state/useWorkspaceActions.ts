@@ -122,6 +122,8 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
     setWorkspaceWallpaper(dataUrl);
     try {
       await writeWorkspaceWallpaper(activeWorkspace.id, dataUrl);
+      // A wallpaper change is a workspace edit: stamp it so it syncs.
+      await patchWorkspace(activeWorkspace.id, {});
     } catch {
       // keep optimistic value
     }

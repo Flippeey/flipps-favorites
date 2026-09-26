@@ -86,7 +86,7 @@
   font-size: 13px; color: var(--fg-3); margin: 0 0 var(--s-4);
 }
 
-/* Settings sync (#7) */
+/* Settings sync */
 .ff-sync-pairing {
   display: flex; align-items: center; gap: var(--s-2);
   margin-top: var(--s-3);

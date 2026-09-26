@@ -1,4 +1,5 @@
 import { extensionApi } from './browser';
+import { sameValue } from './sync-stamps';
 
 export type StorageAreaPreference = 'local' | 'sync-preferred';
 type ResolvedStorageAreaName = 'local' | 'sync';
@@ -286,6 +287,7 @@ export function createCachedRecordStore<T>(args: {
         const nextValue = key in records && resolveConflict
           ? resolveConflict(records[key] as T, value)
           : value;
+        if (key in records && sameValue(records[key], nextValue)) return;
         await valueStore.write({
           ...records,
           [key]: nextValue,
@@ -327,7 +329,10 @@ export interface PerKeyRecordStore<T> {
   readAll: () => Promise<Record<string, T>>;
   readOne: (id: string) => Promise<T | null>;
   writeOne: (id: string, value: T) => Promise<void>;
+  // Several records in one storage.set / storage.remove call.
+  writeMany: (records: Record<string, T>) => Promise<void>;
   deleteOne: (id: string) => Promise<void>;
+  deleteMany: (ids: string[]) => Promise<void>;
   /** Remove every key with this prefix from storage (used during migration tests). */
   clearAll: () => Promise<void>;
 }
@@ -408,7 +413,22 @@ export function createPerKeyRecordStore<T>(args: {
 
     async writeOne(id: string, value: T): Promise<void> {
       const { api } = await resolveArea();
+      const stored = await api.get(storageKey(id));
+      if (sameValue(stored[storageKey(id)], value)) return;
       await api.set({ [storageKey(id)]: value });
+    },
+
+    async writeMany(records: Record<string, T>): Promise<void> {
+      const entries = Object.entries(records);
+      if (!entries.length) return;
+      const { api } = await resolveArea();
+      await api.set(Object.fromEntries(entries.map(([id, value]) => [storageKey(id), value])));
+    },
+
+    async deleteMany(ids: string[]): Promise<void> {
+      if (!ids.length) return;
+      const { api } = await resolveArea();
+      if (api.remove) await api.remove(ids.map(storageKey));
     },
 
     async deleteOne(id: string): Promise<void> {

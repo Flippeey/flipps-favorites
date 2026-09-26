@@ -190,8 +190,8 @@ export async function setFolderIconFromUrl(args: {
   return res.icon;
 }
 
-export async function removeFolderIcon(folderId: string): Promise<void> {
-  await send<RemoveFolderIconResponse>({ type: messageTypes.removeFolderIcon, folderId });
+export async function removeFolderIcon(folderId: string, options: { recordDeletion?: boolean } = {}): Promise<void> {
+  await send<RemoveFolderIconResponse>({ type: messageTypes.removeFolderIcon, folderId, ...options });
 }
 
 export async function getBookmarkUsage(): Promise<Record<string, number>> {
@@ -227,17 +227,18 @@ export async function openTab(url: string): Promise<void> {
   await send<OpenTabResponse>({ type: messageTypes.openTab, url });
 }
 
-// Settings sync (#7). `bundle` is the WorkspaceExportPayload from
-// newtab/lib/workspace-transfer.ts's buildWorkspaceExport(); typed as unknown
-// at the message boundary (see messages.ts comment) and narrowed by the caller.
+// Settings sync. `bundle` is the merged WorkspaceExportPayload planned by
+// newtab/lib/workspace-transfer.ts; typed as unknown at the message boundary
+// (see messages.ts comment) and narrowed by the caller.
 export async function syncPush(bundle: unknown): Promise<void> {
   await sendKeepingBackgroundAlive<SyncPushResponse>({ type: messageTypes.syncPush, bundle });
 }
 
 // Returns the decrypted export payload (untyped — caller narrows/validates,
 // same shape parseWorkspaceFile expects) or null when the server has nothing
-// stored yet for this device's pairing (404). Applying it via
-// applyWorkspaceImport(payload, 'merge') is the UI wave's responsibility.
+// stored yet for this device's pairing (404). The caller merges it
+// (sync-now.ts).
+
 export async function syncPull(): Promise<unknown | null> {
   const res = await sendKeepingBackgroundAlive<SyncPullResponse | SyncPullNotFoundResponse>({ type: messageTypes.syncPull });
   return res.found ? res.payload : null;

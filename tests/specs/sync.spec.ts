@@ -53,7 +53,9 @@ test('a pairing code carries workspaces from one Chrome profile to another and b
 
   await openSyncSettings(b.sync);
   await submitPairingCode(b.sync, code);
-  expect(await linkPreviewSummary(b.sync)).toContain(`New workspaces: “${ALPHA.workspaceName}”`);
+  const preview = await linkPreviewSummary(b.sync);
+  expect(preview).toContain(`This browser will get: “${ALPHA.workspaceName}”`);
+  expect(preview).toContain(`This browser will add: “${BETA.workspaceName}”`);
   expect(await confirmLink(b.sync)).toBe('Linked and synced with the other browser.');
   expect(trace().slice(2)).toEqual([['GET', 200, token], ['PUT', 204, token]]);
   const onB = await readWorkspaces(b.sync);

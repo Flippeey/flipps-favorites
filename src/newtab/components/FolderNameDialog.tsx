@@ -153,7 +153,7 @@ export function FolderNameDialog({ tree, target, siblingNames, onClose, onSaved 
     if (!folderId || working) return;
     setWorking(true);
     try {
-      await removeFolderIcon(folderId);
+      await removeFolderIcon(folderId, { recordDeletion: true });
       setPreviewSrc(null);
       invalidateFolderIconCache(folderId);
       setIconStatus({ kind: 'info', message: 'Icon removed.' });

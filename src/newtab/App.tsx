@@ -29,6 +29,8 @@ import { useScrollCollapsed } from './lib/useScrollCollapsed';
 import { normalizeBookmarkUrl } from './lib/url';
 import { resolveDockMode } from './lib/dock-mode';
 import { effectiveViewSort } from './lib/effective-view-sort';
+import { orderWorkspaces, resolveActiveWorkspace } from './lib/workspace-order';
+
 import { prefetchAllIcons } from './lib/icon-prefetch';
 import { collectFolderIds, findFolder, findNode, findParentFolder, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 import { captureDeleteSnapshots, captureSubtree, restoreDeleteSnapshots, restoreSubtree } from './lib/subtree-snapshot';
@@ -61,8 +63,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const { toasts, pushToast, dismissToast } = useToasts();
 
   const activeWorkspace = useMemo(
-    () => workspaces.find(w => w.id === settings.activeWorkspaceId) ?? workspaces[0] ?? null,
-    [workspaces, settings.activeWorkspaceId],
+    () => resolveActiveWorkspace(workspaces, settings.workspaceOrder, settings.activeWorkspaceId),
+    [workspaces, settings.workspaceOrder, settings.activeWorkspaceId],
   );
 
   // View + sort are per-workspace (WorkspaceRecord). Derive the effective values
@@ -72,15 +74,10 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     [activeWorkspace?.folderMode, activeWorkspace?.bookmarkSortMode, activeWorkspace?.bookmarkSortDirection],
   );
 
-  const orderedWorkspaces = useMemo<WorkspaceRecord[]>(() => {
-    const order = settings.workspaceOrder;
-    if (!order || order.length === 0) return workspaces;
-    const map = new Map(workspaces.map(w => [w.id, w]));
-    const sorted = order.map(id => map.get(id)).filter((w): w is WorkspaceRecord => w != null);
-    const inOrder = new Set(order);
-    const rest = workspaces.filter(w => !inOrder.has(w.id));
-    return [...sorted, ...rest];
-  }, [workspaces, settings.workspaceOrder]);
+  const orderedWorkspaces = useMemo<WorkspaceRecord[]>(
+    () => orderWorkspaces(workspaces, settings.workspaceOrder),
+    [workspaces, settings.workspaceOrder],
+  );
 
   const [workspaceWallpaper, setWorkspaceWallpaper] = useState('');
 

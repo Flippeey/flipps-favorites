@@ -242,6 +242,10 @@ export interface SetFolderIconFromUrlResponse {
 export interface RemoveFolderIconRequest {
   type: typeof messageTypes.removeFolderIcon;
   folderId: string;
+  // True when the user removed the icon, so the removal reaches other
+  // browsers. Cleanup after a bookmark-folder delete leaves it unset: a folder
+  // deleted here says nothing about another browser's folders.
+  recordDeletion?: boolean;
 }
 
 export interface RemoveFolderIconResponse {
@@ -312,9 +316,10 @@ export interface OpenTabResponse {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Settings sync (#7). The export bundle carried by SyncPushRequest is the
-// WorkspaceExportPayload built by newtab/lib/workspace-transfer.ts's
-// buildWorkspaceExport() — typed here as `unknown` to avoid a messages.ts ->
+// Settings sync. The bundle carried by SyncPushRequest is the merged
+// WorkspaceExportPayload planned by newtab/lib/workspace-transfer.ts —
+// typed here as `unknown` to avoid a messages.ts ->
+
 // newtab import (messages.ts is shared/background-safe); callers narrow on
 // their own side.
 // ─────────────────────────────────────────────────────────────────────────────

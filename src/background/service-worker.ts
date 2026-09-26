@@ -1,6 +1,6 @@
 import { extensionApi } from '../shared/browser';
 import { IconFetchError, SyncFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetSyncPairingCodeResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type SyncErrorResponse, type SyncPullResponse, type SyncPullNotFoundResponse, type SyncPushResponse, type AdoptSyncSecretResponse, type WebSearchResponse, type WorkspaceRecord } from '../shared/messages';
-import { deleteWorkspace, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, patchWorkspaceRecord, readBookmarkUsageRecords, readFolderIconOverride, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
+import { createWorkspaceFromUser, deleteWorkspaceFromUser, ensurePerBrowserSettingsMove, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, patchSettingsFromUser, patchWorkspaceFromUser, readBookmarkUsageRecords, readFolderIconOverride, readSettings, readWorkspaces, writeBookmarkUsageRecord } from '../shared/storage';
 import { getIcon, invalidateIcon, removeFolderIcon, removeIconOverride, searchIcons, setFolderIcon, setFolderIconFromUrl, setIconOverride, setIconOverrideFromUrl, sweepFolderIcons, sweepGeneratedRecords } from './icons/icon-service';
 import { adoptSyncSecret, getSyncPairingCode, previewPull, syncPull, syncPush } from './sync-client';
 import { performWebSearch } from './search-shim';
@@ -117,13 +117,16 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
   // newtab always messages the SW before that path is reachable.
   await ensureWorkspaceViewSortMigration();
 
+  // One-time, idempotent move of the per-browser settings out of app-settings.
+  await ensurePerBrowserSettingsMove();
+
   switch (message.type) {
     case messageTypes.ping:
       return { ok: true, context: 'background' };
     case messageTypes.getSettings:
       return { settings: await readSettings() };
     case messageTypes.patchSettings:
-      return { settings: await writeSettings(message.patch) };
+      return { settings: await patchSettingsFromUser(message.patch) };
     case messageTypes.openBookmarkManager:
       return openBookmarkManager();
     case messageTypes.getBookmarkTree:
@@ -194,7 +197,7 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
     case messageTypes.setFolderIconFromUrl:
       return { icon: await setFolderIconFromUrl(message.folderId, message.imageUrl, message.fileName, message.fallbackImageUrl) };
     case messageTypes.removeFolderIcon:
-      await removeFolderIcon(message.folderId);
+      await removeFolderIcon(message.folderId, message.recordDeletion === true);
       return { ok: true };
     case messageTypes.getBookmarkUsage: {
       const records = await readBookmarkUsageRecords();
@@ -212,15 +215,15 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
       return { workspaces } satisfies GetWorkspacesResponse;
     }
     case messageTypes.createWorkspace: {
-      await writeWorkspace(message.workspace);
-      return { workspace: message.workspace } satisfies CreateWorkspaceResponse;
+      return { workspace: await createWorkspaceFromUser(message.workspace) } satisfies CreateWorkspaceResponse;
     }
     case messageTypes.patchWorkspace: {
-      const updated = await patchWorkspaceRecord(message.id, message.patch);
+      const updated = await patchWorkspaceFromUser(message.id, message.patch);
       return { workspace: updated } satisfies PatchWorkspaceResponse;
     }
     case messageTypes.deleteWorkspace: {
-      await deleteWorkspace(message.id);
+      await deleteWorkspaceFromUser(message.id);
+
       return { ok: true } satisfies DeleteWorkspaceResponse;
     }
     case messageTypes.openTab: {

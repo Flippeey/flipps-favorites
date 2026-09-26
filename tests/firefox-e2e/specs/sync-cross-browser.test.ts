@@ -67,7 +67,9 @@ describe('settings sync between Chrome and Firefox', () => {
 
     await openSyncSettings(firefox);
     await submitPairingCode(firefox, code);
-    expect(await linkPreviewSummary(firefox)).toContain(`New workspaces: “${FROM_CHROME.workspaceName}”`);
+    const preview = await linkPreviewSummary(firefox);
+    expect(preview).toContain(`This browser will get: “${FROM_CHROME.workspaceName}”`);
+    expect(preview).toContain(`This browser will add: “${FROM_FIREFOX.workspaceName}”`);
     expect(await confirmLink(firefox)).toBe('Linked and synced with the other browser.');
     expect(trace().slice(2)).toEqual([['GET', 200, token], ['PUT', 204, token]]);
     const onFirefox = await readWorkspaces(firefox);

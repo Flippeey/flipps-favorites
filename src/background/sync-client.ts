@@ -1,4 +1,4 @@
-// Settings-sync client core (#7). Background-only: fetch happens here, never
+// Settings-sync client core. Background-only: fetch happens here, never
 // in newtab. Encrypts the export bundle client-side before it ever leaves the
 // browser; decrypts on pull. The server only ever sees the derived authToken
 // and opaque ciphertext bytes.

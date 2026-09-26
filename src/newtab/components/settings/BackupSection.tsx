@@ -15,6 +15,7 @@ import {
   type ParsedWorkspaceImport,
   type SyncPreviewSummary,
   type WorkspaceImportMode,
+  WorkspaceSchemaTooNewError,
 } from '@/newtab/lib/workspace-transfer';
 import { Ico } from '../Ico';
 import { Segmented } from '../settings-controls';
@@ -27,7 +28,7 @@ interface BackupSectionProps {
 
 type BackupStatus = { kind: 'success' | 'error'; text: string } | null;
 
-// Human copy for each SyncFetchError kind (issue #7 handoff). Kept as a plain
+// Human copy for each SyncFetchError kind. Kept as a plain
 // map rather than a switch so every kind is exhaustively covered in one place.
 const SYNC_ERROR_COPY: Record<string, string> = {
   offline: 'Can’t reach the sync server — you appear to be offline.',
@@ -51,6 +52,9 @@ function describeLastSynced(timestamp: number | null): string {
 }
 
 function describeSyncError(error: unknown): string {
+  if (error instanceof WorkspaceSchemaTooNewError) {
+    return 'Your other browser synced with a newer version of Flipp’s Favorites. Update the extension here, then press Sync now again. Nothing was changed.';
+  }
   if (error instanceof SyncFetchError) {
     const known = SYNC_ERROR_COPY[error.kind];
     if (known) return known;
@@ -212,8 +216,10 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
         setLinkPreview({ payload: null, summary: null });
       } else {
         const payload = normalizeWorkspaceExportPayload(remote);
-        const summary = await buildSyncPreview(payload, linkMode);
-        setLinkPreview({ payload, summary });
+        const mergeSummary = await buildSyncPreview(payload, 'merge');
+        const mode = mergeSummary.recommendedMode;
+        setLinkMode(mode);
+        setLinkPreview({ payload, summary: mode === 'merge' ? mergeSummary : await buildSyncPreview(payload, mode) });
       }
     } catch (error) {
       if (error instanceof SyncFetchError && error.kind === 'validation') {
@@ -282,7 +288,7 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
         <div className="ff-row">
           <div>
             <div className="ff-row__label">Export settings</div>
-            <div className="ff-row__hint">Downloads a JSON file with all workspaces, icon overrides, and usage history.</div>
+            <div className="ff-row__hint">Downloads a JSON file with all workspaces, settings and custom icons. Usage history stays in this browser.</div>
           </div>
           <button
             type="button"
@@ -299,7 +305,8 @@ export function BackupSection({ onAfterImport, pushToast }: BackupSectionProps) 
         <div className="ff-row">
           <div>
             <div className="ff-row__label">Import mode</div>
-            <div className="ff-row__hint">Merge keeps existing data and overlays the file. Replace wipes settings and icon overrides first. Workspaces always merge by ID — your current workspaces are never deleted.</div>
+            <div className="ff-row__hint">Merge keeps whichever version of each item is newer. Replace makes the file&rsquo;s settings, workspaces and custom icons win and wipes other custom icons first. Your current workspaces are never deleted.
+</div>
           </div>
           <Segmented<WorkspaceImportMode>
             options={[{ id: 'merge', label: 'Merge' }, { id: 'replace', label: 'Replace' }]}

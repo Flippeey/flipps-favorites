@@ -19,10 +19,23 @@ export type BackgroundMode = 'solid' | 'gradient' | 'wallpaper';
 export type GradientStyle = 'top' | 'top-bottom' | 'bottom' | 'aurora' | 'mesh' | 'vignette';
 export type BackgroundColorSource = 'accent' | 'custom';
 
+// Where a folder sits and what it holds, so another browser can find its own
+// copy of the folder. Carried by the sync payload; absent on older records.
+export type FolderRootKind = 'toolbar' | 'other' | 'menu' | 'mobile' | 'unknown';
+
+export interface FolderLocator {
+  rootKind: FolderRootKind;
+  path: string[];
+  fingerprint: string[];
+}
+
 export interface WorkspaceRecord {
   id: string;
   name: string;
   rootFolderId: string;
+  // Last user edit (ms). Newest wins when two browsers disagree; absent = 0.
+  updatedAt?: number;
+  rootFolder?: FolderLocator;
   // Visual identity
   themeMode: ThemeMode;
   accentColor: string;
@@ -69,6 +82,26 @@ export interface AppSettings {
   // Folder behaviour (global)
   folderOpenMode: FolderOpenMode;
   folderCountBadgeMode: FolderCountBadgeMode;
+  // Last user edit per synced key (ms); a missing key reads as 0.
+  settingsUpdatedAt?: SettingsStamps;
+}
+
+// Momentary or browser-local state: kept in storage.local, never synced,
+// never stamped and never exported.
+export const PER_BROWSER_SETTING_KEYS = ['activeWorkspaceId', 'dockFolderId'] as const;
+export type PerBrowserSettingKey = typeof PER_BROWSER_SETTING_KEYS[number];
+export type SyncedSettingKey = Exclude<keyof AppSettings, PerBrowserSettingKey | 'settingsUpdatedAt'>;
+export type SyncedSettings = Pick<AppSettings, SyncedSettingKey>;
+export type SettingsStamps = Partial<Record<SyncedSettingKey, number>>;
+
+// Records that an item was deleted, so the deletion reaches other browsers.
+// `key` is the workspace id, the icon overrideKey or the folder-icon syncId.
+export type DeletionMarkerKind = 'workspace' | 'iconOverride' | 'folderIcon';
+
+export interface DeletionMarker {
+  kind: DeletionMarkerKind;
+  key: string;
+  deletedAt: number;
 }
 
 export interface BookmarkNode {
@@ -115,7 +148,7 @@ export interface AppErrorResponse {
   };
 }
 
-// Settings-sync (#7) error taxonomy. Distinct from IconFetchErrorKind: sync
+// Settings-sync error taxonomy. Distinct from IconFetchErrorKind: sync
 // errors are transport/server-condition oriented (no image-decode concerns),
 // plus a client-side 'validation' kind for a bad pairing code.
 export type SyncErrorKind =
@@ -189,6 +222,10 @@ export interface FolderIconOverrideRecord {
   fileName?: string;
   mimeType: string;
   updatedAt: number;
+  // Identity across browsers (folder ids are browser-local). Kept when the
+  // icon is replaced; assigned on first sync for records that predate it.
+  syncId?: string;
+  locator?: FolderLocator;
 }
 
 export interface IconSearchCandidate {

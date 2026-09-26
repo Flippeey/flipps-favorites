@@ -100,8 +100,8 @@ export async function firefoxSafeFetch(url: string, init?: RequestInit, timeoutM
 const NULL_BODY_STATUSES = new Set([204, 205, 304]);
 
 /**
- * XHR-backed fetch shim for arbitrary methods + binary bodies (settings sync,
- * #7). Unlike xhrFetch() above (icon pipeline: GET-only, blob response), this
+ * XHR-backed fetch shim for arbitrary methods + binary bodies (settings
+ * sync). Unlike xhrFetch() above (icon pipeline: GET-only, blob response), this
  * supports PUT with an ArrayBuffer/Blob body and reads the response back as
  * an ArrayBuffer — what the sync push/pull paths need.
  */
