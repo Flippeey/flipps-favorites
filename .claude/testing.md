@@ -107,7 +107,7 @@ npm run test:firefox:e2e:build # Build dist/firefox first, then run firefox-e2e
 # One-command local/agent verification (all headless)
 npm run verify                  # typecheck -> test:unit -> build -> build:chrome:test -> test (chrome) -> test:firefox:e2e, stops on first failure
 
-# Full CI (both Playwright projects — headed firefox; CI/xvfb only, do not run locally without xvfb)
+# Full CI (build + Playwright; only test:ci runs both projects — headed firefox, CI/xvfb only, do not run test:ci locally without xvfb)
 npm run test:build             # Build everything (dist/chrome + dist/chrome-test + dist/firefox), run Playwright (chrome only — calls npm test)
 npm run test:ci                # build + build:chrome:test + `playwright test` (BOTH projects — used by .github/workflows/test.yml under xvfb)
 npm run test:all               # build + build:chrome:test + Playwright (chrome only) + test:firefox:e2e
