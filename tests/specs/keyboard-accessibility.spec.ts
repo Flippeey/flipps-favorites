@@ -173,42 +173,45 @@ test.describe('dropdown keyboard navigation', () => {
     // source and target workspace free of real bookmarks keeps this test's
     // Enter keypress from ever reaching a live link.
     const folderIds = await seedExtraWorkspaces(newtabPage, 10);
-    const extraIds = Array.from({ length: 10 }, (_, i) => `ka-extra-ws-${String(i + 6)}`);
-    // 'Remember last workspace' is off in the promo world, so main.tsx resets
-    // activeWorkspaceId to workspaceOrder[0] on every boot — put both target
-    // extras first in the order so that reset lands where this test expects.
-    const order = [extraIds[0], extraIds[1], ...Object.values(world.workspaceIds), ...extraIds.slice(2)];
-    await patchSettings(newtabPage, { workspaceOrder: order, activeWorkspaceId: extraIds[0] });
-    await newtabPage.reload();
-    await newtabPage.waitForSelector('.ff-app', { timeout: 15_000 });
+    // Bookmark folders outlive the per-test storage reset, so remove them even when an assertion fails.
+    try {
+      const extraIds = Array.from({ length: 10 }, (_, i) => `ka-extra-ws-${String(i + 6)}`);
+      // 'Remember last workspace' is off in the promo world, so main.tsx resets
+      // activeWorkspaceId to workspaceOrder[0] on every boot — put both target
+      // extras first in the order so that reset lands where this test expects.
+      const order = [extraIds[0], extraIds[1], ...Object.values(world.workspaceIds), ...extraIds.slice(2)];
+      await patchSettings(newtabPage, { workspaceOrder: order, activeWorkspaceId: extraIds[0] });
+      await newtabPage.reload();
+      await newtabPage.waitForSelector('.ff-app', { timeout: 15_000 });
 
-    const trigger = newtabPage.locator('.ff-ws-dropdown .ff-pill');
-    await expect(trigger).toBeVisible({ timeout: 5_000 });
-    await trigger.focus();
+      const trigger = newtabPage.locator('.ff-ws-dropdown .ff-pill');
+      await expect(trigger).toBeVisible({ timeout: 5_000 });
+      await trigger.focus();
 
-    await newtabPage.keyboard.press('ArrowDown');
-    const panel = newtabPage.locator('.ff-ws-dropdown__panel');
-    await expect(panel).toBeVisible();
-    await expect(trigger).toHaveAttribute('aria-activedescendant', /.+/);
-    // Screen readers ignore aria-activedescendant on a plain button, so the trigger
-    // must be a combobox that points at the open listbox.
-    await expect(trigger).toHaveAttribute('role', 'combobox');
-    await expect(trigger).toHaveAttribute('aria-controls', String(await panel.getAttribute('id')));
+      await newtabPage.keyboard.press('ArrowDown');
+      const panel = newtabPage.locator('.ff-ws-dropdown__panel');
+      await expect(panel).toBeVisible();
+      await expect(trigger).toHaveAttribute('aria-activedescendant', /.+/);
+      // Screen readers ignore aria-activedescendant on a plain button, so the trigger
+      // must be a combobox that points at the open listbox.
+      await expect(trigger).toHaveAttribute('role', 'combobox');
+      await expect(trigger).toHaveAttribute('aria-controls', String(await panel.getAttribute('id')));
 
-    await newtabPage.keyboard.press('ArrowDown');
-    const activeOptionId = await trigger.getAttribute('aria-activedescendant');
-    const activeOption = newtabPage.locator(`[id="${String(activeOptionId)}"]`);
-    await expect(activeOption).toHaveAttribute('data-highlighted', 'true');
-    const targetWorkspaceId = await activeOption.getAttribute('data-option-workspace-id');
-    expect(targetWorkspaceId).toBe('ka-extra-ws-7');
+      await newtabPage.keyboard.press('ArrowDown');
+      const activeOptionId = await trigger.getAttribute('aria-activedescendant');
+      const activeOption = newtabPage.locator(`[id="${String(activeOptionId)}"]`);
+      await expect(activeOption).toHaveAttribute('data-highlighted', 'true');
+      const targetWorkspaceId = await activeOption.getAttribute('data-option-workspace-id');
+      expect(targetWorkspaceId).toBe('ka-extra-ws-7');
 
-    await newtabPage.keyboard.press('Enter');
-    await expect(panel).toHaveCount(0);
-    await expect(trigger).toBeFocused();
-    await expect(workspaceTab(newtabPage, String(targetWorkspaceId))).toHaveClass(/is-active/, { timeout: 2_000 });
-
-    for (const id of folderIds) {
-      await removeBookmarkTree(newtabPage, id);
+      await newtabPage.keyboard.press('Enter');
+      await expect(panel).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+      await expect(workspaceTab(newtabPage, String(targetWorkspaceId))).toHaveClass(/is-active/, { timeout: 2_000 });
+    } finally {
+      for (const id of folderIds) {
+        await removeBookmarkTree(newtabPage, id);
+      }
     }
   });
 });
