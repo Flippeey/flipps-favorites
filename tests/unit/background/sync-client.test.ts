@@ -132,7 +132,7 @@ describe('sync-client: syncPull', () => {
     const original = { workspaces: [], schemaVersion: 3 };
     const ciphertext = await cryptoMod.encryptPayload(JSON.stringify(original), aesKey);
 
-    mockFetchRequest.mockResolvedValue(new Response(ciphertext, { status: 200 }));
+    mockFetchRequest.mockResolvedValue(new Response(ciphertext as BodyInit, { status: 200 }));
 
     const result = await mod.syncPull();
 
