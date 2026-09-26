@@ -91,8 +91,8 @@ test.describe('context menu', () => {
     await bookmarkTile.click({ modifiers: [modKey] });
 
     const menu = await openContextMenu(newtabPage, bookmarkTile);
-    await expect(menu.locator('.ff-ctx__label', { hasText: 'Open 1 bookmarks in new tabs' })).toBeVisible();
-    await expect(menu.locator('.ff-ctx__label', { hasText: 'Open 1 bookmarks in new window' })).toBeVisible();
+    await expect(menu.locator('.ff-ctx__label', { hasText: 'Open 1 bookmark in new tabs' })).toBeVisible();
+    await expect(menu.locator('.ff-ctx__label', { hasText: 'Open 1 bookmark in new window' })).toBeVisible();
   });
 
   test('pure-bookmark multi-selection keeps the plain "Open N in new tabs" label', async ({ newtabPage, world }) => {

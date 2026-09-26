@@ -168,10 +168,10 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
     const mixedSelection = targetIds.length > bookmarkUrls.length;
     const multi = bookmarkUrls.length > 1;
     const newTabLabel = mixedSelection
-      ? `Open ${bookmarkUrls.length} bookmarks in new tabs`
+      ? `Open ${bookmarkUrls.length} ${bookmarkUrls.length === 1 ? 'bookmark' : 'bookmarks'} in new tabs`
       : multi ? `Open ${bookmarkUrls.length} in new tabs` : 'Open in new tab';
     const newWindowLabel = mixedSelection
-      ? `Open ${bookmarkUrls.length} bookmarks in new window`
+      ? `Open ${bookmarkUrls.length} ${bookmarkUrls.length === 1 ? 'bookmark' : 'bookmarks'} in new window`
       : multi ? `Open ${bookmarkUrls.length} in new window` : 'Open in new window';
     const openInNewTabs = () => {
       void (async () => {
@@ -208,7 +208,7 @@ export function useContextMenuBuilder(args: UseContextMenuBuilderArgs): UseConte
       { kind: 'item', icon: 'trash',        label: deleteLabel,       kbd: IS_MAC ? '⌫' : 'Del', destructive: true,
         onClick: deleteAction },
     ];
-  }, [defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, handleAddWorkspace, handleCreateWorkspaceFromFolder, onCreateFromFolderResult, workspaces, selection, onDeleteBookmark, onMoveSelectionToNewFolder, onMoveTo, onOpenAllInTabs, pushToast]);
+  }, [tree, defaultParentId, handleEditBookmark, handleNewBookmark, handleNewFolder, handlePickBookmark, handlePickFolder, handleRenameFolder, handleAddWorkspace, handleCreateWorkspaceFromFolder, onCreateFromFolderResult, workspaces, selection, onDeleteBookmark, onMoveSelectionToNewFolder, onMoveTo, onOpenAllInTabs, pushToast]);
 
   const handleOpenAddMenu = useCallback((x: number, y: number) => {
     const atMax = workspaces.length >= MAX_WORKSPACES;
