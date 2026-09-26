@@ -565,7 +565,6 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     if (folder) handlePickFolder(folder);
   }, [tree, handlePickFolder]);
 
-  useWorkspaceShortcut(orderedWorkspaces, handleSwitchWorkspace);
 
   // Reset keyboard focus when navigation context changes (workspace switch, folder open/close).
   useEffect(() => {
@@ -651,6 +650,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     appSettingsOpen || workspaceSettingsOpen || renameWorkspaceTarget || confirmDeleteWorkspace || editTarget || quickAddTarget || folderNameTarget || onboardOpen
     || newWorkspaceOpen || confirmDeleteFolder || confirmDeleteBatch || openFolderId || contextMenu,
   );
+
+  useWorkspaceShortcut(orderedWorkspaces, handleSwitchWorkspace, !anyOverlayOpen);
 
   useKeyboardNav({
     enabled: !anyOverlayOpen,
@@ -884,6 +885,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           shape={tileShape}
           onClose={() => setOpenFolderId(null)}
           onPickBookmark={handlePickBookmark}
+          onMiddleOpen={openInNewTab}
           onContextMenu={(target, e) => {
             e.preventDefault();
             setContextMenu({ x: e.clientX, y: e.clientY, items: buildContextMenuItems(target) });
