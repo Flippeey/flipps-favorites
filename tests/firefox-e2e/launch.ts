@@ -47,7 +47,7 @@ function firefoxCacheDir(): string {
 
 /** The exact command that provisions `PINNED_FIREFOX_BUILD_ID` locally or in CI. */
 export function firefoxInstallCommand(): string {
-  return `npx @puppeteer/browsers install firefox@${PINNED_FIREFOX_BUILD_ID}`;
+  return 'npm run test:firefox:e2e:install-browser';
 }
 
 /**
