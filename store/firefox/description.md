@@ -13,10 +13,10 @@ Flipp's Favorites replaces your default new-tab page with a customisable grid of
 - Custom icons — automatic favicon detection for every site, with a 30-day smart cache. Override any icon with a custom image, a URL, or pick one from the built-in icon search. 
 - Flexible layouts — Compact, Balanced, Spacious, and Presentation density presets, or fine-tune columns, gaps, and tile sizes until it feels right. 
 - Beautiful backgrounds — solid colour, rich gradients (aurora, mesh, vignette, and more), or your own wallpaper with opacity, fit, and position controls. 
-- Themes — light, dark, or system-auto, with 10 hand-crafted accent colours and a custom colour picker — set per Workspace. 
+- Themes — light, dark, or system-auto, with 12 hand-crafted accent colours and a custom colour picker — set per Workspace. 
 - Drag and drop everywhere — reorder bookmarks, drop into folders, move items between Workspaces, and rearrange layout sections live. 
-- Multi-select — marquee or Ctrl/Cmd-click to select many bookmarks at once, then cut, copy, paste, or bulk-delete with confirmation. 
-- Inline editing &amp; folder management — rename, retag, create, and delete folders right from the page. No browser bookmark manager required. 
+- Multi-select — marquee or Ctrl/Cmd-click to select many bookmarks at once, then move them to a folder or bulk-delete with confirmation. 
+- Inline editing &amp; folder management — rename, create, and delete folders right from the page. No browser bookmark manager required. 
 - Import and export — back up your full settings and icon overrides as a single JSON file. Restore on any device or browser in seconds. 
 - Completely private — everything is stored locally in your browser. No cloud sync, no accounts, no tracking, no analytics, no ads.
 
