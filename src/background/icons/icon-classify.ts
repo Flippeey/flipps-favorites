@@ -381,10 +381,10 @@ export function isCollageTitle(title: string): boolean {
 }
 
 export function stripHtml(value: string): string {
-  // A single replace pass leaves a stray `<` behind for a tag with no
-  // closing `>` (truncated input) and misses zero-width tags like `<>`.
-  // Loop the tag-removal to a fixed point, then drop any leftover `<`
-  // so untrusted text can never smuggle an unclosed tag start through.
+  // Titles come from untrusted search results. Strip tags, then drop any
+  // leftover `<` from an unterminated tag (e.g. `<script`) so no tag start
+  // survives. One pass already reaches a fixed point; the loop is the form
+  // static sanitization analysis recognises as complete.
   let previous: string;
   let current = value;
   do {
