@@ -37,7 +37,7 @@ import {
   workspaceView,
   type FolderSeed,
 } from '../fixtures/sync-scenario.js';
-import type { WorkspaceExportPayload } from '@/newtab/lib/sync-merge';
+import type { WorkspaceExportPayload } from '@/shared/sync-merge';
 
 const ALPHA_ID = 'ws-alpha-reading';
 const BETA_ID = 'ws-beta-recipes';

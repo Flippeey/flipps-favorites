@@ -24,7 +24,7 @@ import { PER_BROWSER_SETTING_KEYS } from './messages';
 import type { ArchetypeId } from './organization-templates';
 import { getOverrideLookupKeys } from './icon-scope';
 import { createCachedRecordStore, createCachedValueStore, createPerKeyRecordStore } from './storage-buckets';
-import { legacyFolderIconSyncId, markerId, nextStamp, normalizeDeletionMarker, pruneDeletionMarkers, readStamp, sameValue } from './sync-stamps';
+import { changedSincePlan, legacyFolderIconSyncId, markerId, mergePlannedMarkers, nextStamp, normalizeDeletionMarker, pruneDeletionMarkers, readStamp, sameValue } from './sync-stamps';
 
 const storageKey = 'app-settings';
 const iconCacheKey = 'icon-cache-records';
@@ -144,7 +144,7 @@ const workspacesStore = createPerKeyRecordStore<WorkspaceRecord>({
 });
 
 let workspaceViewSortMigrationPromise: Promise<void> | null = null;
-let workspacePerKeyMigrationPromise: Promise<void> | null = null;
+let workspacePerKeyMigrationPromise: Promise<boolean> | null = null;
 
 function workspaceWallpaperKey(workspaceId: string): string {
   return `app-wallpaper-${workspaceId}`;
@@ -413,34 +413,43 @@ export async function deleteWorkspace(id: string): Promise<void> {
   await workspacesStore.deleteOne(id);
 }
 
-// The MV3 service worker can handle two patchWorkspace messages for the SAME
-// workspace concurrently; without serialization both read the same base
-// record and the second write clobbers the first. workspacesStore.updateOne
-// runs the read-merge-write inside its own serialized section, so the
-// read is against the latest persisted state rather than a stale snapshot.
-export async function patchWorkspaceRecord(id: string, patch: Partial<WorkspaceRecord>): Promise<WorkspaceRecord> {
-  return updateWorkspaceRecord(id, patch, false);
-}
-
 // A user edit. An empty patch is an explicit touch (a wallpaper lives outside
 // the record but changing it is still an edit of the workspace); a non-empty
 // patch that changes nothing is a no-op and keeps the old stamp.
+//
+// The MV3 service worker can handle two patchWorkspace messages for the SAME
+// workspace concurrently. updateOne runs the read-merge-write inside the
+// store's serialized section, so the second patch reads the first one's
+// result and concurrent edits always stamp strictly upward.
 export async function patchWorkspaceFromUser(id: string, patch: Partial<WorkspaceRecord>): Promise<WorkspaceRecord> {
   const { updatedAt: _ignored, ...userPatch } = patch;
-  return updateWorkspaceRecord(id, userPatch, true);
-}
-
-// The stamp is taken from the record read inside updateOne's serialized
-// section, so concurrent user edits always stamp strictly upward.
-function updateWorkspaceRecord(id: string, patch: Partial<WorkspaceRecord>, stamp: boolean): Promise<WorkspaceRecord> {
   return workspacesStore.updateOne(id, current => {
     if (!current) {
       throw new Error(`Workspace ${id} not found`);
     }
-    const merged: WorkspaceRecord = { ...current, ...patch, id };
-    if (sameValue(current, merged) && (!stamp || Object.keys(patch).length > 0)) return current;
-    return stamp ? { ...merged, updatedAt: nextStamp(current.updatedAt) } : merged;
+    const merged: WorkspaceRecord = { ...current, ...userPatch, id };
+    if (sameValue(current, merged) && Object.keys(userPatch).length > 0) return current;
+    return { ...merged, updatedAt: nextStamp(current.updatedAt) };
   });
+}
+
+// Writes a record a sync or import planned from `basis` (the stored record the
+// plan read, or undefined when there was none). Skipped when the stored record
+// changed since, e.g. a user edit or delete that landed while the plan ran:
+// that change is newer than anything the plan saw. The check and the write
+// share one serialized section with user edits. Resolves whether it landed.
+export async function writePlannedWorkspace(record: WorkspaceRecord, basis: WorkspaceRecord | undefined): Promise<boolean> {
+  const { next } = await workspacesStore.updateOrDeleteOne(record.id, current =>
+    changedSincePlan(current, basis) ? current : record);
+  return next === record;
+}
+
+// Removes a workspace a sync or import planned to delete from `basis`, unless
+// it changed since (see writePlannedWorkspace). Resolves whether it is gone.
+export async function deletePlannedWorkspace(id: string, basis: WorkspaceRecord | undefined): Promise<boolean> {
+  const { next } = await workspacesStore.updateOrDeleteOne(id, current =>
+    changedSincePlan(current, basis) ? current : null);
+  return next === null;
 }
 
 export async function createWorkspaceFromUser(record: WorkspaceRecord): Promise<WorkspaceRecord> {
@@ -449,10 +458,11 @@ export async function createWorkspaceFromUser(record: WorkspaceRecord): Promise<
   return stamped;
 }
 
+// Read and delete are one serialized step, so the marker is stamped from the
+// record actually deleted, never from one a concurrent edit already replaced.
 export async function deleteWorkspaceFromUser(id: string): Promise<void> {
-  const current = await workspacesStore.readOne(id);
-  await workspacesStore.deleteOne(id);
-  await addDeletionMarkers([{ kind: 'workspace', key: id, deletedAt: nextStamp(current?.updatedAt) }]);
+  const { previous } = await workspacesStore.updateOrDeleteOne(id, () => null);
+  await addDeletionMarkers([{ kind: 'workspace', key: id, deletedAt: nextStamp(previous?.updatedAt) }]);
 }
 
 export async function writeIconOverrideFromUser(record: IconOverrideRecord): Promise<IconOverrideRecord> {
@@ -641,6 +651,13 @@ async function readDeletionMarker(kind: DeletionMarker['kind'], key: string): Pr
 // storage area.
 export async function writeDeletionMarkers(markers: DeletionMarker[], now: number = Date.now()): Promise<void> {
   await enqueueMarkerWrite(() => doWriteDeletionMarkers(markers, now));
+}
+
+// Lands the marker set a sync or import planned from `basis` against the
+// markers stored when the write runs (read inside the marker queue), so a
+// deletion recorded while the plan ran is kept rather than overwritten.
+export async function writePlannedDeletionMarkers(basis: DeletionMarker[], planned: DeletionMarker[], now: number = Date.now()): Promise<void> {
+  await enqueueMarkerWrite(async () => doWriteDeletionMarkers(mergePlannedMarkers(await readDeletionMarkers(), basis, planned), now));
 }
 
 export async function addDeletionMarkers(added: DeletionMarker[]): Promise<void> {
@@ -921,14 +938,16 @@ function asRecord(value: unknown): Record<string, unknown> {
 // writeWorkspace (called by view/sort) already uses per-key layout.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function ensureWorkspacePerKeyMigration(): Promise<void> {
+// Resolves false when the split failed; it is retried on the next call.
+export async function ensureWorkspacePerKeyMigration(): Promise<boolean> {
   if (!workspacePerKeyMigrationPromise) {
-    workspacePerKeyMigrationPromise = runWorkspacePerKeyMigration().catch(error => {
+    workspacePerKeyMigrationPromise = runWorkspacePerKeyMigration().then(() => true, (error: unknown) => {
       workspacePerKeyMigrationPromise = null;
       console.warn('Failed to migrate workspaces to per-key storage.', error);
+      return false;
     });
   }
-  await workspacePerKeyMigrationPromise;
+  return workspacePerKeyMigrationPromise;
 }
 
 async function runWorkspacePerKeyMigration(): Promise<void> {
@@ -1013,8 +1032,13 @@ async function runPerBrowserSettingsMove(): Promise<void> {
 // out of app-settings. Each migration keeps its own memoization and
 // persisted-marker idempotency; this only fixes their relative order in one
 // place instead of leaving it to caller discipline.
+//
+// A failed split stops the chain until a later call retries it: view/sort
+// would otherwise copy the globals onto per-key records, strip them from
+// app-settings and set its marker, and the retried split would then overwrite
+// those records from the legacy aggregate, losing the copied values for good.
 export async function ensureStorageMigrations(): Promise<void> {
-  await ensureWorkspacePerKeyMigration();
+  if (!(await ensureWorkspacePerKeyMigration())) return;
   await ensureWorkspaceViewSortMigration();
   await ensurePerBrowserSettingsMove();
 }

@@ -83,6 +83,36 @@ export interface WorkspaceExportPayload {
   deletions?: DeletionMarker[];
 }
 
+// Import-only counters for entries dropped while parsing an untrusted backup
+// file. Kept separate from WorkspaceExportPayload's on-disk shape (which
+// buildWorkspaceExport also produces) so export output never carries them.
+export interface WorkspaceImportSkipCounts {
+  /** Icon overrides / wallpaper entries dropped for exceeding MAX_IMPORT_DATA_URL_BYTES. */
+  oversizedDataUrlCount: number;
+}
+
+export type ParsedWorkspaceImport = WorkspaceExportPayload & { skipped: WorkspaceImportSkipCounts };
+
+export interface WorkspaceImportSummary {
+  mode: WorkspaceImportMode;
+  workspaceCount: number;
+  // New workspaces not stored because this browser already holds
+  // MAX_WORKSPACES; updates to existing ones never count. Always reported,
+  // and a sync keeps them in the shared copy for browsers with room.
+  workspaceSkippedCount: number;
+  // Workspaces that were attempted but whose write() threw (e.g. quota
+  // exceeded mid-loop). workspaceCount only reflects what actually persisted.
+  workspaceFailedCount: number;
+  iconOverrideCount: number;
+  // Icon overrides dropped for exceeding MAX_IMPORT_DATA_URL_BYTES.
+  iconOverrideSkippedCount: number;
+  folderIconCount: number;
+  bookmarkUsageCount: number;
+  settings: AppSettings;
+  // The merged shared copy a sync pushes.
+  merged: WorkspaceExportPayload;
+}
+
 export interface LocalSyncSnapshot {
   settings: AppSettings;
   workspaces: WorkspaceRecord[];

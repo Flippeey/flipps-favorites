@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import type { AppSettings, BookmarkNode, WorkspaceView } from '@/shared/messages';
 import { SyncFetchError } from '@/shared/messages';
-import { adoptSyncSecret, getSyncPairingCode, syncPreviewPull } from '@/newtab/lib/messaging';
+import { adoptSyncSecret, applyWorkspaceImport, getSyncPairingCode, syncPreviewPull } from '@/newtab/lib/messaging';
 import { completeLinkFromPreview, runSyncNow } from '@/newtab/lib/sync-now';
 import { readLastSyncedAt } from '@/shared/storage';
 import type { PushToastInput } from '@/newtab/state/useToasts';
 import {
-  applyWorkspaceImport,
   buildSyncPreview,
   buildWorkspaceExport,
   downloadWorkspaceExport,
@@ -142,7 +141,7 @@ export function BackupSection({ onAfterImport, pushToast, waiting, tree, onWorks
     setStatus(null);
     try {
       const payload = await parseWorkspaceFile(file);
-      const summary = await applyWorkspaceImport(payload, importMode);
+      const summary = await applyWorkspaceImport(payload, importMode, 'file');
       onAfterImport(summary.settings);
       const wsLabel = summary.workspaceCount === 1 ? 'workspace' : 'workspaces';
       const overrideLabel = summary.iconOverrideCount === 1 ? 'icon override' : 'icon overrides';

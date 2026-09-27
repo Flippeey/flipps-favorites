@@ -26,6 +26,7 @@ export const messageTypes = {
   deleteWorkspace: 'workspaces/delete',
   bindWorkspaceFolder: 'workspaces/bind-folder',
   setWorkspaceNotUsed: 'workspaces/set-not-used',
+  applyWorkspaceImport: 'workspaces/apply-import',
   openTab: 'tabs/open',
   syncPush: 'sync/push',
   syncPull: 'sync/pull',
@@ -50,6 +51,7 @@ import type {
   WorkspaceView,
 } from './models';
 import type { IconOverrideScope } from './icon-scope';
+import type { ImportOrigin, ParsedWorkspaceImport, WorkspaceImportMode, WorkspaceImportSummary } from './sync-merge';
 
 export interface PingRequest {
   type: typeof messageTypes.ping;
@@ -324,6 +326,19 @@ export interface DeleteWorkspaceResponse {
   ok: true;
 }
 
+// Plans and applies a parsed sync payload or backup file in the background,
+// where its writes serialize with concurrent user edits.
+export interface ApplyWorkspaceImportRequest {
+  type: typeof messageTypes.applyWorkspaceImport;
+  payload: ParsedWorkspaceImport;
+  mode: WorkspaceImportMode;
+  origin: ImportOrigin;
+}
+
+export interface ApplyWorkspaceImportResponse {
+  summary: WorkspaceImportSummary;
+}
+
 export interface OpenTabRequest {
   type: typeof messageTypes.openTab;
   url: string;
@@ -335,11 +350,9 @@ export interface OpenTabResponse {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Settings sync. The bundle carried by SyncPushRequest is the merged
-// WorkspaceExportPayload planned by newtab/lib/workspace-transfer.ts —
-// typed here as `unknown` to avoid a messages.ts ->
-
-// newtab import (messages.ts is shared/background-safe); callers narrow on
-// their own side.
+// WorkspaceExportPayload planned by shared/sync-merge.ts, and a pull returns
+// the decrypted remote copy; both are typed `unknown` at this boundary and
+// narrowed by their callers.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface SyncPushRequest {
@@ -428,6 +441,7 @@ export type AppRequest =
   | DeleteWorkspaceRequest
   | BindWorkspaceFolderRequest
   | SetWorkspaceNotUsedRequest
+  | ApplyWorkspaceImportRequest
   | OpenTabRequest
   | SyncPushRequest
   | SyncPullRequest
@@ -462,6 +476,7 @@ export type AppResponse =
   | CreateWorkspaceResponse
   | PatchWorkspaceResponse
   | DeleteWorkspaceResponse
+  | ApplyWorkspaceImportResponse
   | OpenTabResponse
   | SyncPushResponse
   | (SyncPullResponse | SyncPullNotFoundResponse)

@@ -40,6 +40,32 @@ export function markerId(kind: DeletionMarkerKind, key: string): string {
   return `${kind}\u0000${key}`;
 }
 
+// Whether a stored record moved on since a plan read `basis` from storage: it
+// appeared, disappeared, or carries a newer stamp. Every user edit stamps
+// strictly upward, so a newer stamp is always a change the plan never saw.
+export function changedSincePlan(
+  current: { updatedAt?: number } | null,
+  basis: { updatedAt?: number } | undefined,
+): boolean {
+  if (!basis) return current !== null;
+  return current === null || readStamp(current.updatedAt) > readStamp(basis.updatedAt);
+}
+
+// The marker set to store after a sync or import planned `planned` from the
+// `basis` it read: the plan's set, plus every stored marker the plan never saw
+// (a deletion that landed while it ran). Basis markers the plan left out stay
+// out, so a mirror or a retention prune still takes effect. Pruning happens
+// on write.
+export function mergePlannedMarkers(
+  current: DeletionMarker[],
+  basis: DeletionMarker[],
+  planned: DeletionMarker[],
+): DeletionMarker[] {
+  const signature = (m: DeletionMarker): string => `${markerId(m.kind, m.key)}\u0000${String(m.deletedAt)}`;
+  const seen = new Set(basis.map(signature));
+  return [...current.filter(m => !seen.has(signature(m))), ...planned];
+}
+
 export function normalizeDeletionMarker(value: unknown): DeletionMarker | null {
   if (!value || typeof value !== 'object') return null;
   const raw = value as Partial<DeletionMarker>;

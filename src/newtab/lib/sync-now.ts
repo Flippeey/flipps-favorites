@@ -1,8 +1,7 @@
 import type { AppSettings } from '@/shared/messages';
-import { syncPull, syncPush } from '@/newtab/lib/messaging';
+import { applyWorkspaceImport, syncPull, syncPush } from '@/newtab/lib/messaging';
 import { writeLastSyncedAt } from '@/shared/storage';
 import {
-  applyWorkspaceImport,
   normalizeWorkspaceExportPayload,
   WORKSPACE_SCHEMA,
   WORKSPACE_SCHEMA_VERSION,

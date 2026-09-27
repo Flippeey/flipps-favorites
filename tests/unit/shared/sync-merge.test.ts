@@ -17,7 +17,7 @@ import {
   type PlanContext,
   type SyncPlan,
   type WorkspaceExportPayload,
-} from '@/newtab/lib/sync-merge';
+} from '@/shared/sync-merge';
 import { nextStamp, readStamp } from '@/shared/sync-stamps';
 import { buildFolderLocator } from '@/shared/folder-locator';
 import { DELETION_MARKER_RETENTION_MS, MAX_WORKSPACES } from '@/shared/constants';

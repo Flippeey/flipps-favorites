@@ -43,7 +43,9 @@ import type {
   GetSyncPairingCodeResponse,
   AdoptSyncSecretResponse,
   WebSearchResponse,
+  ApplyWorkspaceImportResponse,
 } from '@/shared/messages';
+import type { ImportOrigin, ParsedWorkspaceImport, WorkspaceImportMode, WorkspaceImportSummary } from '@/shared/sync-merge';
 import { IconFetchError, SyncFetchError, messageTypes } from '@/shared/messages';
 
 async function send<T extends AppResponse>(req: AppRequest): Promise<T> {
@@ -237,8 +239,25 @@ export async function openTab(url: string): Promise<void> {
   await send<OpenTabResponse>({ type: messageTypes.openTab, url });
 }
 
+// Plans and applies a parsed payload in the background (see
+// background/workspace-import.ts). Kept alive like a sync request: a large
+// import with many icons can outlast the Firefox event page's idle window.
+export async function applyWorkspaceImport(
+  payload: ParsedWorkspaceImport,
+  mode: WorkspaceImportMode,
+  origin: ImportOrigin,
+): Promise<WorkspaceImportSummary> {
+  const res = await sendKeepingBackgroundAlive<ApplyWorkspaceImportResponse>({
+    type: messageTypes.applyWorkspaceImport,
+    payload,
+    mode,
+    origin,
+  });
+  return res.summary;
+}
+
 // Settings sync. `bundle` is the merged WorkspaceExportPayload planned by
-// newtab/lib/workspace-transfer.ts; typed as unknown at the message boundary
+// shared/sync-merge.ts; typed as unknown at the message boundary
 // (see messages.ts comment) and narrowed by the caller.
 export async function syncPush(bundle: unknown): Promise<void> {
   await sendKeepingBackgroundAlive<SyncPushResponse>({ type: messageTypes.syncPush, bundle });

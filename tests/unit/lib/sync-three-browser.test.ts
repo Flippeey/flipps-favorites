@@ -40,20 +40,32 @@ const TREE: BookmarkNode[] = [{ id: '0', title: '', children: [
 ] }];
 
 let server: unknown = null;
+// The background module instance of whichever profile is running, which the
+// page's apply message reaches.
+let currentBackground: Background | null = null;
 vi.mock('@/newtab/lib/messaging', () => ({
   getBookmarkTree: async () => structuredClone(TREE),
   invalidateIcon: async () => undefined,
+  applyWorkspaceImport: (...[payload, mode, origin]: Parameters<Background['applyWorkspaceImport']>) => {
+    if (!currentBackground) throw new Error('No profile is running.');
+    return currentBackground.applyWorkspaceImport(payload, mode, origin, {
+      loadTree: async () => structuredClone(TREE),
+      invalidateIcons: async () => undefined,
+    });
+  },
   syncPull: async () => (server === null ? null : structuredClone(server)),
   syncPush: async (bundle: unknown) => { server = structuredClone(bundle); },
 }));
 
 type Storage = typeof import('@/shared/storage');
 type SyncNow = typeof import('@/newtab/lib/sync-now');
+type Background = typeof import('@/background/workspace-import');
 
 interface Profile {
   readonly browser: FakeBrowser;
   storage: Storage;
   syncNow: SyncNow;
+  background: Background;
   activeWorkspaceId: string;
 }
 
@@ -65,11 +77,13 @@ async function boot(browser: FakeBrowser): Promise<Profile> {
   vi.resetModules();
   const storage = await import('@/shared/storage');
   const syncNow = await import('@/newtab/lib/sync-now');
-  return { browser, storage, syncNow, activeWorkspaceId: '' };
+  const background = await import('@/background/workspace-import');
+  return { browser, storage, syncNow, background, activeWorkspaceId: '' };
 }
 
 async function on<T>(profile: Profile, run: (p: Profile) => Promise<T>): Promise<T> {
   setCurrentBrowser(profile.browser);
+  currentBackground = profile.background;
   return run(profile);
 }
 
@@ -329,6 +343,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   setCurrentBrowser(null);
+  currentBackground = null;
 });
 
 describe('three browsers syncing through one server', () => {

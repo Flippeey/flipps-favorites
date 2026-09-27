@@ -341,6 +341,12 @@ export interface PerKeyRecordStore<T> {
    * pair, which two overlapping callers can interleave into a lost update.
    */
   updateOne: (id: string, updater: (current: T | null) => T) => Promise<T>;
+  /**
+   * updateOne that may also delete: `decide` returning null removes the key
+   * (a no-op when already absent). Resolves with the value read and the value
+   * left behind, so a caller can tell what it replaced or removed.
+   */
+  updateOrDeleteOne: (id: string, decide: (current: T | null) => T | null) => Promise<{ previous: T | null; next: T | null }>;
   /** Remove every key with this prefix from storage (used during migration tests). */
   clearAll: () => Promise<void>;
 }
@@ -454,6 +460,22 @@ export function createPerKeyRecordStore<T>(args: {
         const next = updater(current);
         if (!sameValue(current, next)) await api.set({ [storageKey(id)]: next });
         return next;
+      });
+    },
+
+    async updateOrDeleteOne(id: string, decide: (current: T | null) => T | null): Promise<{ previous: T | null; next: T | null }> {
+      return enqueueWrite(async () => {
+        const { api } = await resolveArea();
+        const stored = await api.get(storageKey(id));
+        const raw = stored[storageKey(id)];
+        const previous = raw === undefined ? null : deserialize(raw);
+        const next = decide(previous);
+        if (next === null) {
+          if (raw !== undefined && api.remove) await api.remove(storageKey(id));
+        } else if (!sameValue(previous, next)) {
+          await api.set({ [storageKey(id)]: next });
+        }
+        return { previous, next };
       });
     },
 

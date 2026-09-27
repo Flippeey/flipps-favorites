@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BookmarkNode, WorkspaceRecord } from '@/shared/models';
+import type { ImportOrigin, ParsedWorkspaceImport, WorkspaceImportMode } from '@/shared/sync-merge';
 
 // buildWorkspaceExport reads icon overrides from IndexedDB, which the node test
 // environment has no implementation for. Stub the IDB-backed reads (export
@@ -24,11 +25,12 @@ vi.mock('@/shared/icon-idb', () => ({
   deletePendingFolderIconRecord: async () => undefined,
 }));
 
-// workspace-transfer calls getBookmarkTree() for cross-browser folder
-// re-matching (best-effort) and invalidateIcon() after imports. Mock the
-// messaging boundary: the default rejected tree keeps every non-rematch test
-// on the no-rematch path (records keep their pointers, as before the repair
-// existed); rematch tests point it at a fixture tree.
+// Planning reads the bookmark tree for cross-browser folder re-matching
+// (best-effort): the page through getBookmarkTree() messaging, the background
+// apply through its injected loader, both wired to this mock. The default
+// rejected tree keeps every non-rematch test on the no-rematch path (records
+// keep their pointers, as before the repair existed); rematch tests point it
+// at a fixture tree.
 const mockGetBookmarkTree = vi.fn();
 vi.mock('@/newtab/lib/messaging', () => ({
   invalidateIcon: async () => undefined,
@@ -86,9 +88,23 @@ function installChromeFake(opts: { syncSeed?: Record<string, unknown>; localSeed
   (globalThis as unknown as { browser?: unknown }).browser = undefined;
 }
 
-async function importTransfer(): Promise<typeof import('@/newtab/lib/workspace-transfer')> {
+// The page-side module plus the background apply, loaded against one storage
+// module instance. The apply reads the tree through the same mock the preview
+// uses, so both see identical folders.
+async function importTransfer() {
   vi.resetModules();
-  return import('@/newtab/lib/workspace-transfer');
+  const [transfer, background] = await Promise.all([
+    import('@/newtab/lib/workspace-transfer'),
+    import('@/background/workspace-import'),
+  ]);
+  return {
+    ...transfer,
+    applyWorkspaceImport: (payload: ParsedWorkspaceImport, mode: WorkspaceImportMode, origin: ImportOrigin = 'file') =>
+      background.applyWorkspaceImport(payload, mode, origin, {
+        loadTree: async () => mockGetBookmarkTree() as Promise<BookmarkNode[]>,
+        invalidateIcons: async () => undefined,
+      }),
+  };
 }
 
 beforeEach(() => {

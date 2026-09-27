@@ -15,6 +15,7 @@ const mockNormalize = vi.fn((payload: unknown) => payload);
 const mockWriteLastSyncedAt = vi.fn();
 
 vi.mock('@/newtab/lib/messaging', () => ({
+  applyWorkspaceImport: (...args: unknown[]) => mockApplyWorkspaceImport(...args),
   syncPull: (...args: unknown[]) => mockSyncPull(...args),
   syncPush: (...args: unknown[]) => mockSyncPush(...args),
 }));
@@ -26,7 +27,6 @@ vi.mock('@/shared/storage', () => ({
 vi.mock('@/newtab/lib/workspace-transfer', () => ({
   WORKSPACE_SCHEMA: 'flipps-workspace-transfer',
   WORKSPACE_SCHEMA_VERSION: 5,
-  applyWorkspaceImport: (...args: unknown[]) => mockApplyWorkspaceImport(...args),
   normalizeWorkspaceExportPayload: (payload: unknown) => mockNormalize(payload),
 }));
 

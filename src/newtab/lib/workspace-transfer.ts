@@ -1,6 +1,5 @@
 import type {
   AppSettings,
-  BookmarkNode,
   BookmarkSortMode,
   FolderLocator,
   FolderRootKind,
@@ -10,69 +9,43 @@ import type {
   WorkspaceRecord,
 } from '@/shared/messages';
 import {
-  defaultSettings,
   defaultWorkspaceSettings,
-  deleteBookmarkUsageRecord,
-  deleteFolderIconOverride,
-  deleteIconOverrideRecord,
-  deletePendingFolderIcon,
-  deleteWorkspace,
   normalizeSettings,
-  readAllFolderIconOverrides,
-  readBookmarkUsageRecords,
-  readDeletionMarkers,
-  readFolderBindings,
-  readIconOverrideRecords,
   readOnboardingState,
-  readPendingFolderIcons,
-  readPendingUsage,
-  readSettings,
-  readWorkspaces,
-  readWorkspaceWallpaper,
-  removeWorkspaceWallpaper,
   syncedSettingKeys,
-  updateFolderBindings,
   withoutPerBrowserSettings,
-  writeBookmarkUsageRecord,
-  writeDeletionMarkers,
-  writeFolderIconOverride,
-  writeIconOverrideRecord,
-  writePendingFolderIcon,
-  writePendingUsage,
-  writeSettings,
-  writeWorkspace,
-  writeWorkspaceWallpaper,
 } from '@/shared/storage';
 import { normalizeOverrideScope } from '@/shared/icon-scope';
 import { MAX_IMPORT_DATA_URL_BYTES } from '@/shared/constants';
 import { legacyFolderIconSyncId, normalizeDeletionMarker, readStamp, sameValue } from '@/shared/sync-stamps';
 import type { DeletionMarker } from '@/shared/models';
-import { getBookmarkTree, invalidateIcon } from './messaging';
+import { planWorkspaceImport, readLocalSnapshot } from '@/shared/sync-plan';
+import { getBookmarkTree } from './messaging';
 import {
   WORKSPACE_SCHEMA,
   WORKSPACE_SCHEMA_VERSION,
-  planIncomingWorkspaces,
   recommendLinkMode,
   toFolderIconTransfer,
   toOverrideTransfer,
   type BookmarkUsageTransferRecord,
   type FolderIconTransferRecord,
   type IconOverrideTransferRecord,
-  type ImportOrigin,
-  type LocalSyncSnapshot,
-  type SyncPlan,
+  type ParsedWorkspaceImport,
   type WorkspaceExportPayload,
   type WorkspaceImportMode,
   type WorkspaceWallpaperMap,
-} from './sync-merge';
+} from '@/shared/sync-merge';
 
 export {
   WORKSPACE_SCHEMA,
   WORKSPACE_SCHEMA_VERSION,
   type ImportOrigin,
+  type ParsedWorkspaceImport,
   type WorkspaceExportPayload,
   type WorkspaceImportMode,
-} from './sync-merge';
+  type WorkspaceImportSkipCounts,
+  type WorkspaceImportSummary,
+} from '@/shared/sync-merge';
 
 // Thrown for a payload written by a newer extension version. The message
 // suits file import; the sync UI shows its own copy for it.
@@ -81,36 +54,6 @@ export class WorkspaceSchemaTooNewError extends Error {
     super('Import file was made by a newer version of Flipp’s Favorites. Update the extension and try again.');
     this.name = 'WorkspaceSchemaTooNewError';
   }
-}
-
-// Import-only counters for entries dropped while parsing an untrusted backup
-// file. Kept separate from WorkspaceExportPayload's on-disk shape (which
-// buildWorkspaceExport also produces) so export output never carries them.
-export interface WorkspaceImportSkipCounts {
-  /** Icon overrides / wallpaper entries dropped for exceeding MAX_IMPORT_DATA_URL_BYTES. */
-  oversizedDataUrlCount: number;
-}
-
-export type ParsedWorkspaceImport = WorkspaceExportPayload & { skipped: WorkspaceImportSkipCounts };
-
-export interface WorkspaceImportSummary {
-  mode: WorkspaceImportMode;
-  workspaceCount: number;
-  // New workspaces not stored because this browser already holds
-  // MAX_WORKSPACES; updates to existing ones never count. Always reported,
-  // and a sync keeps them in the shared copy for browsers with room.
-  workspaceSkippedCount: number;
-  // Workspaces that were attempted but whose write() threw (e.g. quota
-  // exceeded mid-loop). workspaceCount only reflects what actually persisted.
-  workspaceFailedCount: number;
-  iconOverrideCount: number;
-  // Icon overrides dropped for exceeding MAX_IMPORT_DATA_URL_BYTES.
-  iconOverrideSkippedCount: number;
-  folderIconCount: number;
-  bookmarkUsageCount: number;
-  settings: AppSettings;
-  // The merged shared copy a sync pushes.
-  merged: WorkspaceExportPayload;
 }
 
 // File export: a snapshot with stamps, but without deletion markers,
@@ -315,139 +258,6 @@ function isSortDirection(value: unknown): value is SortDirection {
   return value === 'asc' || value === 'desc';
 }
 
-async function readLocalSnapshot(): Promise<LocalSyncSnapshot> {
-  const [settings, workspaces, overrides, folderIcons, usage, deletions, bindings, pendingFolderIcons, pendingUsage] = await Promise.all([
-    readSettings(),
-    readWorkspaces(),
-    readIconOverrideRecords(),
-    readAllFolderIconOverrides(),
-    readBookmarkUsageRecords(),
-    readDeletionMarkers(),
-    readFolderBindings(),
-    readPendingFolderIcons(),
-    readPendingUsage(),
-  ]);
-  const wallpapers: WorkspaceWallpaperMap = {};
-  for (const ws of workspaces.filter(w => w.backgroundMode === 'wallpaper')) {
-    const dataUrl = await readWorkspaceWallpaper(ws.id);
-    if (dataUrl) wallpapers[ws.id] = dataUrl;
-  }
-  return {
-    settings,
-    workspaces,
-    wallpapers,
-    iconOverrides: Object.values(overrides),
-    folderIcons: Object.values(folderIcons),
-    usage: Object.values(usage),
-    deletions,
-    bindings,
-    pendingFolderIcons,
-    pendingUsage,
-  };
-}
-
-async function planFor(
-  payload: WorkspaceExportPayload,
-  mode: WorkspaceImportMode,
-  origin: ImportOrigin,
-): Promise<{ local: LocalSyncSnapshot; plan: SyncPlan }> {
-  // Best-effort tree fetch for finding folders here and identity pairing. A
-  // failed fetch must not fail the import: nothing new is placed, and the
-  // next page load resolves what it can.
-  let tree: BookmarkNode[] | null = null;
-  const [local] = await Promise.all([
-    readLocalSnapshot(),
-    getBookmarkTree().then(nodes => { tree = nodes; }, (error: unknown) => {
-      console.warn('Bookmark tree unavailable; imported items wait for their folders.', error);
-    }),
-  ]);
-  const { settingsUpdatedAt: _stamps, ...defaults } = withoutPerBrowserSettings(defaultSettings);
-  const plan = planIncomingWorkspaces(payload, local, { mode, origin, tree, now: Date.now(), defaults });
-  return { local, plan };
-}
-
-// Executes the planner's result; decides nothing itself.
-export async function applyWorkspaceImport(
-  payload: ParsedWorkspaceImport,
-  mode: WorkspaceImportMode,
-  origin: ImportOrigin = 'file',
-): Promise<WorkspaceImportSummary> {
-  const { local, plan } = await planFor(payload, mode, origin);
-
-  const activeRekey = plan.rekeys.find(k => k.from === local.settings.activeWorkspaceId);
-  const settings = plan.settingsChanged || activeRekey
-    ? await writeSettings({ ...plan.settings, ...(activeRekey ? { activeWorkspaceId: activeRekey.to } : {}) })
-    : local.settings;
-
-  let workspaceCount = 0;
-  let workspaceFailedCount = 0;
-  for (const record of plan.workspaceWrites) {
-    try {
-      await writeWorkspace(record);
-      workspaceCount += 1;
-    } catch (error) {
-      // Quota or other storage failure mid-loop: keep going so later entries
-      // still get a chance, and report what failed.
-      workspaceFailedCount += 1;
-      console.warn('Failed to store an imported workspace.', error);
-    }
-  }
-  for (const { id, dataUrl } of plan.wallpaperWrites) {
-    try {
-      await writeWorkspaceWallpaper(id, dataUrl);
-    } catch (error) {
-      console.warn('Failed to store an imported wallpaper.', error);
-    }
-  }
-  // Only the workspace record and its wallpaper go; bookmarks are never touched.
-  for (const id of plan.workspaceDeletes) {
-    try {
-      await deleteWorkspace(id);
-      await removeWorkspaceWallpaper(id);
-    } catch (error) {
-      console.warn('Failed to remove a workspace during import.', error);
-    }
-  }
-  const deleted = new Set(plan.workspaceDeletes);
-  await updateFolderBindings(current => ({
-    ...Object.fromEntries(Object.entries(current).filter(([id]) => !deleted.has(id))),
-    ...plan.bindingWrites,
-  }));
-
-  for (const record of plan.overrideWrites) await writeIconOverrideRecord(record);
-  for (const key of plan.overrideDeletes) await deleteIconOverrideRecord(key);
-  for (const record of plan.folderIconWrites) await writeFolderIconOverride(record);
-  for (const folderId of plan.folderIconDeletes) await deleteFolderIconOverride(folderId);
-  for (const record of plan.pendingFolderIconWrites) await writePendingFolderIcon(record);
-  for (const syncId of plan.pendingFolderIconDeletes) await deletePendingFolderIcon(syncId);
-  for (const record of plan.usageWrites) await writeBookmarkUsageRecord(record);
-  for (const bookmarkId of plan.usageDeletes) await deleteBookmarkUsageRecord(bookmarkId);
-  await writePendingUsage(plan.pendingUsage);
-  await writeDeletionMarkers(plan.deletions);
-
-  if (plan.overrideWrites.length || plan.overrideDeletes.length) {
-    try {
-      await invalidateIcon();
-    } catch (error) {
-      // Cached icons refresh on the next page load anyway.
-      console.warn('Icon cache invalidation failed after import.', error);
-    }
-  }
-
-  return {
-    mode,
-    workspaceCount,
-    workspaceSkippedCount: plan.workspaceSkippedCount,
-    workspaceFailedCount,
-    iconOverrideCount: plan.overrideWrites.length,
-    iconOverrideSkippedCount: payload.skipped.oversizedDataUrlCount,
-    folderIconCount: plan.folderIconWrites.length + plan.pendingFolderIconWrites.length,
-    bookmarkUsageCount: plan.usageWrites.length,
-    settings,
-    merged: plan.merged,
-  };
-}
-
 export interface SyncPreviewSummary {
   // "This browser will get": incoming workspaces that appear as new tabs.
   newWorkspaceNames: string[];
@@ -476,7 +286,10 @@ export async function buildSyncPreview(
   payload: ParsedWorkspaceImport,
   mode: WorkspaceImportMode,
 ): Promise<SyncPreviewSummary> {
-  const [{ local, plan }, onboarding] = await Promise.all([planFor(payload, mode, 'sync'), readOnboardingState()]);
+  const [{ local, plan }, onboarding] = await Promise.all([
+    planWorkspaceImport(payload, mode, 'sync', getBookmarkTree),
+    readOnboardingState(),
+  ]);
   return {
     newWorkspaceNames: plan.newWorkspaceNames,
     updatedWorkspaceNames: plan.updatedWorkspaceNames,

@@ -1,5 +1,5 @@
 import { extensionApi } from '../shared/browser';
-import { IconFetchError, SyncFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetSyncPairingCodeResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type SyncErrorResponse, type SyncPullResponse, type SyncPullNotFoundResponse, type SyncPushResponse, type AdoptSyncSecretResponse, type WebSearchResponse, type FolderLocator, type WorkspaceRecord, type WorkspaceView } from '../shared/messages';
+import { IconFetchError, SyncFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetSyncPairingCodeResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type SyncErrorResponse, type SyncPullResponse, type SyncPullNotFoundResponse, type SyncPushResponse, type AdoptSyncSecretResponse, type ApplyWorkspaceImportResponse, type WebSearchResponse, type FolderLocator, type WorkspaceRecord, type WorkspaceView } from '../shared/messages';
 import { createWorkspaceFromUser, deleteWorkspaceFromUser, ensureStorageMigrations, markBindingsBackfilled, markOnboardingPending, patchSettingsFromUser, patchWorkspaceFromUser, readBookmarkUsageRecords, readFolderBindings, readFolderIconOverride, readNotUsedWorkspaceIds, readSettings, readWorkspaces, setWorkspaceNotUsed, updateFolderBindings, writeBookmarkUsageRecord } from '../shared/storage';
 import { buildFolderLocator, folderExists, locatorHash } from '../shared/folder-locator';
 import { overlayWorkspace, readWorkspaceViews, resolveFolderBindings } from './folder-bindings';
@@ -8,6 +8,7 @@ import { adoptSyncSecret, getSyncPairingCode, previewPull, syncPull, syncPush } 
 import { performWebSearch } from './search-shim';
 import { computeBookmarkMoveIndex } from './move-index';
 import { openBookmarkManager } from './bookmark-manager';
+import { applyWorkspaceImport } from './workspace-import';
 
 extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }) => {
   const reason = details.reason ?? 'unknown';
@@ -117,9 +118,7 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
   // One-time, idempotent migrations (per-key workspace split, legacy view/sort
   // copy, then the per-browser settings move — ensureStorageMigrations runs
   // them in that order). Each is memoized + persisted-marker gated, so this is
-  // a cheap no-op after the first run. Covers applyWorkspaceImport's direct
-  // newtab-side writeSettings, since newtab always messages the SW before that
-  // path is reachable.
+  // a cheap no-op after the first run.
   await ensureStorageMigrations();
 
   switch (message.type) {
@@ -259,6 +258,13 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
       await updateFolderBindings(({ [message.id]: _removed, ...rest }) => rest);
       await setWorkspaceNotUsed(message.id, false);
       return { ok: true } satisfies DeleteWorkspaceResponse;
+    }
+    case messageTypes.applyWorkspaceImport: {
+      const summary = await applyWorkspaceImport(message.payload, message.mode, message.origin, {
+        loadTree: getBookmarkTree,
+        invalidateIcons: () => invalidateIcon(),
+      });
+      return { summary } satisfies ApplyWorkspaceImportResponse;
     }
     case messageTypes.openTab: {
       await extensionApi.tabs.create({ url: message.url });
