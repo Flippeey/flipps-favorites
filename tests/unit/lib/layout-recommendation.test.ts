@@ -22,7 +22,6 @@ describe('recommendLayout', () => {
   it('small laptop (1366x768) -> compact', () => {
     const rec = recommendLayout(metrics({ screenWidth: 1366, screenHeight: 768 }));
     expect(rec.layoutPreset).toBe('compact');
-    expect(rec.sizingBucket).toBe('small');
   });
 
   // WHY: 1080p is the mainstream desktop size the stored default ('balanced') is
@@ -30,7 +29,6 @@ describe('recommendLayout', () => {
   it('1080p (1920x1080) -> balanced', () => {
     const rec = recommendLayout(metrics({ screenWidth: 1920, screenHeight: 1080 }));
     expect(rec.layoutPreset).toBe('balanced');
-    expect(rec.sizingBucket).toBe('standard');
   });
 
   // WHY: a 1440p panel has noticeably more room; balanced tiles read small, so it
@@ -38,7 +36,6 @@ describe('recommendLayout', () => {
   it('1440p (2560x1440) -> spacious', () => {
     const rec = recommendLayout(metrics({ screenWidth: 2560, screenHeight: 1440 }));
     expect(rec.layoutPreset).toBe('spacious');
-    expect(rec.sizingBucket).toBe('large');
   });
 
   // WHY: a single 4K monitor is roomy but NOT presentation-roomy — presentation
@@ -47,7 +44,6 @@ describe('recommendLayout', () => {
   it('4K (3840x2160) -> spacious', () => {
     const rec = recommendLayout(metrics({ screenWidth: 3840, screenHeight: 2160 }));
     expect(rec.layoutPreset).toBe('spacious');
-    expect(rec.sizingBucket).toBe('large');
   });
 
   // WHY: the original user report — a 3440x2160 panel is wide and >3k but a single
@@ -95,7 +91,6 @@ describe('recommendLayout', () => {
   it('ultrawide (2560x1080) -> spacious (bump capped, never presentation)', () => {
     const rec = recommendLayout(metrics({ screenWidth: 2560, screenHeight: 1080 }));
     expect(rec.layoutPreset).toBe('spacious');
-    expect(rec.sizingBucket).toBe('large');
   });
 
   // WHY: the reported case — a 3440x1440 (21:9, aspect 2.39) ultrawide. Spacious

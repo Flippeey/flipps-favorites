@@ -184,13 +184,6 @@
   animation: ffSlideUp 180ms var(--ease-out);
 }
 @keyframes ffSlideUp { from { opacity: 0; transform: translate(-50%, 20px); } to { opacity: 1; transform: translate(-50%, 0); } }
-.ff-results__group {
-  padding: 8px 12px 4px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--fg-3);
-}
 .ff-results__item {
   display: flex; align-items: center; gap: 12px;
   padding: 8px 12px;

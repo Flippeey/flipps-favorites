@@ -4,7 +4,6 @@ import type { BookmarkNode, IconSearchCandidate, IconSourceKind, ResolvedIcon } 
 import type { TileShape } from '@/shared/models';
 import { getRegistrableDomain, getScopeHostname, type IconOverrideScope } from '@/shared/icon-scope';
 import {
-  createBookmark,
   getIcon,
   invalidateIcon,
   removeIconOverride,
@@ -26,7 +25,7 @@ import { ModalDialog } from './ModalDialog';
 import { IconPickerPanel } from './IconPickerPanel';
 
 export interface EditTarget {
-  id?: string;
+  id: string;
   parentId?: string;
   title: string;
   url: string;
@@ -144,12 +143,7 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
     setSaving(true);
     setStatus(null);
     try {
-      let bookmark: BookmarkNode;
-      if (target.id) {
-        bookmark = await updateBookmark(target.id, { title, url });
-      } else {
-        bookmark = await createBookmark(target.parentId ?? '1', title, url);
-      }
+      const bookmark = await updateBookmark(target.id, { title, url });
       invalidateFaviconCache(bookmarkUrl);
       if (bookmark.url) {
         invalidateFaviconCache(bookmark.url);
@@ -277,7 +271,6 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
     runSearch(query.trim());
   };
 
-  const canManageIcon = Boolean(target.id);
   const previewSrc = previewIcon?.dataUrl ?? null;
   const scopeHostname = getScopeHostname(bookmarkUrl);
   const scopeDomain = getRegistrableDomain(scopeHostname);
@@ -294,7 +287,7 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
   return (
     <ModalDialog
       icon="pencil"
-      eyebrow={target.id ? 'Edit bookmark' : 'New bookmark'}
+      eyebrow="Edit bookmark"
       title={title || 'Untitled'}
       onClose={onClose}
     >
@@ -313,14 +306,14 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
               tileShape={tileShape}
               previewSrc={previewSrc}
               fallbackLetter={title?.[0] ?? '?'}
-              canManage={canManageIcon}
+              canManage={true}
               onRefresh={handleRefreshIcon}
               onRemove={handleRemoveOverride}
               onUploadClick={handleUploadClick}
               fileInputRef={fileInputRef}
               onFileChange={handleFileChange}
               hintText="Hover the preview for quick icon actions."
-              scopeControl={canManageIcon && scopeOptions.length > 1 ? (
+              scopeControl={scopeOptions.length > 1 ? (
                 <div className="ff-field">
                   <label className="ff-field__label">Apply icon to</label>
                   <div className="ff-segmented" role="radiogroup" aria-label="Icon override scope" style={{ alignSelf: 'stretch' }}>
@@ -370,7 +363,7 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
 
           <IconPickerPanel
             section="search"
-            canManage={canManageIcon}
+            canManage={true}
             query={query}
             onQueryChange={setQuery}
             onSearchSubmit={handleSearchSubmit}
@@ -380,7 +373,6 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
             onPreviewLoad={handlePreviewLoad}
             onPickCandidate={handlePickCandidate}
             onPickCandidateAndClose={handlePickCandidateAndClose}
-            working={working}
           />
     </ModalDialog>
   );

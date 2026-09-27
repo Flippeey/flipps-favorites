@@ -13,10 +13,6 @@
 
 import type { LayoutPresetId } from '@/shared/models';
 
-// Coarse sizing bucket the recommendation falls into. Maps 1:1 onto a non-custom
-// preset, but is named by intent (screen class) for readability and assertions.
-export type LayoutSizingBucket = 'small' | 'standard' | 'large' | 'xlarge';
-
 export interface ViewportMetrics {
   // Effective CSS pixels available to the page (window.innerWidth/Height).
   innerWidth: number;
@@ -30,7 +26,6 @@ export interface ViewportMetrics {
 
 export interface LayoutRecommendation {
   layoutPreset: Exclude<LayoutPresetId, 'custom'>;
-  sizingBucket: LayoutSizingBucket;
 }
 
 // Effective-width cutoffs (CSS px). Each is the upper bound (exclusive) of its
@@ -50,13 +45,6 @@ const LARGE_MAX = 5000;          // 2100–4999: 1440p/QHD (2560) through 4K (38
 // width and is never reached via the aspect bump, so a 3440x1440 ultrawide lands
 // spacious, not presentation (user report — presentation tiles too large there).
 const ULTRAWIDE_ASPECT = 2.1;
-
-const BUCKET_BY_PRESET: Record<Exclude<LayoutPresetId, 'custom'>, LayoutSizingBucket> = {
-  compact: 'small',
-  balanced: 'standard',
-  spacious: 'large',
-  presentation: 'xlarge',
-};
 
 // Ordered densest → roomiest, so "bump one band roomier" is an index step.
 const PRESET_LADDER: Exclude<LayoutPresetId, 'custom'>[] = [
@@ -103,7 +91,7 @@ export function recommendLayout(metrics: ViewportMetrics): LayoutRecommendation 
     preset = PRESET_LADDER[Math.max(baseIndex, bumped)];
   }
 
-  return { layoutPreset: preset, sizingBucket: BUCKET_BY_PRESET[preset] };
+  return { layoutPreset: preset };
 }
 
 // Non-pure convenience reader: pulls live metrics from the newtab page globals.

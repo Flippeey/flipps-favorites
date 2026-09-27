@@ -22,7 +22,6 @@ interface UseDragArgs {
   // Fetch the live ordered children for a folder id (after current sort).
   getOrderedChildren: (folderId: string) => Array<{ id: string }>;
   onCommit: (dragIds: string[], target: DropTarget) => void;
-  onCancel?: () => void;
   // Fired once per drag when a reorder is attempted while reordering is disabled,
   // so the UI can explain that Manual sort is required.
   onReorderBlocked?: () => void;
@@ -107,7 +106,6 @@ export function useDrag({
   selectionRef,
   getOrderedChildren,
   onCommit,
-  onCancel,
   onReorderBlocked,
   dragEngagedRef,
   onSpringOpenWorkspace,
@@ -137,8 +135,6 @@ export function useDrag({
   getOrderedChildrenRef.current = getOrderedChildren;
   const onCommitRef = useRef(onCommit);
   onCommitRef.current = onCommit;
-  const onCancelRef = useRef(onCancel);
-  onCancelRef.current = onCancel;
   const onSpringOpenWorkspaceRef = useRef(onSpringOpenWorkspace);
   onSpringOpenWorkspaceRef.current = onSpringOpenWorkspace;
   const reorderEnabledRef = useRef(reorderEnabled);
@@ -156,7 +152,6 @@ export function useDrag({
       setPreview(null);
       if (stateRef.current?.springTimer) clearTimeout(stateRef.current.springTimer);
       stateRef.current = null;
-      onCancelRef.current?.();
     };
 
     const onDown = (event: PointerEvent) => {
