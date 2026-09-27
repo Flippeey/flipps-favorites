@@ -31,7 +31,8 @@ import { bookmarkUrl, folderExists, locatorHash, normalizeUrlForMatch, resolveFo
 export const WORKSPACE_SCHEMA = 'flipps-workspace-transfer' as const;
 // v3: per-workspace view/sort. v4: folder custom icons. v5: stamps, deletion
 // markers, folder-icon syncId; per-browser settings and usage bookmark ids
-// no longer required.
+// no longer required. A removed wallpaper travels as '' in the wallpaper map;
+// readers that predate it drop the entry and keep their own image.
 export const WORKSPACE_SCHEMA_VERSION = 5;
 
 export type WorkspaceImportMode = 'merge' | 'replace';
