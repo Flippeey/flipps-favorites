@@ -1,6 +1,6 @@
-import type { FolderIconOverrideRecord, GetIconRequest, IconCacheRecord, IconSearchCandidate, ResolvedIcon, SetIconOverrideRequest, IconOverrideRecord } from '@/shared/messages';
+import type { FolderIconOverrideRecord, FolderLocator, GetIconRequest, IconCacheRecord, IconSearchCandidate, ResolvedIcon, SetIconOverrideRequest, IconOverrideRecord } from '@/shared/messages';
 import { extensionApi } from '@/shared/browser';
-import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverrideRecordsForUrl, readIconCacheRecord, readIconCacheRecords, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideRecord, deleteFolderIconOverride, readAllFolderIconOverrides, writeFolderIconOverride } from '@/shared/storage';
+import { deleteAllIconCacheRecords, deleteIconCacheRecord, deleteIconOverridesForUrlFromUser, readIconCacheRecord, readIconCacheRecords, readIconOverrideRecord, writeIconCacheRecord, writeIconOverrideFromUser, deleteFolderIconOverride, deleteFolderIconFromUser, readAllFolderIconOverrides, writeFolderIconFromUser } from '@/shared/storage';
 import { evictExpiredCachedIcons } from '@/shared/icon-idb';
 import { getOverrideKeyForScope, normalizeOverrideScope, type IconOverrideScope } from '@/shared/icon-scope';
 import { iconPipelineVersion, maxDuckDuckGoResults, autoSourceTimeoutMs, sweepBatchSize, sweepBatchSpacingMs, maxConcurrentResolutions, getIconCacheKey } from './icon-constants';
@@ -115,22 +115,21 @@ export async function removeIconOverride(bookmarkUrl: string, bookmarkTitle?: st
   const cacheKey = getIconCacheKey(bookmarkUrl);
   // Clear every scope that currently applies (exact, host, domain) — "Remove"
   // means "stop overriding this bookmark", whichever record was doing it.
-  await deleteIconOverrideRecordsForUrl(bookmarkUrl);
+  await deleteIconOverridesForUrlFromUser(bookmarkUrl);
   await deleteIconCacheRecord(cacheKey);
   return getIcon({ type: 'icons/get', bookmarkUrl, bookmarkTitle });
 }
 
-export async function setFolderIcon(folderId: string, dataUrl: string, mimeType: string, fileName?: string): Promise<FolderIconOverrideRecord> {
+export async function setFolderIcon(folderId: string, dataUrl: string, mimeType: string, fileName?: string, locator?: FolderLocator): Promise<FolderIconOverrideRecord> {
   const normalizedDataUrl = normalizeDataUrl(dataUrl, mimeType);
-  const record: FolderIconOverrideRecord = {
+  return writeFolderIconFromUser({
     folderId,
     dataUrl: normalizedDataUrl,
     fileName,
     mimeType,
-    updatedAt: Date.now(),
-  };
-  await writeFolderIconOverride(record);
-  return record;
+    updatedAt: 0,
+    ...(locator ? { locator } : {}),
+  });
 }
 
 export async function setFolderIconFromUrl(
@@ -138,23 +137,26 @@ export async function setFolderIconFromUrl(
   imageUrl: string,
   fileName?: string,
   fallbackImageUrl?: string,
+  locator?: FolderLocator,
 ): Promise<FolderIconOverrideRecord> {
   try {
-    return await downloadAndPersistFolderIcon(folderId, imageUrl, fileName);
+    return await downloadAndPersistFolderIcon(folderId, imageUrl, fileName, locator);
   } catch (primaryError) {
     if (!fallbackImageUrl || fallbackImageUrl === imageUrl) {
       throw primaryError;
     }
     try {
-      return await downloadAndPersistFolderIcon(folderId, fallbackImageUrl, fileName);
+      return await downloadAndPersistFolderIcon(folderId, fallbackImageUrl, fileName, locator);
     } catch {
       throw primaryError;
     }
   }
 }
 
-export async function removeFolderIcon(folderId: string): Promise<void> {
-  await deleteFolderIconOverride(folderId);
+// recordDeletion: a user removal, which other browsers must follow. Cleanup
+// after the folder itself was deleted leaves no marker.
+export async function removeFolderIcon(folderId: string, recordDeletion = false): Promise<void> {
+  await (recordDeletion ? deleteFolderIconFromUser(folderId) : deleteFolderIconOverride(folderId));
 }
 
 // Startup sweep: removes folder-icon records whose folder no longer exists in
@@ -342,7 +344,6 @@ export async function sweepGeneratedRecords(): Promise<void> {
 }
 
 async function persistIconOverride(args: { bookmarkUrl: string; dataUrl: string; fileName: string; mimeType: string; scope: IconOverrideScope }): Promise<ResolvedIcon> {
-  const now = Date.now();
   const overrideKey = getOverrideKeyForScope(args.bookmarkUrl, args.scope)
     ?? `exact:${args.bookmarkUrl}`;
   const record: IconOverrideRecord = {
@@ -352,17 +353,18 @@ async function persistIconOverride(args: { bookmarkUrl: string; dataUrl: string;
     dataUrl: args.dataUrl,
     fileName: args.fileName,
     mimeType: args.mimeType,
-    updatedAt: now,
+    updatedAt: 0,
   };
 
-  await writeIconOverrideRecord(record);
+  const stored = await writeIconOverrideFromUser(record);
   await deleteIconCacheRecord(getIconCacheKey(args.bookmarkUrl));
 
   return {
     cacheKey: getIconCacheKey(args.bookmarkUrl),
     sourceKind: 'override',
     dataUrl: args.dataUrl,
-    lastUpdated: now,
+    lastUpdated: stored.updatedAt,
     isFallback: false,
   };
 }
+

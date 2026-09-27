@@ -27,14 +27,13 @@ export interface StubHost {
   close(): Promise<void>;
 }
 
-/**
- * Starts a local HTTPS server with a throwaway self-signed cert whose SAN
- * list covers `hostnames`, so the browser's TLS handshake for the real
- * hostname validates against this server without needing to also race an
- * `ignoreHTTPSErrors` override on a brand-new tab target. Returns the
- * `--host-resolver-rules` value that maps `hostnames` to it.
- */
-export async function startStubHost(hostnames: string[]): Promise<StubHost> {
+export interface SelfSignedCert {
+  key: Buffer;
+  cert: Buffer;
+}
+
+/** A throwaway self-signed cert whose SAN list covers `hostnames`. */
+export function createSelfSignedCert(hostnames: string[]): SelfSignedCert {
   const certDir = mkdtempSync(join(tmpdir(), 'ff-stub-cert-'));
   const keyPath = join(certDir, 'key.pem');
   const certPath = join(certDir, 'cert.pem');
@@ -60,17 +59,25 @@ export async function startStubHost(hostnames: string[]): Promise<StubHost> {
     ],
     { stdio: 'ignore' },
   );
+  const pair = { key: readFileSync(keyPath), cert: readFileSync(certPath) };
+  rmSync(certDir, { recursive: true, force: true });
+  return pair;
+}
 
-  const server = https.createServer(
-    { key: readFileSync(keyPath), cert: readFileSync(certPath) },
-    (_req, res) => {
-      res.writeHead(200, { 'content-type': 'text/html' });
-      res.end('<!doctype html><title>stub</title>');
-    },
-  );
+/**
+ * Starts a local HTTPS server with a throwaway self-signed cert whose SAN
+ * list covers `hostnames`, so the browser's TLS handshake for the real
+ * hostname validates against this server without needing to also race an
+ * `ignoreHTTPSErrors` override on a brand-new tab target. Returns the
+ * `--host-resolver-rules` value that maps `hostnames` to it.
+ */
+export async function startStubHost(hostnames: string[]): Promise<StubHost> {
+  const server = https.createServer(createSelfSignedCert(hostnames), (_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end('<!doctype html><title>stub</title>');
+  });
   await new Promise<void>((resolveListen) => server.listen(0, '127.0.0.1', resolveListen));
   const port = (server.address() as AddressInfo).port;
-  rmSync(certDir, { recursive: true, force: true });
 
   return {
     hostResolverRules: hostnames.map((host) => `MAP ${host}:443 127.0.0.1:${port}`).join(','),

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { firstOrderedWorkspaceId, orderWorkspaces } from '@/newtab/lib/workspace-order';
+import type { WorkspaceRecord, WorkspaceView } from '@/shared/messages';
+import {
+  firstOrderedWorkspaceId,
+  orderWorkspaces,
+  resolveActiveWorkspace,
+  shownWorkspaces,
+  workspaceLimitMessage,
+} from '@/newtab/lib/workspace-order';
 
 interface Row { id: string; label: string }
 
@@ -8,6 +15,8 @@ const rows: Row[] = [
   { id: 'b', label: 'B' },
   { id: 'c', label: 'C' },
 ];
+
+const ws = (id: string): WorkspaceRecord => ({ id, name: id, rootFolderId: id } as WorkspaceRecord);
 
 describe('orderWorkspaces', () => {
   // WHY: this is the tab strip's core contract — order dictates left-to-right
@@ -30,6 +39,12 @@ describe('orderWorkspaces', () => {
     expect(orderWorkspaces(rows, ['z', 'b', 'a']).map(r => r.id)).toEqual(['b', 'a', 'c']);
   });
 
+  // WHY: a merged order from another browser can name an id twice; the tab
+  // must still appear once.
+  it('shows a workspace once when the order repeats its id', () => {
+    expect(orderWorkspaces(rows, ['b', 'a', 'b']).map(r => r.id)).toEqual(['b', 'a', 'c']);
+  });
+
   it('falls back to storage order when order is empty or undefined', () => {
     expect(orderWorkspaces(rows, undefined).map(r => r.id)).toEqual(['a', 'b', 'c']);
     expect(orderWorkspaces(rows, []).map(r => r.id)).toEqual(['a', 'b', 'c']);
@@ -41,9 +56,9 @@ describe('firstOrderedWorkspaceId', () => {
     expect(firstOrderedWorkspaceId(rows, ['c', 'a', 'b'])).toBe('c');
   });
 
-  // WHY: this is the exact bug this module fixes — deleting the active
-  // workspace must reactivate the first TAB (order[0]), not whichever
-  // workspace happens to be first in storage/response order.
+  // WHY: deleting the active workspace must reactivate the first TAB
+  // (order[0]), not whichever workspace happens to be first in
+  // storage/response order.
   it('is the first ordered survivor after the active workspace is removed', () => {
     const remaining = rows.filter(r => r.id !== 'c');
     expect(firstOrderedWorkspaceId(remaining, ['c', 'a', 'b'])).toBe('a');
@@ -51,5 +66,36 @@ describe('firstOrderedWorkspaceId', () => {
 
   it('returns undefined for an empty workspace list', () => {
     expect(firstOrderedWorkspaceId([], ['a'])).toBeUndefined();
+  });
+});
+
+// The active workspace is chosen per browser and never synced, so a sync can
+// delete it here; the page must then fall back to a workspace that is shown.
+describe('resolveActiveWorkspace', () => {
+  it('keeps the active workspace while it exists', () => {
+    expect(resolveActiveWorkspace([ws('a'), ws('b')], ['a', 'b'], 'b')?.id).toBe('b');
+  });
+
+  it('falls back to the first workspace in tab order when the active one was deleted by a sync', () => {
+    expect(resolveActiveWorkspace([ws('a'), ws('b')], ['b', 'a'], 'deleted')?.id).toBe('b');
+    expect(resolveActiveWorkspace([], ['b'], 'deleted')).toBeNull();
+  });
+});
+
+describe('workspaces without a folder in this browser', () => {
+  const views: WorkspaceView[] = [
+    ws('shown'),
+    { ...ws('lost'), rootFolderId: '', folderState: 'lost' },
+    { ...ws('waiting'), rootFolderId: '', folderState: 'waiting' },
+    { ...ws('unused'), rootFolderId: '', folderState: 'unused' },
+  ];
+
+  it('hides waiting and unused ones but keeps a lost one, which shows the removed-folder state', () => {
+    expect(shownWorkspaces(views).map(w => w.id)).toEqual(['shown', 'lost']);
+  });
+
+  it('names the hidden ones in the limit message, since they still count', () => {
+    expect(workspaceLimitMessage(views)).toBe('Workspace limit reached (20, including 2 waiting for bookmarks)');
+    expect(workspaceLimitMessage([ws('a')])).toBe('Workspace limit reached (20)');
   });
 });

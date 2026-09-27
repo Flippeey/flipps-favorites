@@ -79,7 +79,7 @@ export function FolderNameDialog({ tree, target, siblingNames, onClose, onSaved 
     },
     remove: {
       run: async () => {
-        await removeFolderIcon(folderId!);
+        await removeFolderIcon(folderId!, { recordDeletion: true });
         invalidateFolderIconCache(folderId!);
         return null;
       },

@@ -7,6 +7,8 @@ newtab.html                       # SPA entry HTML — mounts <div id="app">
 
 src/background/                   # MV3 background; message router; install/update lifecycle
   service-worker.ts              # Message dispatcher + lifecycle hooks
+  sync-client.ts                 # Settings sync: encrypted push/pull against the sync server
+  folder-bindings.ts             # Per-browser binding of synced workspaces to local bookmark folders
   icons/                          # Icon resolution, caching, image fetching
 
 src/newtab/                       # React 19 SPA (new-tab page)
@@ -16,13 +18,15 @@ src/newtab/                       # React 19 SPA (new-tab page)
     settings/                     # Per-section settings panels
   state/                          # State-owning hooks: useSelection, useWorkspaceActions, useToasts, useContextMenuBuilder
   interaction/                    # Interaction hooks: useDrag, useDragWiring, useMarquee, useKeyboardNav, useFocusTrap, useQuickAddShortcuts, useWorkspaceShortcut, useEscapeKey
-  lib/                            # Utilities (messaging, tree, classification, URL, accent, theming, dock-mode, folder-scoring, platform, workspace-transfer)
+  lib/                            # Utilities (messaging, tree, classification, URL, accent, theming, dock-mode, folder-scoring, platform, workspace-transfer, sync-now, workspace-order)
   styles/                         # Import chain in index.css (order matters); see root CLAUDE.md for chain
 
 src/shared/                       # Cross-context code
   messages.ts                     # SOURCE OF TRUTH: message types + contracts
   models.ts, browser.ts, storage.ts, storage-buckets.ts, icon-idb.ts, icon-scope.ts
   organization-templates.ts, icon-fallback.ts, seed-data.ts, constants.ts, url-brand.ts, globals.d.ts
+  sync-crypto.ts, sync-stamps.ts, folder-locator.ts   # Sync encryption, merge stamps, cross-browser folder matching
+  sync-merge.ts, sync-plan.ts     # Pure merge planner; local snapshot + planning (page and background)
 
 tests/
   global-setup.ts                 # Asserts dist/{chrome-test,firefox} exist (does NOT build)
@@ -55,6 +59,11 @@ scripts/
 | `src/background/icons/icon-service.ts` | Icon resolution pipeline entry (`resolveAutomaticIcon`) |
 | `src/newtab/lib/messaging.ts` | Typed wrappers around `runtime.sendMessage` |
 | `src/shared/storage.ts` | Settings/icon-cache/usage persistence; OnboardingState v2 migration. |
+| `src/background/sync-client.ts` | Sync entry: pairing code, encrypted push/pull, link preview fetch |
+| `src/shared/sync-merge.ts` | Sync merge planner: newest change wins per item, deletion markers |
+| `src/shared/sync-plan.ts` | Local snapshot read + planning, shared by the page (export, link preview) and the background |
+| `src/background/workspace-import.ts` | Applies a sync/import plan in the background, serialized with user edits |
+| `src/background/folder-bindings.ts` | Fail-closed binding of synced workspaces to this browser's folders |
 | `vite.config.mjs` | Build config (dual output) + `@` → `src` alias |
 | `tsconfig.json` | Strict TS config + `@/*` path mapping |
 | `scripts/write-manifest.mjs` | Manifest generation with env var overrides |

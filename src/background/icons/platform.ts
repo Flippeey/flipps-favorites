@@ -96,3 +96,122 @@ export async function firefoxSafeFetch(url: string, init?: RequestInit, timeoutM
   }
   return fetch(url, init);
 }
+
+const NULL_BODY_STATUSES = new Set([204, 205, 304]);
+
+export class ResponseTooLargeError extends Error {
+  constructor(maxBytes: number) {
+    super(`Response body exceeds ${maxBytes} bytes`);
+    this.name = 'ResponseTooLargeError';
+  }
+}
+
+// Reads at most maxBytes of the body, cancelling the stream as soon as the
+// declared or received size passes the cap, so an oversized response is
+// never held in memory whole.
+async function readCappedBody(response: Response, maxBytes: number): Promise<ArrayBuffer> {
+  if (Number(response.headers.get('Content-Length')) > maxBytes) {
+    await response.body?.cancel();
+    throw new ResponseTooLargeError(maxBytes);
+  }
+  const reader = response.body?.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (let chunk = await reader?.read(); chunk && !chunk.done; chunk = await reader?.read()) {
+    total += chunk.value.byteLength;
+    if (total > maxBytes) {
+      await reader?.cancel();
+      throw new ResponseTooLargeError(maxBytes);
+    }
+    chunks.push(chunk.value);
+  }
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body.buffer;
+}
+
+/**
+ * XHR-backed fetch shim for arbitrary methods + binary bodies (settings
+ * sync). Unlike xhrFetch() above (icon pipeline: GET-only, blob response), this
+ * supports PUT with an ArrayBuffer/Blob body and reads the response back as
+ * an ArrayBuffer — what the sync push/pull paths need.
+ */
+export function xhrFetchRequest(
+  url: string,
+  init: { method: string; headers?: Record<string, string>; body?: BodyInit },
+  timeoutMs?: number,
+  maxResponseBytes?: number,
+): Promise<Response> {
+  return new Promise<Response>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.responseType = 'arraybuffer';
+    if (timeoutMs !== undefined && timeoutMs > 0) {
+      xhr.timeout = timeoutMs;
+    }
+    xhr.open(init.method, url, true);
+
+    if (init.headers) {
+      for (const [key, value] of Object.entries(init.headers)) {
+        xhr.setRequestHeader(key, value);
+      }
+    }
+
+    xhr.onload = () => {
+      // XHR reports an empty ArrayBuffer even for a bodiless 204, but the
+      // Response constructor throws on any body paired with a null-body status.
+      const body = NULL_BODY_STATUSES.has(xhr.status) ? null : ((xhr.response as ArrayBuffer | null) ?? new ArrayBuffer(0));
+      resolve(new Response(body, { status: xhr.status, statusText: xhr.statusText }));
+    };
+
+    xhr.onerror = () => {
+      reject(new TypeError(`XHR network error requesting ${url}`));
+    };
+
+    xhr.ontimeout = () => {
+      reject(new DOMException(`XHR timeout requesting ${url}`, 'TimeoutError'));
+    };
+
+    xhr.onprogress = (event: ProgressEvent) => {
+      if (maxResponseBytes === undefined) return;
+      if (event.loaded > maxResponseBytes || (event.lengthComputable && event.total > maxResponseBytes)) {
+        xhr.abort();
+        reject(new ResponseTooLargeError(maxResponseBytes));
+      }
+    };
+
+    xhr.send(init.body as XMLHttpRequestBodyInit | undefined);
+  });
+}
+
+/**
+ * Cross-origin fetch for arbitrary methods (PUT/GET with binary bodies), used
+ * by the settings-sync client. Same Chrome-fetch / Firefox-XHR branch as
+ * firefoxSafeFetch, but supports the request shapes sync needs.
+ */
+export async function firefoxSafeFetchRequest(
+  url: string,
+  init: { method: string; headers?: Record<string, string>; body?: BodyInit },
+  timeoutMs?: number,
+  maxResponseBytes?: number,
+): Promise<Response> {
+  if (isFirefox()) {
+    return xhrFetchRequest(url, init, timeoutMs, maxResponseBytes);
+  }
+  const response = await fetch(url, {
+    method: init.method,
+    headers: init.headers,
+    body: init.body,
+    ...(timeoutMs !== undefined && timeoutMs > 0 ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
+  });
+  if (maxResponseBytes === undefined) return response;
+  const body = await readCappedBody(response, maxResponseBytes);
+  return new Response(NULL_BODY_STATUSES.has(response.status) ? null : body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}

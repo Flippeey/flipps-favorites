@@ -24,7 +24,15 @@ export const messageTypes = {
   createWorkspace: 'workspaces/create',
   patchWorkspace: 'workspaces/patch',
   deleteWorkspace: 'workspaces/delete',
+  bindWorkspaceFolder: 'workspaces/bind-folder',
+  setWorkspaceNotUsed: 'workspaces/set-not-used',
+  applyWorkspaceImport: 'workspaces/apply-import',
   openTab: 'tabs/open',
+  syncPush: 'sync/push',
+  syncPull: 'sync/pull',
+  syncPreviewPull: 'sync/preview-pull',
+  getSyncPairingCode: 'sync/get-pairing-code',
+  adoptSyncSecret: 'sync/adopt-secret',
   webSearch: 'search/web-query',
 } as const;
 
@@ -40,8 +48,10 @@ import type {
   IconSearchCandidate,
   ResolvedIcon,
   WorkspaceRecord,
+  WorkspaceView,
 } from './models';
 import type { IconOverrideScope } from './icon-scope';
+import type { ImportOrigin, ParsedWorkspaceImport, WorkspaceImportMode, WorkspaceImportSummary } from './sync-merge';
 
 export interface PingRequest {
   type: typeof messageTypes.ping;
@@ -237,6 +247,10 @@ export interface SetFolderIconFromUrlResponse {
 export interface RemoveFolderIconRequest {
   type: typeof messageTypes.removeFolderIcon;
   folderId: string;
+  // True when the user removed the icon, so the removal reaches other
+  // browsers. Cleanup after a bookmark-folder delete leaves it unset: a folder
+  // deleted here says nothing about another browser's folders.
+  recordDeletion?: boolean;
 }
 
 export interface RemoveFolderIconResponse {
@@ -265,8 +279,9 @@ export interface GetWorkspacesRequest {
   type: typeof messageTypes.getWorkspaces;
 }
 
+// Workspaces as this browser shows them (see WorkspaceView).
 export interface GetWorkspacesResponse {
-  workspaces: WorkspaceRecord[];
+  workspaces: WorkspaceView[];
 }
 
 export interface CreateWorkspaceRequest {
@@ -275,7 +290,7 @@ export interface CreateWorkspaceRequest {
 }
 
 export interface CreateWorkspaceResponse {
-  workspace: WorkspaceRecord;
+  workspace: WorkspaceView;
 }
 
 export interface PatchWorkspaceRequest {
@@ -285,7 +300,21 @@ export interface PatchWorkspaceRequest {
 }
 
 export interface PatchWorkspaceResponse {
-  workspace: WorkspaceRecord;
+  workspace: WorkspaceView;
+}
+
+// Shows the workspace from a folder the user picked in this browser only.
+export interface BindWorkspaceFolderRequest {
+  type: typeof messageTypes.bindWorkspaceFolder;
+  id: string;
+  folderId: string;
+}
+
+// Local only: the workspace stays stored, synced and counted.
+export interface SetWorkspaceNotUsedRequest {
+  type: typeof messageTypes.setWorkspaceNotUsed;
+  id: string;
+  notUsed: boolean;
 }
 
 export interface DeleteWorkspaceRequest {
@@ -297,12 +326,83 @@ export interface DeleteWorkspaceResponse {
   ok: true;
 }
 
+// Plans and applies a parsed sync payload or backup file in the background,
+// where its writes serialize with concurrent user edits.
+export interface ApplyWorkspaceImportRequest {
+  type: typeof messageTypes.applyWorkspaceImport;
+  payload: ParsedWorkspaceImport;
+  mode: WorkspaceImportMode;
+  origin: ImportOrigin;
+  // File imports: payload workspaces whose wallpaper the page kept out of
+  // `payload` and writes itself (see HeldWallpaperWrite).
+  heldWallpaperIds?: string[];
+}
+
+export interface ApplyWorkspaceImportResponse {
+  summary: WorkspaceImportSummary;
+}
+
 export interface OpenTabRequest {
   type: typeof messageTypes.openTab;
   url: string;
 }
 
 export interface OpenTabResponse {
+  ok: true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Settings sync. The bundle carried by SyncPushRequest is the merged
+// WorkspaceExportPayload planned by shared/sync-merge.ts, and a pull returns
+// the decrypted remote copy; both are typed `unknown` at this boundary and
+// narrowed by their callers.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SyncPushRequest {
+  type: typeof messageTypes.syncPush;
+  bundle: unknown;
+}
+
+export interface SyncPushResponse {
+  ok: true;
+}
+
+export interface SyncPullRequest {
+  type: typeof messageTypes.syncPull;
+}
+
+export interface SyncPullResponse {
+  found: true;
+  payload: unknown;
+}
+
+export interface SyncPullNotFoundResponse {
+  found: false;
+}
+
+// Dry-run pull for the link-preview dialog: fetches the namespace the PASTED
+// pairing code points at without adopting the code, so cancelling the dialog
+// leaves this browser untouched. Response reuses SyncPullResponse /
+// SyncPullNotFoundResponse.
+export interface SyncPreviewPullRequest {
+  type: typeof messageTypes.syncPreviewPull;
+  pairingCode: string;
+}
+
+export interface GetSyncPairingCodeRequest {
+  type: typeof messageTypes.getSyncPairingCode;
+}
+
+export interface GetSyncPairingCodeResponse {
+  pairingCode: string;
+}
+
+export interface AdoptSyncSecretRequest {
+  type: typeof messageTypes.adoptSyncSecret;
+  pairingCode: string;
+}
+
+export interface AdoptSyncSecretResponse {
   ok: true;
 }
 
@@ -342,7 +442,15 @@ export type AppRequest =
   | CreateWorkspaceRequest
   | PatchWorkspaceRequest
   | DeleteWorkspaceRequest
+  | BindWorkspaceFolderRequest
+  | SetWorkspaceNotUsedRequest
+  | ApplyWorkspaceImportRequest
   | OpenTabRequest
+  | SyncPushRequest
+  | SyncPullRequest
+  | SyncPreviewPullRequest
+  | GetSyncPairingCodeRequest
+  | AdoptSyncSecretRequest
   | WebSearchRequest;
 
 export type AppResponse =
@@ -371,5 +479,10 @@ export type AppResponse =
   | CreateWorkspaceResponse
   | PatchWorkspaceResponse
   | DeleteWorkspaceResponse
+  | ApplyWorkspaceImportResponse
   | OpenTabResponse
+  | SyncPushResponse
+  | (SyncPullResponse | SyncPullNotFoundResponse)
+  | GetSyncPairingCodeResponse
+  | AdoptSyncSecretResponse
   | WebSearchResponse;

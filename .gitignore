@@ -52,6 +52,7 @@ tests/.artifacts/
 
 # Evidence spec screenshots (generated per-run, uploaded to pr-evidence branch by CI)
 tests/evidence/output/
+.wrangler/
 
 # Per-PR evidence specs are deliberately NEVER committed here — they are throwaway
 # review scaffolding, and the screenshots they produce are already deleted from the

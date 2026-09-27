@@ -130,13 +130,10 @@ export function initialExpansionForSelection(tree: BookmarkNode[], folderId: str
   return new Set(ancestorFolderIds(tree, folderId));
 }
 
+// No folder rather than some other folder: a workspace never shows bookmarks
+// from anywhere but its own folder.
 export function resolveRootFolder(tree: BookmarkNode[], rootId: string): BookmarkNode | null {
-  if (rootId) {
-    const folder = findFolder(tree, rootId);
-    if (folder) return folder;
-  }
-  const top = topLevelFolders(tree);
-  return top[0] ?? null;
+  return rootId ? findFolder(tree, rootId) : null;
 }
 
 export function sortChildren(

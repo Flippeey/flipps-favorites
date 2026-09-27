@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef } from 'react';
-import type { AppSettings, WorkspaceRecord } from '@/shared/messages';
+import type { AppSettings, WorkspaceRecord, WorkspaceView } from '@/shared/messages';
 import type { MarqueeSelection } from '../interaction/useMarquee';
 import { clearDropAttrs } from '../interaction/useDrag';
 import { createWorkspace, deleteWorkspace, patchSettings, patchWorkspace } from '../lib/messaging';
 import { defaultWorkspaceSettings, readWorkspaceWallpaper, writeWorkspaceWallpaper } from '@/shared/storage';
 import { MAX_WORKSPACES } from '@/shared/constants';
 import { pickNextAccent } from '../lib/workspace-accent';
-import { firstOrderedWorkspaceId } from '../lib/workspace-order';
+import { firstOrderedWorkspaceId, shownWorkspaces } from '../lib/workspace-order';
 import type { PushToastInput } from './useToasts';
 
 export type CreateFromFolderGuardResult = 'proceed' | 'at_max' | 'already_exists';
@@ -27,8 +27,9 @@ export function checkCreateFromFolderGuard(
 }
 
 interface UseWorkspaceActionsArgs {
-  workspaces: WorkspaceRecord[];
-  setWorkspaces: React.Dispatch<React.SetStateAction<WorkspaceRecord[]>>;
+  // Every stored workspace, including ones hidden in this browser.
+  workspaces: WorkspaceView[];
+  setWorkspaces: React.Dispatch<React.SetStateAction<WorkspaceView[]>>;
   activeWorkspace: WorkspaceRecord | null;
   settings: AppSettings;
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
@@ -123,6 +124,8 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
     setWorkspaceWallpaper(dataUrl);
     try {
       await writeWorkspaceWallpaper(activeWorkspace.id, dataUrl);
+      // A wallpaper change is a workspace edit: stamp it so it syncs.
+      await patchWorkspace(activeWorkspace.id, {});
     } catch {
       // keep optimistic value
     }
@@ -191,10 +194,10 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
       return;
     }
     const remaining = workspaces.filter(w => w.id !== id);
-    // Activate the first workspace in TAB order, not storage order — otherwise
+    // Activate the first shown workspace in TAB order, not storage order — otherwise
     // deleting the active workspace can jump to a tab that isn't the leftmost one.
     const nextActiveId = settings.activeWorkspaceId === id
-      ? firstOrderedWorkspaceId(remaining, settings.workspaceOrder)
+      ? firstOrderedWorkspaceId(shownWorkspaces(remaining), settings.workspaceOrder)
       : undefined;
     setWorkspaces(remaining);
     if (nextActiveId) await handlePatch({ activeWorkspaceId: nextActiveId });
@@ -237,10 +240,12 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
     setNewWorkspaceOpen(true);
   }, [setNewWorkspaceOpen]);
 
+  // Tabs list only shown workspaces; hidden ones keep their place after them.
   const handleReorderWorkspaces = useCallback(async (ids: string[]) => {
-    setSettings(prev => ({ ...prev, workspaceOrder: ids }));
-    try { await patchSettings({ workspaceOrder: ids }); } catch { /* keep optimistic */ }
-  }, [setSettings]);
+    const order = [...ids, ...settings.workspaceOrder.filter(id => !ids.includes(id))];
+    setSettings(prev => ({ ...prev, workspaceOrder: order }));
+    try { await patchSettings({ workspaceOrder: order }); } catch { /* keep optimistic */ }
+  }, [setSettings, settings.workspaceOrder]);
 
   const handleRenameWorkspace = useCallback(async (id: string, name: string): Promise<void> => {
     const trimmed = name.trim();

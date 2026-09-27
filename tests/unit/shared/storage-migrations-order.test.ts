@@ -168,10 +168,9 @@ describe('ensureStorageMigrations — ordering', () => {
     expect(perKeyIndex).toBeLessThan(viewSortIndex);
   });
 
-  // Documents WHY the order matters, isolated from the (separate,
-  // pre-existing, not introduced by this change) issue where the per-key
-  // split's normalize-on-write can mask the view/sort migration's "field
-  // absent" detection — see the handback report. This test never calls
+  // Documents WHY the order matters, isolated from the separate issue where
+  // the per-key split's normalize-on-write can mask the view/sort migration's
+  // "field absent" detection. This test never calls
   // ensureWorkspaceViewSortMigration at all: it shows that ANY per-key write
   // landing before ensureWorkspacePerKeyMigration runs — which is exactly
   // what happens if it ran second — gets silently discarded, because the
@@ -196,5 +195,38 @@ describe('ensureStorageMigrations — ordering', () => {
     await storage.ensureWorkspacePerKeyMigration();
 
     expect((sync.data[perKey('a')] as WorkspaceRecord).name).toBe('Workspace a');
+  });
+
+  // View/sort run after a failed split would copy the globals onto per-key
+  // records, strip them from app-settings and set its own marker; the retried
+  // split then rewrites those records from the aggregate, and view/sort never
+  // runs again to restore what it copied. So it waits until the split is done.
+  it('a failed per-key split stops the chain until a later call retries it', async () => {
+    const { sync, local } = seedDoublyLegacyState();
+    const realSet = sync.api.set.bind(sync.api);
+    let failNextSplit = true;
+    sync.api.set = async items => {
+      if (failNextSplit && Object.keys(items).some(key => key.startsWith('workspace:'))) {
+        failNextSplit = false;
+        throw new Error('QUOTA_BYTES_PER_ITEM quota exceeded');
+      }
+      await realSet(items);
+    };
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const storage = await importStorage();
+    await storage.ensureStorageMigrations();
+
+    expect(local.data[PER_KEY_MARKER]).toBeUndefined();
+    expect(local.data[VIEW_SORT_MARKER]).toBeUndefined();
+    expect(sync.data[perKey('a')]).toBeUndefined();
+    expect((sync.data[STORAGE_KEY] as Record<string, unknown>).folderMode).toBe('list');
+
+    await storage.ensureStorageMigrations();
+
+    expect(local.data[PER_KEY_MARKER]).toBe(true);
+    expect(local.data[VIEW_SORT_MARKER]).toBe(true);
+    expect(local.setKeyLog.indexOf(PER_KEY_MARKER)).toBeLessThan(local.setKeyLog.indexOf(VIEW_SORT_MARKER));
+    vi.restoreAllMocks();
   });
 });

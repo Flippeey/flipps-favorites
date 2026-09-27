@@ -278,7 +278,7 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
   // Seed at least one folder so the default state is valid; the user can change it.
   const [selectedWorkspaceFolderIds, setSelectedWorkspaceFolderIds] = useState<string[]>(() => {
     if (scanResult.preSelected.length) return scanResult.preSelected.map(f => f.id);
-    const fallback = activeWorkspace?.rootFolderId ?? topLevelFolders(tree)[0]?.id;
+    const fallback = activeWorkspace?.rootFolderId || topLevelFolders(tree)[0]?.id;
     return fallback ? [fallback] : [];
   });
   const [pendingAccentColor, setPendingAccentColor] = useState(
