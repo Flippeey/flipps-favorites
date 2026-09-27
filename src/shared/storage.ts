@@ -49,8 +49,6 @@ const iconOverrideStore = createCachedRecordStore<IconOverrideRecord>({
   },
 });
 
-let iconOverrideMigrationPromise: Promise<void> | null = null;
-
 const bookmarkUsageStore = createCachedRecordStore<BookmarkUsageRecord>({
   storageKey: bookmarkUsageKey,
   area: 'sync-preferred',
@@ -578,8 +576,8 @@ function asRecord(value: unknown): Record<string, unknown> {
 //   - normalizeWorkspaceRecord applied to every record during the split
 //   - Legacy key deleted atomically with writing the marker
 //
-// Call order in service-worker: this migration runs BEFORE the view/sort
-// migration so writeWorkspace (called by view/sort) already uses per-key layout.
+// ensureStorageMigrations runs this BEFORE the view/sort migration so
+// writeWorkspace (called by view/sort) already uses per-key layout.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function ensureWorkspacePerKeyMigration(): Promise<void> {
@@ -637,49 +635,14 @@ async function runWorkspacePerKeyMigration(): Promise<void> {
   await localArea.set({ [workspacePerKeyMigrationMarkerKey]: true });
 }
 
-async function ensureIconOverrideRecordsMigratedToLocal(): Promise<void> {
-  if (!iconOverrideMigrationPromise) {
-    iconOverrideMigrationPromise = (async () => {
-      const syncArea = extensionApi.storage?.sync;
-      const localArea = extensionApi.storage?.local;
-      if (!syncArea?.get || !syncArea?.remove || !localArea?.get || !localArea?.set) {
-        return;
-      }
-
-      try {
-        const [localStored, syncStored] = await Promise.all([
-          localArea.get(iconOverrideKey),
-          syncArea.get(iconOverrideKey),
-        ]) as [Record<string, unknown>, Record<string, unknown>];
-
-        const localRecords = asIconOverrideRecordMap(localStored[iconOverrideKey]);
-        const syncRecords = asIconOverrideRecordMap(syncStored[iconOverrideKey]);
-        if (!Object.keys(syncRecords).length) {
-          return;
-        }
-
-        if (!Object.keys(localRecords).length) {
-          await localArea.set({
-            [iconOverrideKey]: syncRecords,
-          });
-        }
-
-        await syncArea.remove(iconOverrideKey);
-      } catch (error) {
-        console.warn('Failed to migrate icon overrides from sync storage to local storage.', error);
-      }
-    })();
-  }
-
-  await iconOverrideMigrationPromise;
-}
-
-function asIconOverrideRecordMap(value: unknown): Record<string, IconOverrideRecord> {
-  if (!value || typeof value !== 'object') {
-    return {};
-  }
-
-  return { ...(value as Record<string, IconOverrideRecord>) };
+// Single entry point for service-worker to call: runs the per-key split
+// before the view/sort copy, since view/sort's writeWorkspace calls assume
+// records already live under per-id keys. Each migration keeps its own
+// memoization and persisted-marker idempotency; this only fixes their
+// relative order in one place instead of leaving it to caller discipline.
+export async function ensureStorageMigrations(): Promise<void> {
+  await ensureWorkspacePerKeyMigration();
+  await ensureWorkspaceViewSortMigration();
 }
 
 const ARCHETYPE_IDS: ReadonlySet<string> = new Set(['hoarder', 'power-user', 'casual', 'researcher']);

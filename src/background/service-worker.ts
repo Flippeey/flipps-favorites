@@ -1,6 +1,6 @@
 import { extensionApi } from '../shared/browser';
 import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type WebSearchResponse } from '../shared/messages';
-import { deleteWorkspace, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, patchWorkspaceRecord, readBookmarkUsageRecords, readFolderIconOverride, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
+import { deleteWorkspace, ensureStorageMigrations, markOnboardingPending, patchWorkspaceRecord, readBookmarkUsageRecords, readFolderIconOverride, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
 import { getIcon, invalidateIcon, removeFolderIcon, removeIconOverride, searchIcons, setFolderIcon, setFolderIconFromUrl, setIconOverride, setIconOverrideFromUrl, sweepFolderIcons, sweepGeneratedRecords } from './icons/icon-service';
 import { performWebSearch } from './search-shim';
 import { computeBookmarkMoveIndex } from './move-index';
@@ -72,16 +72,12 @@ function buildErrorEnvelope(error: unknown): AppErrorResponse {
 }
 
 async function handleMessage(message: AppRequest): Promise<AppResponse> {
-  // One-time, idempotent migration: splits the legacy `workspaces` aggregate key
-  // into per-record `workspace:<id>` sync keys. Must run BEFORE view/sort migration
-  // so writeWorkspace (called by that migration) already uses per-key layout.
-  await ensureWorkspacePerKeyMigration();
-
-  // One-time, idempotent copy of legacy global view/sort onto every workspace.
-  // Memoized + persisted-marker gated, so this is a cheap no-op after the first
-  // run. Covers applyWorkspaceImport's direct newtab-side writeSettings, since
-  // newtab always messages the SW before that path is reachable.
-  await ensureWorkspaceViewSortMigration();
+  // One-time, idempotent migrations (per-key workspace split, then legacy
+  // view/sort copy — ensureStorageMigrations runs them in that order). Each
+  // is memoized + persisted-marker gated, so this is a cheap no-op after the
+  // first run. Covers applyWorkspaceImport's direct newtab-side writeSettings,
+  // since newtab always messages the SW before that path is reachable.
+  await ensureStorageMigrations();
 
   switch (message.type) {
     case messageTypes.ping:
