@@ -52,6 +52,40 @@ describe('isCollageTitle / stripHtml', () => {
   });
 });
 
+describe('stripHtml performance and output stability', () => {
+  // Each timing case catches a different quadratic shape: a regex like /<[^>]*>/ rescans
+  // to the end from every unterminated '<', while a /<[^<>]*>/ fixed-point loop strips one
+  // '<>' pair per pass when opens and closes are segregated.
+  it('stays linear on unterminated nested angle brackets', () => {
+    const start = performance.now();
+    stripHtml('<'.repeat(100000));
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(500);
+  });
+
+  it('stays linear when opens and closes are segregated', () => {
+    const start = performance.now();
+    stripHtml('<'.repeat(50000) + '>'.repeat(50000));
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(500);
+  });
+
+  it('pins output for representative tag shapes', () => {
+    const cases: Array<[string, string]> = [
+      ['<b>Hi</b> there', 'Hi there'],
+      ['<script', 'script'],
+      ['x<img src=y', 'ximg src=y'],
+      ['<>', ''],
+      ['<a<a<a<a', 'aaaa'],
+      ['<<a>b>', 'b>'],
+      ['a<b<c>d', 'ad'],
+    ];
+    for (const [input, expected] of cases) {
+      expect(stripHtml(input)).toBe(expected);
+    }
+  });
+});
+
 describe('clampFaviconSize', () => {
   it('clamps to [128,256]', () => {
     expect(clampFaviconSize(64)).toBe(128);

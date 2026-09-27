@@ -36,6 +36,7 @@ import {
 } from './icon-classify';
 import {
   parseOriginIconCandidates,
+  parseManifestHref,
   parseLargestSize,
   extractDuckDuckGoToken,
   getFileNameFromUrl,
@@ -135,10 +136,10 @@ export async function gatherOriginIconProbes(hostname: string): Promise<OriginPr
     const probes: Array<{ url: string; sizeHint: number; weight: number }> = [];
     if (html) {
       probes.push(...parseOriginIconCandidates(html, origin));
-      const manifestMatch = html.match(/<link[^>]+rel=["']?manifest["']?[^>]*href=["']([^"']+)["']/i);
-      if (manifestMatch?.[1]) {
+      const manifestHref = parseManifestHref(html);
+      if (manifestHref) {
         try {
-          const manifestUrl = new URL(manifestMatch[1], `${origin}/`).toString();
+          const manifestUrl = new URL(manifestHref, `${origin}/`).toString();
           const manifestResponse = await fetchWithTimeout(manifestUrl, 2500).catch(() => null);
           if (manifestResponse?.ok) {
             const manifest = await manifestResponse.json().catch(() => null) as { icons?: Array<{ src: string; sizes?: string; type?: string }> } | null;

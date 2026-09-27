@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  parseLargestSize, parseOriginIconCandidates,
+  parseLargestSize, parseOriginIconCandidates, parseManifestHref,
+  ORIGIN_HTML_PARSE_LIMIT,
   extractDuckDuckGoToken, isDataUrl, getFileNameFromUrl,
 } from '@/background/icons/icon-parse';
 
@@ -20,6 +21,45 @@ describe('parseOriginIconCandidates', () => {
     const out = parseOriginIconCandidates(html, 'https://acme.com');
     expect(out.some(c => c.url === 'https://acme.com/a.png' && c.weight === 100)).toBe(true);
     expect(out.some(c => c.url === 'https://acme.com/f.ico')).toBe(true);
+  });
+});
+
+describe('parseOriginIconCandidates / parseManifestHref performance', () => {
+  const unterminatedLinkSoup = '<link rel=icon href=a.png '.repeat(15000);
+
+  it('parses unterminated repeated link tags in linear time', () => {
+    const start = performance.now();
+    parseOriginIconCandidates(unterminatedLinkSoup, 'https://acme.com');
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(1000);
+  });
+
+  it('parses manifest links in the same unterminated soup in linear time', () => {
+    const start = performance.now();
+    parseManifestHref(unterminatedLinkSoup);
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(1000);
+  });
+
+  it('ignores link tags past the parse limit', () => {
+    const filler = 'x'.repeat(ORIGIN_HTML_PARSE_LIMIT);
+    const html = `<head><link rel="icon" href="/in-limit.png">${filler}<link rel="icon" href="/past-limit.png"></head>`;
+    const out = parseOriginIconCandidates(html, 'https://acme.com');
+    expect(out.some(c => c.url === 'https://acme.com/in-limit.png')).toBe(true);
+    expect(out.some(c => c.url === 'https://acme.com/past-limit.png')).toBe(false);
+  });
+});
+
+describe('parseManifestHref', () => {
+  it('extracts the manifest href across quoting styles', () => {
+    expect(parseManifestHref('<link rel="manifest" href="/site.webmanifest">')).toBe('/site.webmanifest');
+    expect(parseManifestHref("<link rel='manifest' href='/site.webmanifest'>")).toBe('/site.webmanifest');
+    expect(parseManifestHref('<link rel=manifest href=/site.webmanifest>')).toBe('/site.webmanifest');
+  });
+
+  it('returns null when there is no manifest link', () => {
+    expect(parseManifestHref('<link rel="icon" href="/f.ico">')).toBeNull();
+    expect(parseManifestHref('<p>no links here</p>')).toBeNull();
   });
 });
 
