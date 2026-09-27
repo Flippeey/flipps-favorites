@@ -4,9 +4,7 @@ name: PR Evidence
 # `pr-evidence` branch, and posts them as a single sticky comment. The spec and its
 # screenshots both live on that disposable branch and are deleted together when the PR
 # closes (cleanup job below) - a per-PR evidence spec is throwaway review scaffolding and
-# never belongs in this public repo's permanent history. See:
-#   /home/flippey/.claude/docs/plan/20260711-pr-evidence-and-wiki-capture/ws1-evidence-decision.md
-# for the full design rationale (T1). This file implements that contract (T4).
+# never belongs in this public repo's permanent history.
 #
 # SECURITY (read before editing):
 # - Event is `pull_request`, never `pull_request_target`. `pull_request_target` runs with

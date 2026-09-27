@@ -58,9 +58,16 @@ export async function launchContext({ withVideo = false } = {}) {
   await mkdir(VIDEO_DIR, { recursive: true });
   await mkdir(SHOT_DIR, { recursive: true });
   const profileDir = await mkdtemp(join(tmpdir(), 'ff-promo-'));
+  // Chrome's new headless mode (--headless=new) supports MV3 extensions,
+  // unlike legacy headless. headless:false + the `--headless=new` arg drives
+  // it; headless:true instead makes Playwright inject legacy `--headless`,
+  // under which the extension service worker never registers. Set HEADED=1
+  // to force a visible window for local debugging (see tests/fixtures/launch.ts).
+  const headed = process.env.HEADED === '1';
   const launchOpts = {
     headless: false,
     args: [
+      ...(headed ? [] : ['--headless=new']),
       `--disable-extensions-except=${CHROME_EXT_PATH}`,
       `--load-extension=${CHROME_EXT_PATH}`,
       '--no-first-run',

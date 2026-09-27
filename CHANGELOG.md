@@ -6,6 +6,34 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## [Unreleased]
 
+## [2.7.0] — Folder pickers, undo, and search fallback
+
+### Added
+- **Destination folder picker** in the add-bookmark and add-folder dialogs — choose where a new item lands without leaving the dialog.
+- **Move to...** and **Open all in tabs** context-menu actions for folders.
+- **Undo** toast for folder delete and batch delete.
+- **QuickAdd duplicate-bookmark hint** — warns when the URL you're adding is already bookmarked.
+- Hero search opens a typed URL directly, or falls back to a web search when there are zero matches.
+- Opt-in custom icons for folders.
+
+### Fixed
+- Wallpaper opacity at 100% no longer leaves a dark tint over the background.
+- Firefox new-tab page now shows the correct branded favicon instead of a generic one.
+- Drag-selector ids are now escaped before use in attribute selectors, preventing a drag from aborting mid-drag on ids containing special characters.
+- Firefox XHR redirect URL is threaded through correctly so the origin-scrape login-redirect guard fires as intended.
+- Settings that fail to persist now surface a toast instead of failing silently.
+- Workspace import is capped and embedded data-URL icons are size-bounded, preventing oversized imports from corrupting storage.
+- Workspace and icon-cache record writes are now serialized, so concurrent writes can no longer drop each other's changes.
+
+## [2.6.2] — Firefox stability + E2E coverage
+
+### Fixed
+- Firefox new-tab page opening correctly again (regression from the 2.6.1 Firefox icon-loading fix).
+- Firefox icon loading and the DDG icon-search picker further hardened.
+
+### Added
+- Firefox end-to-end test coverage via a Puppeteer + WebDriver BiDi suite.
+
 ## [2.6.1] — Firefox icon loading restored
 
 ### Fixed
@@ -13,6 +41,81 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 - **Firefox icon loading** — icons now load correctly on Firefox. Switches to XMLHttpRequest via a background page so that host_permissions CORS bypass is honoured (Firefox service workers do not get this bypass, causing all icon sources to fail in 2.6.0).
 - **Firefox DDG icon-search picker** — thumbnail images in the Edit Icon dialog now render on Firefox. The edit dialog sets `referrerPolicy="origin"` on Firefox, matching the XHR referrer policy used for icon search requests.
 - **Firefox host permissions** — removed redundant explicit entries (`duckduckgo.com`, `icon.horse`) from the Firefox manifest; the `https://*/*` wildcard already covers them via XHR.
+
+## [2.6.0] — Per-workspace view/sort, organization templates, 20 workspaces
+
+### Added
+- Per-workspace view mode and sort order, with a Sort control surfaced in the Layout settings.
+- Organization-template onboarding: the wizard recommends a persona-based template (Hoarder, Power User, Casual, and overlays) and applies matching view/sort defaults.
+- Workspace cap raised from 9 to 20, with Alt+Arrow shortcuts and a desktop jump-menu for switching.
+- "Create workspace" option on the folder context menu, and drag a folder onto the workspace tab bar to create one directly.
+- Icon search result source shown in the hover title.
+- Middle-click a bookmark tile to open it in a new tab.
+- Bookmark icons prefetch during bootstrap, removing the placeholder-icon flash on load.
+- RELEASE_NOTES.txt wired into the AMO publish workflow.
+
+### Fixed
+- Archetype classifier scoring and giant-folder share calculation corrected.
+- Density picker no longer recommends Presentation layout above ultrawide breakpoints.
+- Default "Favorites" workspace is created when onboarding is skipped.
+- Sync storage quota overflow at the 20-workspace cap resolved by moving to per-workspace sync keys.
+- Origin-scrape icon lookups no longer retry every probe against hosts that downgrade `https://` to `http://`, which was flooding the console.
+- "Remember last workspace" toggle is honored on boot.
+- Drag-source state no longer sticks across workspace switches, which was muting favicons.
+- Undo toast now also covers cross-folder moves made in list view.
+- DDG icon auto-resolution relevance improved; IDN punycode domains decode correctly for the brand query; Icon Horse letter-placeholders are gated so they fall through to DDG instead of poisoning the cache.
+
+### Changed
+- Gradient background picker simplified to accent color plus custom chips.
+- Workspace settings drawer restyled with skeleton-preview cards and consistent headers.
+
+## [2.4.1] — Undo, drag relocation, and auto-accent
+
+### Added
+- Undo toast for bookmark and folder relocations.
+- Move selected bookmarks into a new folder directly from the context menu.
+- Double-click an icon search result to apply it and close the dialog.
+- New workspaces auto-assign a distinct accent color at creation.
+- Onboarding picks a resolution-aware default layout for new installs.
+- Chrome Web Store + AMO publish workflow.
+
+### Fixed
+- Drag-and-drop relocation now works under auto-sort modes, not just manual sort.
+- Drop indicator and drag handle confinement fixed for folder-to-root relocation and list view.
+
+## [2.4.0] — Scoped icon overrides, deep folder picker
+
+### Added
+- Icon overrides are now scoped (exact URL, host, or domain), with a host-keyed cache, a login-redirect guard, and SVG/ICO icon support.
+- Deep expand/collapse folder picker for workspace creation, with recommendations merged into one capped, pinned list.
+- Accent color handling is theme-aware.
+
+### Fixed
+- Icon search seeds its query with a subdomain-aware brand name.
+- Folder picker no longer double-scrolls; sized to match the onboarding and new-workspace dialogs.
+- Hero/nav no longer flickers when collapsing at small viewport widths.
+- Firefox now shows the dashboard on startup via a homepage override.
+
+## [2.3.3] — Per-workspace theming, IndexedDB icon storage
+
+### Added
+- Per-workspace theme mode (light/dark independent of the global setting).
+- Tips carousel in onboarding.
+- Bookmark folder view modes.
+- Privacy policy document.
+
+### Changed
+- Icon cache and overrides moved from `chrome.storage` to IndexedDB.
+- Drag-and-drop visual indicators enhanced for section headers.
+
+### Fixed
+- Active workspace tab legibility on dark theme with a wallpaper background.
+- Clock text shadow strengthened against wallpaper backgrounds in dark mode.
+- Search overlay now shows when the hero search bar is scrolled off-screen.
+- Onboarding workspace theme preview updates live as you pick a theme in step 2.
+- Workspace creation is skipped when the target root folder already exists.
+- Marquee selection pointer handling hardened.
+- Legacy storage quota freed on update; expired IndexedDB icon records evicted on sweep.
 
 ## [2.2.0] — Polish & shortcuts
 

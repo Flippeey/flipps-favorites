@@ -42,12 +42,12 @@ FEATURES
     presets, or fine-tune columns, gaps, and tile sizes.
  ›  Beautiful backgrounds — solid colour, rich gradients (aurora,
     mesh, vignette), or your own wallpaper with fit/position controls.
- ›  Themes — light, dark, or system-auto, with 10 accent colours and
+ ›  Themes — light, dark, or system-auto, with 12 accent colours and
     a custom colour picker — set per Workspace.
  ›  Drag and drop everywhere — reorder, drop into folders, move items
     between Workspaces, rearrange layout sections live.
  ›  Multi-select — marquee or Ctrl/Cmd-click to select many bookmarks,
-    then cut, copy, paste, or bulk-delete.
+    then move them to a folder, or bulk-delete.
  ›  Inline editing — rename, create, and delete folders right from the
     page. No browser bookmark manager required.
  ›  Import and export — back up settings and icon overrides as a
