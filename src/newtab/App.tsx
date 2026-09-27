@@ -34,6 +34,7 @@ import { collectFolderIds, findFolder, findNode, findParentFolder, isFolder, res
 import { captureDeleteSnapshots, captureSubtree, restoreDeleteSnapshots, restoreSubtree } from './lib/subtree-snapshot';
 import { captureMoveSnapshots, moveIdsTracked, restoreMoveSnapshots } from './lib/move-snapshot';
 import { runUndoableMutation } from './lib/undoable-mutation';
+import { orderWorkspaces } from './lib/workspace-order';
 import { MAX_WORKSPACES, OPEN_ALL_TABS_CONFIRM_THRESHOLD } from '../shared/constants';
 import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper } from '../shared/storage';
 import { useWorkspaceActions } from './state/useWorkspaceActions';
@@ -73,15 +74,10 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     [activeWorkspace?.folderMode, activeWorkspace?.bookmarkSortMode, activeWorkspace?.bookmarkSortDirection],
   );
 
-  const orderedWorkspaces = useMemo<WorkspaceRecord[]>(() => {
-    const order = settings.workspaceOrder;
-    if (!order || order.length === 0) return workspaces;
-    const map = new Map(workspaces.map(w => [w.id, w]));
-    const sorted = order.map(id => map.get(id)).filter((w): w is WorkspaceRecord => w != null);
-    const inOrder = new Set(order);
-    const rest = workspaces.filter(w => !inOrder.has(w.id));
-    return [...sorted, ...rest];
-  }, [workspaces, settings.workspaceOrder]);
+  const orderedWorkspaces = useMemo<WorkspaceRecord[]>(
+    () => orderWorkspaces(workspaces, settings.workspaceOrder),
+    [workspaces, settings.workspaceOrder],
+  );
 
   const [workspaceWallpaper, setWorkspaceWallpaper] = useState('');
 
