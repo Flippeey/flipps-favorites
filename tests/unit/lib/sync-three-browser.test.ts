@@ -379,3 +379,71 @@ describe('three browsers syncing through one server', () => {
     });
   });
 });
+
+describe('wallpapers across browsers', () => {
+  const WALLPAPER = 'data:image/png;base64,V0FMTA==';
+
+  it('a wallpaper removed on one browser is removed on the other and never comes back', async () => {
+    clock = START;
+    server = null;
+    const a = await boot(createBrowser('a'));
+    const b = await boot(createBrowser('b'));
+    await on(a, async p => {
+      await p.storage.createWorkspaceFromUser({ ...workspace('w'), backgroundMode: 'wallpaper' });
+      await p.storage.writeWorkspaceWallpaper('w', WALLPAPER);
+      await p.syncNow.runSyncNow();
+    });
+    clock += 1_000;
+    await on(b, async p => {
+      await p.syncNow.runSyncNow();
+      expect(await p.storage.readWorkspaceWallpaper('w')).toBe(WALLPAPER);
+    });
+
+    // The wallpaper card's trash button: the image goes, the background mode stays.
+    clock += 1_000;
+    await on(a, async p => {
+      await p.storage.writeWorkspaceWallpaper('w', '');
+      await p.storage.patchWorkspaceFromUser('w', {});
+      await p.syncNow.runSyncNow();
+    });
+    for (const profile of [b, a, b]) {
+      clock += 1_000;
+      await on(profile, async p => {
+        await p.syncNow.runSyncNow();
+        expect(await p.storage.readWorkspaceWallpaper('w')).toBe('');
+        expect((await p.storage.readWorkspaces()).map(w => [w.id, w.backgroundMode])).toEqual([['w', 'wallpaper']]);
+      });
+    }
+  });
+
+  it('a newer copy of a workspace from a profile that never had its wallpaper keeps the wallpaper', async () => {
+    clock = START;
+    server = null;
+    // Two Chrome profiles on one account: account sync copies the workspace
+    // record, never the wallpaper, which stays in the profile it was set in.
+    const shared = createArea('sync');
+    const first = await boot(createBrowser('first', 0, shared));
+    const second = await boot(createBrowser('second', 0, shared));
+    await on(first, async p => {
+      await p.storage.createWorkspaceFromUser({ ...workspace('w'), backgroundMode: 'wallpaper' });
+      await p.storage.writeWorkspaceWallpaper('w', WALLPAPER);
+    });
+    clock += 1_000;
+    await on(second, async p => {
+      expect(await p.storage.readWorkspaceWallpaper('w')).toBe('');
+      await p.storage.patchWorkspaceFromUser('w', { name: 'Renamed elsewhere' });
+      await p.syncNow.runSyncNow();
+    });
+    clock += 1_000;
+    await on(first, async p => {
+      await p.syncNow.runSyncNow();
+      expect((await p.storage.readWorkspaces()).map(w => w.name)).toEqual(['Renamed elsewhere']);
+      expect(await p.storage.readWorkspaceWallpaper('w')).toBe(WALLPAPER);
+    });
+    clock += 1_000;
+    await on(second, async p => {
+      await p.syncNow.runSyncNow();
+      expect(await p.storage.readWorkspaceWallpaper('w')).toBe(WALLPAPER);
+    });
+  });
+});

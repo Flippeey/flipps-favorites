@@ -65,7 +65,10 @@ export interface BookmarkUsageTransferRecord {
 }
 
 // Wallpapers can be MBs of data URL, so they travel as a sidecar map keyed by
-// workspace id rather than inside WorkspaceRecord.
+// workspace id rather than inside WorkspaceRecord. '' means the user removed
+// it. A missing entry says nothing: the sender may never have received the
+// image (Chrome account sync copies the record, not the wallpaper) or it was
+// dropped as too large, so the receiver keeps its own.
 export type WorkspaceWallpaperMap = Record<string, string>;
 
 export interface WorkspaceExportPayload {
@@ -275,7 +278,7 @@ export function planIncomingWorkspaces(
       localById.delete(match.id);
       localById.set(keep, { ...match, id: keep });
       const wallpaper = localWallpapers.get(match.id);
-      if (wallpaper) localWallpapers.set(keep, wallpaper);
+      if (wallpaper !== undefined) localWallpapers.set(keep, wallpaper);
       rekeys.push({ from: match.id, to: keep });
       renamed.set(match.id, keep);
       if (syncMerge) addMarker({ kind: 'workspace', key: match.id, deletedAt: nextStamp(match.updatedAt, ctx.now) });

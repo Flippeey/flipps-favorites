@@ -10,7 +10,7 @@ import {
   readPendingUsage,
   readSettings,
   readWorkspaces,
-  readWorkspaceWallpaper,
+  readStoredWorkspaceWallpaper,
   withoutPerBrowserSettings,
 } from './storage';
 import {
@@ -41,8 +41,8 @@ export async function readLocalSnapshot(): Promise<LocalSyncSnapshot> {
   ]);
   const wallpapers: WorkspaceWallpaperMap = {};
   for (const ws of workspaces.filter(w => w.backgroundMode === 'wallpaper')) {
-    const dataUrl = await readWorkspaceWallpaper(ws.id);
-    if (dataUrl) wallpapers[ws.id] = dataUrl;
+    const dataUrl = await readStoredWorkspaceWallpaper(ws.id);
+    if (dataUrl !== null) wallpapers[ws.id] = dataUrl;
   }
   return {
     settings,

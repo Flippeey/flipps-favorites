@@ -745,11 +745,17 @@ async function doWriteDeletionMarkers(markers: DeletionMarker[], now: number): P
 
 // Wallpapers are data URLs too large to cache in memory — bypass CachedValueStore intentionally.
 export async function readWorkspaceWallpaper(workspaceId: string): Promise<string> {
+  return (await readStoredWorkspaceWallpaper(workspaceId)) ?? '';
+}
+
+// '' when the user removed the wallpaper, null when none was ever stored in
+// this browser: sync must pass on a removal but not the lack of an image.
+export async function readStoredWorkspaceWallpaper(workspaceId: string): Promise<string | null> {
   const key = workspaceWallpaperKey(workspaceId);
   const area = extensionApi.storage?.local;
-  if (!area?.get) return '';
+  if (!area?.get) return null;
   const result = await area.get(key) as Record<string, unknown>;
-  return typeof result[key] === 'string' ? result[key] as string : '';
+  return typeof result[key] === 'string' ? result[key] as string : null;
 }
 
 export async function writeWorkspaceWallpaper(workspaceId: string, dataUrl: string): Promise<void> {

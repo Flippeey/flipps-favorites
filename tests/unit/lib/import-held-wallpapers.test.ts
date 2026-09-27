@@ -140,4 +140,33 @@ describe('importWorkspaceFile wallpapers', () => {
 
     expect(await storage.readWorkspaceWallpaper('a')).toBe('data:image/png;base64,VVNFUg==');
   });
+
+  it('clears the wallpaper here when the file says it was removed from a newer copy of the workspace', async () => {
+    const { storage, transfer } = await load();
+    await storage.writeWorkspace(record('a', { updatedAt: NOW - 1_000 }));
+    await storage.writeWorkspaceWallpaper('a', WALLPAPER);
+    const file = transfer.normalizeWorkspaceExportPayload({
+      ...filePayload([record('a', { updatedAt: NOW - 500 })], {}),
+      workspaceWallpapers: { a: '' },
+    });
+
+    await transfer.importWorkspaceFile(file, 'merge');
+
+    expect(await storage.readWorkspaceWallpaper('a')).toBe('');
+  });
+
+  it('keeps the wallpaper here when the file could not carry its own (too large)', async () => {
+    const { storage, transfer } = await load();
+    await storage.writeWorkspace(record('a', { updatedAt: NOW - 1_000 }));
+    await storage.writeWorkspaceWallpaper('a', WALLPAPER);
+    const file = transfer.normalizeWorkspaceExportPayload({
+      ...filePayload([record('a', { updatedAt: NOW - 500 })], {}),
+      workspaceWallpapers: { a: `data:image/png;base64,${'A'.repeat(5 * 1024 * 1024)}` },
+    });
+    expect(file.skipped.oversizedDataUrlCount).toBe(1);
+
+    await transfer.importWorkspaceFile(file, 'replace');
+
+    expect(await storage.readWorkspaceWallpaper('a')).toBe(WALLPAPER);
+  });
 });

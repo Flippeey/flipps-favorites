@@ -117,7 +117,7 @@ export async function importWorkspaceFile(
   const summary = await applyWorkspaceImport({ ...rest, workspaceWallpapers: {} }, mode, 'file', Object.keys(held));
   for (const { workspaceId, sourceId } of summary.heldWallpaperWrites) {
     const dataUrl = held[sourceId];
-    if (!dataUrl) continue;
+    if (dataUrl === undefined) continue;
     try {
       await writeWorkspaceWallpaper(workspaceId, dataUrl);
     } catch (error) {
@@ -432,7 +432,8 @@ function normalizeWallpaperMap(value: unknown): { map: WorkspaceWallpaperMap; sk
   const map: WorkspaceWallpaperMap = {};
   let skippedCount = 0;
   for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof raw !== 'string' || !raw.startsWith('data:image/')) continue;
+    // '' carries a removal.
+    if (typeof raw !== 'string' || (raw !== '' && !raw.startsWith('data:image/'))) continue;
     if (exceedsDataUrlSizeCap(raw)) {
       skippedCount += 1;
       continue;
