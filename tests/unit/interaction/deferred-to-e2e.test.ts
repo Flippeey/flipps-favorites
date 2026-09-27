@@ -49,15 +49,19 @@ import { describe, expect, it } from 'vitest';
 //   layout plus PointerEvent capture — moot without a browser. Covered by
 //   Playwright specs exercising marquee/rubber-band selection.
 //
-// - useDrag.ts — the largest hook; hit-testing (drop-zone resolution, gap-snap
-//   nearest-tile search, workspace bar-gap insertion index) all happens inside
-//   the `onMove` pointer handler closure, reading `getBoundingClientRect()` /
-//   `elementFromPoint()` against live DOM. `clearDropAttrs` is exported but is
-//   a DOM-mutation procedure (deletes dataset attributes), not a pure decision
-//   function — nothing to assert against beyond "did it delete the attribute",
-//   which requires constructing DOM elements without exercising any of the
-//   hook's actual decision logic. Covered by Playwright specs
-//   exercising drag-drop (tests/specs/dragdrop.spec.ts).
+// - useDrag.ts — the decision logic (reorder gating/index, no-op suppression,
+//   folder-zone detection, gap-snap nearest-tile search, section-drop nearest
+//   neighbour, workspace bar-gap insertion index) is extracted into pure
+//   functions in `lib/drop-resolution.ts`, unit-tested directly in
+//   tests/unit/lib/drop-resolution.test.ts. What's left in useDrag.ts itself
+//   is DOM wiring only: `elementFromPoint()`/`closest()` reads that build the
+//   plain geometry snapshot, and writes of dataset attributes / drag state —
+//   still onMove-pointer-handler-closure shaped and still exercised by
+//   Playwright specs (tests/specs/dragdrop.spec.ts), not unit tests.
+//   `clearDropAttrs` is exported but is a DOM-mutation procedure (deletes
+//   dataset attributes), not a pure decision function — nothing to assert
+//   against beyond "did it delete the attribute", which requires constructing
+//   DOM elements without exercising any decision logic. Still deferred here.
 //
 // - useDragWiring.ts — wires three useDrag instances together; its own
 //   `handleDragCommit`/`getOrderedChildren`/`handleSpringOpenWorkspace` are

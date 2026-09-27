@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { BookmarkNode, BookmarkSortMode, SortDirection, ViewMode, WorkspaceRecord } from '@/shared/messages';
+import { resolvePillGapDrop } from '../lib/drop-resolution';
 import { altShortcut } from '../lib/platform';
 import { useScrollCollapsed } from '../lib/useScrollCollapsed';
 import { Ico } from './Ico';
@@ -136,7 +137,12 @@ function WorkspaceTabs({ workspaces, activeWorkspaceId, onSwitchWorkspace, onWor
               onDragOver={e => {
                 e.preventDefault(); e.dataTransfer.dropEffect = 'move';
                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                setDropIndex(e.clientX < rect.left + rect.width / 2 ? i : i + 1);
+                // Same pointer-vs-midpoint math useDrag's workspace-bar-gap drop
+                // uses across all pills at once (drop-resolution.ts); here it's
+                // evaluated for just the one pill under the pointer (native
+                // dragover fires per-element), so the pill list is a single rect
+                // and the result is offset by this pill's own index i.
+                setDropIndex(i + resolvePillGapDrop([rect], e.clientX).insertIndex);
               }}
               onDrop={e => { e.preventDefault(); if (dropIndex !== null) commitDrop(dropIndex); setDropIndex(null); }}
               onDragEnd={() => { setDragSrcId(null); setDropIndex(null); }}

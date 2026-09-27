@@ -1,4 +1,15 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import {
+  isInFolderDropZone,
+  isNoopReorder,
+  isPastMidpointX,
+  isReorderDropAllowed,
+  nearestRowTile,
+  reorderIndexFromHover,
+  resolvePillGapDrop,
+  resolveSectionDropTarget,
+  type Rect,
+} from '../lib/drop-resolution';
 
 export type DropTarget =
   | { kind: 'reorder'; parentId: string; index: number }
@@ -207,12 +218,7 @@ export function useDrag({
         }
       };
       const setReorder = (parentId: string, index: number, hint?: { el: HTMLElement; pos: 'before' | 'after' }): void => {
-        // A "reorder" target whose parent differs from the drag's origin scope is
-        // actually a relocation (moving into a different folder / the root) — valid
-        // in any sort mode. Only a same-parent reorder is position-based and thus
-        // gated to manual sort.
-        const isRelocation = parentId !== drag.scopeId;
-        if (!reorderEnabledRef.current && !isRelocation) { blockReorder(); return; }
+        if (!isReorderDropAllowed(parentId, drag.scopeId, reorderEnabledRef.current)) { blockReorder(); return; }
         // Show the drop indicator whenever the drop is live — including an auto-sort
         // relocation, where it marks where the item lands before the sort settles it.
         if (hint) hint.el.dataset.dropPosition = hint.pos;
@@ -338,29 +344,12 @@ export function useDrag({
         const pills = Array.from(
           dropZoneEl.querySelectorAll<HTMLElement>('[data-workspace-id]')
         );
-        // Determine insert index: walk pills left-to-right, insert before the first
-        // pill whose center-x is to the right of the pointer. If pointer is past all
-        // pills, insert at the end.
-        let insertIndex = pills.length; // default: after last pill
-        let lineTarget: HTMLElement | null = null;
-        let linePos: 'before' | 'after' = 'after';
-        for (let i = 0; i < pills.length; i++) {
-          const r = pills[i]!.getBoundingClientRect();
-          const midX = r.left + r.width / 2;
-          if (event.clientX < midX) {
-            insertIndex = i;
-            lineTarget = pills[i]!;
-            linePos = 'before';
-            break;
-          }
-        }
-        if (lineTarget === null && pills.length > 0) {
-          // Pointer is right of all pill centers → insert after the last pill.
-          lineTarget = pills[pills.length - 1]!;
-          linePos = 'after';
-        }
-        if (lineTarget) {
-          lineTarget.dataset[linePos === 'before' ? 'dropBefore' : 'dropAfter'] = 'true';
+        const { insertIndex, lineIndex, linePos } = resolvePillGapDrop(
+          pills.map(p => p.getBoundingClientRect()),
+          event.clientX,
+        );
+        if (lineIndex !== null) {
+          pills[lineIndex]!.dataset[linePos === 'before' ? 'dropBefore' : 'dropAfter'] = 'true';
         }
         drag.dropTarget = { kind: 'workspace-new', insertIndex };
         return;
@@ -370,46 +359,29 @@ export function useDrag({
         const sectionEls = Array.from(
           canvas.querySelectorAll<HTMLElement>('section[data-scope-folder-id]')
         );
-        let targetSectionId: string | null = null;
-        let placeAfter = false;
+        const hit = resolveSectionDropTarget(
+          sectionEls.map(sec => ({ id: sec.dataset.scopeFolderId ?? '', rect: sec.getBoundingClientRect() })),
+          dragSet,
+          event.clientY,
+        );
 
-        for (const sec of sectionEls) {
-          const id = sec.dataset.scopeFolderId ?? '';
-          if (dragSet.has(id)) continue;
-          const r = sec.getBoundingClientRect();
-          if (event.clientY >= r.top && event.clientY <= r.bottom) {
-            targetSectionId = id;
-            placeAfter = event.clientY > r.top + r.height / 2;
-            break;
-          }
-        }
-
-        if (!targetSectionId) {
-          let best: { id: string; dy: number; placeAfter: boolean } | null = null;
-          for (const sec of sectionEls) {
-            const id = sec.dataset.scopeFolderId ?? '';
-            if (dragSet.has(id)) continue;
-            const r = sec.getBoundingClientRect();
-            const dy = Math.abs(event.clientY - (r.top + r.height / 2));
-            if (!best || dy < best.dy) best = { id, dy, placeAfter: event.clientY > r.top + r.height / 2 };
-          }
-          if (best) { targetSectionId = best.id; placeAfter = best.placeAfter; }
-        }
-
-        if (!targetSectionId) {
+        if (!hit) {
           const ordered = getOrderedChildrenRef.current(rootFolderIdRef.current).filter(c => !dragSet.has(c.id));
           setReorder(rootFolderIdRef.current, ordered.length);
           return;
         }
+        const { id: targetSectionId, placeAfter } = hit;
 
         const ordered = getOrderedChildrenRef.current(rootFolderIdRef.current).filter(c => !dragSet.has(c.id));
-        const idx = ordered.findIndex(c => c.id === targetSectionId);
-        const dropIndex = idx === -1 ? ordered.length : idx + (placeAfter ? 1 : 0);
+        const dropIndex = reorderIndexFromHover(ordered.map(c => c.id), targetSectionId, placeAfter);
 
         if (drag.dragIds.length === 1) {
           const unfiltered = getOrderedChildrenRef.current(rootFolderIdRef.current);
-          const origIdx = unfiltered.findIndex(c => c.id === drag.dragIds[0]);
-          if (origIdx !== -1 && dropIndex === origIdx) { drag.dropTarget = null; return; }
+          const origIndex = unfiltered.findIndex(c => c.id === drag.dragIds[0]);
+          if (isNoopReorder({ singleId: true, sameParent: true, dropIndex, originIndex: origIndex })) {
+            drag.dropTarget = null;
+            return;
+          }
         }
 
         const targetSec = canvas.querySelector<HTMLElement>(scopeFolderSelector(targetSectionId));
@@ -425,17 +397,13 @@ export function useDrag({
         // Use the per-session cached tile list (populated at engage time) to avoid
         // repeated querySelectorAll on every pointermove.
         const tiles = drag.tiles ?? [];
-        let best: { tile: HTMLElement; dx: number } | null = null;
-        for (const t of tiles) {
-          const id = t.dataset.itemId ?? '';
-          if (dragSet.has(id)) continue;
-          const r = t.getBoundingClientRect();
-          if (event.clientY < r.top || event.clientY > r.bottom) continue;
-          const center = r.left + r.width / 2;
-          const dx = Math.abs(event.clientX - center);
-          if (!best || dx < best.dx) best = { tile: t, dx };
-        }
-        hoverTile = best?.tile ?? null;
+        const nearestId = nearestRowTile(
+          tiles.map(t => ({ id: t.dataset.itemId ?? '', rect: t.getBoundingClientRect() })),
+          dragSet,
+          event.clientX,
+          event.clientY,
+        );
+        hoverTile = nearestId ? tiles.find(t => t.dataset.itemId === nearestId) ?? null : null;
       }
 
       if (!hoverTile) {
@@ -477,30 +445,26 @@ export function useDrag({
 
       const hoverScope = closestScopeId(hoverTile, rootFolderIdRef.current);
       const hoverKind = hoverTile.dataset.itemKind;
-      const rect = hoverTile.getBoundingClientRect();
+      const rect: Rect = hoverTile.getBoundingClientRect();
 
       // Only treat as "drop inside folder" when cursor is directly over the folder
       // tile's middle band — never when we snapped from a gap.
-      if (directHit && hoverKind === 'folder') {
-        const inSideZone = event.clientX < rect.left + rect.width * 0.25 || event.clientX > rect.left + rect.width * 0.75;
-        if (!inSideZone) {
-          hoverTile.dataset.dropPosition = 'inside';
-          drag.dropTarget = { kind: 'folder', folderId: hoverId };
-          return;
-        }
+      if (directHit && hoverKind === 'folder' && isInFolderDropZone(rect, event.clientX)) {
+        hoverTile.dataset.dropPosition = 'inside';
+        drag.dropTarget = { kind: 'folder', folderId: hoverId };
+        return;
       }
 
-      const placeAfter = event.clientX > rect.left + rect.width / 2;
+      const placeAfter = isPastMidpointX(rect, event.clientX);
       const ordered = getOrderedChildrenRef.current(hoverScope).filter(c => !dragSet.has(c.id));
-      const idx = ordered.findIndex(c => c.id === hoverId);
-      const dropIndex = idx === -1 ? ordered.length : idx + (placeAfter ? 1 : 0);
+      const dropIndex = reorderIndexFromHover(ordered.map(c => c.id), hoverId, placeAfter);
 
       // Suppress hint + commit when the computed reorder would not actually move
       // the item (dropping at its current post-removal slot in the same parent).
       if (drag.dragIds.length === 1 && hoverScope === drag.scopeId) {
         const unfiltered = getOrderedChildrenRef.current(drag.scopeId);
-        const origIdx = unfiltered.findIndex(c => c.id === drag.dragIds[0]);
-        if (origIdx !== -1 && dropIndex === origIdx) {
+        const origIndex = unfiltered.findIndex(c => c.id === drag.dragIds[0]);
+        if (isNoopReorder({ singleId: true, sameParent: true, dropIndex, originIndex: origIndex })) {
           drag.dropTarget = null;
           return;
         }
