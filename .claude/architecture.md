@@ -72,7 +72,7 @@ Settings / icon cache / usage state goes through `CachedValueStore` and `CachedR
 
 Extend the bucket helpers in `shared/storage.ts` rather than calling `extensionApi.storage.*` from new code.
 
-Writes are serialized so read-modify-write cycles can't interleave: settings through `writeQueue` (`writeSettings`), each workspace through a per-id queue (`patchWorkspaceRecord`) in `storage.ts`, and each `CachedRecordStore` through its `writeTail` (`writeOne` / `deleteOne`) in `storage-buckets.ts`. A new write path that reads, merges and writes outside these queues silently drops concurrent writes — route it through them.
+Writes are serialized so read-modify-write cycles can't interleave: settings through `writeQueue` (`writeSettings`) in `storage.ts`; each `CachedRecordStore` and `PerKeyRecordStore` (workspaces) through their own `writeTail` (`writeOne` / `deleteOne` / `updateOne`) in `storage-buckets.ts` — `patchWorkspaceRecord` in `storage.ts` is a thin wrapper over `workspacesStore.updateOne`, which runs the read-merge-write inside that serialized section. A new write path that reads, merges and writes outside these queues silently drops concurrent writes — route it through them.
 
 ## Archetype Classification & Organization Templates
 
