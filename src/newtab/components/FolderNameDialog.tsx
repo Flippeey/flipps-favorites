@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { BookmarkNode, IconSearchCandidate } from '@/shared/messages';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { BookmarkNode } from '@/shared/messages';
 import {
   createBookmark,
   getFolderIcon,
@@ -9,9 +9,9 @@ import {
   setFolderIconFromUrl,
   updateBookmark,
 } from '../lib/messaging';
-import { normalizeUploadedImage, iconPersistenceErrorMessage } from '../lib/icon-helpers';
 import { invalidateFolderIconCache } from '../lib/folder-icon-cache';
 import { findFolder, isFolder } from '../lib/tree';
+import { useIconPicker } from '../state/useIconPicker';
 import { Ico } from './Ico';
 import { ModalDialog } from './ModalDialog';
 import { FolderPicker } from './FolderPicker';
@@ -49,125 +49,48 @@ export function FolderNameDialog({ tree, target, siblingNames, onClose, onSaved 
   const canManageIcon = target.mode === 'rename';
   const folderId = target.mode === 'rename' ? target.id : undefined;
 
-  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
-  const [query, setQuery] = useState(() => defaultFolderQuery(initial));
-  const [results, setResults] = useState<IconSearchCandidate[]>([]);
-  const [validatedPreviews, setValidatedPreviews] = useState<Set<string>>(new Set());
-  const [searching, setSearching] = useState(false);
-  const [working, setWorking] = useState(false);
   const [iconStatus, setIconStatus] = useState<{ message: string; kind: 'info' | 'success' | 'error' } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const applyingRef = useRef<Promise<void> | null>(null);
 
-  const runSearch = useCallback(async (q: string) => {
-    setSearching(true);
-    setValidatedPreviews(new Set());
-    try {
-      const candidates = await searchIcons(q);
-      setResults(candidates);
-    } catch {
-      setResults([]);
-    } finally {
-      setSearching(false);
-    }
-  }, []);
+  const picker = useIconPicker({
+    enabled: canManageIcon,
+    identityKey: folderId,
+    initialQuery: defaultFolderQuery(initial),
+    // Folder search has no dedicated status box, unlike the bookmark dialog's
+    // shared one — a "no matches" / "search failed" note here would have
+    // nowhere to appear other than iconStatus, which is reserved for apply
+    // outcomes.
+    notifySearchResult: false,
+    onStatus: setIconStatus,
+    loadInitial: () => getFolderIcon(folderId!),
+    search: (q) => searchIcons(q),
+    applyCandidate: async (candidate) => {
+      const record = await setFolderIconFromUrl({
+        folderId: folderId!,
+        imageUrl: candidate.imageUrl,
+        fallbackImageUrl: candidate.previewUrl !== candidate.imageUrl ? candidate.previewUrl : undefined,
+      });
+      invalidateFolderIconCache(folderId!);
+      return record;
+    },
+    applyUpload: async (dataUrl, file) => {
+      const record = await setFolderIcon({ folderId: folderId!, dataUrl, fileName: file.name, mimeType: 'image/png' });
+      invalidateFolderIconCache(folderId!);
+      return record;
+    },
+    remove: {
+      run: async () => {
+        await removeFolderIcon(folderId!);
+        invalidateFolderIconCache(folderId!);
+        return null;
+      },
+      successMessage: 'Icon removed.',
+      errorMessage: 'Could not remove icon.',
+    },
+  });
 
-  const handlePreviewLoad = useCallback((imageUrl: string, image: HTMLImageElement) => {
-    const minEdge = Math.min(image.naturalWidth, image.naturalHeight);
-    if (minEdge < 64) return;
-    setValidatedPreviews(prev => {
-      if (prev.has(imageUrl)) return prev;
-      const next = new Set(prev);
-      next.add(imageUrl);
-      return next;
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!folderId) return;
-    getFolderIcon(folderId).then(record => setPreviewSrc(record?.dataUrl ?? null)).catch(() => undefined);
-    runSearch(defaultFolderQuery(initial));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [folderId]);
-
-  const applyCandidate = async (candidate: IconSearchCandidate): Promise<void> => {
-    if (!folderId) return;
-    if (applyingRef.current) {
-      await applyingRef.current.catch(() => undefined);
-      return;
-    }
-    const run = (async () => {
-      setWorking(true);
-      try {
-        const record = await setFolderIconFromUrl({
-          folderId,
-          imageUrl: candidate.imageUrl,
-          fallbackImageUrl: candidate.previewUrl !== candidate.imageUrl ? candidate.previewUrl : undefined,
-        });
-        setPreviewSrc(record.dataUrl);
-        invalidateFolderIconCache(folderId);
-        setIconStatus({ kind: 'success', message: 'Icon applied.' });
-      } catch (e) {
-        setIconStatus({ kind: 'error', message: iconPersistenceErrorMessage(e, 'search') });
-      } finally {
-        setWorking(false);
-        applyingRef.current = null;
-      }
-    })();
-    applyingRef.current = run;
-    await run.catch(() => undefined);
-  };
-
-  const handlePickCandidate = (candidate: IconSearchCandidate): void => {
-    void applyCandidate(candidate);
-  };
-
-  const handlePickCandidateAndClose = async (candidate: IconSearchCandidate): Promise<void> => {
-    await applyCandidate(candidate);
-  };
-
-  const handleUploadClick = () => {
-    if (!folderId || working) return;
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file || !folderId || working) return;
-    setWorking(true);
-    try {
-      const dataUrl = await normalizeUploadedImage(file);
-      const record = await setFolderIcon({ folderId, dataUrl, fileName: file.name, mimeType: 'image/png' });
-      setPreviewSrc(record.dataUrl);
-      invalidateFolderIconCache(folderId);
-      setIconStatus({ kind: 'success', message: 'Icon uploaded.' });
-    } catch (e) {
-      setIconStatus({ kind: 'error', message: iconPersistenceErrorMessage(e, 'upload') });
-    } finally {
-      setWorking(false);
-    }
-  };
-
-  const handleRemoveIcon = async () => {
-    if (!folderId || working) return;
-    setWorking(true);
-    try {
-      await removeFolderIcon(folderId);
-      setPreviewSrc(null);
-      invalidateFolderIconCache(folderId);
-      setIconStatus({ kind: 'info', message: 'Icon removed.' });
-    } catch {
-      setIconStatus({ kind: 'error', message: 'Could not remove icon.' });
-    } finally {
-      setWorking(false);
-    }
-  };
-
-  const handleIconSearchSubmit = () => {
-    if (!query.trim()) return;
-    runSearch(query.trim());
-  };
+  const previewSrc = picker.preview?.dataUrl ?? null;
+  const handlePickCandidate = picker.pickCandidate;
+  const handlePickCandidateAndClose = picker.pickCandidateAndClose;
 
   // If the user picks a different destination than the default, the sibling
   // names passed down from App (computed against the default parent) go
@@ -294,10 +217,10 @@ export function FolderNameDialog({ tree, target, siblingNames, onClose, onSaved 
           previewSrc={previewSrc}
           fallbackLetter={value?.[0] ?? '?'}
           canManage={canManageIcon}
-          onRemove={handleRemoveIcon}
-          onUploadClick={handleUploadClick}
-          fileInputRef={fileInputRef}
-          onFileChange={handleFileChange}
+          onRemove={picker.handleRemove}
+          onUploadClick={picker.handleUploadClick}
+          fileInputRef={picker.fileInputRef}
+          onFileChange={picker.handleFileChange}
           hintText="Hover the preview to change or remove the folder icon."
         />
         {iconStatus && (
@@ -312,13 +235,13 @@ export function FolderNameDialog({ tree, target, siblingNames, onClose, onSaved 
       <IconPickerPanel
         section="search"
         canManage={canManageIcon}
-        query={query}
-        onQueryChange={setQuery}
-        onSearchSubmit={handleIconSearchSubmit}
-        searching={searching}
-        results={results}
-        validatedPreviews={validatedPreviews}
-        onPreviewLoad={handlePreviewLoad}
+        query={picker.query}
+        onQueryChange={picker.setQuery}
+        onSearchSubmit={picker.handleSearchSubmit}
+        searching={picker.searching}
+        results={picker.results}
+        validatedPreviews={picker.validatedPreviews}
+        onPreviewLoad={picker.handlePreviewLoad}
         onPickCandidate={handlePickCandidate}
         onPickCandidateAndClose={handlePickCandidateAndClose}
         heading="Search folder icons"
