@@ -2,11 +2,11 @@ import { useCallback, useMemo, useState } from 'react';
 import { MAX_WORKSPACES } from '@/shared/constants';
 import type { AppSettings, BookmarkNode, ThemeMode, WorkspaceRecord } from '@/shared/messages';
 import type { ArchetypeId } from '@/shared/organization-templates';
-import { ORGANIZATION_TEMPLATES } from '@/shared/organization-templates';
 import { applyAccent } from '../lib/accent';
 import { classify } from '../lib/archetype-match';
 import { formatFolderStats, scanFolders, type ScoredFolder } from '../lib/folder-scoring';
 import { recommendLayout, readViewportMetrics } from '../lib/layout-recommendation';
+import { buildOnboardingPlan } from '../lib/onboarding-plan';
 import { altShortcut, modShortcut } from '../lib/platform';
 import { profileTree } from '../lib/tree-profile';
 import { findFolder, topLevelFolders } from '../lib/tree';
@@ -342,67 +342,31 @@ export function Onboarding({ settings, activeWorkspace, tree, onPatch, onPatchWo
       // Onboarding theme/accent picks only persist to an existing workspace via
       // onPatchWorkspace. On a fresh install the workspace is created here, so carry the
       // chosen accent + theme through as overrides — otherwise they reset to the defaults.
-      // Only the first workspace honors the user's explicit accent pick; bulk-created
-      // siblings auto-pick a distinct unused accent (handled in handleCreateWorkspace).
-      // layoutPreset is a resolution-aware default applied to every workspace created
-      // here (fresh install / new selections via onCreateWorkspace). The activeWorkspace
-      // retarget branch below never spreads these overrides, so an existing workspace's
-      // user-chosen accent + layout are left untouched.
-      const layoutPreset = recommendedLayout.layoutPreset;
-
-      // Template overrides: spread the chosen template's workspaceOverrides (folderMode,
-      // bookmarkSortMode, bookmarkSortDirection) into every workspace created here.
-      // The chosen preset is the sole source of the workspace view/sort — there is no
-      // separate view-mode control to compose against.
       // Template NEVER sets layoutPreset — layout-recommendation.ts owns that field.
-      const templateOverrides = pendingTemplateId
-        ? { ...ORGANIZATION_TEMPLATES[pendingTemplateId].workspaceOverrides }
-        : {};
+      const folderTitles = Object.fromEntries(
+        selectedWorkspaceFolderIds
+          .map((id): [string, string] | null => {
+            const title = findFolder(tree, id)?.title;
+            return title === undefined ? null : [id, title];
+          })
+          .filter((entry): entry is [string, string] => entry !== null),
+      );
 
-      const firstOverrides = {
+      const plan = buildOnboardingPlan({
+        hasActiveWorkspace: !!activeWorkspace,
+        pendingTemplateId,
+        selectedWorkspaceFolderIds,
+        folderTitles,
         accentColor: pendingAccentColor,
         themeMode: settings.themeMode,
-        layoutPreset,
-        ...templateOverrides,
-      };
-      const restOverrides = {
-        themeMode: settings.themeMode,
-        layoutPreset,
-        ...templateOverrides,
-      };
+        layoutPreset: recommendedLayout.layoutPreset,
+      });
 
-      const [firstId, ...restIds] = selectedWorkspaceFolderIds;
-      if (activeWorkspace) {
-        // Re-run over existing workspaces.
-        //
-        // NEVER retarget an existing workspace's rootFolderId here. Doing so used to
-        // corrupt the ACTIVE workspace (repointing it at firstId's folder) and orphan
-        // its old root — which the create-if-missing loop below then recreated as a
-        // DUPLICATE workspace (the "last workspace duplicated" bug). Instead:
-        //   1. Apply the chosen preset (opt-in) to the active workspace IN PLACE. This
-        //      is the explicit opt-in control — we only patch view/sort when the user
-        //      actually picked a preset on this re-run.
-        //   2. Create workspaces only for selected folders that don't already have one
-        //      (handleCreateWorkspace dedups by rootFolderId, so existing ones are skipped).
-        if (pendingTemplateId) {
-          await onPatchWorkspace({
-            folderMode: templateOverrides.folderMode,
-            bookmarkSortMode: templateOverrides.bookmarkSortMode,
-            bookmarkSortDirection: templateOverrides.bookmarkSortDirection,
-          });
-        }
-        for (const id of selectedWorkspaceFolderIds) {
-          const folder = findFolder(tree, id);
-          if (folder) await onCreateWorkspace(id, folder.title, restOverrides);
-        }
-      } else if (firstId) {
-        // Fresh install: create every selected folder as a workspace. The first honors
-        // the user's explicit accent pick; siblings auto-pick a distinct accent.
-        const folder = findFolder(tree, firstId);
-        await onCreateWorkspace(firstId, folder?.title ?? 'My workspace', firstOverrides);
-        for (const id of restIds) {
-          const restFolder = findFolder(tree, id);
-          if (restFolder) await onCreateWorkspace(id, restFolder.title, restOverrides);
+      for (const step of plan) {
+        if (step.kind === 'patchActiveWorkspace') {
+          await onPatchWorkspace(step.patch);
+        } else {
+          await onCreateWorkspace(step.folderId, step.name, step.overrides);
         }
       }
     } catch {

@@ -29,7 +29,7 @@ Chrome Playwright specs load a **test build** to eliminate flake from `chrome.st
 
 **Deferred E2E markers**: some hooks are documented as E2E-only in their own test files, with reasons, rather than given fake unit coverage:
 - `tests/unit/state/*.test.ts` — `useSelection`, `useToasts` (state hooks with side effects that need the full component tree). `useWorkspaceActions` has no marker: its create-from-folder guard is unit-tested through the extracted `checkCreateFromFolderGuard`. `useContextMenuBuilder` has no marker either: menu construction is unit-tested directly through the extracted pure `buildContextMenuItems`, with the hook itself a thin `useCallback` wrapper around it.
-- `tests/unit/interaction/deferred-to-e2e.test.ts` — all 8 interaction hooks (`useDrag`, `useMarquee`, `useKeyboardNav`, etc.; require real DOM + event simulation)
+- `tests/unit/interaction/deferred-to-e2e.test.ts` — all 8 interaction hooks (`useMarquee`, `useKeyboardNav`, etc.; require real DOM + event simulation). `useDrag`'s decision logic (reorder gating/index, no-op suppression, folder-zone, nearest-tile/section resolution, bar-gap insertion index) is carved out into pure functions in `newtab/lib/drop-resolution.ts` and unit-tested in `tests/unit/lib/drop-resolution.test.ts`; only its DOM wiring (hit-testing + attribute writes) stays E2E-only.
 
 ## Evidence specs
 
