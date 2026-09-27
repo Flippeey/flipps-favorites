@@ -168,10 +168,9 @@ describe('ensureStorageMigrations — ordering', () => {
     expect(perKeyIndex).toBeLessThan(viewSortIndex);
   });
 
-  // Documents WHY the order matters, isolated from the (separate,
-  // pre-existing, not introduced by this change) issue where the per-key
-  // split's normalize-on-write can mask the view/sort migration's "field
-  // absent" detection — see the handback report. This test never calls
+  // Documents WHY the order matters, isolated from the separate issue where
+  // the per-key split's normalize-on-write can mask the view/sort migration's
+  // "field absent" detection. This test never calls
   // ensureWorkspaceViewSortMigration at all: it shows that ANY per-key write
   // landing before ensureWorkspacePerKeyMigration runs — which is exactly
   // what happens if it ran second — gets silently discarded, because the

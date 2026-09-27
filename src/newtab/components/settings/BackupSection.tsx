@@ -419,6 +419,10 @@ export function BackupSection({ onAfterImport, pushToast, waiting, tree, onWorks
         <p className="ff-sync-warning">
           Treat this code like a password. Anyone who has it can read <em>and overwrite</em> your synced data.
         </p>
+        <p className="ff-row__hint">
+          Save it somewhere safe, like a password manager. If you lose access to every linked browser, it&rsquo;s
+          the only way to get your synced data back.
+        </p>
       </div>
 
       <div className="ff-card">
