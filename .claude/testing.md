@@ -28,7 +28,7 @@ Chrome Playwright specs load a **test build** to eliminate flake from `chrome.st
 **Reason**: Component tests either test implementation (brittle — they fail on safe refactors) or redundantly retest E2E coverage. The architecture (state in `App.tsx`, presentational children, extracted pure functions) already isolates unit-testable logic from render. Pure logic lives in unit tests (`lib/`, `shared/`); components are validated via E2E.
 
 **Deferred E2E markers**: some hooks are documented as E2E-only in their own test files, with reasons, rather than given fake unit coverage:
-- `tests/unit/state/*.test.ts` — `useSelection`, `useToasts`, `useContextMenuBuilder` (state hooks with side effects that need the full component tree). `useWorkspaceActions` has no marker: its create-from-folder guard is unit-tested through the extracted `checkCreateFromFolderGuard`.
+- `tests/unit/state/*.test.ts` — `useSelection`, `useToasts` (state hooks with side effects that need the full component tree). `useWorkspaceActions` has no marker: its create-from-folder guard is unit-tested through the extracted `checkCreateFromFolderGuard`. `useContextMenuBuilder` has no marker either: menu construction is unit-tested directly through the extracted pure `buildContextMenuItems`, with the hook itself a thin `useCallback` wrapper around it.
 - `tests/unit/interaction/deferred-to-e2e.test.ts` — all 8 interaction hooks (`useDrag`, `useMarquee`, `useKeyboardNav`, etc.; require real DOM + event simulation)
 
 ## Evidence specs
