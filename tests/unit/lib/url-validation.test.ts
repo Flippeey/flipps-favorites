@@ -17,12 +17,17 @@ describe('hasUrlScheme', () => {
 
 describe('isValidBookmarkUrl', () => {
   it('accepts the browser-internal allowlist', () => {
-    for (const v of ['http://x.com', 'https://x.com', 'chrome://flags', 'edge://settings', 'about:blank', 'file:///etc/hosts']) {
+    for (const v of ['http://x.com', 'https://x.com', 'chrome://flags', 'chrome://settings', 'edge://settings', 'about:blank', 'file:///etc/hosts', 'file:///C:/x']) {
       expect(isValidBookmarkUrl(v)).toBe(true);
     }
   });
   it('rejects disallowed schemes and junk', () => {
     for (const v of ['javascript:alert(1)', 'mailto:a@b.com', 'ftp://x.com', 'data:text/html,x', 'not a url', '', 'localhost:3000']) {
+      expect(isValidBookmarkUrl(v)).toBe(false);
+    }
+  });
+  it('rejects http(s) URLs with no real hostname (bare "www." left over from an unedited default)', () => {
+    for (const v of ['https://www.', 'http://www./', 'https://www./path']) {
       expect(isValidBookmarkUrl(v)).toBe(false);
     }
   });

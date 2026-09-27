@@ -22,8 +22,12 @@ function inferTitle(url: string): string {
   return seed.charAt(0).toUpperCase() + seed.slice(1);
 }
 
+// Seed value for the URL field — not a real URL, so it must be treated as
+// empty input rather than validated as a bookmark URL.
+const DEFAULT_URL = 'https://www.';
+
 export function QuickAddDialog({ tree, parentId, parentTitle, onClose, onSaved }: QuickAddDialogProps) {
-  const [value, setValue] = useState('https://www.');
+  const [value, setValue] = useState(DEFAULT_URL);
   const [targetId, setTargetId] = useState(parentId);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -43,7 +47,7 @@ export function QuickAddDialog({ tree, parentId, parentTitle, onClose, onSaved }
     e.preventDefault();
     if (saving) return;
     let url = value.trim();
-    if (!url || url === 'https://' || url === 'http://' || url === 'www.') {
+    if (!url || url === 'https://' || url === 'http://' || url === 'www.' || url === DEFAULT_URL) {
       setError('Enter a URL.');
       return;
     }

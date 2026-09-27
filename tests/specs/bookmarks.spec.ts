@@ -58,6 +58,20 @@ test('QuickAdd rejects an empty URL with an error message', async ({ newtabPage 
   await expect(dialog.locator('.ff-status[data-kind="error"]')).toContainText(/URL|enter/i);
 });
 
+test('QuickAdd rejects the untouched default URL', async ({ newtabPage }) => {
+  // The dialog seeds its input with a placeholder-like default ("https://www.").
+  // Submitting without typing anything must be treated as empty input, not as a
+  // URL with hostname "www." that slips past validation and creates a bookmark.
+  await newtabPage.getByRole('button', { name: 'Add', exact: true }).click();
+  await newtabPage.locator('.ff-ctx').getByRole('menuitem', { name: /Add bookmark/i }).click();
+  const dialog = newtabPage.locator('.ff-dialog');
+  await dialog.getByRole('button', { name: /Add bookmark/i }).click();
+
+  await expect(dialog.locator('.ff-status[data-kind="error"]')).toBeVisible();
+  await expect(dialog.locator('.ff-status[data-kind="error"]')).toContainText('Enter a URL.');
+  await expect(newtabPage.locator('.ff-tile[data-item-kind="bookmark"]')).toHaveCount(0);
+});
+
 test('right-click empty canvas surfaces Add bookmark + Add folder', async ({ newtabPage }) => {
   const menu = await openContextMenu(newtabPage, newtabPage.locator('.ff-canvas'));
   await expect(menu.getByRole('menuitem', { name: /Add bookmark/i })).toBeVisible();

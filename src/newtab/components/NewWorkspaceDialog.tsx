@@ -39,6 +39,8 @@ export function NewWorkspaceDialog({ tree, workspaces, onConfirm, onClose }: New
   const [selectedId, setSelectedId] = useState(defaultId);
   const [name, setName] = useState(() => findFolder(tree, defaultId)?.title ?? '');
   const nameEditedRef = useRef(false);
+  const creatingRef = useRef(false);
+  const [creating, setCreating] = useState(false);
 
   const handleFolderSelect = (id: string) => {
     setSelectedId(id);
@@ -53,13 +55,20 @@ export function NewWorkspaceDialog({ tree, workspaces, onConfirm, onClose }: New
   };
 
   const handleConfirm = async () => {
-    if (!selectedId) return;
-    const folder = findFolder(tree, selectedId);
-    // Only dismiss on success — onConfirm returns undefined when creation fails
-    // (e.g. storage write rejected). Closing regardless made failures look like
-    // a silent no-op ("dialog closes but no workspace added").
-    const createdId = await onConfirm(selectedId, name.trim() || folder?.title || 'Workspace');
-    if (createdId) onClose();
+    if (!selectedId || creatingRef.current) return;
+    creatingRef.current = true;
+    setCreating(true);
+    try {
+      const folder = findFolder(tree, selectedId);
+      // Only dismiss on success — onConfirm returns undefined when creation fails
+      // (e.g. storage write rejected). Closing regardless made failures look like
+      // a silent no-op ("dialog closes but no workspace added").
+      const createdId = await onConfirm(selectedId, name.trim() || folder?.title || 'Workspace');
+      if (createdId) onClose();
+    } finally {
+      creatingRef.current = false;
+      setCreating(false);
+    }
   };
 
   return (
@@ -96,7 +105,7 @@ export function NewWorkspaceDialog({ tree, workspaces, onConfirm, onClose }: New
       </div>
       <div className="ff-dialog__actions">
         <button type="button" className="ff-btn ff-btn--ghost" onClick={onClose}>Cancel</button>
-        <button type="button" className="ff-btn ff-btn--primary" onClick={handleConfirm} disabled={!selectedId}>
+        <button type="button" className="ff-btn ff-btn--primary" onClick={handleConfirm} disabled={!selectedId || creating}>
           Create workspace
         </button>
       </div>

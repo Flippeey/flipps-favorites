@@ -119,6 +119,29 @@ test('create workspace via NewWorkspaceDialog adds a tab', async ({ newtabPage, 
   await removeBookmarkTree(newtabPage, folderId);
 });
 
+test('double-clicking Create workspace only creates one workspace', async ({ newtabPage, world }) => {
+  // A second click landing before the first create() resolves must not fire a
+  // second creation — the tab count must grow by exactly 1, not 2.
+  const folderId = await createTestFolder(newtabPage, 'Double Click WS Root');
+  const countBefore = world.workspaces.length;
+
+  await newtabPage.getByRole('button', { name: 'Add', exact: true }).click();
+  const addMenu = contextMenu(newtabPage);
+  await expect(addMenu).toBeVisible();
+  await addMenu.locator('.ff-ctx__item').filter({ hasText: 'Add workspace' }).click();
+
+  const dialog = newtabPage.locator('.ff-dialog, [role="dialog"]').first();
+  await expect(dialog).toBeVisible({ timeout: 5_000 });
+
+  const createBtn = newtabPage.getByRole('button', { name: 'Create workspace', exact: true });
+  await expect(createBtn).toBeEnabled({ timeout: 5_000 });
+  await createBtn.dblclick();
+
+  await expect(newtabPage.locator('.ff-ws-tab')).toHaveCount(countBefore + 1, { timeout: 8_000 });
+
+  await removeBookmarkTree(newtabPage, folderId);
+});
+
 test('folder already used as a workspace root stays expandable so its subfolders remain selectable', async ({ newtabPage }) => {
   // WHY: the recursive folder picker only emits a folder's children when the
   // parent row is expanded. An earlier build filtered excluded roots (folders
