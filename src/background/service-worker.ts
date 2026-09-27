@@ -263,7 +263,7 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
       const summary = await applyWorkspaceImport(message.payload, message.mode, message.origin, {
         loadTree: getBookmarkTree,
         invalidateIcons: () => invalidateIcon(),
-      });
+      }, message.heldWallpaperIds);
       return { summary } satisfies ApplyWorkspaceImportResponse;
     }
     case messageTypes.openTab: {

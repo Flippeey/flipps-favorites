@@ -246,12 +246,14 @@ export async function applyWorkspaceImport(
   payload: ParsedWorkspaceImport,
   mode: WorkspaceImportMode,
   origin: ImportOrigin,
+  heldWallpaperIds?: string[],
 ): Promise<WorkspaceImportSummary> {
   const res = await sendKeepingBackgroundAlive<ApplyWorkspaceImportResponse>({
     type: messageTypes.applyWorkspaceImport,
     payload,
     mode,
     origin,
+    ...(heldWallpaperIds ? { heldWallpaperIds } : {}),
   });
   return res.summary;
 }

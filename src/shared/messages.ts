@@ -333,6 +333,9 @@ export interface ApplyWorkspaceImportRequest {
   payload: ParsedWorkspaceImport;
   mode: WorkspaceImportMode;
   origin: ImportOrigin;
+  // File imports: payload workspaces whose wallpaper the page kept out of
+  // `payload` and writes itself (see HeldWallpaperWrite).
+  heldWallpaperIds?: string[];
 }
 
 export interface ApplyWorkspaceImportResponse {

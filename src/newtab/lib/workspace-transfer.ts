@@ -14,13 +14,14 @@ import {
   readOnboardingState,
   syncedSettingKeys,
   withoutPerBrowserSettings,
+  writeWorkspaceWallpaper,
 } from '@/shared/storage';
 import { normalizeOverrideScope } from '@/shared/icon-scope';
 import { MAX_IMPORT_DATA_URL_BYTES } from '@/shared/constants';
 import { legacyFolderIconSyncId, normalizeDeletionMarker, readStamp, sameValue } from '@/shared/sync-stamps';
 import type { DeletionMarker } from '@/shared/models';
 import { planWorkspaceImport, readLocalSnapshot } from '@/shared/sync-plan';
-import { getBookmarkTree } from './messaging';
+import { applyWorkspaceImport, getBookmarkTree } from './messaging';
 import {
   WORKSPACE_SCHEMA,
   WORKSPACE_SCHEMA_VERSION,
@@ -33,6 +34,7 @@ import {
   type ParsedWorkspaceImport,
   type WorkspaceExportPayload,
   type WorkspaceImportMode,
+  type WorkspaceImportSummary,
   type WorkspaceWallpaperMap,
 } from '@/shared/sync-merge';
 
@@ -100,6 +102,29 @@ export async function parseWorkspaceFile(file: File): Promise<ParsedWorkspaceImp
     throw new Error('Import file is not valid JSON.');
   }
   return normalizeWorkspaceExportPayload(parsed);
+}
+
+// Applies a parsed backup file. Its wallpapers (up to MAX_IMPORT_DATA_URL_BYTES
+// each, one per workspace) could push the request past the runtime message
+// size limit, so they stay on the page: the background plans with their ids
+// and names the ones to store, and the page writes them. A failed wallpaper
+// write does not fail the import.
+export async function importWorkspaceFile(
+  payload: ParsedWorkspaceImport,
+  mode: WorkspaceImportMode,
+): Promise<WorkspaceImportSummary> {
+  const { workspaceWallpapers: held, ...rest } = payload;
+  const summary = await applyWorkspaceImport({ ...rest, workspaceWallpapers: {} }, mode, 'file', Object.keys(held));
+  for (const { workspaceId, sourceId } of summary.heldWallpaperWrites) {
+    const dataUrl = held[sourceId];
+    if (!dataUrl) continue;
+    try {
+      await writeWorkspaceWallpaper(workspaceId, dataUrl);
+    } catch (error) {
+      console.warn('Failed to store an imported wallpaper.', error);
+    }
+  }
+  return summary;
 }
 
 // Shared shape validation + normalization for a parsed (untrusted) export

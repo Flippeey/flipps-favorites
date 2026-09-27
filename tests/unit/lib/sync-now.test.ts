@@ -48,6 +48,18 @@ function resetMocks(): void {
 }
 
 describe('runSyncNow', () => {
+  it('an apply that returns no merged copy fails the sync instead of pushing an empty shared copy', async () => {
+    resetMocks();
+    mockSyncPull.mockResolvedValue(FAKE_REMOTE);
+    mockApplyWorkspaceImport.mockResolvedValue({ mode: 'merge', settings: FAKE_SETTINGS });
+
+    const mod = await importSyncNow();
+
+    await expect(mod.runSyncNow()).rejects.toThrow();
+    expect(mockSyncPush).not.toHaveBeenCalled();
+    expect(mockWriteLastSyncedAt).not.toHaveBeenCalled();
+  });
+
   it('first-ever sync: pull returns null (404) -> merges an empty copy and pushes the merged set', async () => {
     resetMocks();
     mockSyncPull.mockResolvedValue(null);

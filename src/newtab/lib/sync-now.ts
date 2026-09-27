@@ -6,7 +6,9 @@ import {
   WORKSPACE_SCHEMA,
   WORKSPACE_SCHEMA_VERSION,
   type ParsedWorkspaceImport,
+  type WorkspaceExportPayload,
   type WorkspaceImportMode,
+  type WorkspaceImportSummary,
 } from '@/newtab/lib/workspace-transfer';
 
 export type SyncNowResult =
@@ -29,7 +31,7 @@ export async function runSyncNow(): Promise<SyncNowResult> {
   const remote = await syncPull();
   const payload = remote === null ? emptyPayload() : normalizeWorkspaceExportPayload(remote);
   const summary = await applyWorkspaceImport(payload, 'merge', 'sync');
-  await syncPush(summary.merged);
+  await syncPush(mergedCopy(summary));
   await recordSyncCompleted();
   return remote === null ? { merged: false } : { merged: true, settings: summary.settings };
 }
@@ -47,9 +49,16 @@ export async function completeLinkFromPreview(
   mode: WorkspaceImportMode,
 ): Promise<SyncNowResult> {
   const summary = await applyWorkspaceImport(payload ?? emptyPayload(), payload === null ? 'merge' : mode, 'sync');
-  await syncPush(summary.merged);
+  await syncPush(mergedCopy(summary));
   await recordSyncCompleted();
   return payload === null ? { merged: false } : { merged: true, settings: summary.settings };
+}
+
+// A sync apply always returns the merged copy. Pushing its absence would
+// overwrite the shared copy with nothing, so a missing one is an error.
+function mergedCopy(summary: WorkspaceImportSummary): WorkspaceExportPayload {
+  if (!summary.merged) throw new Error('Sync could not build the shared copy.');
+  return summary.merged;
 }
 
 function emptyPayload(): ParsedWorkspaceImport {

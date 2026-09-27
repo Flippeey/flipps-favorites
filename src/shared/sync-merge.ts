@@ -109,8 +109,21 @@ export interface WorkspaceImportSummary {
   folderIconCount: number;
   bookmarkUsageCount: number;
   settings: AppSettings;
-  // The merged shared copy a sync pushes.
-  merged: WorkspaceExportPayload;
+  // Wallpapers the caller held back from the request, for it to write.
+  heldWallpaperWrites: HeldWallpaperWrite[];
+  // The merged shared copy a sync pushes. Sync only: a file import has no use
+  // for it, and it carries every wallpaper and icon, more than a runtime
+  // message may hold.
+  merged?: WorkspaceExportPayload;
+}
+
+// A backup file can carry more wallpaper data than one runtime message holds,
+// so the page keeps it back and the background names which to write:
+// the page's copy for `sourceId` (the payload's workspace id) goes under
+// `workspaceId` (the id stored here, after any pairing with a local one).
+export interface HeldWallpaperWrite {
+  workspaceId: string;
+  sourceId: string;
 }
 
 export interface LocalSyncSnapshot {
