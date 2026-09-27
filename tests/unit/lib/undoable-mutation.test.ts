@@ -3,11 +3,9 @@ import { runUndoableMutation, type UndoableMutationDeps } from '@/newtab/lib/und
 import type { PushToastInput, ToastAction } from '@/newtab/state/useToasts';
 
 function makeDeps() {
-  const deps: UndoableMutationDeps = {
-    refreshTree: vi.fn().mockResolvedValue(undefined),
-    pushToast: vi.fn(),
-  };
-  return deps as { refreshTree: ReturnType<typeof vi.fn>; pushToast: ReturnType<typeof vi.fn> };
+  const refreshTree = vi.fn(async (): Promise<void> => { /* fake */ });
+  const pushToast = vi.fn((_input: PushToastInput): void => { /* fake */ });
+  return { refreshTree, pushToast } satisfies UndoableMutationDeps;
 }
 
 function lastToast(pushToast: ReturnType<typeof vi.fn>): PushToastInput {
