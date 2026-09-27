@@ -1,18 +1,11 @@
 /**
- * drop-resolution.ts — pure drop-target decision logic extracted from
- * useDrag.ts's onMove pointer handler.
- *
- * These cases mirror the user-visible regressions fixed across useDrag.ts's
- * history (see `git log --oneline -- src/newtab/interaction/useDrag.ts`),
- * naming each test after the behavior rather than the historical bug so it
- * keeps failing correctly if the decision changes again:
- *  - f70a3ca: relocation drops (cross-parent) must stay live under auto-sort;
- *    only same-parent reorder is gated to manual sort.
- *  - 1dee8b3 / 1b0a3e0: same, plus the drop indicator must still render for a
- *    live auto-sort relocation (covered indirectly — isReorderDropAllowed is
- *    what useDrag now guards the indicator with).
- *  - 8b55987 / a21eb0b: workspace-bar gap insertion index by pill midpoint,
- *    at the start/middle/end of the pill list.
+ * drop-resolution.ts — pure drop-target decision logic behind useDrag's
+ * pointer handler. Tests are named after the user-visible behavior:
+ *  - relocation drops (cross-parent) stay live under auto-sort; only
+ *    same-parent reorder is gated to manual sort, and the drop indicator
+ *    follows the same guard (isReorderDropAllowed).
+ *  - workspace-bar gap insertion index is decided by pill midpoint, at the
+ *    start/middle/end of the pill list.
  */
 import { describe, expect, it } from 'vitest';
 import {
