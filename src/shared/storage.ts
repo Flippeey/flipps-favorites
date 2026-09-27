@@ -17,6 +17,9 @@ import {
   writeFolderIconRecord,
   writeIconOverride,
   writeCachedIcon,
+  updateOrDeleteFolderIconRecord,
+  updateOrDeleteIconOverride,
+  updateOrDeletePendingFolderIconRecord,
 } from './icon-idb';
 import { MAX_PENDING_USAGE } from './constants';
 import type { AppSettings, BookmarkSortMode, BookmarkUsageRecord, DeletionMarker, FolderBinding, FolderIconOverrideRecord, IconCacheRecord, IconOverrideRecord, PerBrowserSettingKey, SettingsStamps, SortDirection, SyncedSettingKey, ViewMode, WorkspaceRecord } from './messages';
@@ -240,8 +243,8 @@ function enqueueSettingsWrite<T>(run: () => Promise<T>): Promise<T> {
   return scheduled;
 }
 
-// Raw writer: stores stamps exactly as given (import and sync pass the
-// incoming ones). Only patchSettingsFromUser stamps.
+// Raw writer: stores stamps exactly as given. Only patchSettingsFromUser
+// stamps; a sync or import lands through writePlannedSettings.
 export async function writeSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   return enqueueSettingsWrite(() => doWriteSettings(patch));
 }
@@ -257,6 +260,25 @@ export async function patchSettingsFromUser(patch: Partial<AppSettings>): Promis
       if (key in patch && !sameValue(current[key], next[key])) stamps[key] = nextStamp(stamps[key], now);
     }
     return doWriteSettings({ ...patch, settingsUpdatedAt: stamps });
+  });
+}
+
+// Lands the settings a sync or import planned against the stamps it read
+// (`basis`). Inside the settings queue, so it is atomic relative to user edits:
+// a synced key whose stored stamp moved past its basis stamp was edited while
+// the plan ran, and keeps its stored value and stamp.
+export async function writePlannedSettings(planned: Partial<AppSettings>, basis: SettingsStamps): Promise<AppSettings> {
+  return enqueueSettingsWrite(async () => {
+    const current = await readSettings();
+    const stored = current.settingsUpdatedAt ?? {};
+    const keptKeys = syncedSettingKeys.filter(key => readStamp(stored[key]) > readStamp(basis[key]));
+    const kept = Object.fromEntries(keptKeys.map(key => [key, current[key]])) as Partial<AppSettings>;
+    const keptStamps = Object.fromEntries(keptKeys.map(key => [key, stored[key]])) as SettingsStamps;
+    return doWriteSettings({
+      ...planned,
+      ...kept,
+      settingsUpdatedAt: { ...planned.settingsUpdatedAt, ...keptStamps },
+    });
   });
 }
 
@@ -396,8 +418,12 @@ export async function writeBookmarkUsageRecord(record: BookmarkUsageRecord): Pro
   await bookmarkUsageStore.writeOne(record.bookmarkId, record);
 }
 
-export async function deleteBookmarkUsageRecord(bookmarkId: string): Promise<void> {
-  await bookmarkUsageStore.deleteOne(bookmarkId);
+// Removes a usage record a sync planned to delete from the `basisUsedAt` it
+// read, unless a bookmark open moved it on since. Planned usage WRITES need no
+// such check: writeOne keeps the larger usedAt, so they never lower a newer
+// value. Resolves whether the record is gone.
+export async function deletePlannedBookmarkUsage(bookmarkId: string, basisUsedAt: number | undefined): Promise<boolean> {
+  return bookmarkUsageStore.deleteOneIf(bookmarkId, current => readStamp(current.usedAt) <= readStamp(basisUsedAt));
 }
 
 export async function readWorkspaces(): Promise<WorkspaceRecord[]> {
@@ -463,6 +489,45 @@ export async function createWorkspaceFromUser(record: WorkspaceRecord): Promise<
 export async function deleteWorkspaceFromUser(id: string): Promise<void> {
   const { previous } = await workspacesStore.updateOrDeleteOne(id, () => null);
   await addDeletionMarkers([{ kind: 'workspace', key: id, deletedAt: nextStamp(previous?.updatedAt) }]);
+}
+
+// Icon writes and deletes a sync or import planned from `basis`, skipped when
+// the stored record changed since (see writePlannedWorkspace). The check and
+// the write run in one IndexedDB readwrite transaction, which the browser
+// never interleaves with another write to that store, so a user edit either
+// lands first (and is seen) or after (and replaces the planned value). Each
+// resolves whether the planned outcome landed.
+async function landPlanned<T extends { updatedAt?: number }>(
+  update: (decide: (current: T | null) => T | null) => Promise<{ next: T | null }>,
+  planned: T | null,
+  basis: T | undefined,
+): Promise<boolean> {
+  const { next } = await update(current => (changedSincePlan(current, basis) ? current : planned));
+  return next === planned;
+}
+
+export function writePlannedIconOverride(record: IconOverrideRecord, basis: IconOverrideRecord | undefined): Promise<boolean> {
+  return landPlanned(decide => updateOrDeleteIconOverride(record.overrideKey, decide), record, basis);
+}
+
+export function deletePlannedIconOverride(overrideKey: string, basis: IconOverrideRecord | undefined): Promise<boolean> {
+  return landPlanned(decide => updateOrDeleteIconOverride(overrideKey, decide), null, basis);
+}
+
+export function writePlannedFolderIcon(record: FolderIconOverrideRecord, basis: FolderIconOverrideRecord | undefined): Promise<boolean> {
+  return landPlanned(decide => updateOrDeleteFolderIconRecord(record.folderId, decide), record, basis);
+}
+
+export function deletePlannedFolderIcon(folderId: string, basis: FolderIconOverrideRecord | undefined): Promise<boolean> {
+  return landPlanned(decide => updateOrDeleteFolderIconRecord(folderId, decide), null, basis);
+}
+
+export function writePlannedPendingFolderIcon(record: FolderIconOverrideRecord, basis: FolderIconOverrideRecord | undefined): Promise<boolean> {
+  return landPlanned(decide => updateOrDeletePendingFolderIconRecord(record.syncId ?? '', decide), record, basis);
+}
+
+export function deletePlannedPendingFolderIcon(syncId: string, basis: FolderIconOverrideRecord | undefined): Promise<boolean> {
+  return landPlanned(decide => updateOrDeletePendingFolderIconRecord(syncId, decide), null, basis);
 }
 
 export async function writeIconOverrideFromUser(record: IconOverrideRecord): Promise<IconOverrideRecord> {

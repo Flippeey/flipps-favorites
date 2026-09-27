@@ -1,4 +1,5 @@
 import type { FolderIconOverrideRecord, IconOverrideRecord } from '@/shared/models';
+import { sameValue } from '@/shared/sync-stamps';
 
 // In-memory stand-in for one browser profile: chrome.storage.local/sync with
 // onChanged, the icon IndexedDB, and a write counter per area. Modules under
@@ -174,6 +175,23 @@ export function currentBrowser(): FakeBrowser {
   return current;
 }
 
+// One synchronous step, as atomic as the IndexedDB readwrite transaction it
+// stands in for.
+function updateOrDelete<T>(map: Map<string, T>, key: string, decide: (current: T | null) => T | null): { previous: T | null; next: T | null } {
+  const previous = clone(map.get(key)) ?? null;
+  const next = decide(previous);
+  if (next === null) {
+    if (previous === null) return { previous, next };
+    map.delete(key);
+  } else if (sameValue(previous, next)) {
+    return { previous, next };
+  } else {
+    map.set(key, clone(next));
+  }
+  currentBrowser().idbWrites += 1;
+  return { previous, next };
+}
+
 export const idbModule = {
   readCachedIcon: async () => null,
   writeCachedIcon: async () => undefined,
@@ -221,6 +239,12 @@ export const idbModule = {
     b.pendingFolderIcons.delete(syncId);
     b.idbWrites += 1;
   },
+  updateOrDeleteIconOverride: async (key: string, decide: (current: IconOverrideRecord | null) => IconOverrideRecord | null) =>
+    updateOrDelete(currentBrowser().overrides, key, decide),
+  updateOrDeleteFolderIconRecord: async (folderId: string, decide: (current: FolderIconOverrideRecord | null) => FolderIconOverrideRecord | null) =>
+    updateOrDelete(currentBrowser().folderIcons, folderId, decide),
+  updateOrDeletePendingFolderIconRecord: async (syncId: string, decide: (current: FolderIconOverrideRecord | null) => FolderIconOverrideRecord | null) =>
+    updateOrDelete(currentBrowser().pendingFolderIcons, syncId, decide),
 };
 
 // Deterministic PRNG (mulberry32) so a failing seed replays exactly.

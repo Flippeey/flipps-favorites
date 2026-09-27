@@ -61,9 +61,14 @@ export function mergePlannedMarkers(
   basis: DeletionMarker[],
   planned: DeletionMarker[],
 ): DeletionMarker[] {
+  return [...markersAddedSince(current, basis), ...planned];
+}
+
+// Stored markers a plan never saw: recorded (or restamped) after it read `basis`.
+export function markersAddedSince(current: DeletionMarker[], basis: DeletionMarker[]): DeletionMarker[] {
   const signature = (m: DeletionMarker): string => `${markerId(m.kind, m.key)}\u0000${String(m.deletedAt)}`;
   const seen = new Set(basis.map(signature));
-  return [...current.filter(m => !seen.has(signature(m))), ...planned];
+  return current.filter(m => !seen.has(signature(m)));
 }
 
 export function normalizeDeletionMarker(value: unknown): DeletionMarker | null {

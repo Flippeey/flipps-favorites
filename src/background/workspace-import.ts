@@ -1,46 +1,77 @@
-import type { BookmarkNode } from '@/shared/models';
+import type { BookmarkNode, DeletionMarker } from '@/shared/models';
 import {
-  deleteBookmarkUsageRecord,
-  deleteFolderIconOverride,
-  deleteIconOverrideRecord,
-  deletePendingFolderIcon,
+  deletePlannedBookmarkUsage,
+  deletePlannedFolderIcon,
+  deletePlannedIconOverride,
+  deletePlannedPendingFolderIcon,
   deletePlannedWorkspace,
+  readDeletionMarkers,
   removeWorkspaceWallpaper,
   updateFolderBindings,
   writeBookmarkUsageRecord,
-  writeFolderIconOverride,
-  writeIconOverrideRecord,
-  writePendingFolderIcon,
   writePendingUsage,
   writePlannedDeletionMarkers,
+  writePlannedFolderIcon,
+  writePlannedIconOverride,
+  writePlannedPendingFolderIcon,
+  writePlannedSettings,
   writePlannedWorkspace,
-  writeSettings,
   writeWorkspaceWallpaper,
 } from '@/shared/storage';
 import { planWorkspaceImport } from '@/shared/sync-plan';
-import type { ImportOrigin, ParsedWorkspaceImport, WorkspaceImportMode, WorkspaceImportSummary } from '@/shared/sync-merge';
+import { legacyFolderIconSyncId, markerId, markersAddedSince } from '@/shared/sync-stamps';
+import type {
+  HeldWallpaperWrite,
+  ImportOrigin,
+  ParsedWorkspaceImport,
+  WorkspaceImportMode,
+  WorkspaceImportSummary,
+} from '@/shared/sync-merge';
 
 export interface WorkspaceImportDeps {
   loadTree: () => Promise<BookmarkNode[]>;
   invalidateIcons: () => Promise<void>;
 }
 
+// Stands in for a wallpaper the caller held back, so the planner still sees
+// that the workspace has one. The NUL byte keeps it from ever equalling a
+// stored data URL.
+const heldWallpaperRef = (sourceId: string): string => `\u0000held-wallpaper:${sourceId}`;
+
 // Executes the planner's result; decides nothing itself. Runs in the
 // background so its writes share the storage queues with user edits, which
-// only serialize within one JS context: a workspace or marker changed while
-// the plan ran keeps that newer change.
+// only serialize within one JS context: anything changed while the plan ran
+// (a workspace, a setting, an icon, a usage record, a marker) keeps that
+// newer change.
+//
+// `heldWallpaperIds` names payload workspaces whose wallpaper the caller kept
+// out of `payload`; the ones to store come back in `heldWallpaperWrites`.
 export async function applyWorkspaceImport(
   payload: ParsedWorkspaceImport,
   mode: WorkspaceImportMode,
   origin: ImportOrigin,
   deps: WorkspaceImportDeps,
+  heldWallpaperIds: readonly string[] = [],
 ): Promise<WorkspaceImportSummary> {
-  const { local, plan } = await planWorkspaceImport(payload, mode, origin, deps.loadTree);
+  const heldRefs = new Map(heldWallpaperIds.map(id => [heldWallpaperRef(id), id]));
+  const withRefs: ParsedWorkspaceImport = heldRefs.size
+    ? {
+        ...payload,
+        workspaceWallpapers: {
+          ...payload.workspaceWallpapers,
+          ...Object.fromEntries([...heldRefs].map(([ref, id]) => [id, ref])),
+        },
+      }
+    : payload;
+  const { local, plan } = await planWorkspaceImport(withRefs, mode, origin, deps.loadTree);
   const basisById = new Map(local.workspaces.map(w => [w.id, w]));
 
   const activeRekey = plan.rekeys.find(k => k.from === local.settings.activeWorkspaceId);
   const settings = plan.settingsChanged || activeRekey
-    ? await writeSettings({ ...plan.settings, ...(activeRekey ? { activeWorkspaceId: activeRekey.to } : {}) })
+    ? await writePlannedSettings(
+        { ...plan.settings, ...(activeRekey ? { activeWorkspaceId: activeRekey.to } : {}) },
+        local.settings.settingsUpdatedAt ?? {},
+      )
     : local.settings;
 
   let workspaceCount = 0;
@@ -58,8 +89,14 @@ export async function applyWorkspaceImport(
       console.warn('Failed to store an imported workspace.', error);
     }
   }
+  const heldWallpaperWrites: HeldWallpaperWrite[] = [];
   for (const { id, dataUrl } of plan.wallpaperWrites) {
     if (keptLocal.has(id)) continue;
+    const sourceId = heldRefs.get(dataUrl);
+    if (sourceId !== undefined) {
+      heldWallpaperWrites.push({ workspaceId: id, sourceId });
+      continue;
+    }
     try {
       await writeWorkspaceWallpaper(id, dataUrl);
     } catch (error) {
@@ -82,18 +119,46 @@ export async function applyWorkspaceImport(
     ...plan.bindingWrites,
   }));
 
-  for (const record of plan.overrideWrites) await writeIconOverrideRecord(record);
-  for (const key of plan.overrideDeletes) await deleteIconOverrideRecord(key);
-  for (const record of plan.folderIconWrites) await writeFolderIconOverride(record);
-  for (const folderId of plan.folderIconDeletes) await deleteFolderIconOverride(folderId);
-  for (const record of plan.pendingFolderIconWrites) await writePendingFolderIcon(record);
-  for (const syncId of plan.pendingFolderIconDeletes) await deletePendingFolderIcon(syncId);
+  // An icon the user set and removed again while the plan ran is absent from
+  // storage, just as when the plan read it; only its fresh marker tells.
+  const lateMarkers = new Set(
+    markersAddedSince(await readDeletionMarkers(), local.deletions).map(m => markerId(m.kind, m.key)),
+  );
+  const deletedMeanwhile = (kind: DeletionMarker['kind'], key: string): boolean => lateMarkers.has(markerId(kind, key));
+  const folderIconKey = (r: { folderId: string; syncId?: string }): string => r.syncId ?? legacyFolderIconSyncId(r.folderId);
+
+  const basisOverrides = new Map(local.iconOverrides.map(r => [r.overrideKey, r]));
+  let iconOverrideCount = 0;
+  let overrideDeleteCount = 0;
+  for (const record of plan.overrideWrites) {
+    if (deletedMeanwhile('iconOverride', record.overrideKey)) continue;
+    if (await writePlannedIconOverride(record, basisOverrides.get(record.overrideKey))) iconOverrideCount += 1;
+  }
+  for (const key of plan.overrideDeletes) {
+    if (await deletePlannedIconOverride(key, basisOverrides.get(key))) overrideDeleteCount += 1;
+  }
+
+  const basisFolderIcons = new Map(local.folderIcons.map(r => [r.folderId, r]));
+  const basisPending = new Map(local.pendingFolderIcons.map(r => [r.syncId ?? '', r]));
+  let folderIconCount = 0;
+  for (const record of plan.folderIconWrites) {
+    if (deletedMeanwhile('folderIcon', folderIconKey(record))) continue;
+    if (await writePlannedFolderIcon(record, basisFolderIcons.get(record.folderId))) folderIconCount += 1;
+  }
+  for (const folderId of plan.folderIconDeletes) await deletePlannedFolderIcon(folderId, basisFolderIcons.get(folderId));
+  for (const record of plan.pendingFolderIconWrites) {
+    if (deletedMeanwhile('folderIcon', folderIconKey(record))) continue;
+    if (await writePlannedPendingFolderIcon(record, basisPending.get(record.syncId ?? ''))) folderIconCount += 1;
+  }
+  for (const syncId of plan.pendingFolderIconDeletes) await deletePlannedPendingFolderIcon(syncId, basisPending.get(syncId));
+
+  const basisUsage = new Map(local.usage.map(r => [r.bookmarkId, r.usedAt]));
   for (const record of plan.usageWrites) await writeBookmarkUsageRecord(record);
-  for (const bookmarkId of plan.usageDeletes) await deleteBookmarkUsageRecord(bookmarkId);
+  for (const bookmarkId of plan.usageDeletes) await deletePlannedBookmarkUsage(bookmarkId, basisUsage.get(bookmarkId));
   await writePendingUsage(plan.pendingUsage);
   await writePlannedDeletionMarkers(local.deletions, plan.deletions);
 
-  if (plan.overrideWrites.length || plan.overrideDeletes.length) {
+  if (iconOverrideCount + overrideDeleteCount > 0) {
     try {
       await deps.invalidateIcons();
     } catch (error) {
@@ -107,11 +172,12 @@ export async function applyWorkspaceImport(
     workspaceCount,
     workspaceSkippedCount: plan.workspaceSkippedCount,
     workspaceFailedCount,
-    iconOverrideCount: plan.overrideWrites.length,
+    iconOverrideCount,
     iconOverrideSkippedCount: payload.skipped.oversizedDataUrlCount,
-    folderIconCount: plan.folderIconWrites.length + plan.pendingFolderIconWrites.length,
+    folderIconCount,
     bookmarkUsageCount: plan.usageWrites.length,
     settings,
-    merged: plan.merged,
+    heldWallpaperWrites,
+    ...(origin === 'sync' ? { merged: plan.merged } : {}),
   };
 }

@@ -27,6 +27,9 @@ export interface CachedRecordStore<T> {
   readOne: (key: string) => Promise<T | null>;
   writeOne: (key: string, value: T) => Promise<void>;
   deleteOne: (key: string) => Promise<void>;
+  // Deletes only when `shouldDelete` approves the value read inside the
+  // store's serialized section. Resolves whether the key is gone.
+  deleteOneIf: (key: string, shouldDelete: (current: T) => boolean) => Promise<boolean>;
   clearAll: () => Promise<void>;
 }
 
@@ -304,6 +307,17 @@ export function createCachedRecordStore<T>(args: {
         const nextRecords = { ...records };
         delete nextRecords[key];
         await valueStore.write(nextRecords);
+      });
+    },
+    async deleteOneIf(key: string, shouldDelete: (current: T) => boolean): Promise<boolean> {
+      return enqueueWrite(async () => {
+        const records = await valueStore.readFresh();
+        if (!(key in records)) return true;
+        if (!shouldDelete(records[key] as T)) return false;
+        const nextRecords = { ...records };
+        delete nextRecords[key];
+        await valueStore.write(nextRecords);
+        return true;
       });
     },
     async clearAll(): Promise<void> {
