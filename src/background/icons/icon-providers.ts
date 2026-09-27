@@ -1,5 +1,4 @@
 import type { FolderIconOverrideRecord, GetIconRequest, IconCacheRecord, IconOverrideRecord, IconSearchCandidate, ResolvedIcon } from '@/shared/messages';
-import { IconFetchError } from '@/shared/messages';
 import { writeIconOverrideRecord, deleteIconCacheRecord, writeFolderIconOverride } from '@/shared/storage';
 import {
   faviconProviderUrl,
@@ -11,7 +10,6 @@ import {
   maxDuckDuckGoResults,
   minimumAcceptedIconSize,
   minimumAutoIconSize,
-  minimumOverrideIconSize,
   originFetchTimeoutMs,
   iconHorseTimeoutMs,
   s2TimeoutMs,
@@ -40,18 +38,15 @@ import {
   parseLargestSize,
   extractDuckDuckGoToken,
   getFileNameFromUrl,
-  describeError,
 } from './icon-parse';
 import {
   fetchAndValidateImage,
   fetchWithTimeout,
-  getImageDimensions,
-  blobToDataUrl,
+  downloadAndValidateChosenImage,
 } from './icon-image';
 import { withCorsBypass, firefoxSafeFetch } from './cors-bypass';
 import { sleep } from './concurrency';
 import { extractBrandInfo } from '@/shared/url-brand';
-import { isIcoBytes, extractLargestIcoPng } from './ico-parse';
 import { getS2GlobeSignature, matchesS2GlobeSignature } from './s2-globe-gate';
 
 interface DuckDuckGoSearchResponse {
@@ -436,55 +431,7 @@ export async function downloadAndPersistOverride(
   fileName?: string,
   scope?: IconOverrideScope,
 ): Promise<ResolvedIcon> {
-  let response: Response;
-  try {
-    response = await firefoxSafeFetch(imageUrl, { cache: 'force-cache' });
-  } catch (error) {
-    throw new IconFetchError('network', `Could not reach the icon URL: ${describeError(error)}`);
-  }
-
-  if (!response.ok) {
-    throw new IconFetchError('http-status', `Icon image request failed with ${String(response.status)}.`, response.status);
-  }
-
-  let blob = await response.blob().catch((error: unknown) => {
-    throw new IconFetchError('decode-fail', `Could not read icon body: ${describeError(error)}`);
-  });
-
-  let mimeType = blob.type || 'image/png';
-  if (!mimeType.startsWith('image/')) {
-    throw new IconFetchError('not-image', 'Remote icon response is not an image.');
-  }
-
-  // ICO containers can't be decoded via createImageBitmap in worker contexts —
-  // extract the largest embedded PNG so multi-size favicons survive validation.
-  const bytes = new Uint8Array(await blob.arrayBuffer().catch(() => new ArrayBuffer(0)));
-  if (isIcoBytes(bytes)) {
-    const extracted = extractLargestIcoPng(bytes);
-    if (extracted) {
-      blob = new Blob([extracted.png as BlobPart], { type: 'image/png' });
-      mimeType = 'image/png';
-    }
-  }
-
-  let dimensions: { width: number; height: number };
-  try {
-    dimensions = await getImageDimensions(blob);
-  } catch (error) {
-    throw new IconFetchError('decode-fail', `Could not decode icon image: ${describeError(error)}`);
-  }
-
-  if (
-    dimensions.width < minimumOverrideIconSize ||
-    dimensions.height < minimumOverrideIconSize
-  ) {
-    throw new IconFetchError(
-      'too-small',
-      `Icon is ${String(dimensions.width)}x${String(dimensions.height)}; minimum is ${String(minimumOverrideIconSize)}x${String(minimumOverrideIconSize)}.`,
-    );
-  }
-
-  const dataUrl = await blobToDataUrl(blob, mimeType);
+  const { dataUrl, mimeType } = await downloadAndValidateChosenImage(imageUrl);
   const now = Date.now();
   const cacheKey = getIconCacheKey(bookmarkUrl);
   const normalizedScope = normalizeOverrideScope(scope);
@@ -521,53 +468,7 @@ export async function downloadAndPersistFolderIcon(
   imageUrl: string,
   fileName?: string,
 ): Promise<FolderIconOverrideRecord> {
-  let response: Response;
-  try {
-    response = await firefoxSafeFetch(imageUrl, { cache: 'force-cache' });
-  } catch (error) {
-    throw new IconFetchError('network', `Could not reach the icon URL: ${describeError(error)}`);
-  }
-
-  if (!response.ok) {
-    throw new IconFetchError('http-status', `Icon image request failed with ${String(response.status)}.`, response.status);
-  }
-
-  let blob = await response.blob().catch((error: unknown) => {
-    throw new IconFetchError('decode-fail', `Could not read icon body: ${describeError(error)}`);
-  });
-
-  let mimeType = blob.type || 'image/png';
-  if (!mimeType.startsWith('image/')) {
-    throw new IconFetchError('not-image', 'Remote icon response is not an image.');
-  }
-
-  const bytes = new Uint8Array(await blob.arrayBuffer().catch(() => new ArrayBuffer(0)));
-  if (isIcoBytes(bytes)) {
-    const extracted = extractLargestIcoPng(bytes);
-    if (extracted) {
-      blob = new Blob([extracted.png as BlobPart], { type: 'image/png' });
-      mimeType = 'image/png';
-    }
-  }
-
-  let dimensions: { width: number; height: number };
-  try {
-    dimensions = await getImageDimensions(blob);
-  } catch (error) {
-    throw new IconFetchError('decode-fail', `Could not decode icon image: ${describeError(error)}`);
-  }
-
-  if (
-    dimensions.width < minimumOverrideIconSize ||
-    dimensions.height < minimumOverrideIconSize
-  ) {
-    throw new IconFetchError(
-      'too-small',
-      `Icon is ${String(dimensions.width)}x${String(dimensions.height)}; minimum is ${String(minimumOverrideIconSize)}x${String(minimumOverrideIconSize)}.`,
-    );
-  }
-
-  const dataUrl = await blobToDataUrl(blob, mimeType);
+  const { dataUrl, mimeType } = await downloadAndValidateChosenImage(imageUrl);
   const record: FolderIconOverrideRecord = {
     folderId,
     dataUrl,

@@ -1,8 +1,10 @@
 import { extensionApi } from '../shared/browser';
 import { IconFetchError, messageTypes, type AppErrorResponse, type AppRequest, type AppResponse, type BookmarkNode, type CreateWorkspaceResponse, type DeleteWorkspaceResponse, type GetWorkspacesResponse, type IconFetchErrorKind, type OpenTabResponse, type PatchWorkspaceResponse, type WebSearchResponse } from '../shared/messages';
-import { deleteWorkspace, ensureWorkspacePerKeyMigration, ensureWorkspaceViewSortMigration, markOnboardingPending, patchWorkspaceRecord, readBookmarkUsageRecords, readFolderIconOverride, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
+import { deleteWorkspace, ensureStorageMigrations, markOnboardingPending, patchWorkspaceRecord, readBookmarkUsageRecords, readFolderIconOverride, readSettings, readWorkspaces, writeBookmarkUsageRecord, writeSettings, writeWorkspace } from '../shared/storage';
 import { getIcon, invalidateIcon, removeFolderIcon, removeIconOverride, searchIcons, setFolderIcon, setFolderIconFromUrl, setIconOverride, setIconOverrideFromUrl, sweepFolderIcons, sweepGeneratedRecords } from './icons/icon-service';
 import { performWebSearch } from './search-shim';
+import { computeBookmarkMoveIndex } from './move-index';
+import { openBookmarkManager } from './bookmark-manager';
 
 extensionApi.runtime.onInstalled.addListener(async (details: { reason?: string }) => {
   const reason = details.reason ?? 'unknown';
@@ -70,16 +72,12 @@ function buildErrorEnvelope(error: unknown): AppErrorResponse {
 }
 
 async function handleMessage(message: AppRequest): Promise<AppResponse> {
-  // One-time, idempotent migration: splits the legacy `workspaces` aggregate key
-  // into per-record `workspace:<id>` sync keys. Must run BEFORE view/sort migration
-  // so writeWorkspace (called by that migration) already uses per-key layout.
-  await ensureWorkspacePerKeyMigration();
-
-  // One-time, idempotent copy of legacy global view/sort onto every workspace.
-  // Memoized + persisted-marker gated, so this is a cheap no-op after the first
-  // run. Covers applyWorkspaceImport's direct newtab-side writeSettings, since
-  // newtab always messages the SW before that path is reachable.
-  await ensureWorkspaceViewSortMigration();
+  // One-time, idempotent migrations (per-key workspace split, then legacy
+  // view/sort copy — ensureStorageMigrations runs them in that order). Each
+  // is memoized + persisted-marker gated, so this is a cheap no-op after the
+  // first run. Covers applyWorkspaceImport's direct newtab-side writeSettings,
+  // since newtab always messages the SW before that path is reachable.
+  await ensureStorageMigrations();
 
   switch (message.type) {
     case messageTypes.ping:
@@ -102,23 +100,16 @@ async function handleMessage(message: AppRequest): Promise<AppResponse> {
         })),
       };
     case messageTypes.moveBookmark: {
-      // Compensate for Chrome/WebExtensions same-parent move quirk: when the
-      // target index is greater than the bookmark's current index, the browser
-      // subtracts 1 internally (item shifts on removal). The UI passes a
-      // post-removal index; bump it by 1 in that case so the item lands where
-      // intended.
       let index = message.index;
       if (typeof index === 'number') {
         const existing = await extensionApi.bookmarks.get(message.bookmarkId);
         const current = Array.isArray(existing) ? existing[0] : existing;
-        if (
-          current &&
-          current.parentId === message.parentId &&
-          typeof current.index === 'number' &&
-          index > current.index
-        ) {
-          index = index + 1;
-        }
+        index = computeBookmarkMoveIndex({
+          requestedIndex: index,
+          targetParentId: message.parentId,
+          currentParentId: current?.parentId,
+          currentIndex: current?.index,
+        });
       }
       return {
         bookmark: normalizeBookmarkNode(await extensionApi.bookmarks.move(message.bookmarkId, {
@@ -227,37 +218,4 @@ function normalizeBookmarkNode(node: RawBookmarkNode): BookmarkNode {
 
 function normalizeBookmarkNodes(nodes: RawBookmarkNode[]): BookmarkNode[] {
   return nodes.map(normalizeBookmarkNode);
-}
-
-async function openBookmarkManager(): Promise<{ ok: boolean; opened: boolean; message?: string }> {
-  const isFirefox = /firefox/i.test(navigator.userAgent);
-
-  if (isFirefox) {
-    return {
-      ok: false,
-      opened: false,
-      message: 'Firefox restricts opening the bookmark manager from extensions. Use Ctrl+Shift+O or open it from the browser menu.',
-    };
-  }
-
-  if (!extensionApi.tabs?.create) {
-    return {
-      ok: false,
-      opened: false,
-      message: 'This browser does not expose tab creation from the extension context.',
-    };
-  }
-
-  try {
-    await extensionApi.tabs.create({ url: 'chrome://bookmarks/' });
-    return { ok: true, opened: true };
-  } catch (error) {
-    return {
-      ok: false,
-      opened: false,
-      message: error instanceof Error
-        ? error.message
-        : 'The browser blocked the native bookmark manager page.',
-    };
-  }
 }

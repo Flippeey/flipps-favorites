@@ -328,6 +328,14 @@ export interface PerKeyRecordStore<T> {
   readOne: (id: string) => Promise<T | null>;
   writeOne: (id: string, value: T) => Promise<void>;
   deleteOne: (id: string) => Promise<void>;
+  /**
+   * Atomic read-modify-write for one id: `updater` runs inside the store's
+   * serialized section against a freshly-read current value (null if absent),
+   * and its return value is what gets persisted. Use this instead of a
+   * caller-side readOne-then-writeOne pair, which two overlapping callers can
+   * interleave into a lost update.
+   */
+  updateOne: (id: string, updater: (current: T | null) => T) => Promise<T>;
   /** Remove every key with this prefix from storage (used during migration tests). */
   clearAll: () => Promise<void>;
 }
@@ -382,6 +390,23 @@ export function createPerKeyRecordStore<T>(args: {
     return raw as T;
   }
 
+  // Chain every mutating call onto a per-store tail promise, mirroring
+  // createCachedRecordStore's writeTail above. writeOne only touches its own
+  // physical key, but updateOne's read-modify-write and deleteOne's no-remove
+  // fallback (read all -> filter -> set) both need a stable view of the store
+  // across the operation: two overlapping updateOne calls for the SAME id
+  // would otherwise both read the same pre-write record and the second write
+  // would silently drop the first's fields, and the fallback delete's re-set
+  // of every other key could stomp a write that landed in between its read
+  // and its write.
+  let writeTail: Promise<unknown> = Promise.resolve();
+
+  function enqueueWrite<R>(run: () => Promise<R>): Promise<R> {
+    const scheduled = writeTail.then(run);
+    writeTail = scheduled.catch(() => undefined);
+    return scheduled;
+  }
+
   return {
     async readAll(): Promise<Record<string, T>> {
       const { api } = await resolveArea();
@@ -407,40 +432,58 @@ export function createPerKeyRecordStore<T>(args: {
     },
 
     async writeOne(id: string, value: T): Promise<void> {
-      const { api } = await resolveArea();
-      await api.set({ [storageKey(id)]: value });
+      await enqueueWrite(async () => {
+        const { api } = await resolveArea();
+        await api.set({ [storageKey(id)]: value });
+      });
+    },
+
+    async updateOne(id: string, updater: (current: T | null) => T): Promise<T> {
+      return enqueueWrite(async () => {
+        const { api } = await resolveArea();
+        const stored = await api.get(storageKey(id));
+        const raw = stored[storageKey(id)];
+        const current = raw === undefined ? null : deserialize(raw);
+        const next = updater(current);
+        await api.set({ [storageKey(id)]: next });
+        return next;
+      });
     },
 
     async deleteOne(id: string): Promise<void> {
-      const { api } = await resolveArea();
-      if (api.remove) {
-        await api.remove(storageKey(id));
-      } else {
-        // Fallback: read–modify–write (shouldn't be needed for standard areas).
-        const all = await api.get(null);
-        const next: Record<string, unknown> = {};
-        for (const [key, val] of Object.entries(all)) {
-          if (key !== storageKey(id)) next[key] = val;
+      await enqueueWrite(async () => {
+        const { api } = await resolveArea();
+        if (api.remove) {
+          await api.remove(storageKey(id));
+        } else {
+          // Fallback: read–modify–write (shouldn't be needed for standard areas).
+          const all = await api.get(null);
+          const next: Record<string, unknown> = {};
+          for (const [key, val] of Object.entries(all)) {
+            if (key !== storageKey(id)) next[key] = val;
+          }
+          await api.set(next);
         }
-        await api.set(next);
-      }
+      });
     },
 
     async clearAll(): Promise<void> {
-      const { api } = await resolveArea();
-      const all = await api.get(null);
-      const prefix = keyPrefix + ':';
-      const keys = Object.keys(all).filter(k => k.startsWith(prefix));
-      if (!keys.length) return;
-      if (api.remove) {
-        await api.remove(keys);
-      } else {
-        const next: Record<string, unknown> = {};
-        for (const [key, val] of Object.entries(all)) {
-          if (!key.startsWith(prefix)) next[key] = val;
+      await enqueueWrite(async () => {
+        const { api } = await resolveArea();
+        const all = await api.get(null);
+        const prefix = keyPrefix + ':';
+        const keys = Object.keys(all).filter(k => k.startsWith(prefix));
+        if (!keys.length) return;
+        if (api.remove) {
+          await api.remove(keys);
+        } else {
+          const next: Record<string, unknown> = {};
+          for (const [key, val] of Object.entries(all)) {
+            if (!key.startsWith(prefix)) next[key] = val;
+          }
+          await api.set(next);
         }
-        await api.set(next);
-      }
+      });
     },
   };
 }

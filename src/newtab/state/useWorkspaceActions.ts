@@ -6,6 +6,7 @@ import { createWorkspace, deleteWorkspace, patchSettings, patchWorkspace } from 
 import { defaultWorkspaceSettings, readWorkspaceWallpaper, writeWorkspaceWallpaper } from '@/shared/storage';
 import { MAX_WORKSPACES } from '@/shared/constants';
 import { pickNextAccent } from '../lib/workspace-accent';
+import { firstOrderedWorkspaceId } from '../lib/workspace-order';
 import type { PushToastInput } from './useToasts';
 
 export type CreateFromFolderGuardResult = 'proceed' | 'at_max' | 'already_exists';
@@ -190,10 +191,14 @@ export function useWorkspaceActions(args: UseWorkspaceActionsArgs): UseWorkspace
       return;
     }
     const remaining = workspaces.filter(w => w.id !== id);
-    const nextActiveId = settings.activeWorkspaceId === id ? remaining[0]?.id : undefined;
+    // Activate the first workspace in TAB order, not storage order — otherwise
+    // deleting the active workspace can jump to a tab that isn't the leftmost one.
+    const nextActiveId = settings.activeWorkspaceId === id
+      ? firstOrderedWorkspaceId(remaining, settings.workspaceOrder)
+      : undefined;
     setWorkspaces(remaining);
     if (nextActiveId) await handlePatch({ activeWorkspaceId: nextActiveId });
-  }, [workspaces, settings.activeWorkspaceId, handlePatch, setWorkspaces]);
+  }, [workspaces, settings.activeWorkspaceId, settings.workspaceOrder, handlePatch, setWorkspaces]);
 
   const handleDuplicateWorkspace = useCallback(async (id: string) => {
     if (workspaces.length >= MAX_WORKSPACES) return;

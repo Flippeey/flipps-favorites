@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useEscapeKey } from '../interaction/useEscapeKey';
-import type { BookmarkNode, IconSearchCandidate, IconSourceKind, ResolvedIcon } from '@/shared/messages';
+import type { BookmarkNode, IconSearchCandidate, IconSourceKind } from '@/shared/messages';
 import type { TileShape } from '@/shared/models';
 import { getRegistrableDomain, getScopeHostname, type IconOverrideScope } from '@/shared/icon-scope';
 import {
@@ -12,14 +12,10 @@ import {
   setIconOverrideFromUrl,
   updateBookmark,
 } from '../lib/messaging';
-import {
-  getHostname,
-  iconPersistenceErrorMessage,
-  isValidBookmarkUrl,
-  normalizeUploadedImage,
-} from '../lib/icon-helpers';
+import { getHostname, isValidBookmarkUrl } from '../lib/icon-helpers';
 import { buildBrandSearchQuery } from '@/shared/url-brand';
 import { invalidateFaviconCache, invalidateFaviconCacheForScope } from '../lib/favicon-cache';
+import { useIconPicker } from '../state/useIconPicker';
 import { Ico } from './Ico';
 import { ModalDialog } from './ModalDialog';
 import { IconPickerPanel } from './IconPickerPanel';
@@ -65,71 +61,67 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<Status>(null);
 
-  const [query, setQuery] = useState(() => defaultQuery(target.title, target.url));
-  const [results, setResults] = useState<IconSearchCandidate[]>([]);
-  const [validatedPreviews, setValidatedPreviews] = useState<Set<string>>(new Set());
-  const [searching, setSearching] = useState(false);
-  const [previewIcon, setPreviewIcon] = useState<ResolvedIcon | null>(null);
-  const [working, setWorking] = useState(false);
   // Default to host scope: picking an icon once should fix every bookmark on the
   // same site (5 dev.azure.com bookmarks = 1 override, not 5).
   const [overrideScope, setOverrideScope] = useState<IconOverrideScope>('host');
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  // Tracks an in-flight candidate apply so a double-click (which fires click →
-  // click → dblclick) dedupes onto the single network write instead of issuing
-  // a second override and racing the close.
-  const applyingRef = useRef<Promise<ResolvedIcon | null> | null>(null);
 
   const bookmarkUrl = target.url;
   const bookmarkTitle = target.title;
 
   useEscapeKey(onClose);
 
-  const runSearch = useCallback(async (q: string) => {
-    setSearching(true);
-    setValidatedPreviews(new Set());
-    try {
-      const candidates = await searchIcons(q, bookmarkUrl);
-      setResults(candidates);
-      // Count is shown in the Search-icons header; only surface a status when there's nothing.
-      setStatus(candidates.length ? null : { kind: 'error', message: 'No matches.' });
-    } catch {
-      setResults([]);
-      setStatus({ kind: 'error', message: 'Search failed.' });
-    } finally {
-      setSearching(false);
-    }
-  }, [bookmarkUrl]);
-
-  const handlePreviewLoad = useCallback((imageUrl: string, image: HTMLImageElement) => {
-    const minEdge = Math.min(image.naturalWidth, image.naturalHeight);
-    if (minEdge < 64) return;
-    setValidatedPreviews(prev => {
-      if (prev.has(imageUrl)) return prev;
-      const next = new Set(prev);
-      next.add(imageUrl);
-      return next;
-    });
-  }, []);
-
-  const loadPreview = useCallback(async () => {
-    if (!bookmarkUrl) return;
-    try {
-      const icon = await getIcon(bookmarkUrl, bookmarkTitle);
-      setPreviewIcon(icon);
-    } catch {
-      // ignore
-    }
-  }, [bookmarkUrl, bookmarkTitle]);
-
-  // Initial: load preview + run search (only for existing bookmarks with a real URL)
-  useEffect(() => {
-    if (!target.id || !isValidBookmarkUrl(bookmarkUrl)) return;
-    loadPreview();
-    runSearch(defaultQuery(bookmarkTitle, bookmarkUrl));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.id]);
+  const picker = useIconPicker({
+    enabled: Boolean(target.id),
+    initialEnabled: Boolean(target.id) && isValidBookmarkUrl(bookmarkUrl),
+    identityKey: target.id,
+    initialQuery: defaultQuery(bookmarkTitle, bookmarkUrl),
+    onStatus: setStatus,
+    loadInitial: () => getIcon(bookmarkUrl, bookmarkTitle),
+    search: (q) => searchIcons(q, bookmarkUrl),
+    applyCandidate: async (candidate) => {
+      const icon = await setIconOverrideFromUrl({
+        bookmarkUrl,
+        bookmarkTitle,
+        imageUrl: candidate.imageUrl,
+        fallbackImageUrl: candidate.previewUrl !== candidate.imageUrl ? candidate.previewUrl : undefined,
+        scope: overrideScope,
+      });
+      invalidateFaviconCacheForScope(bookmarkUrl, overrideScope);
+      return icon;
+    },
+    applyUpload: async (dataUrl, file) => {
+      const icon = await setIconOverride({
+        bookmarkUrl,
+        bookmarkTitle,
+        dataUrl,
+        fileName: file.name,
+        mimeType: 'image/png',
+        scope: overrideScope,
+      });
+      invalidateFaviconCacheForScope(bookmarkUrl, overrideScope);
+      return icon;
+    },
+    remove: {
+      run: async () => {
+        const icon = await removeIconOverride(bookmarkUrl, bookmarkTitle);
+        // Removal clears every scope, so refresh all tiles that could share it.
+        invalidateFaviconCacheForScope(bookmarkUrl, 'domain');
+        return icon;
+      },
+      successMessage: 'Icon override removed.',
+      errorMessage: 'Could not remove icon override.',
+    },
+    refresh: {
+      run: async () => {
+        await invalidateIcon(bookmarkUrl);
+        const icon = await getIcon(bookmarkUrl, bookmarkTitle);
+        invalidateFaviconCache(bookmarkUrl);
+        return icon;
+      },
+      successMessage: 'Icon refreshed.',
+      errorMessage: 'Could not refresh icon.',
+    },
+  });
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -159,118 +151,16 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
     }
   };
 
-  const applyCandidate = async (candidate: IconSearchCandidate): Promise<void> => {
-    if (!target.id) return;
-    // Reuse an apply already running for this gesture (the click that preceded a
-    // dblclick) rather than starting a second write.
-    if (applyingRef.current) {
-      await applyingRef.current.catch(() => undefined);
-      return;
-    }
-    const run = (async (): Promise<ResolvedIcon | null> => {
-      setWorking(true);
-      try {
-        const icon = await setIconOverrideFromUrl({
-          bookmarkUrl,
-          bookmarkTitle,
-          imageUrl: candidate.imageUrl,
-          fallbackImageUrl: candidate.previewUrl !== candidate.imageUrl ? candidate.previewUrl : undefined,
-          scope: overrideScope,
-        });
-        setPreviewIcon(icon);
-        invalidateFaviconCacheForScope(bookmarkUrl, overrideScope);
-        setStatus({ kind: 'success', message: 'Icon applied.' });
-        return icon;
-      } catch (e) {
-        setStatus({ kind: 'error', message: iconPersistenceErrorMessage(e, 'search') });
-        return null;
-      } finally {
-        setWorking(false);
-        applyingRef.current = null;
-      }
-    })();
-    applyingRef.current = run;
-    await run.catch(() => undefined);
-  };
-
   // Single click: apply the icon, keep the dialog open for further tweaks.
-  const handlePickCandidate = (candidate: IconSearchCandidate): void => {
-    void applyCandidate(candidate);
-  };
+  const handlePickCandidate = picker.pickCandidate;
 
   // Double click (power users): apply, then close once the write settles.
   const handlePickCandidateAndClose = async (candidate: IconSearchCandidate): Promise<void> => {
-    await applyCandidate(candidate);
+    await picker.pickCandidateAndClose(candidate);
     onClose();
   };
 
-  const handleRefreshIcon = async () => {
-    if (!target.id || working) return;
-    setWorking(true);
-    try {
-      await invalidateIcon(bookmarkUrl);
-      const icon = await getIcon(bookmarkUrl, bookmarkTitle);
-      setPreviewIcon(icon);
-      invalidateFaviconCache(bookmarkUrl);
-      setStatus({ kind: 'info', message: 'Icon refreshed.' });
-    } catch {
-      setStatus({ kind: 'error', message: 'Could not refresh icon.' });
-    } finally {
-      setWorking(false);
-    }
-  };
-
-  const handleRemoveOverride = async () => {
-    if (!target.id || working) return;
-    setWorking(true);
-    try {
-      const icon = await removeIconOverride(bookmarkUrl, bookmarkTitle);
-      setPreviewIcon(icon);
-      // Removal clears every scope, so refresh all tiles that could share it.
-      invalidateFaviconCacheForScope(bookmarkUrl, 'domain');
-      setStatus({ kind: 'info', message: 'Icon override removed.' });
-    } catch {
-      setStatus({ kind: 'error', message: 'Could not remove icon override.' });
-    } finally {
-      setWorking(false);
-    }
-  };
-
-  const handleUploadClick = () => {
-    if (!target.id || working) return;
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file || !target.id || working) return;
-    setWorking(true);
-    try {
-      const dataUrl = await normalizeUploadedImage(file);
-      const icon = await setIconOverride({
-        bookmarkUrl,
-        bookmarkTitle,
-        dataUrl,
-        fileName: file.name,
-        mimeType: 'image/png',
-        scope: overrideScope,
-      });
-      setPreviewIcon(icon);
-      invalidateFaviconCacheForScope(bookmarkUrl, overrideScope);
-      setStatus({ kind: 'success', message: 'Icon uploaded.' });
-    } catch (e) {
-      setStatus({ kind: 'error', message: iconPersistenceErrorMessage(e, 'upload') });
-    } finally {
-      setWorking(false);
-    }
-  };
-
-  const handleSearchSubmit = () => {
-    if (!query.trim()) return;
-    runSearch(query.trim());
-  };
-
+  const previewIcon = picker.preview;
   const previewSrc = previewIcon?.dataUrl ?? null;
   const scopeHostname = getScopeHostname(bookmarkUrl);
   const scopeDomain = getRegistrableDomain(scopeHostname);
@@ -307,11 +197,11 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
               previewSrc={previewSrc}
               fallbackLetter={title?.[0] ?? '?'}
               canManage={true}
-              onRefresh={handleRefreshIcon}
-              onRemove={handleRemoveOverride}
-              onUploadClick={handleUploadClick}
-              fileInputRef={fileInputRef}
-              onFileChange={handleFileChange}
+              onRefresh={picker.handleRefresh}
+              onRemove={picker.handleRemove}
+              onUploadClick={picker.handleUploadClick}
+              fileInputRef={picker.fileInputRef}
+              onFileChange={picker.handleFileChange}
               hintText="Hover the preview for quick icon actions."
               scopeControl={scopeOptions.length > 1 ? (
                 <div className="ff-field">
@@ -364,13 +254,13 @@ export function EditDialog({ target, tileShape, onClose, onSaved }: EditDialogPr
           <IconPickerPanel
             section="search"
             canManage={true}
-            query={query}
-            onQueryChange={setQuery}
-            onSearchSubmit={handleSearchSubmit}
-            searching={searching}
-            results={results}
-            validatedPreviews={validatedPreviews}
-            onPreviewLoad={handlePreviewLoad}
+            query={picker.query}
+            onQueryChange={picker.setQuery}
+            onSearchSubmit={picker.handleSearchSubmit}
+            searching={picker.searching}
+            results={picker.results}
+            validatedPreviews={picker.validatedPreviews}
+            onPreviewLoad={picker.handlePreviewLoad}
             onPickCandidate={handlePickCandidate}
             onPickCandidateAndClose={handlePickCandidateAndClose}
           />
