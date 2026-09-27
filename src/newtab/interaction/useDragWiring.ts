@@ -5,7 +5,8 @@ import type { MarqueeSelection } from './useMarquee';
 import { useDrag, type DropTarget, type DragPreviewState } from './useDrag';
 import { moveBookmark } from '../lib/messaging';
 import { findFolder, findNode, isFolder } from '../lib/tree';
-import { captureMoveSnapshots, restoreMoveSnapshots } from '../lib/move-snapshot';
+import { captureMoveSnapshots, restoreMoveSnapshots, type MoveSnapshot } from '../lib/move-snapshot';
+import { runUndoableMutation } from '../lib/undoable-mutation';
 import { MAX_WORKSPACES } from '@/shared/constants';
 
 export type FolderTabDropResult = 'create' | 'move' | 'skip';
@@ -112,89 +113,81 @@ export function useDragWiring(args: UseDragWiringArgs): UseDragWiringResult {
   }, [tree, sortedChildren]);
 
   const handleDragCommit = useCallback(async (dragIds: string[], target: DropTarget) => {
-    // Snapshot every drag's origins from the live tree BEFORE moving so Undo can
-    // replay each item back to its parent + index. We snapshot unconditionally —
-    // not just for folder/dock/workspace drops — because a 'reorder' drop whose
-    // target parent differs from an item's source folder is itself a cross-folder
-    // relocation (e.g. list view: dropping next to a bookmark already inside a
-    // folder). The `relocated` filter below keeps pure same-parent reorders
-    // toast-free, so this stays correct for both cases.
-    const snapshots = captureMoveSnapshots(tree, dragIds);
-    try {
-      if (target.kind === 'folder') {
-        for (const id of dragIds) {
-          await moveBookmark(id, target.folderId);
-        }
-      } else if (target.kind === 'dock') {
-        const dockFolderId = settings.dockFolderId || rootFolder?.id || '';
-        if (!dockFolderId) return;
-        for (const id of dragIds) {
-          await moveBookmark(id, dockFolderId);
-        }
-      } else if (target.kind === 'workspace') {
-        // Drop ON an existing workspace pill → always move item(s) into that workspace.
-        // Single-folder drops no longer create a workspace here; that only happens
-        // for bar-gap drops (target.kind === 'workspace-new') below.
-        const ws = workspaces.find(w => w.id === target.workspaceId);
-        if (!ws) return;
-        if (ws.rootFolderId === rootFolder?.id) return;
-        for (const id of dragIds) {
-          await moveBookmark(id, ws.rootFolderId);
-        }
-      } else if (target.kind === 'workspace-new') {
-        // Drop in the workspace bar GAP (not on a pill) → create workspace from
-        // a single folder, inserted at target.insertIndex in the workspace order.
-        // Multi-item and non-folder gap drops are no-ops. isFolderTabCreateCandidate
-        // only decides eligibility to attempt a create (single folder payload);
-        // the cap/duplicate skip decision is made downstream in onFolderDropOnTab
-        // (handleCreateWorkspaceFromFolder), which still needs to run so it can
-        // surface the correct 'at_max' / 'already_exists' toast.
-        if (isFolderTabCreateCandidate(dragIds, tree)) {
-          const node = findNode(tree, dragIds[0]!)!;
-          const result = await onFolderDropOnTab(node.id, node.title, target.insertIndex);
-          void result; // toast surfaced by App.tsx via the onFolderDropOnTab callback
-          return;
-        }
-        // Non-folder or multi-item gap drop: no-op.
-        return;
-      } else {
-        // reorder — preserve drag-source order, increment index as we go for items moving forward in same parent
-        let idx = target.index;
-        for (const id of dragIds) {
-          await moveBookmark(id, target.parentId, idx);
-          idx += 1;
-        }
-      }
-      // Drop selection scope if target moved away
-      const moveTargetScope = target.kind === 'folder' ? target.folderId : target.kind === 'dock' ? (settings.dockFolderId || rootFolder?.id || '') : target.kind === 'workspace' ? (workspaces.find(w => w.id === target.workspaceId)?.rootFolderId ?? '') : target.parentId;
-      setSelection({ ids: new Set(dragIds), scopeFolderId: moveTargetScope });
+    await runUndoableMutation<MoveSnapshot[]>(
+      { refreshTree, pushToast },
+      {
+        refreshOnPerformFailure: true,
+        perform: async () => {
+          // Snapshot every drag's origins from the live tree BEFORE moving so Undo can
+          // replay each item back to its parent + index. We snapshot unconditionally —
+          // not just for folder/dock/workspace drops — because a 'reorder' drop whose
+          // target parent differs from an item's source folder is itself a cross-folder
+          // relocation (e.g. list view: dropping next to a bookmark already inside a
+          // folder). The `relocated` filter below keeps pure same-parent reorders
+          // toast-free, so this stays correct for both cases.
+          const snapshots = captureMoveSnapshots(tree, dragIds);
+          if (target.kind === 'folder') {
+            for (const id of dragIds) {
+              await moveBookmark(id, target.folderId);
+            }
+          } else if (target.kind === 'dock') {
+            const dockFolderId = settings.dockFolderId || rootFolder?.id || '';
+            if (!dockFolderId) return [];
+            for (const id of dragIds) {
+              await moveBookmark(id, dockFolderId);
+            }
+          } else if (target.kind === 'workspace') {
+            // Drop ON an existing workspace pill → always move item(s) into that workspace.
+            // Single-folder drops no longer create a workspace here; that only happens
+            // for bar-gap drops (target.kind === 'workspace-new') below.
+            const ws = workspaces.find(w => w.id === target.workspaceId);
+            if (!ws) return [];
+            if (ws.rootFolderId === rootFolder?.id) return [];
+            for (const id of dragIds) {
+              await moveBookmark(id, ws.rootFolderId);
+            }
+          } else if (target.kind === 'workspace-new') {
+            // Drop in the workspace bar GAP (not on a pill) → create workspace from
+            // a single folder, inserted at target.insertIndex in the workspace order.
+            // Multi-item and non-folder gap drops are no-ops. isFolderTabCreateCandidate
+            // only decides eligibility to attempt a create (single folder payload);
+            // the cap/duplicate skip decision is made downstream in onFolderDropOnTab
+            // (handleCreateWorkspaceFromFolder), which still needs to run so it can
+            // surface the correct 'at_max' / 'already_exists' toast.
+            if (isFolderTabCreateCandidate(dragIds, tree)) {
+              const node = findNode(tree, dragIds[0]!)!;
+              const result = await onFolderDropOnTab(node.id, node.title, target.insertIndex);
+              void result; // toast surfaced by App.tsx via the onFolderDropOnTab callback
+              return [];
+            }
+            // Non-folder or multi-item gap drop: no-op.
+            return [];
+          } else {
+            // reorder — preserve drag-source order, increment index as we go for items moving forward in same parent
+            let idx = target.index;
+            for (const id of dragIds) {
+              await moveBookmark(id, target.parentId, idx);
+              idx += 1;
+            }
+          }
+          // Drop selection scope if target moved away
+          const moveTargetScope = target.kind === 'folder' ? target.folderId : target.kind === 'dock' ? (settings.dockFolderId || rootFolder?.id || '') : target.kind === 'workspace' ? (workspaces.find(w => w.id === target.workspaceId)?.rootFolderId ?? '') : target.parentId;
+          setSelection({ ids: new Set(dragIds), scopeFolderId: moveTargetScope });
 
-      // Skip the toast for no-op drops where every item already lives in the
-      // target scope (target scope == source scope) — nothing was relocated.
-      const relocated = snapshots.filter(s => s.parentId !== moveTargetScope);
-      if (relocated.length > 0) {
-        const count = relocated.length;
-        pushToast({
-          kind: 'info',
-          message: `Moved ${count} ${count === 1 ? 'item' : 'items'}`,
-          action: {
-            label: 'Undo',
-            onClick: () => {
-              void (async () => {
-                try {
-                  await restoreMoveSnapshots(relocated, moveBookmark);
-                  await refreshTree();
-                } catch {
-                  pushToast({ kind: 'error', message: 'Couldn’t undo the move.' });
-                }
-              })();
-            },
-          },
-        });
-      }
-    } finally {
-      await refreshTree();
-    }
+          // Skip the toast for no-op drops where every item already lives in the
+          // target scope (target scope == source scope) — nothing was relocated.
+          return snapshots.filter(s => s.parentId !== moveTargetScope);
+        },
+        onSuccess: (relocated) => {
+          if (relocated.length === 0) return null;
+          const count = relocated.length;
+          return {
+            message: `Moved ${count} ${count === 1 ? 'item' : 'items'}`,
+            undo: { run: () => restoreMoveSnapshots(relocated, moveBookmark), failedMessage: 'Couldn’t undo the move.' },
+          };
+        },
+      },
+    );
   }, [tree, refreshTree, rootFolder, settings.dockFolderId, workspaces, setSelection, pushToast, onFolderDropOnTab]);
 
   // Drag itself is always live so relocation (into a folder, the dock, or another
