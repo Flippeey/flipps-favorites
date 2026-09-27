@@ -16,14 +16,14 @@ src/newtab/                       # React 19 SPA (new-tab page)
   App.tsx                         # Root: owns all top-level state
   components/                     # React components
     settings/                     # Per-section settings panels
-  state/                          # State-owning hooks: useSelection, useWorkspaceActions, useToasts, useContextMenuBuilder, useOptimisticPatch
+  state/                          # State-owning hooks: useSelection, useWorkspaceActions, useToasts, useContextMenuBuilder
   interaction/                    # Interaction hooks: useDrag, useDragWiring, useMarquee, useKeyboardNav, useFocusTrap, useQuickAddShortcuts, useWorkspaceShortcut, useEscapeKey
   lib/                            # Utilities (messaging, tree, classification, URL, accent, theming, dock-mode, folder-scoring, platform, workspace-transfer, sync-merge, sync-now, workspace-order)
   styles/                         # Import chain in index.css (order matters); see root CLAUDE.md for chain
 
 src/shared/                       # Cross-context code
   messages.ts                     # SOURCE OF TRUTH: message types + contracts
-  models.ts, browser.ts, storage.ts, storage-buckets.ts, icon-idb.ts
+  models.ts, browser.ts, storage.ts, storage-buckets.ts, icon-idb.ts, icon-scope.ts
   organization-templates.ts, icon-fallback.ts, seed-data.ts, constants.ts, url-brand.ts, globals.d.ts
   sync-crypto.ts, sync-stamps.ts, folder-locator.ts   # Sync encryption, merge stamps, cross-browser folder matching
 
@@ -33,10 +33,12 @@ tests/
   specs/                          # Playwright E2E specs (one per user-flow area)
   unit/                           # Vitest unit tests (mirrored to src layout)
   firefox-e2e/                    # Puppeteer + WebDriver BiDi Firefox suite (separate global-setup, launch, seed, vitest config)
+  evidence/                       # Evidence-spec harness + example; per-PR specs go in gitignored evidence/pr/ (see testing.md)
 
 scripts/
   write-manifest.mjs              # Post-build manifest generator
   promo/                          # Promo asset generation (screenshots, videos, etc.)
+  store/                          # Store-listing lint + sync (store:lint, store:firefox, store:chrome)
 ```
 
 ## Key File Index
@@ -47,7 +49,7 @@ scripts/
 | `src/shared/models.ts` | Shared data models used across both contexts. |
 | `src/shared/organization-templates.ts` | Template bundles: per-archetype view/sort overrides. |
 | `src/newtab/App.tsx` | Top-level state orchestration; composes the `state/` hooks + dialogs/drawers |
-| `src/newtab/state/` | State-owning hooks (selection, workspaces, toasts, optimistic patch, context menu) |
+| `src/newtab/state/` | State-owning hooks (selection, workspaces, toasts, context menu) |
 | `src/newtab/main.tsx` | App bootstrap (preloads settings + tree, then renders `<App>`) |
 | `src/newtab/lib/tree-profile.ts` | profileTree: O(n) structural metrics (totalBookmarks, folderedRatio, domainDiversity, etc.). |
 | `src/newtab/lib/archetype-match.ts` | classify: 3-class archetype matcher (hoarder, power-user, casual) w/ overlays. |

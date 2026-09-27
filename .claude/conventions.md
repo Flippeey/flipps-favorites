@@ -3,7 +3,7 @@
 ## File Naming
 
 - React components: `PascalCase.tsx` (`Tile.tsx`, `HeroSearch.tsx`). Multi-export files are fine (`views.tsx`, `Tile.tsx` export several components).
-- Custom hooks: `useFoo.ts`. Pointer/keyboard interaction hooks live in `src/newtab/interaction/`; state-owning hooks (selection, workspaces, toasts, optimistic patch, context-menu builder) live in `src/newtab/state/`.
+- Custom hooks: `useFoo.ts`. Pointer/keyboard interaction hooks live in `src/newtab/interaction/`; state-owning hooks (selection, workspaces, toasts, context-menu builder) live in `src/newtab/state/`.
 - Utility modules: `kebab-case.ts` (`icon-helpers.ts`, `write-manifest.mjs`).
 - Tests: `<feature>.spec.ts` in `tests/specs/`.
 - CSS: `kebab-case.css`.
@@ -20,7 +20,7 @@
 ## CSS Conventions
 
 - Class prefix `ff-`, BEM-ish: `ff-tile`, `ff-tile__icon`, `ff-tile__label`, `ff-section__header`.
-- Express state through `data-*` attributes (`data-selected`, `data-item-kind`, `data-bg`, `data-tile-shape`), not modifier classes.
+- Express state through `data-*` attributes (`data-selected`, `data-item-kind`, `data-bg`, `data-tile-shape`), not modifier classes. `.is-active` / `.is-scrolled` in `TopNav.tsx` are a legacy exception (styled in `nav.css` / `hero.css`, queried by `useWorkspaceShortcut.ts`, asserted in `tests/specs/workspaces.spec.ts`) — don't copy them for new state.
 
 ## Data Attributes (DOM query API)
 
@@ -32,6 +32,8 @@ These are the contract between components and interaction hooks. Render them con
 - `data-overlay-crumb-id` on overlay breadcrumbs
 
 Query DOM via `data-*` selectors rather than class names.
+
+When interpolating an id into an attribute selector, escape it: use `itemIdSelector` / `scopeFolderSelector` (`interaction/useDrag.ts`) or `CSS.escape(id)`. Ids are opaque strings, and an unescaped `"` throws a SyntaxError that aborts a drag mid-pointermove.
 
 ## TypeScript Style
 

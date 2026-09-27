@@ -10,7 +10,7 @@ Local-only files (`settings.local.json`, `memory.db`, every other `skills/` entr
 
 ## Detailed References
 
-Load when relevant to current work:
+Loaded into every session via @-import — keep them lean:
 
 - @structure.md — full file tree, module responsibilities, key file index
 - @architecture.md — message pipeline, state ownership, interaction/state hooks, theming, selection scope, icon pipeline

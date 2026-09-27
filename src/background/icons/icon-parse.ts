@@ -1,8 +1,13 @@
+// Origin HTML can be arbitrarily large; cap what we scan so a pathological
+// or adversarial page can't turn icon resolution into an unbounded parse.
+export const ORIGIN_HTML_PARSE_LIMIT = 256 * 1024;
+
 export function parseOriginIconCandidates(html: string, origin: string): Array<{ url: string; sizeHint: number; weight: number }> {
   const candidates: Array<{ url: string; sizeHint: number; weight: number }> = [];
-  const linkRegex = /<link\b[^>]*>/gi;
+  const limited = html.slice(0, ORIGIN_HTML_PARSE_LIMIT);
+  const linkRegex = /<link\b[^<>]*>/gi;
   let match: RegExpExecArray | null;
-  while ((match = linkRegex.exec(html)) !== null) {
+  while ((match = linkRegex.exec(limited)) !== null) {
     const tag = match[0];
     const rel = extractAttr(tag, 'rel')?.toLowerCase() ?? '';
     if (!/(icon|apple-touch-icon|shortcut icon|mask-icon|fluid-icon)/.test(rel)) continue;
@@ -23,6 +28,19 @@ export function parseOriginIconCandidates(html: string, origin: string): Array<{
     candidates.push({ url: absolute, sizeHint, weight });
   }
   return candidates;
+}
+
+export function parseManifestHref(html: string): string | null {
+  const limited = html.slice(0, ORIGIN_HTML_PARSE_LIMIT);
+  const linkRegex = /<link\b[^<>]*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = linkRegex.exec(limited)) !== null) {
+    const tag = match[0];
+    const rel = extractAttr(tag, 'rel')?.toLowerCase() ?? '';
+    if (!rel.split(/\s+/).includes('manifest')) continue;
+    return extractAttr(tag, 'href');
+  }
+  return null;
 }
 
 function extractAttr(tag: string, attr: string): string | null {

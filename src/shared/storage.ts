@@ -71,8 +71,6 @@ const iconOverrideStore = createCachedRecordStore<IconOverrideRecord>({
   },
 });
 
-let iconOverrideMigrationPromise: Promise<void> | null = null;
-
 const bookmarkUsageStore = createCachedRecordStore<BookmarkUsageRecord>({
   storageKey: bookmarkUsageKey,
   area: 'sync-preferred',
@@ -415,19 +413,13 @@ export async function deleteWorkspace(id: string): Promise<void> {
   await workspacesStore.deleteOne(id);
 }
 
-// Per-workspace-id write queues, mirroring the settings writeQueue/doWriteSettings
-// pattern above. The MV3 service worker can handle two patchWorkspace messages for
-// the SAME workspace concurrently; without serialization both read the same base
-// record and the second write clobbers the first. Keying by workspace id
-// (rather than one global queue) lets patches to different workspaces proceed
-// in parallel.
-const workspacePatchQueues = new Map<string, Promise<unknown>>();
-
+// The MV3 service worker can handle two patchWorkspace messages for the SAME
+// workspace concurrently; without serialization both read the same base
+// record and the second write clobbers the first. workspacesStore.updateOne
+// runs the read-merge-write inside its own serialized section, so the
+// read is against the latest persisted state rather than a stale snapshot.
 export async function patchWorkspaceRecord(id: string, patch: Partial<WorkspaceRecord>): Promise<WorkspaceRecord> {
-  const previous = workspacePatchQueues.get(id) ?? Promise.resolve();
-  const run = previous.then(() => doPatchWorkspaceRecord(id, patch));
-  workspacePatchQueues.set(id, run.catch(() => undefined));
-  return run;
+  return updateWorkspaceRecord(id, patch, false);
 }
 
 // A user edit. An empty patch is an explicit touch (a wallpaper lives outside
@@ -435,24 +427,20 @@ export async function patchWorkspaceRecord(id: string, patch: Partial<WorkspaceR
 // patch that changes nothing is a no-op and keeps the old stamp.
 export async function patchWorkspaceFromUser(id: string, patch: Partial<WorkspaceRecord>): Promise<WorkspaceRecord> {
   const { updatedAt: _ignored, ...userPatch } = patch;
-  const previous = workspacePatchQueues.get(id) ?? Promise.resolve();
-  const run = previous.then(() => doPatchWorkspaceRecord(id, userPatch, true));
-  workspacePatchQueues.set(id, run.catch(() => undefined));
-  return run;
+  return updateWorkspaceRecord(id, userPatch, true);
 }
 
-async function doPatchWorkspaceRecord(id: string, patch: Partial<WorkspaceRecord>, stamp = false): Promise<WorkspaceRecord> {
-  // Re-read fresh INSIDE the critical section (after acquiring the queue slot) so
-  // the merge is based on the latest persisted state, not a stale pre-queue snapshot.
-  const current = await workspacesStore.readOne(id);
-  if (!current) {
-    throw new Error(`Workspace ${id} not found`);
-  }
-  const merged: WorkspaceRecord = { ...current, ...patch, id };
-  if (sameValue(current, merged) && (!stamp || Object.keys(patch).length > 0)) return current;
-  const updated = stamp ? { ...merged, updatedAt: nextStamp(current.updatedAt) } : merged;
-  await workspacesStore.writeOne(id, updated);
-  return updated;
+// The stamp is taken from the record read inside updateOne's serialized
+// section, so concurrent user edits always stamp strictly upward.
+function updateWorkspaceRecord(id: string, patch: Partial<WorkspaceRecord>, stamp: boolean): Promise<WorkspaceRecord> {
+  return workspacesStore.updateOne(id, current => {
+    if (!current) {
+      throw new Error(`Workspace ${id} not found`);
+    }
+    const merged: WorkspaceRecord = { ...current, ...patch, id };
+    if (sameValue(current, merged) && (!stamp || Object.keys(patch).length > 0)) return current;
+    return stamp ? { ...merged, updatedAt: nextStamp(current.updatedAt) } : merged;
+  });
 }
 
 export async function createWorkspaceFromUser(record: WorkspaceRecord): Promise<WorkspaceRecord> {
@@ -929,8 +917,8 @@ function asRecord(value: unknown): Record<string, unknown> {
 //   - normalizeWorkspaceRecord applied to every record during the split
 //   - Legacy key deleted atomically with writing the marker
 //
-// Call order in service-worker: this migration runs BEFORE the view/sort
-// migration so writeWorkspace (called by view/sort) already uses per-key layout.
+// ensureStorageMigrations runs this BEFORE the view/sort migration so
+// writeWorkspace (called by view/sort) already uses per-key layout.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function ensureWorkspacePerKeyMigration(): Promise<void> {
@@ -1019,49 +1007,16 @@ async function runPerBrowserSettingsMove(): Promise<void> {
   }
 }
 
-async function ensureIconOverrideRecordsMigratedToLocal(): Promise<void> {
-  if (!iconOverrideMigrationPromise) {
-    iconOverrideMigrationPromise = (async () => {
-      const syncArea = extensionApi.storage?.sync;
-      const localArea = extensionApi.storage?.local;
-      if (!syncArea?.get || !syncArea?.remove || !localArea?.get || !localArea?.set) {
-        return;
-      }
-
-      try {
-        const [localStored, syncStored] = await Promise.all([
-          localArea.get(iconOverrideKey),
-          syncArea.get(iconOverrideKey),
-        ]) as [Record<string, unknown>, Record<string, unknown>];
-
-        const localRecords = asIconOverrideRecordMap(localStored[iconOverrideKey]);
-        const syncRecords = asIconOverrideRecordMap(syncStored[iconOverrideKey]);
-        if (!Object.keys(syncRecords).length) {
-          return;
-        }
-
-        if (!Object.keys(localRecords).length) {
-          await localArea.set({
-            [iconOverrideKey]: syncRecords,
-          });
-        }
-
-        await syncArea.remove(iconOverrideKey);
-      } catch (error) {
-        console.warn('Failed to migrate icon overrides from sync storage to local storage.', error);
-      }
-    })();
-  }
-
-  await iconOverrideMigrationPromise;
-}
-
-function asIconOverrideRecordMap(value: unknown): Record<string, IconOverrideRecord> {
-  if (!value || typeof value !== 'object') {
-    return {};
-  }
-
-  return { ...(value as Record<string, IconOverrideRecord>) };
+// Single entry point for service-worker to call: runs the per-key split
+// before the view/sort copy, since view/sort's writeWorkspace calls assume
+// records already live under per-id keys, then moves the per-browser settings
+// out of app-settings. Each migration keeps its own memoization and
+// persisted-marker idempotency; this only fixes their relative order in one
+// place instead of leaving it to caller discipline.
+export async function ensureStorageMigrations(): Promise<void> {
+  await ensureWorkspacePerKeyMigration();
+  await ensureWorkspaceViewSortMigration();
+  await ensurePerBrowserSettingsMove();
 }
 
 const ARCHETYPE_IDS: ReadonlySet<string> = new Set(['hoarder', 'power-user', 'casual', 'researcher']);

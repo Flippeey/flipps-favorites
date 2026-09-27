@@ -1,7 +1,8 @@
 import type { IconCacheRecord, IconSourceKind, ResolvedIcon } from '@/shared/messages';
+import { IconFetchError } from '@/shared/messages';
 import { buildFallbackSvgDataUrl } from '@/shared/icon-fallback';
-import { cacheTtlMs, generatedTtlMs, iconPipelineVersion, maxSvgIconBytes, placeholderMaxDistinctColors, placeholderMinDominantRatio, placeholderMaxSaturation, placeholderMinBrightness, placeholderMaxBrightness } from './icon-constants';
-import { isDataUrl } from './icon-parse';
+import { cacheTtlMs, generatedTtlMs, iconPipelineVersion, maxSvgIconBytes, minimumOverrideIconSize, placeholderMaxDistinctColors, placeholderMinDominantRatio, placeholderMaxSaturation, placeholderMinBrightness, placeholderMaxBrightness } from './icon-constants';
+import { isDataUrl, describeError } from './icon-parse';
 import { getIconLabel } from './icon-classify';
 import { isIcoBytes, extractLargestIcoPng } from './ico-parse';
 import { firefoxSafeFetch, isFirefox } from './platform';
@@ -99,6 +100,68 @@ function buildRecord(args: FetchAndValidateArgs, dataUrl: string, mimeType: stri
     expiresAt: now + cacheTtlMs,
     pipelineVersion: iconPipelineVersion,
   };
+}
+
+export interface ValidatedChosenImage {
+  dataUrl: string;
+  mimeType: string;
+}
+
+// Fetch + validate a single image the user explicitly chose (a search result
+// or a direct icon URL) for use as an override. Unlike fetchAndValidateImage
+// (auto-resolution, returns null on any miss), this throws a typed
+// IconFetchError so the picking UI can explain what went wrong.
+export async function downloadAndValidateChosenImage(imageUrl: string): Promise<ValidatedChosenImage> {
+  let response: Response;
+  try {
+    response = await firefoxSafeFetch(imageUrl, { cache: 'force-cache' });
+  } catch (error) {
+    throw new IconFetchError('network', `Could not reach the icon URL: ${describeError(error)}`);
+  }
+
+  if (!response.ok) {
+    throw new IconFetchError('http-status', `Icon image request failed with ${String(response.status)}.`, response.status);
+  }
+
+  let blob = await response.blob().catch((error: unknown) => {
+    throw new IconFetchError('decode-fail', `Could not read icon body: ${describeError(error)}`);
+  });
+
+  let mimeType = blob.type || 'image/png';
+  if (!mimeType.startsWith('image/')) {
+    throw new IconFetchError('not-image', 'Remote icon response is not an image.');
+  }
+
+  // ICO containers can't be decoded via createImageBitmap in worker contexts —
+  // extract the largest embedded PNG so multi-size favicons survive validation.
+  const bytes = new Uint8Array(await blob.arrayBuffer().catch(() => new ArrayBuffer(0)));
+  if (isIcoBytes(bytes)) {
+    const extracted = extractLargestIcoPng(bytes);
+    if (extracted) {
+      blob = new Blob([extracted.png as BlobPart], { type: 'image/png' });
+      mimeType = 'image/png';
+    }
+  }
+
+  let dimensions: { width: number; height: number };
+  try {
+    dimensions = await getImageDimensions(blob);
+  } catch (error) {
+    throw new IconFetchError('decode-fail', `Could not decode icon image: ${describeError(error)}`);
+  }
+
+  if (
+    dimensions.width < minimumOverrideIconSize ||
+    dimensions.height < minimumOverrideIconSize
+  ) {
+    throw new IconFetchError(
+      'too-small',
+      `Icon is ${String(dimensions.width)}x${String(dimensions.height)}; minimum is ${String(minimumOverrideIconSize)}x${String(minimumOverrideIconSize)}.`,
+    );
+  }
+
+  const dataUrl = await blobToDataUrl(blob, mimeType);
+  return { dataUrl, mimeType };
 }
 
 export function hasOpaqueCenter(bitmap: ImageBitmap): boolean {

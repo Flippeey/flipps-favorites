@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { BookmarkNode } from '@/shared/messages';
 import { FolderMultiPicker } from '../FolderMultiPicker';
 import { Segmented } from '../settings-controls';
@@ -6,14 +7,16 @@ import type { SectionProps } from './types';
 
 export function DockSection({ settings, tree, onPatch }: SectionProps & { tree: BookmarkNode[] }) {
   const visibility: DockMode = resolveDockMode(settings.showDock, settings.autoHideDock);
+  const visibilityLabelId = useId();
   return (
     <div className="ff-set-section">
       <h3 className="ff-set-section__title">Dock</h3>
       <p className="ff-set-section__desc">A pinned row at the bottom for your most-used links.</p>
       <div className="ff-card">
         <div className="ff-row">
-          <div className="ff-row__label">Visibility</div>
+          <div className="ff-row__label" id={visibilityLabelId}>Visibility</div>
           <Segmented<'always' | 'hover' | 'hidden'>
+            labelledBy={visibilityLabelId}
             options={[
               { id: 'always', label: 'Always' },
               { id: 'hover',  label: 'On hover' },

@@ -36,6 +36,7 @@ import { prefetchAllIcons } from './lib/icon-prefetch';
 import { collectFolderIds, findFolder, findNode, findParentFolder, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 import { captureDeleteSnapshots, captureSubtree, restoreDeleteSnapshots, restoreSubtree } from './lib/subtree-snapshot';
 import { captureMoveSnapshots, moveIdsTracked, restoreMoveSnapshots } from './lib/move-snapshot';
+import { runUndoableMutation } from './lib/undoable-mutation';
 import { MAX_WORKSPACES, OPEN_ALL_TABS_CONFIRM_THRESHOLD } from '../shared/constants';
 import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper } from '../shared/storage';
 import { useWorkspaceActions } from './state/useWorkspaceActions';
@@ -264,31 +265,22 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       url: item.url,
       index: idx >= 0 ? idx : undefined,
     };
-    try {
-      await removeBookmark(item.id);
-      await refreshTree();
-      pushToast({
-        kind: 'info',
-        message: `Deleted “${item.title}”`,
-        action: snapshot.parentId
-          ? {
-              label: 'Undo',
-              onClick: () => {
-                void (async () => {
-                  try {
-                    await createBookmark(snapshot.parentId!, snapshot.title, snapshot.url, snapshot.index);
-                    await refreshTree();
-                  } catch {
-                    pushToast({ kind: 'error', message: 'Couldn’t restore the bookmark.' });
-                  }
-                })();
-              },
-            }
-          : undefined,
-      });
-    } catch {
-      pushToast({ kind: 'error', message: `Couldn’t delete “${item.title}”.` });
-    }
+    await runUndoableMutation(
+      { refreshTree, pushToast },
+      {
+        perform: () => removeBookmark(item.id),
+        onSuccess: () => ({
+          message: `Deleted “${item.title}”`,
+          undo: snapshot.parentId
+            ? {
+                run: async () => { await createBookmark(snapshot.parentId!, snapshot.title, snapshot.url, snapshot.index); },
+                failedMessage: 'Couldn’t restore the bookmark.',
+              }
+            : undefined,
+        }),
+        performFailedMessage: `Couldn’t delete “${item.title}”.`,
+      },
+    );
   }, [tree, refreshTree, pushToast]);
 
   const sortedChildren = useCallback((children?: BookmarkNode[]) => {
@@ -477,30 +469,27 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const handleConfirmMoveTo = useCallback(async (targetFolderId: string): Promise<void> => {
     const ids = moveToState?.ids ?? [];
     if (ids.length === 0) return;
-    const outcome = await moveIdsTracked(tree, ids, targetFolderId, moveBookmark);
-    if (outcome.movedIds.length > 0) {
-      setSelection({ ids: new Set(outcome.movedIds), scopeFolderId: targetFolderId });
-      pushToast({
-        kind: 'info',
-        message: `Moved ${outcome.movedIds.length} ${outcome.movedIds.length === 1 ? 'item' : 'items'}`,
-        action: outcome.snapshots.length > 0
+    const outcome = await runUndoableMutation(
+      { refreshTree, pushToast },
+      {
+        perform: async () => {
+          const result = await moveIdsTracked(tree, ids, targetFolderId, moveBookmark);
+          if (result.movedIds.length > 0) {
+            setSelection({ ids: new Set(result.movedIds), scopeFolderId: targetFolderId });
+          }
+          return result;
+        },
+        onSuccess: (result) => result.movedIds.length > 0
           ? {
-              label: 'Undo',
-              onClick: () => {
-                void (async () => {
-                  try {
-                    await restoreMoveSnapshots(outcome.snapshots, moveBookmark);
-                    await refreshTree();
-                  } catch {
-                    pushToast({ kind: 'error', message: 'Couldn’t undo the move.' });
-                  }
-                })();
-              },
+              message: `Moved ${result.movedIds.length} ${result.movedIds.length === 1 ? 'item' : 'items'}`,
+              undo: result.snapshots.length > 0
+                ? { run: () => restoreMoveSnapshots(result.snapshots, moveBookmark), failedMessage: 'Couldn’t undo the move.' }
+                : undefined,
             }
-          : undefined,
-      });
-    }
-    if (outcome.failedIds.length > 0) {
+          : null,
+      },
+    );
+    if (outcome && outcome.failedIds.length > 0) {
       pushToast({
         kind: 'error',
         message: outcome.movedIds.length > 0
@@ -508,7 +497,6 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           : `Couldn’t move the selected ${ids.length === 1 ? 'item' : 'items'}.`,
       });
     }
-    await refreshTree();
   }, [moveToState, tree, refreshTree, pushToast, setSelection]);
 
   const openFolderBookmarksInTabs = useCallback(async (folder: BookmarkNode) => {
@@ -598,8 +586,6 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     if (folder) handlePickFolder(folder);
   }, [tree, handlePickFolder]);
 
-  useWorkspaceShortcut(orderedWorkspaces, handleSwitchWorkspace);
-
   // Reset keyboard focus when navigation context changes (workspace switch, folder open/close).
   useEffect(() => {
     setFocusedTileId(null);
@@ -684,6 +670,8 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     appSettingsOpen || workspaceSettingsOpen || renameWorkspaceTarget || confirmDeleteWorkspace || editTarget || quickAddTarget || folderNameTarget || onboardOpen
     || newWorkspaceOpen || confirmDeleteFolder || confirmDeleteBatch || openFolderId || contextMenu,
   );
+
+  useWorkspaceShortcut(orderedWorkspaces, handleSwitchWorkspace, !anyOverlayOpen);
 
   useKeyboardNav({
     enabled: !anyOverlayOpen,
@@ -933,6 +921,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           shape={tileShape}
           onClose={() => setOpenFolderId(null)}
           onPickBookmark={handlePickBookmark}
+          onMiddleOpen={openInNewTab}
           onContextMenu={(target, e) => {
             e.preventDefault();
             setContextMenu({ x: e.clientX, y: e.clientY, items: buildContextMenuItems(target) });
@@ -991,34 +980,28 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
               // Capture origins before relocating so Undo can replay each item
               // back to its parent + index (the new folder is empty at this point).
               const snapshots = captureMoveSnapshots(tree, moveIds);
-              try {
-                // Sequential to preserve selection order in the new folder.
-                for (const id of moveIds) await moveBookmark(id, folder.id);
-                setSelection({ ids: new Set(moveIds), scopeFolderId: folder.id });
-                pushToast({
-                  kind: 'info',
-                  message: `Moved ${moveIds.length} ${moveIds.length === 1 ? 'item' : 'items'} to “${folder.title}”.`,
-                  action: snapshots.length > 0
-                    ? {
-                        label: 'Undo',
-                        onClick: () => {
-                          void (async () => {
-                            try {
-                              // Restore items to origin, then remove the now-empty new folder.
-                              await restoreMoveSnapshots(snapshots, moveBookmark);
-                              await removeBookmark(folder.id, true);
-                              await refreshTree();
-                            } catch {
-                              pushToast({ kind: 'error', message: 'Couldn’t undo the move.' });
-                            }
-                          })();
-                        },
-                      }
-                    : undefined,
-                });
-              } catch {
-                pushToast({ kind: 'error', message: 'Couldn’t move the selected bookmarks.' });
-              }
+              await runUndoableMutation(
+                { refreshTree, pushToast },
+                {
+                  perform: async () => {
+                    // Sequential to preserve selection order in the new folder.
+                    for (const id of moveIds) await moveBookmark(id, folder.id);
+                    setSelection({ ids: new Set(moveIds), scopeFolderId: folder.id });
+                  },
+                  onSuccess: () => ({
+                    message: `Moved ${moveIds.length} ${moveIds.length === 1 ? 'item' : 'items'} to “${folder.title}”.`,
+                    undo: snapshots.length > 0
+                      ? {
+                          // Restore items to origin, then remove the now-empty new folder.
+                          run: async () => { await restoreMoveSnapshots(snapshots, moveBookmark); await removeBookmark(folder.id, true); },
+                          failedMessage: 'Couldn’t undo the move.',
+                        }
+                      : undefined,
+                  }),
+                  performFailedMessage: 'Couldn’t move the selected bookmarks.',
+                  refreshOnSuccess: false,
+                },
+              );
             }
             await refreshTree();
           }}
@@ -1054,29 +1037,22 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             const parent = findParentFolder(tree, folder.id);
             const index = parent?.children?.findIndex(c => c.id === folder.id) ?? -1;
             const subtree = captureSubtree(folder);
-            await removeBookmark(folder.id, true);
-            void cleanupFolderIcons(folder);
-            setConfirmDeleteFolder(null);
-            await refreshTree();
-            pushToast({
-              kind: 'info',
-              message: `Deleted “${folder.title}”`,
-              action: parent && index >= 0
-                ? {
-                    label: 'Undo',
-                    onClick: () => {
-                      void (async () => {
-                        try {
-                          await restoreSubtree(subtree, parent.id, index, createBookmark);
-                          await refreshTree();
-                        } catch {
-                          pushToast({ kind: 'error', message: 'Couldn’t restore the folder.' });
-                        }
-                      })();
-                    },
-                  }
-                : undefined,
-            });
+            await runUndoableMutation(
+              { refreshTree, pushToast },
+              {
+                perform: async () => {
+                  await removeBookmark(folder.id, true);
+                  void cleanupFolderIcons(folder);
+                  setConfirmDeleteFolder(null);
+                },
+                onSuccess: () => ({
+                  message: `Deleted “${folder.title}”`,
+                  undo: parent && index >= 0
+                    ? { run: () => restoreSubtree(subtree, parent.id, index, createBookmark).then(() => undefined), failedMessage: 'Couldn’t restore the folder.' }
+                    : undefined,
+                }),
+              },
+            );
           }}
         />
       )}
@@ -1090,33 +1066,26 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
             // Capture every item's origin + contents (bookmarks and folders
             // alike) before deleting so Undo can restore the whole batch.
             const snapshots = captureDeleteSnapshots(tree, ids);
-            for (const id of ids) {
-              const node = findNode(tree, id);
-              await removeBookmark(id, node ? isFolder(node) : undefined);
-              if (node && isFolder(node)) void cleanupFolderIcons(node);
-            }
-            setConfirmDeleteBatch(null);
-            setSelection({ ids: new Set(), scopeFolderId: '' });
-            await refreshTree();
-            pushToast({
-              kind: 'info',
-              message: `Deleted ${ids.length} ${ids.length === 1 ? 'item' : 'items'}`,
-              action: snapshots.length > 0
-                ? {
-                    label: 'Undo',
-                    onClick: () => {
-                      void (async () => {
-                        try {
-                          await restoreDeleteSnapshots(snapshots, createBookmark);
-                          await refreshTree();
-                        } catch {
-                          pushToast({ kind: 'error', message: 'Couldn’t restore the deleted items.' });
-                        }
-                      })();
-                    },
+            await runUndoableMutation(
+              { refreshTree, pushToast },
+              {
+                perform: async () => {
+                  for (const id of ids) {
+                    const node = findNode(tree, id);
+                    await removeBookmark(id, node ? isFolder(node) : undefined);
+                    if (node && isFolder(node)) void cleanupFolderIcons(node);
                   }
-                : undefined,
-            });
+                  setConfirmDeleteBatch(null);
+                  setSelection({ ids: new Set(), scopeFolderId: '' });
+                },
+                onSuccess: () => ({
+                  message: `Deleted ${ids.length} ${ids.length === 1 ? 'item' : 'items'}`,
+                  undo: snapshots.length > 0
+                    ? { run: () => restoreDeleteSnapshots(snapshots, createBookmark), failedMessage: 'Couldn’t restore the deleted items.' }
+                    : undefined,
+                }),
+              },
+            );
           }}
         />
       )}

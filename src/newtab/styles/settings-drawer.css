@@ -60,7 +60,6 @@
   border-color: var(--accent-border);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 12%, transparent);
 }
-.ff-drawer__navdivider { height: 1px; background: var(--line-1); margin: 4px 8px; }
 .ff-drawer__nav--footer {
   flex: 0 0 auto;
   padding-top: var(--s-2);

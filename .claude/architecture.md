@@ -34,9 +34,14 @@ Bulkier state slices are factored into hooks under `src/newtab/state/` (see stru
 
 Optimistic update pattern (`handlePatch` in `App.tsx`):
 ```typescript
-setSettings(prev => ({ ...prev, ...patch }));      // optimistic
-try { setSettings(await patchSettings(patch)); }   // reconcile with truth
-catch { /* keep optimistic value */ }
+setSettings(prev => ({ ...prev, ...patch }));                  // optimistic
+try {
+  const next = await patchSettings(patch);
+  const keys = Object.keys(patch) as (keyof AppSettings)[];     // reconcile only the keys sent,
+  setSettings(prev => ({ ...prev, ...Object.fromEntries(keys.map(k => [k, next[k]])) })); // so concurrent patches to other keys survive
+} catch {
+  pushToast({ kind: 'error', message: '…' });                   // keep the optimistic value, surface the failure
+}
 ```
 
 Refresh-after-mutation pattern: call `refreshTree()` in the `onSaved` / `finally` of the mutating operation.
@@ -67,6 +72,8 @@ Settings / icon cache / usage state goes through `CachedValueStore` and `CachedR
 
 Extend the bucket helpers in `shared/storage.ts` rather than calling `extensionApi.storage.*` from new code.
 
+Writes are serialized so read-modify-write cycles can't interleave: settings through `writeQueue` (`writeSettings`) in `storage.ts`; each `CachedRecordStore` and `PerKeyRecordStore` (workspaces) through their own `writeTail` (`writeOne` / `writeMany` / `deleteOne` / `deleteMany` / `updateOne`) in `storage-buckets.ts` — `patchWorkspaceRecord` / `patchWorkspaceFromUser` in `storage.ts` are thin wrappers over `workspacesStore.updateOne`, which runs the read-merge-write inside that serialized section. A new write path that reads, merges and writes outside these queues silently drops concurrent writes — route it through them.
+
 ## Archetype Classification & Organization Templates
 
 Onboarding classifies the user's selected bookmark roots via two-stage pipeline:
@@ -79,19 +86,19 @@ Onboarding classifies the user's selected bookmark roots via two-stage pipeline:
 ## Icon Pipeline
 
 Resolution order in `resolveAutomaticIcon` (`src/background/icons/icon-service.ts`); providers live in `icon-providers.ts`:
-1. User override (persisted, never expires). **Scoped** since v9 (`shared/icon-scope.ts`): lookup order `exact:<url>` > `host:<hostname>` > `domain:<registrable root>`. Stored in IDB keyed by `overrideKey` (`ff-icons` DB v4; v1→v2 migrates per-URL to scope-keyed, v2→v3 removes unused `fit` field, v3→v4 adds the `folder-icons` store — additive, no record migration). Edit dialog has an "Apply icon to" segmented control (default: host).
-2. Cache — in-memory in-flight dedup + persisted record (30-day TTL; stale non-generated records trigger a background refresh). **Keyed per host** (`icon:host:<hostname>`) since auto-resolution is purely host-derived — N bookmarks on a host share one resolution.
+1. User override (persisted, never expires). **Scoped** (`shared/icon-scope.ts`): lookup order `exact:<url>` > `host:<hostname>` > `domain:<registrable root>`. Stored in IDB keyed by `overrideKey` (`ff-icons` DB v4; v1→v2 migrates per-URL to scope-keyed, v2→v3 removes unused `fit` field, v3→v4 adds the `folder-icons` store — additive, no record migration). Edit dialog has an "Apply icon to" segmented control (default: host).
+2. Cache — in-memory in-flight dedup + persisted record (30-day TTL, 24 h for generated letter-tiles; any stale record, generated ones included, triggers a background refresh). **Keyed per host** (`icon:host:<hostname>`) since auto-resolution is purely host-derived — N bookmarks on a host share one resolution.
 3. **Origin scrape** — fetch the site's own `https://<host>/` HTML, parse `<link rel>` icons + web-app manifest, then probe `apple-touch-icon*` / `android-chrome-192x192.png` / `favicon.ico` paths. Primary source; awaited first within `autoSourceTimeoutMs`. Guards: a cross-root redirect (login SSO page) discards the landed HTML and marks the host **gated**; same-host SVG icons are accepted without bitmap decode (capped at `maxSvgIconBytes`); ICO containers get their largest embedded PNG extracted (`ico-parse.ts`) since `createImageBitmap` can't decode ICO/SVG in workers.
 4. **Google S2** — `google.com/s2/favicons`. Skipped for personal-infra hosts (S2 returns a generic globe for unreachable private domains) and when the `google.com` host permission is absent.
-5. **Icon Horse** — `icon.horse/icon/<host>`. Last-resort favicon before image search; personal-infra and gated hosts skip straight to DDG (Icon Horse letter placeholders would poison the cache).
-6. **DuckDuckGo image search** — `duckduckgo.com`, query built from brand/title/hostname terms. Supplies the first acceptable hit (`fetchDuckDuckGoFirstHit`) and powers the edit-dialog icon picker (`searchDuckDuckGoImages`). On Firefox, use `referrerPolicy="origin"` in the DDG iframe (src/newtab/components/EditDialog.tsx) — `no-referrer` causes Bing CDN to return 64px stubs that fail the `minEdge>=64px` size guard.
+5. **Icon Horse** — `icon.horse/icon/<host>`. Last-resort favicon before image search. Gated hosts skip it entirely; personal-infra hosts try DDG first and fall back to Icon Horse (then DDG again) only if that misses — Icon Horse letter placeholders would poison the cache.
+6. **DuckDuckGo image search** — `duckduckgo.com`, query built from brand/title/hostname terms. Supplies the first acceptable hit (`fetchDuckDuckGoFirstHit`) and powers the edit-dialog icon picker (`searchDuckDuckGoImages`). On Firefox, use `referrerPolicy="origin"` on the DDG candidate preview `<img>` (src/newtab/components/IconPickerPanel.tsx, shared by the bookmark and folder icon dialogs) — `no-referrer` causes Bing CDN to return 64px stubs that fail the `minEdge>=64px` size guard.
 
 If all sources fail, a generated letter-tile record is cached (swept + retried later by `sweepGeneratedRecords`). Request deduplication (`inFlightIcons`) prevents concurrent fetches for the same host; resolutions are gated by `ResolutionSemaphore`. Newtab calls `getIcon(url, title)` via messaging; the page-level `favicon-cache.ts` has `invalidateFaviconCacheForScope` to refresh all same-host/domain tiles after a scoped override.
 
 ### Fetch Path: Chrome vs. Firefox
 
-- **Chrome**: uses `fetch()` with `declarativeNetRequest` session rules (scripts/write-manifest.mjs) that inject `Access-Control-Allow-Origin: *` headers. Requires explicit host_permissions for S2, DDG, Icon Horse.
-- **Firefox**: uses `XMLHttpRequest` on the background page (src/background/icons/platform.ts) via `firefoxSafeFetch()` / `xhrFetch()`. Host_permissions grant XHR cross-origin access; `['https://*/*']` covers all favicon services. `declarativeNetRequest` rules do NOT inject headers on Firefox background fetch() calls — the XHR path is the workaround. Branch at runtime via `isFirefox()` (checks navigator.userAgent).
+- **Chrome**: uses `fetch()`; `withCorsBypass` (`src/background/icons/cors-bypass.ts`) adds a temporary `declarativeNetRequest` session rule that injects `Access-Control-Allow-Origin: *` for the request. Host access comes from the manifest's `https://*/*` host permission (see Manifest differences below).
+- **Firefox**: uses `XMLHttpRequest` on the background page (src/background/icons/platform.ts) via `firefoxSafeFetch()` / `xhrFetch()`. Host_permissions grant XHR cross-origin access; `['https://*/*']` covers all favicon services. `declarativeNetRequest` rules do NOT inject headers on Firefox background fetch() calls — the XHR path is the workaround. Branch at runtime via `isFirefox()` (checks navigator.userAgent). `xhrFetch` redefines the synthesized `Response.url` from `xhr.responseURL`; the origin-scrape cross-root-redirect (gated-host) guard reads `response.url`, so keep this in any rewrite or the guard silently stops firing on Firefox.
 
 ## Dual-Target Builds
 
@@ -100,10 +107,10 @@ Same source compiles to both Chrome and Firefox (via Vite `--mode chrome|firefox
 **Browser-specific logic placement:**
 - `shared/browser.ts` — `extensionApi` shim for Chrome/Firefox runtime differences (e.g., namespace detection).
 - `src/background/icons/platform.ts` — `isFirefox()`, `firefoxSafeFetch()`, `xhrFetch()` for icon pipeline fetch branching. Kept separate from browser.ts to avoid extension API imports at module evaluation (breaks Vitest).
-- `src/newtab/lib/platform.ts` — `IS_FIREFOX`, `MOD_KEY`, `ALT_KEY`, referrer-policy constants for UI (e.g., EditDialog DDG iframe).
+- `src/newtab/lib/platform.ts` — `IS_MAC`, `IS_FIREFOX`, `MOD_KEY`, `ALT_KEY`, `modShortcut` / `altShortcut` for UI (e.g. `IS_FIREFOX` picks the DDG preview `<img>` `referrerPolicy` in `IconPickerPanel.tsx`).
 
 **Manifest differences** (scripts/write-manifest.mjs):
-- Chrome: `host_permissions` includes explicit favicon-service hosts (S2, DDG, Icon Horse) for declarativeNetRequest rules; `service_worker` in background.
+- Chrome: `host_permissions` is `https://*/*` plus explicit `duckduckgo.com` and `icon.horse` entries (Google S2 is covered only by the wildcard); `service_worker` in background.
 - Firefox: `host_permissions` uses only `['https://*/*']` (XHR honors wildcard); `background.page` instead of service_worker (background page required for XHR CORS support).
 
 Feature code MUST NOT have target-aware branches. All conditional logic funnels through the shims above.

@@ -31,17 +31,22 @@ export function captureMoveSnapshots(tree: BookmarkNode[], ids: string[]): MoveS
 }
 
 /**
- * Reverse a relocate by moving each item back to its captured origin. Replays in
- * capture order so multi-item moves land back in their original relative slots.
- * Throws on the first failed move so callers can surface an error toast. The
- * mover is injected (the `moveBookmark` messaging wrapper) so this module stays
- * free of the WebExtension shim and remains unit-testable.
+ * Reverse a relocate by moving each item back to its captured origin. Snapshots
+ * are captured in selection order (click order), which can be spatially out of
+ * order — replaying them as-captured would insert a higher index first and
+ * shift it out from under a still-pending lower-index sibling. Replay ascending
+ * by `index` instead (stable, so ties and different-parent snapshots keep their
+ * capture order) so each insertion's index is still valid for the ones that
+ * follow. Throws on the first failed move so callers can surface an error
+ * toast. The mover is injected (the `moveBookmark` messaging wrapper) so this
+ * module stays free of the WebExtension shim and remains unit-testable.
  */
 export async function restoreMoveSnapshots(
   snapshots: MoveSnapshot[],
   move: (id: string, parentId: string, index: number) => Promise<unknown>,
 ): Promise<void> {
-  for (const snap of snapshots) {
+  const ordered = [...snapshots].sort((a, b) => a.index - b.index);
+  for (const snap of ordered) {
     await move(snap.id, snap.parentId, snap.index);
   }
 }

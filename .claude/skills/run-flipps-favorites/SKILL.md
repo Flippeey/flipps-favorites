@@ -95,13 +95,13 @@ to confirm the UI actually rendered.
 | `screenshot [name]` | Save `screenshots/<name>.png` (default `ss-<ts>`) |
 | `click <selector>` | `querySelector(sel).click()` |
 | `click-text <text>` | Click first button/link/`[role=button]` matching the text |
-| `fill <selector> <text>` | Fill an input |
+| `fill <selector> <text>` | Fill an input — the selector is the first word (no spaces); the rest of the line is the text |
 | `type <text>` | Type at the keyboard |
 | `press <key>` | Press a key (e.g. `Escape`, `Control+K`) |
 | `wait <selector>` | Wait up to 10s for a selector |
 | `eval <expression>` | Evaluate JS in the page, print JSON result |
 | `text [selector]` | Print `innerText` (whole body if no selector) |
-| `console-errors` / `network-errors` | Report console errors / failed responses |
+| `console-errors` / `network-errors` | Listen for 1s from when the command runs, then report console errors / responses >= 400. Errors emitted by earlier commands are never seen, so a 0 count says nothing about the steps before it |
 | `url` / `reload` / `quit` / `help` | self-explanatory |
 
 Selectors follow the project's `data-*` DOM contract: tiles are `[data-item-id]` /

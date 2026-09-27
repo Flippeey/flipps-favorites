@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BookmarkNode } from '@/shared/messages';
-import { captureMoveSnapshots, moveIdsTracked } from '@/newtab/lib/move-snapshot';
+import { captureMoveSnapshots, moveIdsTracked, restoreMoveSnapshots } from '@/newtab/lib/move-snapshot';
 
 // Browser-shaped tree: outer root → user folders. `dock` holds two bookmarks;
 // `work` holds one folder (`sub`) and one bookmark. Mirrors how the live tree
@@ -56,6 +56,49 @@ describe('captureMoveSnapshots', () => {
     expect(captureMoveSnapshots(tree, ['missing', 'bm-a'])).toEqual([
       { id: 'bm-a', parentId: 'dock', index: 0 },
     ]);
+  });
+});
+
+describe('restoreMoveSnapshots', () => {
+  // WHY: snapshots are captured in selection (click) order, which can be
+  // spatially out of order relative to their index in the parent. Replaying
+  // a higher-index snapshot before a lower-index one shifts the lower one out
+  // from under the still-pending insert, landing it one slot off from where
+  // it started. Restoring ascending by index (mirroring subtree-snapshot's
+  // delete-undo) keeps every insertion's index valid for the ones that follow.
+  it('restores items to their original parent order regardless of capture order', async () => {
+    // In-memory mover reproducing chrome.bookmarks.move insert semantics:
+    // splice the id out of its current parent, then splice it into the
+    // target parent at `index` (clamped to the new length).
+    const parent: string[] = ['a', 'b', 'c', 'd', 'e'];
+    const locations = new Map<string, string[]>([['dock', parent]]);
+
+    const move = async (id: string, parentId: string, index: number): Promise<void> => {
+      for (const arr of locations.values()) {
+        const i = arr.indexOf(id);
+        if (i >= 0) arr.splice(i, 1);
+      }
+      const target = locations.get(parentId);
+      if (!target) throw new Error(`unknown parent ${parentId}`);
+      target.splice(Math.min(index, target.length), 0, id);
+    };
+
+    // Simulate the pre-move captures (index is the pre-move position), then
+    // actually remove d and b from the parent to mirror the move having
+    // already happened, exactly like a real move-then-undo sequence.
+    const snapshots = [
+      { id: 'd', parentId: 'dock', index: 3 },
+      { id: 'b', parentId: 'dock', index: 1 },
+    ];
+    parent.splice(parent.indexOf('d'), 1);
+    parent.splice(parent.indexOf('b'), 1);
+
+    const original = [...snapshots];
+    await restoreMoveSnapshots(snapshots, move);
+
+    expect(parent).toEqual(['a', 'b', 'c', 'd', 'e']);
+    // The caller's array must not be mutated by the restore.
+    expect(snapshots).toEqual(original);
   });
 });
 

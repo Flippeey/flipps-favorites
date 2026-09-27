@@ -132,6 +132,23 @@ describe('workspace stamps', () => {
     expect(totalWrites(browser)).toBe(0);
   });
 
+  // Two edits racing in the background must both land, and the later one must
+  // carry the newer stamp, or another browser could keep the older edit.
+  it('concurrent user patches to one workspace keep both edits and stamp strictly upward', async () => {
+    const storage = await loadStorage();
+    await storage.createWorkspaceFromUser(record('a'));
+
+    const [first, second] = await Promise.all([
+      storage.patchWorkspaceFromUser('a', { accentColor: '#000000' }),
+      storage.patchWorkspaceFromUser('a', { name: 'Renamed' }),
+    ]);
+
+    expect(first.updatedAt).toBe(NOW + 1);
+    expect(second.updatedAt).toBe(NOW + 2);
+    const stored = (await storage.readWorkspaces())[0];
+    expect(stored).toMatchObject({ accentColor: '#000000', name: 'Renamed', updatedAt: NOW + 2 });
+  });
+
   it('an empty patch is a touch (the wallpaper path) and restamps', async () => {
     const storage = await loadStorage();
     await storage.createWorkspaceFromUser(record('a'));

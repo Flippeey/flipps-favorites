@@ -265,8 +265,11 @@ const COMMANDS = {
     }
   },
 
-  async fill(selector, text) {
+  async fill(args) {
     if (!newtabPage) return fail('ERROR: navigate first');
+    // Both dispatchers pass one space-joined argument string; the selector is its first word.
+    const [selector, ...words] = args.split(' ');
+    const text = words.join(' ');
 
     try {
       const loc = newtabPage.locator(selector).first();

@@ -381,17 +381,28 @@ export function isCollageTitle(title: string): boolean {
 }
 
 export function stripHtml(value: string): string {
-  // Titles come from untrusted search results. Strip tags, then drop any
-  // leftover `<` from an unterminated tag (e.g. `<script`) so no tag start
-  // survives. One pass already reaches a fixed point; the loop is the form
-  // static sanitization analysis recognises as complete.
-  let previous: string;
-  let current = value;
-  do {
-    previous = current;
-    current = current.replace(/<[^>]*>/g, '');
-  } while (current !== previous);
-  return current.replace(/</g, '').trim();
+  // Titles come from untrusted search results. A regex fixed-point loop is
+  // quadratic on adversarial input, so scan left to right instead: from each
+  // `<` skip to its matching `>`, or keep the rest of the string when none
+  // follows. Then drop any leftover `<` from an unterminated tag (e.g.
+  // `<script`) so no tag start survives.
+  let result = '';
+  let index = 0;
+  while (index < value.length) {
+    const start = value.indexOf('<', index);
+    if (start === -1) {
+      result += value.slice(index);
+      break;
+    }
+    result += value.slice(index, start);
+    const end = value.indexOf('>', start + 1);
+    if (end === -1) {
+      result += value.slice(start);
+      break;
+    }
+    index = end + 1;
+  }
+  return result.replace(/</g, '').trim();
 }
 
 /**

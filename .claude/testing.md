@@ -3,8 +3,8 @@
 ## Three Test Surfaces
 
 - **Vitest unit tests** — `tests/unit/**/*.test.ts`. Pure logic only: utilities, helpers, pure functions (e.g. icon parsing, dock-mode resolution, URL normalization). Fast, no browser. Run with `npm run test:unit` or `npm run test:unit:watch`.
-- **Playwright E2E (Chrome)** — `tests/specs/*.spec.ts`. User flows, integration, DOM + cross-context messaging. Chrome project runs all specs, headless; Firefox project runs `icons.spec.ts` only, headed (Playwright Firefox can't load extensions headless — CI runs it under xvfb, run it yourself only when debugging icon code). Playwright's built-in esbuild TS transform wires `@/` path alias (tsconfig `paths` resolved at runtime with zero extra config). Run with `npm test` (chrome, headless) or `npm run test:chrome` / `npm run test:firefox`.
-- **Puppeteer WebDriver BiDi suite (Firefox)** — `tests/firefox-e2e/specs/**/*.test.ts`. Broad Firefox E2E coverage — bookmarks, boot, context-menu, icons, middle-click, onboarding, search, settings, workspaces. Uses Puppeteer + Firefox WebDriver BiDi (the only way to load a MV3 extension in headless Firefox; Playwright's juggler backend cannot). Separate Vitest config + separate `vitest run -c` invocation so it doesn't get picked up by `npm run test:unit`. Run with `npm run test:firefox:e2e` or `npm run test:firefox:e2e:build`.
+- **Playwright E2E (Chrome)** — `tests/specs/*.spec.ts`. User flows, integration, DOM + cross-context messaging. Chrome project runs all specs; Firefox project runs `icons.spec.ts` only. Both launch headless unless `HEADED=1` (`tests/fixtures/launch.ts`), locally and in CI — no xvfb. Playwright's built-in esbuild TS transform wires `@/` path alias (tsconfig `paths` resolved at runtime with zero extra config). Run with `npm test` (chrome, headless) or `npm run test:chrome` / `npm run test:firefox`.
+- **Puppeteer WebDriver BiDi suite (Firefox)** — `tests/firefox-e2e/specs/**/*.test.ts`. Broad Firefox E2E coverage — bookmarks, boot, context-menu, icons, middle-click, onboarding, search, settings, workspaces. Uses Puppeteer + Firefox WebDriver BiDi (the only way to load a MV3 extension in headless Firefox; Playwright's juggler backend cannot). It runs a pinned Firefox build (`tests/firefox-e2e/firefox-build.json`) because Firefox 153+ rejects WebDriver BiDi navigation to `moz-extension://`; install it once with `npm run test:firefox:e2e:install-browser` — the suite refuses to start without it. Separate Vitest config + separate `vitest run -c` invocation so it doesn't get picked up by `npm run test:unit`. Run with `npm run test:firefox:e2e` or `npm run test:firefox:e2e:build`.
 
 ### Why Three?
 
@@ -28,7 +28,7 @@ Chrome Playwright specs load a **test build** to eliminate flake from `chrome.st
 **Reason**: Component tests either test implementation (brittle — they fail on safe refactors) or redundantly retest E2E coverage. The architecture (state in `App.tsx`, presentational children, extracted pure functions) already isolates unit-testable logic from render. Pure logic lives in unit tests (`lib/`, `shared/`); components are validated via E2E.
 
 **Deferred E2E markers**: some hooks are documented as E2E-only in their own test files, with reasons, rather than given fake unit coverage:
-- `tests/unit/state/*.test.ts` — `useSelection`, `useWorkspaceActions`, `useToasts`, `useContextMenuBuilder` (state hooks with side effects that need the full component tree)
+- `tests/unit/state/*.test.ts` — `useSelection`, `useToasts` (state hooks with side effects that need the full component tree). `useWorkspaceActions` has no marker: its create-from-folder guard is unit-tested through the extracted `checkCreateFromFolderGuard`. `useContextMenuBuilder` has no marker either: menu construction is unit-tested directly through the extracted pure `buildContextMenuItems`, with the hook itself a thin `useCallback` wrapper around it.
 - `tests/unit/interaction/deferred-to-e2e.test.ts` — all 8 interaction hooks (`useDrag`, `useMarquee`, `useKeyboardNav`, etc.; require real DOM + event simulation)
 
 ## Settings-sync specs (local sync server)
@@ -112,7 +112,7 @@ npm run test:unit:watch        # Vitest watch mode
 # Playwright E2E (Chrome, headless)
 npm test                       # Chrome project only, headless (icons.spec.ts on firefox is NOT included)
 npm run test:chrome            # Same as npm test
-npm run test:firefox           # Firefox project only (icons.spec.ts) — headed; CI/xvfb or manual icon debugging only
+npm run test:firefox           # Firefox project only (icons.spec.ts), headless (HEADED=1 to watch)
 npm run test:ui                # Playwright interactive debugger
 npm run test:headed            # Chrome project with visible window
 npm run test:report            # Generate HTML report
@@ -120,13 +120,14 @@ npm run test:report            # Generate HTML report
 # Puppeteer Firefox E2E
 npm run test:firefox:e2e       # Run tests/firefox-e2e/**/*.test.ts (requires dist/firefox), headless by default
 npm run test:firefox:e2e:build # Build dist/firefox first, then run firefox-e2e
+npm run test:firefox:e2e:install-browser  # One-time: install the pinned Firefox build (tests/firefox-e2e/firefox-build.json)
 
 # One-command local/agent verification (all headless)
 npm run verify                  # typecheck -> test:unit -> build -> build:chrome:test -> test (chrome) -> test:firefox:e2e, stops on first failure
 
-# Full CI (build + Playwright; only test:ci runs both projects — headed firefox, CI/xvfb only, do not run test:ci locally without xvfb)
+# Build + Playwright (only test:ci runs both projects; all headless)
 npm run test:build             # Build everything (dist/chrome + dist/chrome-test + dist/firefox), run Playwright (chrome only — calls npm test)
-npm run test:ci                # build + build:chrome:test + `playwright test` (BOTH projects — used by .github/workflows/test.yml under xvfb)
+npm run test:ci                # build + build:chrome:test + `playwright test` (BOTH projects, headless; .github/workflows/test.yml runs the same steps individually)
 npm run test:all               # build + build:chrome:test + Playwright (chrome only) + test:firefox:e2e
 ```
 
@@ -139,15 +140,15 @@ npm run test:unit              # Vitest — fast, run first
 npm run build                  # rebuild dist/chrome + dist/firefox (for release artifact validation)
 npm run build:chrome:test      # rebuild dist/chrome-test (for Playwright)
 npm test                       # run Playwright chrome project, headless
-npm run test:firefox           # if change touches icon code (headed; CI/xvfb or manual only)
+npm run test:firefox           # if change touches icon code
 npm run test:firefox:e2e       # if change needs broad Firefox validation
 ```
 
 All-in-one, headless: `npm run verify` (typecheck + test:unit + build + build:chrome:test +
 Playwright chrome + test:firefox:e2e, stops on first failure) — the standard command before
 opening a PR. `npm run test:build` / `npm run test:all` cover the same ground without the
-typecheck gate. `npm run test:ci` additionally runs the headed Firefox Playwright project and is
-CI/xvfb-only. `npm run test:ui` for interactive debugging.
+typecheck gate. `npm run test:ci` additionally runs the Firefox Playwright project. `npm run test:ui`
+opens an interactive window — for a human debugging, never an agent run.
 
 ## Writing Tests
 

@@ -291,3 +291,33 @@ test('Alt+ArrowLeft wraps from first workspace to last', async ({ newtabPage, wo
     timeout: 2_000,
   });
 });
+
+test('Alt+ArrowRight and Alt+2 are inert while the workspace settings drawer is open', async ({ newtabPage, world }) => {
+  // Work is active (index 0). Opening the drawer moves keyboard focus inside
+  // it (useFocusTrap auto-focuses its first focusable element), so the
+  // shortcut listener must not react to Alt+Arrow/Alt+digit while it's open —
+  // otherwise the drawer edits one workspace while the tab strip silently
+  // switches to another underneath it.
+  await expect(workspaceTab(newtabPage, world.workspaceIds.Work)).toHaveClass(/is-active/);
+
+  await newtabPage.getByRole('button', { name: 'Customize workspace' }).click();
+  const drawer = newtabPage.locator('.ff-drawer[aria-label="Workspace settings"]');
+  await expect(drawer).toBeVisible();
+  await expect(drawer.locator(':focus')).toHaveCount(1);
+
+  await newtabPage.keyboard.press('Alt+ArrowRight');
+  await newtabPage.keyboard.press('Alt+2');
+  // Settle window so a would-be (buggy) switch has time to commit before we
+  // assert it didn't happen — an immediate toHaveClass check can race a
+  // just-fired switch and observe the pre-update DOM, passing falsely.
+  await newtabPage.waitForTimeout(500);
+  await expect(workspaceTab(newtabPage, world.workspaceIds.Work)).toHaveClass(/is-active/);
+
+  await newtabPage.getByRole('button', { name: 'Close' }).click();
+  await expect(drawer).toBeHidden();
+
+  await newtabPage.keyboard.press('Alt+ArrowRight');
+  await expect(workspaceTab(newtabPage, world.workspaceIds.Personal)).toHaveClass(/is-active/, {
+    timeout: 2_000,
+  });
+});

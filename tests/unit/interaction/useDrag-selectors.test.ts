@@ -47,12 +47,9 @@ describe('itemIdSelector', () => {
     expect(selector).toBe('[data-item-id="id\\:with\\:colons"]');
   });
 
-  it('escapes an id that starts with a digit (invalid as a bare CSS identifier)', () => {
-    const selector = itemIdSelector('123-numeric-start');
-    expect(selector).toBe('[data-item-id="123-numeric-start"]');
-    // Digits themselves aren't special inside a quoted attribute value — the
-    // important case is unescaped quotes/backslashes, covered above. This
-    // case documents that plain ids still round-trip unchanged.
+  it('escapes a quote in an id that starts with a digit', () => {
+    const selector = itemIdSelector('1"leading-digit');
+    expect(selector).toBe('[data-item-id="1\\"leading-digit"]');
   });
 
   it('is unescaped for a plain alphanumeric id (no spurious escaping)', () => {

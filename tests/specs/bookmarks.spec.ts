@@ -58,6 +58,20 @@ test('QuickAdd rejects an empty URL with an error message', async ({ newtabPage 
   await expect(dialog.locator('.ff-status[data-kind="error"]')).toContainText(/URL|enter/i);
 });
 
+test('QuickAdd rejects the untouched default URL', async ({ newtabPage }) => {
+  // The dialog seeds its input with a placeholder-like default ("https://www.").
+  // Submitting without typing anything must be treated as empty input, not as a
+  // URL with hostname "www." that slips past validation and creates a bookmark.
+  await newtabPage.getByRole('button', { name: 'Add', exact: true }).click();
+  await newtabPage.locator('.ff-ctx').getByRole('menuitem', { name: /Add bookmark/i }).click();
+  const dialog = newtabPage.locator('.ff-dialog');
+  await dialog.getByRole('button', { name: /Add bookmark/i }).click();
+
+  await expect(dialog.locator('.ff-status[data-kind="error"]')).toBeVisible();
+  await expect(dialog.locator('.ff-status[data-kind="error"]')).toContainText('Enter a URL.');
+  await expect(newtabPage.locator('.ff-tile[data-item-kind="bookmark"]')).toHaveCount(0);
+});
+
 test('right-click empty canvas surfaces Add bookmark + Add folder', async ({ newtabPage }) => {
   const menu = await openContextMenu(newtabPage, newtabPage.locator('.ff-canvas'));
   await expect(menu.getByRole('menuitem', { name: /Add bookmark/i })).toBeVisible();
@@ -178,4 +192,37 @@ test('middle-click on a folder tile does NOT open a new tab', async ({ newtabPag
 
   context.off('page', onPage);
   expect(newPageOpened).toBe(false);
+});
+
+test.describe('middle-click on a bookmark tile inside a folder overlay', () => {
+  // Same real-navigation caveat as the top-level middle-click describe above:
+  // stub the host so the opened tab's navigation doesn't depend on live DNS.
+  test.use({ stubHosts: ['example.com'] });
+
+  test('opens it in a new tab and leaves the overlay open', async ({ newtabPage }) => {
+    const bmUrl = 'https://example.com/';
+    const folderId = await createSubFolder(newtabPage, rootId, 'Overlay Middle Click');
+    const bmId = await createTestBookmark(newtabPage, folderId, 'Overlay Target', bmUrl);
+    await reloadNewtab(newtabPage);
+
+    const folderTile = tileById(newtabPage, folderId);
+    await folderTile.waitFor();
+    await folderTile.click();
+
+    const overlay = newtabPage.locator('.ff-folder-overlay');
+    await overlay.waitFor({ state: 'visible', timeout: 5_000 });
+
+    const tile = tileById(newtabPage, bmId);
+    await tile.waitFor();
+
+    const [newPage] = await Promise.all([
+      newtabPage.context().waitForEvent('page', { timeout: 10_000 }),
+      tile.click({ button: 'middle' }),
+    ]);
+    await newPage.waitForLoadState('domcontentloaded');
+    expect(newPage.url()).toBe(bmUrl);
+    await newPage.close();
+
+    await expect(overlay).toBeVisible();
+  });
 });
