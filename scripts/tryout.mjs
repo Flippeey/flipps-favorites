@@ -165,6 +165,7 @@ function main() {
   }
 
   const child = spawn(exePath, args, { detached: true, stdio: 'ignore' });
+  child.on('error', (error) => fail(`Failed to launch ${exePath}: ${error.message}`));
   child.unref();
 }
 

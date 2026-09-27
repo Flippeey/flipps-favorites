@@ -124,7 +124,7 @@ untouched.
 ```bash
 npm run tryout -- chrome              # builds dist/chrome, stages + launches it in a test profile
 npm run tryout -- firefox --from /path/to/other/checkout   # use an already-built dist/firefox
-npm run tryout -- chrome --dry-run    # resolve paths and print the launch command, no GUI window
+npm run tryout -- chrome --dry-run    # build + stage, print the launch command, no GUI window
 ```
 
 Without `--from`, the script runs the matching `build:<target>` first. `TRYOUT_CHROME_EXE` /
