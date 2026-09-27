@@ -16,6 +16,7 @@ import {
   revealPairingCode,
   submitPairingCode,
   syncNow,
+  waitFor,
   type SyncPage,
 } from './sync-ui.js';
 
@@ -103,6 +104,155 @@ export async function setFolderIcon(page: SyncPage, folderId: string): Promise<v
     mimeType: 'image/png',
     fileName: 'folder-icon.png',
   });
+}
+
+/** Create a folder (and its bookmarks) inside an existing one; returns its id. */
+export async function addChildFolder(page: SyncPage, parentId: string, title: string, bookmarks: BookmarkSeed[]): Promise<string> {
+  return page.evaluate(async (data) => {
+    type Api = { bookmarks: { create(b: { parentId: string; title: string; url?: string }): Promise<{ id: string }> } };
+    const api = (globalThis as unknown as { browser?: Api; chrome: Api }).browser
+      ?? (globalThis as unknown as { chrome: Api }).chrome;
+    const folder = await api.bookmarks.create({ parentId: data.parentId, title: data.title });
+    for (const bookmark of data.bookmarks) {
+      await api.bookmarks.create({ parentId: folder.id, title: bookmark.title, url: bookmark.url });
+    }
+    return folder.id;
+  }, { parentId, title, bookmarks });
+}
+
+/** Remove a folder's custom icon the way the folder edit dialog does. */
+export async function clearFolderIcon(page: SyncPage, folderId: string): Promise<void> {
+  await send(page, { type: 'icons/remove-folder-icon', folderId, recordDeletion: true });
+}
+
+/** Give a bookmark a custom icon the way the edit dialog does (host scope, its default); returns the image the tile shows. */
+export async function setIconOverride(page: SyncPage, bookmarkUrl: string, png: Buffer): Promise<string> {
+  const res = await send<{ icon: { dataUrl: string } }>(page, {
+    type: 'icons/set-override',
+    bookmarkUrl,
+    dataUrl: `data:image/png;base64,${png.toString('base64')}`,
+    fileName: 'override.png',
+    mimeType: 'image/png',
+    scope: 'host',
+  });
+  return res.icon.dataUrl;
+}
+
+/** The edit dialog's Remove custom icon. */
+export async function clearIconOverride(page: SyncPage, bookmarkUrl: string): Promise<void> {
+  await send(page, { type: 'icons/remove-override', bookmarkUrl });
+}
+
+/** Keys of the icon overrides this browser stores. */
+export async function iconOverrideKeys(page: SyncPage): Promise<string[]> {
+  return page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolveOpen, rejectOpen) => {
+      const req = indexedDB.open('ff-icons');
+      req.onsuccess = () => resolveOpen(req.result);
+      req.onerror = () => rejectOpen(req.error);
+    });
+    try {
+      if (!db.objectStoreNames.contains('overrides')) return [];
+      return await new Promise<string[]>((resolveKeys, rejectKeys) => {
+        const req = db.transaction('overrides', 'readonly').objectStore('overrides').getAllKeys();
+        req.onsuccess = () => resolveKeys(req.result.map(String).sort());
+        req.onerror = () => rejectKeys(req.error);
+      });
+    } finally {
+      db.close();
+    }
+  }, undefined);
+}
+
+/** Whether this browser stores a custom icon for the folder. */
+export async function hasFolderIcon(page: SyncPage, folderId: string): Promise<boolean> {
+  const res = await send<{ icon: unknown }>(page, { type: 'icons/get-folder-icon', folderId });
+  return res.icon !== null && res.icon !== undefined;
+}
+
+/**
+ * Pick a wallpaper for a workspace the way Appearance does: switch its
+ * background to Wallpaper, store the image, and stamp the workspace so the
+ * change syncs.
+ */
+export async function setWallpaper(page: SyncPage, workspaceId: string, dataUrl: string): Promise<void> {
+  await writeLocalStorageKey(page, `app-wallpaper-${workspaceId}`, dataUrl);
+  await editWorkspace(page, workspaceId, { backgroundMode: 'wallpaper' });
+}
+
+/** The wallpaper card's trash button: the image goes, the Wallpaper background mode stays. */
+export async function clearWallpaper(page: SyncPage, workspaceId: string): Promise<void> {
+  await writeLocalStorageKey(page, `app-wallpaper-${workspaceId}`, '');
+  await editWorkspace(page, workspaceId, {});
+}
+
+export async function storedWallpaper(page: SyncPage, workspaceId: string): Promise<string> {
+  const value = await readLocalStorageKey(page, `app-wallpaper-${workspaceId}`);
+  return typeof value === 'string' ? value : '';
+}
+
+/** Wait until the page paints the active workspace's wallpaper; throws if it never does. */
+export async function waitForWallpaperShown(page: SyncPage): Promise<void> {
+  await page.evaluate(async () => {
+    const deadline = Date.now() + 15_000;
+    for (;;) {
+      const layer = document.querySelector<HTMLElement>('.ff-bg-wallpaper[data-active="true"]');
+      if (layer && getComputedStyle(layer).backgroundImage.startsWith('url(')) return;
+      if (Date.now() > deadline) throw new Error('The wallpaper never rendered');
+      await new Promise((resolveTick) => setTimeout(resolveTick, 50));
+    }
+  }, undefined);
+}
+
+export async function wallpaperShown(page: SyncPage): Promise<boolean> {
+  return page.evaluate(() => {
+    const layer = document.querySelector<HTMLElement>('.ff-bg-wallpaper[data-active="true"]');
+    return layer !== null && getComputedStyle(layer).backgroundImage.startsWith('url(');
+  }, undefined);
+}
+
+/** Wait until the folder tile titled `title` shows a custom icon, and return its image source. */
+export async function waitForFolderIconShown(page: SyncPage, title: string): Promise<string> {
+  return page.evaluate(async (folderTitle) => {
+    const deadline = Date.now() + 15_000;
+    for (;;) {
+      const tile = Array.from(document.querySelectorAll('.ff-tile[data-item-kind="folder"]'))
+        .find((el) => el.querySelector('.ff-tile__label')?.textContent === folderTitle);
+      const src = tile?.querySelector<HTMLImageElement>('.ff-folder-tile__custom-image')?.getAttribute('src');
+      if (src) return src;
+      if (Date.now() > deadline) throw new Error(`Folder tile "${folderTitle}" never showed a custom icon`);
+      await new Promise((resolveTick) => setTimeout(resolveTick, 50));
+    }
+  }, title);
+}
+
+/** Wait until the folder tile titled `title` is on the page; throws if it never appears. */
+export async function waitForFolderTile(page: SyncPage, title: string): Promise<void> {
+  await waitFor(page, { selector: '.ff-tile[data-item-kind="folder"] .ff-tile__label', text: title });
+}
+
+export async function folderIconShown(page: SyncPage, title: string): Promise<boolean> {
+  return page.evaluate((folderTitle) => {
+    const tile = Array.from(document.querySelectorAll('.ff-tile[data-item-kind="folder"]'))
+      .find((el) => el.querySelector('.ff-tile__label')?.textContent === folderTitle);
+    return tile?.querySelector('.ff-folder-tile__custom-image') != null;
+  }, title);
+}
+
+/** Wait until the bookmark tile titled `title` shows exactly the image `src`; throws if it never does. */
+export async function waitForBookmarkIcon(page: SyncPage, title: string, src: string): Promise<void> {
+  await page.evaluate(async (data) => {
+    const deadline = Date.now() + 15_000;
+    let seen: string | null | undefined;
+    for (;;) {
+      const tile = Array.from(document.querySelectorAll('.ff-tile[data-item-kind="bookmark"]'))
+        .find((el) => el.querySelector('.ff-tile__label')?.textContent === data.title);
+      seen = tile?.querySelector('.ff-tile__icon img')?.getAttribute('src');
+      if (seen === data.src) return;
+      if (Date.now() > deadline) throw new Error(`Bookmark tile "${data.title}" shows ${String(seen).slice(0, 60)}, not the expected icon`);
+      await new Promise((resolveTick) => setTimeout(resolveTick, 50));
+    }
+  }, { title, src });
 }
 
 export async function removeFolder(page: SyncPage, folderId: string): Promise<void> {
@@ -260,6 +410,15 @@ export async function copyAccountSyncedStorage(from: SyncPage, to: SyncPage): Pr
     await (globalThis as unknown as { chrome: Api }).chrome.storage.local.set(copied);
   }, items);
   return Object.keys(items).sort();
+}
+
+export async function writeLocalStorageKey(page: SyncPage, key: string, value: unknown): Promise<void> {
+  await page.evaluate(async (entry) => {
+    type Api = { storage: { local: { set(items: Record<string, unknown>): Promise<void> } } };
+    const api = (globalThis as unknown as { browser?: Api; chrome: Api }).browser
+      ?? (globalThis as unknown as { chrome: Api }).chrome;
+    await api.storage.local.set({ [entry.key]: entry.value });
+  }, { key, value });
 }
 
 export async function readLocalStorageKey(page: SyncPage, key: string): Promise<unknown> {

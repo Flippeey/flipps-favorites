@@ -11,11 +11,13 @@ import {
   linkError,
   linkPreviewSummary,
   openSyncSettings,
+  readSettings,
   readWorkspaces,
   revealPairingCode,
   seedSyncProfile,
   submitPairingCode,
   syncNow,
+  waitFor,
   withNewToast,
   type SyncProfileSeed,
 } from '../fixtures/sync-ui.js';
@@ -168,4 +170,37 @@ test('a rate-limited pull surfaces as rate limited and pushes nothing', async ({
   expect(await syncNow(a.sync)).toBe('Too many sync attempts — try again in a bit.');
   expect(syncStub.syncCalls().map((call) => [call.method, call.status])).toEqual([['GET', 429]]);
   expect(await lastSyncedCaption(a.sync)).toBe(NEVER_SYNCED);
+});
+
+test('cancelling the link preview leaves this browser exactly as it was and sends nothing', async ({ syncStub, openSyncBrowser }) => {
+  const a = await openSyncBrowser();
+  const b = await openSyncBrowser();
+  await seedSyncProfile(a.sync, ALPHA);
+  await seedSyncProfile(b.sync, BETA);
+  await openSyncSettings(a.sync);
+  expect(await syncNow(a.sync)).toBe(SYNCED);
+  const code = await revealPairingCode(a.sync);
+  const tokenOfA = await expectedAuthToken(code);
+  const sharedCopy = syncStub.blob(tokenOfA);
+
+  await openSyncSettings(b.sync);
+  const ownCodeOfB = await revealPairingCode(b.sync);
+  const workspacesBefore = await readWorkspaces(b.sync);
+  const settingsBefore = await readSettings(b.sync);
+  const callsBefore = syncStub.syncCalls().length;
+
+  await submitPairingCode(b.sync, code);
+  expect(await linkPreviewSummary(b.sync)).toContain(`This browser will get: “${ALPHA.workspaceName}”`);
+  await waitFor(b.sync, { selector: '.ff-dialog__actions .ff-btn--ghost', text: 'Cancel', click: true });
+  expect(await isLinkPreviewOpen(b.sync)).toBe(false);
+
+  // The preview read the shared copy once; nothing was written anywhere.
+  expect(syncStub.syncCalls().slice(callsBefore).map((call) => [call.method, call.status, call.token])).toEqual([['GET', 200, tokenOfA]]);
+  expect(syncStub.blob(tokenOfA)?.equals(sharedCopy!)).toBe(true);
+  expect(await readWorkspaces(b.sync)).toEqual(workspacesBefore);
+  expect(await readSettings(b.sync)).toEqual(settingsBefore);
+  await b.sync.reload();
+  await openSyncSettings(b.sync);
+  expect(await revealPairingCode(b.sync)).toBe(ownCodeOfB);
+  expect(await lastSyncedCaption(b.sync)).toBe(NEVER_SYNCED);
 });

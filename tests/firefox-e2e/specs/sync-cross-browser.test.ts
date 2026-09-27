@@ -18,6 +18,7 @@ import {
   type SyncPage,
   type SyncProfileSeed,
 } from '../../fixtures/sync-ui';
+import { deleteWorkspace, editWorkspace, pressSyncNow, workspaceView } from '../../fixtures/sync-scenario';
 import { launchChromeWithExtension, launchFirefoxWithExtension, type ChromeSession, type FirefoxSession } from '../launch';
 import { syncPageFromPuppeteer } from '../sync-page';
 
@@ -32,6 +33,11 @@ const FROM_FIREFOX: SyncProfileSeed = {
   workspace: { accentColor: '#4D5E6F' },
 };
 
+const CHROME_WS = 'ws-chrome-reading-canary';
+const FIREFOX_WS = 'ws-firefox-recipes-canary';
+
+// The tests share one linked pair: the first links Chrome and Firefox, the
+// later ones build on that link.
 describe('settings sync between Chrome and Firefox', () => {
   let stub: SyncStub;
   let chromeSession: ChromeSession;
@@ -88,5 +94,35 @@ describe('settings sync between Chrome and Firefox', () => {
         plaintextMarkers: [FROM_CHROME.workspaceName, FROM_FIREFOX.workspaceName, '#1A2B3C', '#4D5E6F'],
       }),
     ).toEqual([]);
+  }, 90_000);
+
+  it('concurrent edits of one workspace: the later edit wins on both browsers', async () => {
+    await editWorkspace(chrome, FIREFOX_WS, { accentColor: '#AA2244' });
+    await editWorkspace(firefox, FIREFOX_WS, { accentColor: '#22AA44' });
+    const chromeStamp = (await workspaceView(chrome, FIREFOX_WS))?.updatedAt ?? 0;
+    const firefoxStamp = (await workspaceView(firefox, FIREFOX_WS))?.updatedAt ?? 0;
+    expect(firefoxStamp).toBeGreaterThan(chromeStamp);
+
+    expect(await pressSyncNow(chrome)).toBe('Synced.');
+    expect(await pressSyncNow(firefox)).toBe('Synced.');
+    expect(await pressSyncNow(chrome)).toBe('Synced.');
+
+    for (const side of [chrome, firefox]) {
+      expect((await workspaceView(side, FIREFOX_WS))?.accentColor).toBe('#22AA44');
+      expect((await workspaceView(side, CHROME_WS))?.accentColor).toBe('#1A2B3C');
+    }
+  }, 90_000);
+
+  it('a workspace deleted on Firefox is removed on Chrome and stays deleted after both sync again', async () => {
+    await deleteWorkspace(firefox, CHROME_WS);
+    expect(await pressSyncNow(firefox)).toBe('Synced.');
+    expect(await pressSyncNow(chrome)).toBe('Synced.');
+    expect(await workspaceView(chrome, CHROME_WS)).toBeUndefined();
+
+    expect(await pressSyncNow(chrome)).toBe('Synced.');
+    expect(await pressSyncNow(firefox)).toBe('Synced.');
+    for (const side of [chrome, firefox]) {
+      expect((await readWorkspaces(side)).map((ws) => ws.id)).toEqual([FIREFOX_WS]);
+    }
   }, 90_000);
 });
