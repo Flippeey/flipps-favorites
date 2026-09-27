@@ -4,7 +4,7 @@
 // per browser profile, so a separate profile (not just a separate tab) is required.
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 const usage = 'Usage: npm run tryout -- chrome|firefox [--from <path>] [--dry-run]';
 
@@ -24,7 +24,12 @@ function parseArgs(argv) {
   for (let i = 1; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--from') {
-      from = argv[i + 1];
+      const value = argv[i + 1];
+      if (!value || value.startsWith('--')) {
+        fail(usage);
+      }
+      // npm runs scripts from the package root; INIT_CWD is where the user typed the command.
+      from = resolve(process.env.INIT_CWD ?? process.cwd(), value);
       i += 1;
     } else if (arg === '--dry-run') {
       dryRun = true;
@@ -38,8 +43,13 @@ function parseArgs(argv) {
 
 function runWslInterop(command) {
   try {
-    return execFileSync('cmd.exe', ['/c', command], { encoding: 'utf8' }).trim();
-  } catch (error) {
+    // cmd.exe warns about UNC paths when started from a WSL directory, so start it from C:.
+    return execFileSync('cmd.exe', ['/c', command], {
+      encoding: 'utf8',
+      cwd: '/mnt/c',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
     return undefined;
   }
 }
@@ -56,10 +66,6 @@ function resolveLocalAppData() {
 
 function toUnixPath(windowsPath) {
   return execFileSync('wslpath', ['-u', windowsPath], { encoding: 'utf8' }).trim();
-}
-
-function toWindowsPath(unixPath) {
-  return execFileSync('wslpath', ['-w', unixPath], { encoding: 'utf8' }).trim();
 }
 
 function resolveDist(target, from) {

@@ -133,12 +133,12 @@ Without `--from`, the script runs the matching `build:<target>` first. `TRYOUT_C
 - **Chrome**: on a new test profile, enable Developer mode and use "Load unpacked" once, pointing
   at the printed staging path. On later runs, reload the extension from `chrome://extensions/`.
 - **Firefox**: temporary add-ons don't survive a restart, so "Load Temporary Add-on" at
-  `about:debugging#/runtime/this-firefox` is required every session. Local data (bookmarks tree,
-  settings) persists across sessions via profile prefs.
+  `about:debugging#/runtime/this-firefox` is required every session. The test profile's `user.js` keeps the extension's storage and
+  internal UUID when the temporary add-on unloads, so workspaces, settings and icons survive restarts.
 - Pair a test build with its own sync pairing code, not the real one, unless you're deliberately
   testing mixed versions.
 - Don't sign the Firefox test profile into the same Firefox Account as your real profile — Firefox
-  builds share a gecko extension ID, so `chrome.storage.sync` would mix between the test and real
+  builds share a gecko extension ID, so `storage.sync` would mix between the test and real
   installs.
 
 ## Workflow
