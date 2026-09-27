@@ -193,3 +193,36 @@ test('middle-click on a folder tile does NOT open a new tab', async ({ newtabPag
   context.off('page', onPage);
   expect(newPageOpened).toBe(false);
 });
+
+test.describe('middle-click on a bookmark tile inside a folder overlay', () => {
+  // Same real-navigation caveat as the top-level middle-click describe above:
+  // stub the host so the opened tab's navigation doesn't depend on live DNS.
+  test.use({ stubHosts: ['example.com'] });
+
+  test('opens it in a new tab and leaves the overlay open', async ({ newtabPage }) => {
+    const bmUrl = 'https://example.com/';
+    const folderId = await createSubFolder(newtabPage, rootId, 'Overlay Middle Click');
+    const bmId = await createTestBookmark(newtabPage, folderId, 'Overlay Target', bmUrl);
+    await reloadNewtab(newtabPage);
+
+    const folderTile = tileById(newtabPage, folderId);
+    await folderTile.waitFor();
+    await folderTile.click();
+
+    const overlay = newtabPage.locator('.ff-folder-overlay');
+    await overlay.waitFor({ state: 'visible', timeout: 5_000 });
+
+    const tile = tileById(newtabPage, bmId);
+    await tile.waitFor();
+
+    const [newPage] = await Promise.all([
+      newtabPage.context().waitForEvent('page', { timeout: 10_000 }),
+      tile.click({ button: 'middle' }),
+    ]);
+    await newPage.waitForLoadState('domcontentloaded');
+    expect(newPage.url()).toBe(bmUrl);
+    await newPage.close();
+
+    await expect(overlay).toBeVisible();
+  });
+});

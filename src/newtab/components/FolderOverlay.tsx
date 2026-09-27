@@ -14,6 +14,7 @@ interface FolderOverlayProps {
   shape: TileShape;
   onClose: () => void;
   onPickBookmark: (item: BookmarkNode, event?: { metaKey?: boolean; ctrlKey?: boolean }) => void;
+  onMiddleOpen?: (item: BookmarkNode) => void;
   onContextMenu?: (target: BookmarkNode, event: ReactMouseEvent) => void;
   onNewBookmark?: (parentId: string, parentTitle?: string) => void;
   onNewFolder?: (parentId: string, parentTitle?: string) => void;
@@ -37,6 +38,7 @@ export function FolderOverlay({
   shape,
   onClose,
   onPickBookmark,
+  onMiddleOpen,
   onContextMenu,
   onNewBookmark,
   onNewFolder,
@@ -303,6 +305,7 @@ export function FolderOverlay({
                 onPickFolder={handleItemClick}
                 onPickItem={handleItemClick}
                 onContextMenu={onContextMenu}
+                onMiddleOpen={onMiddleOpen}
               />
             ))}
           </div>

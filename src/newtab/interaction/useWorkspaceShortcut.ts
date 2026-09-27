@@ -3,8 +3,9 @@ import type { WorkspaceRecord } from '@/shared/messages';
 
 // Alt+1-9 switches workspace directly (only when no modifier conflicts and no input is focused).
 // Alt+ArrowLeft / Alt+ArrowRight cycle through workspaces with wrap-around at both ends.
-export function useWorkspaceShortcut(workspaces: WorkspaceRecord[], onSwitch: (id: string) => void): void {
+export function useWorkspaceShortcut(workspaces: WorkspaceRecord[], onSwitch: (id: string) => void, enabled: boolean): void {
   useEffect(() => {
+    if (!enabled) return;
     const onKey = (e: KeyboardEvent) => {
       if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
       const active = document.activeElement;
@@ -34,5 +35,5 @@ export function useWorkspaceShortcut(workspaces: WorkspaceRecord[], onSwitch: (i
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [workspaces, onSwitch]);
+  }, [workspaces, onSwitch, enabled]);
 }
