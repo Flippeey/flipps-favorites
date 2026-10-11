@@ -44,14 +44,29 @@ function scheduleFolderIconSweep(): Promise<void> {
     });
 }
 
-extensionApi.runtime.onMessage.addListener((message: AppRequest, _sender: unknown, sendResponse: (response: AppResponse | AppErrorResponse | undefined) => void) => {
-  handleMessage(message)
-    .then(sendResponse)
-    .catch((error: unknown) => {
-      sendResponse(buildErrorEnvelope(error));
-    });
-  return true; // Keep the message channel open for the async response
-});
+type BackgroundResponse = AppResponse | AppErrorResponse;
+
+// Never rejects: every failure resolves into a typed error envelope.
+function respond(message: AppRequest): Promise<BackgroundResponse> {
+  return handleMessage(message).catch((error: unknown) => buildErrorEnvelope(error));
+}
+
+// On the Firefox event page, public/background-boot.js already registered the
+// onMessage listener (see that file for why); publish the handler into it.
+// Chrome's service worker has no boot script and ignores a Promise returned
+// from an onMessage listener, so it keeps the sendResponse listener.
+const publishBackgroundHandler = (globalThis as {
+  __ffPublishBackgroundHandler?: (handler: (message: AppRequest) => Promise<BackgroundResponse>) => void;
+}).__ffPublishBackgroundHandler;
+
+if (publishBackgroundHandler) {
+  publishBackgroundHandler(respond);
+} else {
+  extensionApi.runtime.onMessage.addListener((message: AppRequest, _sender: unknown, sendResponse: (response: BackgroundResponse | undefined) => void) => {
+    void respond(message).then(sendResponse);
+    return true; // Keep the message channel open for the async response
+  });
+}
 
 function buildErrorEnvelope(error: unknown): AppErrorResponse {
   let kind: IconFetchErrorKind = 'unknown';
