@@ -34,7 +34,6 @@ import type {
   PatchWorkspaceResponse,
   DeleteWorkspaceResponse,
   OpenTabResponse,
-  PingResponse,
   WebSearchResponse,
 } from '@/shared/messages';
 import { IconFetchError, messageTypes } from '@/shared/messages';
@@ -49,32 +48,6 @@ async function send<T extends AppResponse>(req: AppRequest): Promise<T> {
     throw new IconFetchError('unknown', 'No response from background service worker.');
   }
   return res as T;
-}
-
-// Firefox suspends its background event page once it has seen no event for
-// the idle timeout, even while a reply is pending. Requests that wait on the
-// network (icon resolution, image search and download) can outlast it, so
-// while any is pending one shared timer pings the background; each delivered
-// message resets the idle timer. On Chrome the pings extend the service
-// worker's lifetime the same way.
-const KEEP_ALIVE_INTERVAL_MS = 1_000;
-let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
-let keepAliveHolders = 0;
-
-async function sendKeepingBackgroundAlive<T extends AppResponse>(req: AppRequest): Promise<T> {
-  keepAliveHolders += 1;
-  keepAliveTimer ??= setInterval(() => {
-    void send<PingResponse>({ type: messageTypes.ping }).catch(() => undefined);
-  }, KEEP_ALIVE_INTERVAL_MS);
-  try {
-    return await send<T>(req);
-  } finally {
-    keepAliveHolders -= 1;
-    if (keepAliveHolders === 0 && keepAliveTimer !== null) {
-      clearInterval(keepAliveTimer);
-      keepAliveTimer = null;
-    }
-  }
 }
 
 export async function getSettings(): Promise<AppSettings> {
@@ -93,7 +66,7 @@ export async function getBookmarkTree(): Promise<BookmarkNode[]> {
 }
 
 export async function getIcon(bookmarkUrl: string, bookmarkTitle?: string): Promise<ResolvedIcon> {
-  const res = await sendKeepingBackgroundAlive<GetIconResponse>({ type: messageTypes.getIcon, bookmarkUrl, bookmarkTitle });
+  const res = await send<GetIconResponse>({ type: messageTypes.getIcon, bookmarkUrl, bookmarkTitle });
   return res.icon;
 }
 
@@ -117,7 +90,7 @@ export async function moveBookmark(bookmarkId: string, parentId: string, index?:
 }
 
 export async function searchIcons(query: string, bookmarkUrl?: string): Promise<IconSearchCandidate[]> {
-  const res = await sendKeepingBackgroundAlive<SearchIconsResponse>({ type: messageTypes.searchIcons, query, bookmarkUrl });
+  const res = await send<SearchIconsResponse>({ type: messageTypes.searchIcons, query, bookmarkUrl });
   return res.candidates;
 }
 
@@ -141,12 +114,12 @@ export async function setIconOverrideFromUrl(args: {
   fileName?: string;
   scope?: IconOverrideScope;
 }): Promise<ResolvedIcon> {
-  const res = await sendKeepingBackgroundAlive<SetIconOverrideFromUrlResponse>({ type: messageTypes.setIconOverrideFromUrl, ...args });
+  const res = await send<SetIconOverrideFromUrlResponse>({ type: messageTypes.setIconOverrideFromUrl, ...args });
   return res.icon;
 }
 
 export async function removeIconOverride(bookmarkUrl: string, bookmarkTitle?: string): Promise<ResolvedIcon> {
-  const res = await sendKeepingBackgroundAlive<RemoveIconOverrideResponse>({ type: messageTypes.removeIconOverride, bookmarkUrl, bookmarkTitle });
+  const res = await send<RemoveIconOverrideResponse>({ type: messageTypes.removeIconOverride, bookmarkUrl, bookmarkTitle });
   return res.icon;
 }
 
@@ -175,7 +148,7 @@ export async function setFolderIconFromUrl(args: {
   fallbackImageUrl?: string;
   fileName?: string;
 }): Promise<FolderIconOverrideRecord> {
-  const res = await sendKeepingBackgroundAlive<SetFolderIconFromUrlResponse>({ type: messageTypes.setFolderIconFromUrl, ...args });
+  const res = await send<SetFolderIconFromUrlResponse>({ type: messageTypes.setFolderIconFromUrl, ...args });
   return res.icon;
 }
 
