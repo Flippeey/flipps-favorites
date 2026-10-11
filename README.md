@@ -57,7 +57,7 @@
 - ✏️ **Inline editing & folder management** — rename, create, and delete folders directly from the page; no browser bookmark manager required.
 - ☑️ **Multi-select** — marquee or `Ctrl`/`Cmd`-click to select many items, then move them to a folder or bulk-delete with confirmation.
 - 💾 **Import / export** — back up and restore your full settings and icon overrides as a single JSON file; portable across devices and browsers.
-- 🔒 **Privacy-first** — no accounts, no third-party servers, no telemetry, no ads. Requests only the permissions it actually needs.
+- 🔒 **Privacy-first** — no accounts, no servers of its own, no telemetry, no ads. Requests only the permissions it actually needs.
 
 ---
 
