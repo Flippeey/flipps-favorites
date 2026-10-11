@@ -1,2 +1,6 @@
 <!DOCTYPE html>
+<!-- Firefox event page. background-boot.js MUST load first (classic script,
+     synchronous): it registers the wake-capable runtime.onMessage listener
+     before the module below evaluates. See background-boot.js for why. -->
+<script src="background-boot.js"></script>
 <script type="module" src="background.js"></script>

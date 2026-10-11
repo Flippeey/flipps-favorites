@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import type { AppSettings, BookmarkNode, BookmarkSortMode, SortDirection, WorkspaceRecord } from '../shared/messages';
+import type { AppSettings, BookmarkNode, BookmarkSortMode, SortDirection, WorkspaceRecord, WorkspaceView } from '../shared/messages';
 import { ConfirmBatchDeleteDialog, ConfirmDeleteDialog } from './components/ConfirmDeleteDialog';
 import { ContextMenu, type ContextMenuItem } from './components/ContextMenu';
 import { Dock } from './components/Dock';
@@ -7,6 +7,7 @@ import { EditDialog, type EditTarget } from './components/EditDialog';
 import { ConfirmOpenAllTabsDialog } from './components/ConfirmOpenAllTabsDialog';
 import { FolderNameDialog, type FolderNameDialogTarget } from './components/FolderNameDialog';
 import { FolderOverlay } from './components/FolderOverlay';
+import { ChooseFolderDialog } from './components/ChooseFolderDialog';
 import { MoveToDialog } from './components/MoveToDialog';
 import { NewWorkspaceDialog } from './components/NewWorkspaceDialog';
 import { QuickAddDialog } from './components/QuickAddDialog';
@@ -29,12 +30,13 @@ import { useScrollCollapsed } from './lib/useScrollCollapsed';
 import { normalizeBookmarkUrl } from './lib/url';
 import { resolveDockMode } from './lib/dock-mode';
 import { effectiveViewSort } from './lib/effective-view-sort';
+import { orderWorkspaces, resolveActiveWorkspace, shownWorkspaces, workspaceLimitMessage } from './lib/workspace-order';
+
 import { prefetchAllIcons } from './lib/icon-prefetch';
 import { collectFolderIds, findFolder, findNode, findParentFolder, isFolder, resolveRootFolder, sortChildren } from './lib/tree';
 import { captureDeleteSnapshots, captureSubtree, restoreDeleteSnapshots, restoreSubtree } from './lib/subtree-snapshot';
 import { captureMoveSnapshots, moveIdsTracked, restoreMoveSnapshots } from './lib/move-snapshot';
 import { runUndoableMutation } from './lib/undoable-mutation';
-import { orderWorkspaces } from './lib/workspace-order';
 import { MAX_WORKSPACES, OPEN_ALL_TABS_CONFIRM_THRESHOLD } from '../shared/constants';
 import { markOnboardingCompleted, defaultWorkspaceSettings, readWorkspaceWallpaper } from '../shared/storage';
 import { useWorkspaceActions } from './state/useWorkspaceActions';
@@ -46,7 +48,7 @@ import { ToastHost } from './components/ToastHost';
 interface AppProps {
   initialSettings: AppSettings;
   initialTree: BookmarkNode[];
-  initialWorkspaces: WorkspaceRecord[];
+  initialWorkspaces: WorkspaceView[];
   initialOnboardOpen?: boolean;
 }
 
@@ -59,12 +61,16 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
   const [settings, setSettings] = useState(initialSettings);
   const [tree, setTree] = useState(initialTree);
   const [usage, setUsage] = useState<Record<string, number>>({});
-  const [workspaces, setWorkspaces] = useState(initialWorkspaces);
+  // Every stored workspace; `workspaces` are the ones shown in this browser.
+  const [allWorkspaces, setWorkspaces] = useState(initialWorkspaces);
+  const workspaces = useMemo(() => shownWorkspaces(allWorkspaces), [allWorkspaces]);
+  const waitingWorkspaces = useMemo(() => allWorkspaces.filter(w => w.folderState === 'waiting'), [allWorkspaces]);
+  const [choosingFolderFor, setChoosingFolderFor] = useState<WorkspaceView | null>(null);
   const { toasts, pushToast, dismissToast } = useToasts();
 
   const activeWorkspace = useMemo(
-    () => workspaces.find(w => w.id === settings.activeWorkspaceId) ?? workspaces[0] ?? null,
-    [workspaces, settings.activeWorkspaceId],
+    () => resolveActiveWorkspace(workspaces, settings.workspaceOrder, settings.activeWorkspaceId),
+    [workspaces, settings.workspaceOrder, settings.activeWorkspaceId],
   );
 
   // View + sort are per-workspace (WorkspaceRecord). Derive the effective values
@@ -217,6 +223,37 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     }
   }, []);
 
+  // Bookmarks may have been imported or changed while this page was hidden;
+  // re-fetching workspaces also re-runs folder resolution.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      void refreshTree();
+      void refreshWorkspaces();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [refreshTree, refreshWorkspaces]);
+
+  const handleAfterImport = useCallback(async (next: AppSettings) => {
+    setSettings(next);
+    await refreshTree();
+    try {
+      const fresh = await getWorkspaces();
+      setWorkspaces(fresh);
+      const waiting = fresh.filter(w => w.folderState === 'waiting').length;
+      if (waiting > waitingWorkspaces.length) {
+        pushToast({
+          kind: 'info',
+          message: `${String(waiting)} synced ${waiting === 1 ? 'workspace needs' : 'workspaces need'} a folder`,
+          action: { label: waiting === 1 ? 'Choose folder' : 'Choose folders', onClick: () => openAppSettings('backup') },
+        });
+      }
+    } catch {
+      // The next page load reconciles.
+    }
+  }, [refreshTree, waitingWorkspaces.length, pushToast, openAppSettings]);
+
   // Delete a single bookmark with an Undo affordance. Captures the original
   // parent + position so Undo re-creates it where it was. Failure surfaces a toast.
   const handleDeleteBookmark = useCallback(async (item: BookmarkNode) => {
@@ -349,7 +386,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     handleReorderWorkspaces,
     handleRenameWorkspace,
   } = useWorkspaceActions({
-    workspaces,
+    workspaces: allWorkspaces,
     setWorkspaces,
     activeWorkspace,
     settings,
@@ -501,11 +538,11 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
     if (result === 'created') {
       pushToast({ kind: 'info', message: `Workspace "${folderTitle}" created.` });
     } else if (result === 'at_max') {
-      pushToast({ kind: 'error', message: `Workspace limit reached (${MAX_WORKSPACES}).` });
+      pushToast({ kind: 'error', message: `${workspaceLimitMessage(allWorkspaces)}.` });
     } else {
       pushToast({ kind: 'info', message: `"${folderTitle}" is already a workspace root.` });
     }
-  }, [pushToast]);
+  }, [pushToast, allWorkspaces]);
 
   const { buildContextMenuItems, handleOpenAddMenu, handleWorkspaceContextMenu, handleCanvasContextMenu } = useContextMenuBuilder({
     tree,
@@ -659,9 +696,9 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
 
   // Single-key quick-add shortcuts — only when no overlay is open
   const handleOpenNewWorkspace = useCallback(() => {
-    if (workspaces.length >= MAX_WORKSPACES) return;
+    if (allWorkspaces.length >= MAX_WORKSPACES) return;
     setNewWorkspaceOpen(true);
-  }, [workspaces.length]);
+  }, [allWorkspaces.length]);
 
   const folderSiblingNames = useMemo<string[]>(() => {
     if (!folderNameTarget) return [];
@@ -747,7 +784,7 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           onOpenAppSettings={() => openAppSettings()}
           onOpenWorkspaceSettings={() => openWorkspaceSettings('appearance')}
           folderDragActive={folderDragActive}
-          atWorkspaceCap={workspaces.length >= MAX_WORKSPACES}
+          atWorkspaceCap={allWorkspaces.length >= MAX_WORKSPACES}
         />
       </header>
 
@@ -783,7 +820,23 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
       )}
 
       <main className="ff-canvas" ref={(el) => { canvasRef.current = el; setCanvasEl(el); }}>
-        {!isAtRoot && sortedCurrentFolder ? (
+        {!rootFolder ? (
+          <div className="ff-folder-notice" role="status" data-testid="folder-notice">
+            {activeWorkspace ? (
+              <>
+                <span>This workspace’s folder was removed</span>
+                <button type="button" className="ff-btn ff-btn--ghost" onClick={() => setChoosingFolderFor(activeWorkspace)}>Choose folder</button>
+              </>
+            ) : waitingWorkspaces.length > 0 ? (
+              <>
+                <span>Your synced workspaces need a folder in this browser</span>
+                <button type="button" className="ff-btn ff-btn--ghost" onClick={() => openAppSettings('backup')}>Choose folders</button>
+              </>
+            ) : (
+              <button type="button" className="ff-btn ff-btn--ghost" onClick={handleAddWorkspace}>New workspace</button>
+            )}
+          </div>
+        ) : !isAtRoot && sortedCurrentFolder ? (
           <FolderPageView
             folder={sortedCurrentFolder}
             shape={tileShape}
@@ -955,6 +1008,15 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
         />
       )}
 
+      {choosingFolderFor && (
+        <ChooseFolderDialog
+          tree={tree}
+          workspace={choosingFolderFor}
+          onClose={() => setChoosingFolderFor(null)}
+          onChosen={(chosen) => setWorkspaces(prev => prev.map(w => (w.id === chosen.id ? chosen : w)))}
+        />
+      )}
+
       {newWorkspaceOpen && (
         <NewWorkspaceDialog
           tree={tree}
@@ -1054,7 +1116,10 @@ export function App({ initialSettings, initialTree, initialWorkspaces, initialOn
           tree={tree}
           initialSection={appSettingsInitialSection}
           onPatchGlobal={handlePatch}
-          onAfterImport={(next: AppSettings) => { setSettings(next); refreshTree(); }}
+          onAfterImport={(next: AppSettings) => { void handleAfterImport(next); }}
+          pushToast={pushToast}
+          waitingWorkspaces={waitingWorkspaces}
+          onWorkspacesChanged={() => { void refreshWorkspaces(); }}
           onReplaySetup={() => { setAppSettingsOpen(false); setOnboardOpen(true); }}
           onClose={() => { setAppSettingsOpen(false); setAppSettingsInitialSection('navigation'); }}
         />

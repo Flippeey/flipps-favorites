@@ -27,19 +27,33 @@ import type {
   MoveBookmarkResponse,
   GetBookmarkUsageResponse,
   IconOverrideScope,
+  PingResponse,
   RecordBookmarkUseResponse,
   WorkspaceRecord,
+  WorkspaceView,
   GetWorkspacesResponse,
   CreateWorkspaceResponse,
   PatchWorkspaceResponse,
   DeleteWorkspaceResponse,
   OpenTabResponse,
+  SyncErrorResponse,
+  SyncPushResponse,
+  SyncPullResponse,
+  SyncPullNotFoundResponse,
+  GetSyncPairingCodeResponse,
+  AdoptSyncSecretResponse,
   WebSearchResponse,
+  ApplyWorkspaceImportResponse,
 } from '@/shared/messages';
-import { IconFetchError, messageTypes } from '@/shared/messages';
+import type { ImportOrigin, ParsedWorkspaceImport, WorkspaceImportMode, WorkspaceImportSummary } from '@/shared/sync-merge';
+import { IconFetchError, SyncFetchError, messageTypes } from '@/shared/messages';
 
 async function send<T extends AppResponse>(req: AppRequest): Promise<T> {
-  const res = (await extensionApi.runtime.sendMessage(req)) as T | AppErrorResponse | undefined;
+  const res = (await extensionApi.runtime.sendMessage(req)) as T | AppErrorResponse | SyncErrorResponse | undefined;
+  if (res && typeof res === 'object' && '__syncError' in res) {
+    const { kind, message, httpStatus } = (res as SyncErrorResponse).__syncError;
+    throw new SyncFetchError(kind, message, httpStatus);
+  }
   if (res && typeof res === 'object' && '__error' in res) {
     const { kind, message, httpStatus } = (res as AppErrorResponse).__error;
     throw new IconFetchError(kind, message, httpStatus);
@@ -48,6 +62,33 @@ async function send<T extends AppResponse>(req: AppRequest): Promise<T> {
     throw new IconFetchError('unknown', 'No response from background service worker.');
   }
   return res as T;
+}
+
+// How often to nudge the background while a slow request is pending. Must sit
+// comfortably below the Firefox event-page idle timeout (default 30s; the
+// regression test shrinks it to 2s via pref) and Chrome's SW idle window.
+const KEEP_ALIVE_INTERVAL_MS = 1_000;
+
+// Firefox suspends its background EVENT PAGE after an idle timeout even while
+// an onMessage response is pending — a pending listener promise or in-flight
+// XHR does NOT hold the page (MDN: "Message ports cannot prevent an event page
+// from shutting down"). A sync request can take up to 10s (XHR timeout), so
+// without help Firefox tears the page down mid-request and the reply surfaces
+// as "Promised response from onMessage listener went out of scope". Pinging
+// while the request is pending resets the idle timer (every delivered message
+// is an event), keeping the page alive; on Chrome the same pings extend the
+// MV3 service worker's lifetime. Wake-up of an ALREADY-suspended page is
+// handled separately by public/background-boot.js. Both halves are guarded by
+// tests/firefox-e2e/specs/sync-event-page.test.ts.
+async function sendKeepingBackgroundAlive<T extends AppResponse>(req: AppRequest): Promise<T> {
+  const keepAlive = setInterval(() => {
+    void send<PingResponse>({ type: messageTypes.ping }).catch(() => undefined);
+  }, KEEP_ALIVE_INTERVAL_MS);
+  try {
+    return await send<T>(req);
+  } finally {
+    clearInterval(keepAlive);
+  }
 }
 
 export async function getSettings(): Promise<AppSettings> {
@@ -152,8 +193,8 @@ export async function setFolderIconFromUrl(args: {
   return res.icon;
 }
 
-export async function removeFolderIcon(folderId: string): Promise<void> {
-  await send<RemoveFolderIconResponse>({ type: messageTypes.removeFolderIcon, folderId });
+export async function removeFolderIcon(folderId: string, options: { recordDeletion?: boolean } = {}): Promise<void> {
+  await send<RemoveFolderIconResponse>({ type: messageTypes.removeFolderIcon, folderId, ...options });
 }
 
 export async function getBookmarkUsage(): Promise<Record<string, number>> {
@@ -166,19 +207,28 @@ export async function recordBookmarkUse(bookmarkId: string): Promise<number> {
   return res.usedAt;
 }
 
-export async function getWorkspaces(): Promise<WorkspaceRecord[]> {
+export async function getWorkspaces(): Promise<WorkspaceView[]> {
   const res = await send<GetWorkspacesResponse>({ type: messageTypes.getWorkspaces });
   return res.workspaces;
 }
 
-export async function createWorkspace(workspace: WorkspaceRecord): Promise<WorkspaceRecord> {
+export async function createWorkspace(workspace: WorkspaceRecord): Promise<WorkspaceView> {
   const res = await send<CreateWorkspaceResponse>({ type: messageTypes.createWorkspace, workspace });
   return res.workspace;
 }
 
-export async function patchWorkspace(id: string, patch: Partial<WorkspaceRecord>): Promise<WorkspaceRecord> {
+export async function patchWorkspace(id: string, patch: Partial<WorkspaceRecord>): Promise<WorkspaceView> {
   const res = await send<PatchWorkspaceResponse>({ type: messageTypes.patchWorkspace, id, patch });
   return res.workspace;
+}
+
+export async function bindWorkspaceFolder(id: string, folderId: string): Promise<WorkspaceView> {
+  const res = await send<PatchWorkspaceResponse>({ type: messageTypes.bindWorkspaceFolder, id, folderId });
+  return res.workspace;
+}
+
+export async function setWorkspaceNotUsed(id: string, notUsed: boolean): Promise<void> {
+  await send<DeleteWorkspaceResponse>({ type: messageTypes.setWorkspaceNotUsed, id, notUsed });
 }
 
 export async function deleteWorkspace(id: string): Promise<void> {
@@ -187,6 +237,62 @@ export async function deleteWorkspace(id: string): Promise<void> {
 
 export async function openTab(url: string): Promise<void> {
   await send<OpenTabResponse>({ type: messageTypes.openTab, url });
+}
+
+// Plans and applies a parsed payload in the background (see
+// background/workspace-import.ts). Kept alive like a sync request: a large
+// import with many icons can outlast the Firefox event page's idle window.
+export async function applyWorkspaceImport(
+  payload: ParsedWorkspaceImport,
+  mode: WorkspaceImportMode,
+  origin: ImportOrigin,
+  heldWallpaperIds?: string[],
+): Promise<WorkspaceImportSummary> {
+  const res = await sendKeepingBackgroundAlive<ApplyWorkspaceImportResponse>({
+    type: messageTypes.applyWorkspaceImport,
+    payload,
+    mode,
+    origin,
+    ...(heldWallpaperIds ? { heldWallpaperIds } : {}),
+  });
+  return res.summary;
+}
+
+// Settings sync. `bundle` is the merged WorkspaceExportPayload planned by
+// shared/sync-merge.ts; typed as unknown at the message boundary
+// (see messages.ts comment) and narrowed by the caller.
+export async function syncPush(bundle: unknown): Promise<void> {
+  await sendKeepingBackgroundAlive<SyncPushResponse>({ type: messageTypes.syncPush, bundle });
+}
+
+// Returns the decrypted export payload (untyped — caller narrows/validates,
+// same shape parseWorkspaceFile expects) or null when the server has nothing
+// stored yet for this device's pairing (404). The caller merges it
+// (sync-now.ts).
+
+export async function syncPull(): Promise<unknown | null> {
+  const res = await sendKeepingBackgroundAlive<SyncPullResponse | SyncPullNotFoundResponse>({ type: messageTypes.syncPull });
+  return res.found ? res.payload : null;
+}
+
+// Dry-run pull for the link-preview dialog (see sync-client.previewPull): the
+// pasted code is used for auth/decrypt but NOT adopted. Returns the decrypted
+// payload, or null when that namespace has nothing stored yet.
+export async function syncPreviewPull(pairingCode: string): Promise<unknown | null> {
+  const res = await sendKeepingBackgroundAlive<SyncPullResponse | SyncPullNotFoundResponse>({
+    type: messageTypes.syncPreviewPull,
+    pairingCode,
+  });
+  return res.found ? res.payload : null;
+}
+
+export async function getSyncPairingCode(): Promise<string> {
+  const res = await send<GetSyncPairingCodeResponse>({ type: messageTypes.getSyncPairingCode });
+  return res.pairingCode;
+}
+
+export async function adoptSyncSecret(pairingCode: string): Promise<void> {
+  await send<AdoptSyncSecretResponse>({ type: messageTypes.adoptSyncSecret, pairingCode });
 }
 
 export async function webSearch(query: string, openInNewTab: boolean): Promise<void> {

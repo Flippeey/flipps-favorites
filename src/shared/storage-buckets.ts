@@ -1,4 +1,5 @@
 import { extensionApi } from './browser';
+import { sameValue } from './sync-stamps';
 
 export type StorageAreaPreference = 'local' | 'sync-preferred';
 type ResolvedStorageAreaName = 'local' | 'sync';
@@ -26,6 +27,9 @@ export interface CachedRecordStore<T> {
   readOne: (key: string) => Promise<T | null>;
   writeOne: (key: string, value: T) => Promise<void>;
   deleteOne: (key: string) => Promise<void>;
+  // Deletes only when `shouldDelete` approves the value read inside the
+  // store's serialized section. Resolves whether the key is gone.
+  deleteOneIf: (key: string, shouldDelete: (current: T) => boolean) => Promise<boolean>;
   clearAll: () => Promise<void>;
 }
 
@@ -286,6 +290,7 @@ export function createCachedRecordStore<T>(args: {
         const nextValue = key in records && resolveConflict
           ? resolveConflict(records[key] as T, value)
           : value;
+        if (key in records && sameValue(records[key], nextValue)) return;
         await valueStore.write({
           ...records,
           [key]: nextValue,
@@ -302,6 +307,17 @@ export function createCachedRecordStore<T>(args: {
         const nextRecords = { ...records };
         delete nextRecords[key];
         await valueStore.write(nextRecords);
+      });
+    },
+    async deleteOneIf(key: string, shouldDelete: (current: T) => boolean): Promise<boolean> {
+      return enqueueWrite(async () => {
+        const records = await valueStore.readFresh();
+        if (!(key in records)) return true;
+        if (!shouldDelete(records[key] as T)) return false;
+        const nextRecords = { ...records };
+        delete nextRecords[key];
+        await valueStore.write(nextRecords);
+        return true;
       });
     },
     async clearAll(): Promise<void> {
@@ -327,15 +343,24 @@ export interface PerKeyRecordStore<T> {
   readAll: () => Promise<Record<string, T>>;
   readOne: (id: string) => Promise<T | null>;
   writeOne: (id: string, value: T) => Promise<void>;
+  // Several records in one storage.set / storage.remove call.
+  writeMany: (records: Record<string, T>) => Promise<void>;
   deleteOne: (id: string) => Promise<void>;
+  deleteMany: (ids: string[]) => Promise<void>;
   /**
    * Atomic read-modify-write for one id: `updater` runs inside the store's
    * serialized section against a freshly-read current value (null if absent),
-   * and its return value is what gets persisted. Use this instead of a
-   * caller-side readOne-then-writeOne pair, which two overlapping callers can
-   * interleave into a lost update.
+   * and its return value is what gets persisted (no write when it equals the
+   * value as read). Use this instead of a caller-side readOne-then-writeOne
+   * pair, which two overlapping callers can interleave into a lost update.
    */
   updateOne: (id: string, updater: (current: T | null) => T) => Promise<T>;
+  /**
+   * updateOne that may also delete: `decide` returning null removes the key
+   * (a no-op when already absent). Resolves with the value read and the value
+   * left behind, so a caller can tell what it replaced or removed.
+   */
+  updateOrDeleteOne: (id: string, decide: (current: T | null) => T | null) => Promise<{ previous: T | null; next: T | null }>;
   /** Remove every key with this prefix from storage (used during migration tests). */
   clearAll: () => Promise<void>;
 }
@@ -434,6 +459,8 @@ export function createPerKeyRecordStore<T>(args: {
     async writeOne(id: string, value: T): Promise<void> {
       await enqueueWrite(async () => {
         const { api } = await resolveArea();
+        const stored = await api.get(storageKey(id));
+        if (sameValue(stored[storageKey(id)], value)) return;
         await api.set({ [storageKey(id)]: value });
       });
     },
@@ -445,8 +472,41 @@ export function createPerKeyRecordStore<T>(args: {
         const raw = stored[storageKey(id)];
         const current = raw === undefined ? null : deserialize(raw);
         const next = updater(current);
-        await api.set({ [storageKey(id)]: next });
+        if (!sameValue(current, next)) await api.set({ [storageKey(id)]: next });
         return next;
+      });
+    },
+
+    async updateOrDeleteOne(id: string, decide: (current: T | null) => T | null): Promise<{ previous: T | null; next: T | null }> {
+      return enqueueWrite(async () => {
+        const { api } = await resolveArea();
+        const stored = await api.get(storageKey(id));
+        const raw = stored[storageKey(id)];
+        const previous = raw === undefined ? null : deserialize(raw);
+        const next = decide(previous);
+        if (next === null) {
+          if (raw !== undefined && api.remove) await api.remove(storageKey(id));
+        } else if (!sameValue(previous, next)) {
+          await api.set({ [storageKey(id)]: next });
+        }
+        return { previous, next };
+      });
+    },
+
+    async writeMany(records: Record<string, T>): Promise<void> {
+      const entries = Object.entries(records);
+      if (!entries.length) return;
+      await enqueueWrite(async () => {
+        const { api } = await resolveArea();
+        await api.set(Object.fromEntries(entries.map(([id, value]) => [storageKey(id), value])));
+      });
+    },
+
+    async deleteMany(ids: string[]): Promise<void> {
+      if (!ids.length) return;
+      await enqueueWrite(async () => {
+        const { api } = await resolveArea();
+        if (api.remove) await api.remove(ids.map(storageKey));
       });
     },
 
