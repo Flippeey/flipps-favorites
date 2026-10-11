@@ -4,7 +4,7 @@ All notable changes to Flipp's Favorites are documented in this file.
 
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.8.0] — Folder count badges, keyboard menus, and reliability fixes
 
 ### Added
 - **Folder count badge setting**: show the item count on folder tiles always (the default) or only on hover.
