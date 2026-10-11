@@ -1,13 +1,12 @@
-What's new in 2.7.0:
+What's new in 2.8.0:
 
-- Add bookmarks and folders straight into any folder with the new destination picker in the add dialogs
-- Undo folder delete and batch delete right from the toast
-- New "Move to..." and "Open all in tabs" context-menu actions
-- Opt-in custom icons for folders
-- Hero search now opens typed URLs directly and falls back to web search when there are no matches
-- QuickAdd now warns when you're about to add a duplicate bookmark
-- Replay the onboarding setup anytime from Help, or open Help with the ? shortcut
-- Fixed: wallpaper at 100% opacity no longer leaves a dark tint
-- Fixed: Firefox new-tab page now shows the correct branded favicon
-- Fixed: drag no longer breaks on bookmarks or folders with special characters in their name
-- Fixed: settings that fail to save now show a toast instead of silently reverting
+- New setting: show the item count on folder tiles always, or only on hover
+- Menus and dropdowns are fully keyboard-operable, and settings controls are labelled for screen readers
+- "Open all in tabs" now opens tabs one at a time and tells you if any failed
+- Fixed: "Move to..." no longer offers a selected folder or its own subfolders as the destination
+- Fixed: undoing a move restores the items in their original order
+- Fixed: workspace shortcuts no longer fire while a dialog or folder is open; middle-click works inside folders too
+- Fixed: leaving system theme mode keeps the theme that was showing
+- Fixed: the new-workspace and Quick Add dialogs can no longer be submitted twice
+- Fixed: Firefox icon searches and downloads no longer fail when the background page goes to sleep
+- Fixed: Chrome icons no longer fail to load after the background restarts mid-fetch
