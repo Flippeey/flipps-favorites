@@ -6,6 +6,26 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 ## [Unreleased]
 
+### Added
+- **Folder count badge setting**: show the item count on folder tiles always (the default) or only on hover.
+
+### Fixed
+- Menus and dropdowns are now fully keyboard-operable, and settings controls have accessible names for screen readers.
+- Multi-select **Move to...** no longer offers a selected folder or one of its own subfolders as the destination.
+- **Open all in tabs** opens tabs one at a time and shows an error toast if any fail, instead of dropping them silently.
+- Undoing a move now restores the items in their original order.
+- Workspace keyboard shortcuts no longer fire while a dialog or folder overlay is open, and middle-click opens bookmarks in a new tab inside the folder overlay too.
+- Leaving system theme mode now keeps the theme that was showing instead of switching it.
+- The new-workspace and Quick Add dialogs can no longer be submitted twice.
+- Disabled dialog buttons now look disabled.
+- Firefox: icon searches and downloads no longer fail when the background page is suspended mid-request.
+- Chrome: icons no longer fail to load after the service worker restarts in the middle of fetching one.
+- A storage upgrade that fails partway no longer goes on to run the workspace view/sort migration on incomplete data.
+- Icon lookup parses site HTML and search-result titles in linear time, and HTML stripping no longer leaves stray angle brackets.
+
+### Changed
+- The privacy policy and store listings now describe icon fetching, the search permission and the workspace limit (20) accurately.
+
 ## [2.7.0] — Folder pickers, undo, and search fallback
 
 ### Added
