@@ -1,6 +1,6 @@
 # Privacy Policy — Flipp's Favorites
 
-**Effective date:** 2026-05-31
+**Effective date:** 2026-10-11
 
 Flipp's Favorites is a browser extension that replaces the new-tab page with a
 dashboard of your own bookmarks. This policy explains what data the extension
@@ -12,7 +12,8 @@ The developer of Flipp's Favorites does **not** collect, store, sell, or
 transmit any of your personal data. The extension has no analytics, no
 tracking, no advertising, and no remote code. Everything the extension stores
 stays on your own device or syncs through your browser's built-in sync — it is
-never sent to the developer or to any server the developer controls.
+never sent to the developer or to any server the developer controls. The only
+network requests the extension makes are for site icons, described below.
 
 ## What the extension stores, and where
 
@@ -36,31 +37,43 @@ by your browser across devices you are signed in to):
 You can remove all of this at any time by removing the extension or clearing the
 extension's storage.
 
-## Third-party favicon services
+## Site icons and third-party icon services
 
-To show a recognizable icon for each bookmark, the extension fetches favicon
-images from public icon providers. When it does so, it sends **only the hostname
-of a bookmark** (for example, `example.com`) to these services — never the full
-URL, your browsing history, or any personal information:
+To show a recognizable icon for each bookmark, the extension first asks the
+bookmarked site itself for its icon: it requests the site's home page (to read
+the icon links it declares) and its standard icon files, such as `favicon.ico`.
+
+If the site has no usable icon, the extension falls back to public icon
+providers. For these automatic lookups it sends **only the hostname of a
+bookmark** (for example, `example.com`) — never the full URL, your browsing
+history, or any personal information:
 
 - Google S2 Favicons — https://policies.google.com/privacy
 - Icon Horse — https://icon.horse/privacy
 - DuckDuckGo — https://duckduckgo.com/privacy
 
-These requests are made directly from your browser to the provider. The
-developer does not receive, log, or store the results beyond the on-device cache
-described above.
+DuckDuckGo image results can point at images hosted elsewhere; the extension
+downloads the chosen image from that host. When you search for an icon yourself
+in the edit dialog, the text you type is sent to DuckDuckGo image search.
+
+All of these requests go directly from your browser to the site or provider.
+The developer does not receive, log, or store them or their results; resolved
+icons are kept only in the on-device cache described above.
 
 ## Permissions
 
 - **bookmarks** — Read and edit your bookmarks to display and organize them.
 - **storage** — Save your preferences, workspaces, usage counts, wallpapers, and
   onboarding state, as described above.
+- **search** — When you choose to search the web from the search bar, hand the
+  query to your browser's default search engine, exactly as if you had typed it
+  into the address bar. The extension does not see or store the results.
 - **declarativeNetRequest** — Add a temporary, per-request rule that lets the
   extension read favicon images returned by the icon providers. No browsing
   traffic is blocked, redirected, or recorded.
-- **host permissions** (`https://*/*`, and the icon providers) — Fetch favicon
-  images for any site you bookmark. Required because you may bookmark any site.
+- **host permissions** (`https://*/*`, and the icon providers) — Fetch icons
+  from any site you bookmark, and from the icon providers above. Required
+  because you may bookmark any site.
 
 ## Changes to this policy
 

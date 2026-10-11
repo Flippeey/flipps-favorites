@@ -15,7 +15,7 @@ self-contained dashboard with its own theme, accent colour, wallpaper,
 layout, and dock. Keep a focused space for work, another for research,
 another for side projects or clients. Switch in a single click (or
 Ctrl/Cmd + 1–9), drag a bookmark onto a workspace tab to move it, and
-reorder tabs however you like. Up to nine Workspaces, zero overhead.
+reorder tabs however you like. Up to twenty Workspaces, zero overhead.
 
 WHAT DOES IT DO?
 
@@ -52,16 +52,18 @@ FEATURES
     page. No browser bookmark manager required.
  ›  Import and export — back up settings and icon overrides as a
     single JSON file. Restore on any device in seconds.
- ›  Completely private — stored locally. No cloud, no accounts, no
-    tracking, no analytics, no ads.
+ ›  Completely private — stored in your browser. No servers of our
+    own, no accounts, no tracking, no analytics, no ads.
 
 PRIVACY
 
-Flipp's Favorites has no backend and no servers. Your bookmarks and
-preferences never leave your browser. The only network requests fetch
-site icons — and only the hostname of a bookmark is ever sent, to icon
-services (Icon Horse, DuckDuckGo, standard favicon endpoints). No data
-collected, stored remotely, or shared. No telemetry. No analytics.
+Flipp's Favorites has no backend and no servers of its own. Your
+bookmarks stay in your browser, and your preferences only travel with
+your browser's built-in sync if you have it turned on. The only network
+requests fetch site icons: from the bookmarked site itself first, then
+from icon services (Google, Icon Horse, DuckDuckGo), which receive only
+the bookmark's hostname. Nothing is collected by the developer, stored
+remotely, or shared. No telemetry. No analytics.
 
 FREE, NO STRINGS ATTACHED
 
