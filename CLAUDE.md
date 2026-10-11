@@ -16,7 +16,7 @@ React 19 SPA in newtab; vanilla TS service worker.
 - TypeScript 7.0 (native compiler; strict, ES2022, `moduleResolution: Bundler`). `@/*` path alias → `src/*` (tsconfig + vite); prefer it over deep relative imports.
 - React 19 + ReactDOM 19 — functional components + hooks only.
 - Vite 8 + `@vitejs/plugin-react` 6 — dual output via `--mode chrome` / `--mode firefox`. Manifest V3 both targets.
-- Tests: Playwright (`tests/specs/*.spec.ts`) + Vitest 4 (`tests/unit/**/*.test.ts`).
+- Tests: Playwright (`tests/specs/*.spec.ts`) + Vitest 5 (`tests/unit/**/*.test.ts`).
 - Plain CSS, no preprocessor. Import chain (order matters): `styles/index.css` → `tokens`, `base`, `nav`, `hero`, `tiles`, `overlay`, `dock`, `dialogs`, `settings-drawer`, `onboarding`, `interactions`, `responsive`.
 - npm, `type: module`. Runtime deps: `react`, `react-dom` only. Discuss before adding any new top-level dependency, state library, or CSS framework.
 
