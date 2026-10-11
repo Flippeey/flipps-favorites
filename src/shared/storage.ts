@@ -122,7 +122,7 @@ const workspacesStore = createPerKeyRecordStore<WorkspaceRecord>({
 });
 
 let workspaceViewSortMigrationPromise: Promise<void> | null = null;
-let workspacePerKeyMigrationPromise: Promise<void> | null = null;
+let workspacePerKeyMigrationPromise: Promise<boolean> | null = null;
 
 function workspaceWallpaperKey(workspaceId: string): string {
   return `app-wallpaper-${workspaceId}`;
@@ -580,14 +580,15 @@ function asRecord(value: unknown): Record<string, unknown> {
 // writeWorkspace (called by view/sort) already uses per-key layout.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function ensureWorkspacePerKeyMigration(): Promise<void> {
+export async function ensureWorkspacePerKeyMigration(): Promise<boolean> {
   if (!workspacePerKeyMigrationPromise) {
-    workspacePerKeyMigrationPromise = runWorkspacePerKeyMigration().catch(error => {
+    workspacePerKeyMigrationPromise = runWorkspacePerKeyMigration().then(() => true, (error: unknown) => {
       workspacePerKeyMigrationPromise = null;
       console.warn('Failed to migrate workspaces to per-key storage.', error);
+      return false;
     });
   }
-  await workspacePerKeyMigrationPromise;
+  return workspacePerKeyMigrationPromise;
 }
 
 async function runWorkspacePerKeyMigration(): Promise<void> {
@@ -640,8 +641,10 @@ async function runWorkspacePerKeyMigration(): Promise<void> {
 // records already live under per-id keys. Each migration keeps its own
 // memoization and persisted-marker idempotency; this only fixes their
 // relative order in one place instead of leaving it to caller discipline.
+// A failed split stops the chain so view/sort never runs against the legacy
+// aggregate; the next call retries both.
 export async function ensureStorageMigrations(): Promise<void> {
-  await ensureWorkspacePerKeyMigration();
+  if (!(await ensureWorkspacePerKeyMigration())) return;
   await ensureWorkspaceViewSortMigration();
 }
 
