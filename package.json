@@ -28,6 +28,7 @@
     "store:lint": "node scripts/store/lint.mjs",
     "store:firefox": "node scripts/store/firefox-sync.mjs",
     "store:chrome": "node scripts/store/chrome-pack.mjs",
+    "tryout": "node scripts/tryout.mjs",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:firefox:e2e": "vitest run -c tests/firefox-e2e/vitest.config.ts",

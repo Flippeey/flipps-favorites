@@ -114,6 +114,33 @@ npm run test:ci                # build + build:chrome:test + `playwright test` (
 npm run test:all               # build + build:chrome:test + Playwright (chrome only) + test:firefox:e2e
 ```
 
+## Trying a build in a test profile
+
+`npm run tryout -- chrome|firefox [--from <path>] [--dry-run]` launches a built extension in a
+dedicated browser profile, separate from the real installed extension. This is necessary because
+only one extension can own the new tab per browser profile, and the release install must stay
+untouched.
+
+```bash
+npm run tryout -- chrome              # builds dist/chrome, stages + launches it in a test profile
+npm run tryout -- firefox --from /path/to/other/checkout   # use an already-built dist/firefox
+npm run tryout -- chrome --dry-run    # build + stage, print the launch command, no GUI window
+```
+
+Without `--from`, the script runs the matching `build:<target>` first. `TRYOUT_CHROME_EXE` /
+`TRYOUT_FIREFOX_EXE` override the browser executable path.
+
+- **Chrome**: on a new test profile, enable Developer mode and use "Load unpacked" once, pointing
+  at the printed staging path. On later runs, reload the extension from `chrome://extensions/`.
+- **Firefox**: temporary add-ons don't survive a restart, so "Load Temporary Add-on" at
+  `about:debugging#/runtime/this-firefox` is required every session. The test profile's `user.js` keeps the extension's storage and
+  internal UUID when the temporary add-on unloads, so workspaces, settings and icons survive restarts.
+- Pair a test build with its own sync pairing code, not the real one, unless you're deliberately
+  testing mixed versions.
+- Don't sign the Firefox test profile into the same Firefox Account as your real profile — Firefox
+  builds share a gecko extension ID, so `storage.sync` would mix between the test and real
+  installs.
+
 ## Workflow
 
 When editing code exercised by tests:
